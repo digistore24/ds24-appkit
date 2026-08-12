@@ -1,6 +1,6 @@
 ---
 name: salespage
-description: Builds the app's own salespage — turns the placeholder home page (app/page.tsx) into a page that sells THIS product, with an outcome headline and a real visual, benefits, what's inside, honest social proof, ONE offer block with a working checkout, and an FAQ. Use this when the user says "build my salespage", "my homepage is weak", "the start page still shows the template", "the landing page looks empty", "make the home page sell", or when build-app step 6, setup-digistore or go-to-market hands over. "Visitors do not buy" has two answers — no traffic is go-to-market, a page that does not convert the traffic it gets is this skill.
+description: Builds the app's own salespage — replaces the placeholder home page with one that actually sells THIS product — headline, a real visual, honest proof, ONE offer block with a working checkout, an FAQ. Use this when the user says "build my salespage", "my homepage is weak", "the start page still shows the template", "the landing page looks empty", "make the home page sell", or when build-app, `setup-digistore` or `go-to-market` hands over. "Visitors do not buy" has two answers — no traffic is `go-to-market`, a page that does not convert the traffic it gets is this skill.
 requires: 0.7.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
@@ -17,7 +17,7 @@ before step 2; do not restate it here. It carries the section inventory, where
 every fact comes from, the offer-block-versus-`/plans` reasoning, the imagery
 rules and the honesty rules. What lives in this skill is only the path.
 
-The decision is the user's, never yours (`CLAUDE.md` → *How a skill works*:
+The decision is the user's, never yours (`docs/guidance.md` → *How a skill works*:
 **anything the customer will SEE is proposed, never assumed**).
 
 ## Step 0 — Is there already one?
@@ -26,7 +26,8 @@ The decision is the user's, never yours (`CLAUDE.md` → *How a skill works*:
   ask in one sentence what should change. A recorded "no real salespage yet, on
   purpose" is an answer — say so and stop.
 - **`app/page.tsx` is no longer the shipped placeholder** (the three
-  `home.features.*` cards are gone) → somebody already built one. This run is
+  `home.features.*` keys are gone from the page — that is the marker, whatever
+  the page renders them as) → somebody already built one. This run is
   an improvement pass: do step 5's stranger test first, report what fails, and
   propose only the sections that would fix it.
 - **An experiment / test app** → skip the whole skill, same boundary as

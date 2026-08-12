@@ -13,6 +13,7 @@ import {
 } from "./checkout";
 import { DIGISTORE_REDIR_URL as DEFAULT_REDIR_URL } from "./config.mjs";
 import type { ProductDef } from "./products";
+import { blankComments } from "@/scripts/lib/source-text.mjs";
 
 const sub: ProductDef = {
   key: "basis_monatlich",
@@ -222,9 +223,7 @@ describe("testpay wiring", () => {
     // mistake — which is how the signpost came to be missing in the first
     // place. So the call is looked for in code only, with the comments (and
     // the worked example inside them) stripped out.
-    const code = buyUrlSrc
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/^\s*\/\/.*$/gm, "");
+    const code = blankComments(buyUrlSrc);
     expect(code).not.toMatch(/withTestpayParam\s*\(/);
     expect(buyUrlSrc).not.toMatch(/from\s+["']\.\/testpay["']/);
   });

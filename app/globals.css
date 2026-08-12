@@ -18,10 +18,16 @@
    and you get a surface that does not follow into dark mode and gets missed
    when the app is recolored.
 
-   The base is a neutral grey, the accent an indigo. Both are a deliberate
+   The base is a WARM grey, the accent a deep petrol. Both are a deliberate
    starting point, not a law: **to recolor the whole app, `--primary` (plus
    `--primary-foreground` and `--ring`) in both blocks is enough.** Everything
    else — buttons, active menu items, focus rings, badges, links — hangs off it.
+
+   The warm neutral is half the decision and the half that looks like nothing.
+   A cool accent on a cool grey is a swatch; a cool accent on a warm grey is a
+   pairing somebody chose. `node run.mjs brand` only ever writes the three
+   accent tokens, so this hue survives a customer's rebrand — see
+   docs/design-system.md.
 
    Two things that are easy to get wrong:
 
@@ -35,33 +41,33 @@
    ───────────────────────────────────────────────────────────────────────── */
 :root {
   --background: hsl(0 0% 100%);
-  --foreground: hsl(240 10% 6%);
+  --foreground: hsl(30 10% 8%);
   --card: hsl(0 0% 100%);
-  --card-foreground: hsl(240 10% 6%);
+  --card-foreground: hsl(30 10% 8%);
   --popover: hsl(0 0% 100%);
-  --popover-foreground: hsl(240 10% 6%);
+  --popover-foreground: hsl(30 10% 8%);
 
   /* The app's accent. Turn this dial to recolor. */
-  --primary: hsl(243 70% 58%);
+  --primary: hsl(190 90% 26%);
   --primary-foreground: hsl(0 0% 100%);
 
   /* Secondary surfaces: secondary buttons, badges. */
-  --secondary: hsl(240 5% 96%);
-  --secondary-foreground: hsl(240 6% 20%);
+  --secondary: hsl(36 20% 95%);
+  --secondary-foreground: hsl(30 10% 22%);
   /* Quiet surfaces: table headers, placeholders, set-off boxes. */
-  --muted: hsl(240 5% 96%);
-  --muted-foreground: hsl(240 4% 44%);
+  --muted: hsl(36 20% 95%);
+  --muted-foreground: hsl(30 6% 42%);
   /* Hover/focus in menus and lists. */
-  --accent: hsl(240 5% 95%);
-  --accent-foreground: hsl(240 6% 12%);
+  --accent: hsl(36 22% 92%);
+  --accent-foreground: hsl(30 10% 14%);
   /* Destructive actions (delete). White text on it. */
   --destructive: hsl(0 72% 45%);
   --destructive-foreground: hsl(0 0% 100%);
 
-  --border: hsl(240 6% 90%);
-  --input: hsl(240 6% 87%);
-  --ring: hsl(243 70% 58%);
-  --radius: 0.625rem;
+  --border: hsl(34 14% 88%);
+  --input: hsl(34 12% 82%);
+  --ring: hsl(190 90% 26%);
+  --radius: 0.5rem;
 
   /* Messages (Callout). Four intents, each with surface/border/text. The text
      color is deliberately dark enough for >= 7:1 contrast on its matching
@@ -79,34 +85,51 @@
   --danger: hsl(0 90% 96%);
   --danger-border: hsl(0 75% 78%);
   --danger-foreground: hsl(0 70% 32%);
+
+  /* Elevation. Two steps and only two: `raised` is a surface sitting ABOVE the
+     page (a card, an input, the active tab), `overlay` is something floating
+     OVER it (a dialog, a sheet, a menu). Named after the ROLE for the same
+     reason `--font-app-sans` is (see the note in `@theme inline` below):
+     `--shadow-card` would be a name that lies the moment a tab wears it.
+
+     The raised step is worn by every form control in the app, so its strength
+     is fixed by having to look right on a <Card> AND on an <Input> — the
+     shipped elevation is the QUIET one. The stronger set is the `design`
+     skill's "lifted" package and lives in the comment after the `.dark` block;
+     it is never the default here.
+
+     Both are defined in `.dark` as well, with values of their own rather than
+     these at a higher opacity — the arithmetic is written out there. */
+  --elevation-raised: 0 1px 2px 0 hsl(30 15% 12% / 0.06), 0 1px 3px 0 hsl(30 15% 12% / 0.04);
+  --elevation-overlay: 0 10px 24px -6px hsl(30 15% 12% / 0.18), 0 4px 10px -4px hsl(30 15% 12% / 0.12);
 }
 
 .dark {
-  --background: hsl(240 10% 5%);
-  --foreground: hsl(0 0% 98%);
+  --background: hsl(30 8% 6%);
+  --foreground: hsl(36 12% 96%);
   /* In dark mode, cards sit deliberately a shade above the background —
      otherwise every card edge vanishes and the page becomes a grey wall. */
-  --card: hsl(240 8% 9%);
-  --card-foreground: hsl(0 0% 98%);
-  --popover: hsl(240 8% 11%);
-  --popover-foreground: hsl(0 0% 98%);
+  --card: hsl(30 7% 10%);
+  --card-foreground: hsl(36 12% 96%);
+  --popover: hsl(30 7% 12%);
+  --popover-foreground: hsl(36 12% 96%);
 
   /* Heller Akzent mit dunkler Schrift darauf — siehe Punkt 1 oben. */
-  --primary: hsl(243 85% 74%);
-  --primary-foreground: hsl(244 55% 13%);
+  --primary: hsl(186 62% 60%);
+  --primary-foreground: hsl(191 70% 9%);
 
-  --secondary: hsl(240 5% 15%);
-  --secondary-foreground: hsl(0 0% 96%);
-  --muted: hsl(240 5% 15%);
-  --muted-foreground: hsl(240 5% 64%);
-  --accent: hsl(240 5% 17%);
-  --accent-foreground: hsl(0 0% 98%);
+  --secondary: hsl(30 6% 16%);
+  --secondary-foreground: hsl(36 10% 95%);
+  --muted: hsl(30 6% 16%);
+  --muted-foreground: hsl(34 8% 66%);
+  --accent: hsl(30 6% 18%);
+  --accent-foreground: hsl(36 12% 96%);
   --destructive: hsl(0 62% 52%);
   --destructive-foreground: hsl(0 0% 100%);
 
-  --border: hsl(240 5% 18%);
-  --input: hsl(240 5% 23%);
-  --ring: hsl(243 85% 74%);
+  --border: hsl(30 6% 19%);
+  --input: hsl(30 6% 24%);
+  --ring: hsl(186 62% 60%);
 
   /* Dunkel gespiegelt: gedaempfte Flaeche, heller Rand, sehr helle Schrift.
      Nicht die Hell-Werte invertieren — kraeftige Farbflaechen blenden im
@@ -123,7 +146,50 @@
   --danger: hsl(0 45% 16%);
   --danger-border: hsl(0 55% 45%);
   --danger-foreground: hsl(0 95% 88%);
+
+  /* Elevation, and these are NOT the light values at a higher opacity — the
+     arithmetic says why. Tailwind's default shadow colour is `rgb(0 0 0 / 0.1)`;
+     `--background` here is `hsl(30 8% 6%)` (~rgb 17 15 14) and `--card` is
+     `hsl(30 7% 10%)` (~rgb 27 25 24). A 10 %-black shadow over a surface at 6 %
+     lightness moves one or two values per channel — below the threshold of a
+     screen, so before these two lines existed the app had no depth at all after
+     dark, and pushing that alpha would not have fixed it either: near-black on
+     near-black stays invisible however far it goes.
+
+     So the dark answer is a different construction, not a stronger one: a DEEP
+     drop below, which the lighter card fill and the border cannot supply, plus —
+     on `overlay` only — a hairline light rim taken from `--foreground`, which is
+     the part a near-black page can actually show. `raised` deliberately gets no
+     rim: it is worn by every input, switch and checkbox, and a light edge there
+     reads as a bevel rather than as depth. */
+  --elevation-raised: 0 1px 2px 0 hsl(0 0% 0% / 0.55), 0 2px 6px -1px hsl(0 0% 0% / 0.45);
+  --elevation-overlay: 0 16px 40px -10px hsl(0 0% 0% / 0.8), 0 4px 12px -4px hsl(0 0% 0% / 0.6), 0 0 0 1px hsl(36 12% 96% / 0.22);
 }
+
+/* ── The "lifted" elevation package — NOT shipped, deliberately ──────────────
+   The second value set the `design` skill offers when somebody wants the app to
+   feel raised rather than calm. It lives here, in the file that defines the
+   shipped values, rather than in a note somewhere: two value sets, one file,
+   and only one of them live.
+
+   🚨 It sits OUTSIDE the `:root` and `.dark` blocks, and no line below begins
+   with `--`. `parseTokens()` (scripts/ux/rules.mjs) strips no CSS comments —
+   its matcher is `^\s*--name: value;` over a block's raw body — so a
+   commented-out token written the obvious way INSIDE a block would be read as a
+   live token by `ux-check`'s contrast pass and by app/globals.elevation.test.ts.
+   Hence the leading `*` on every value line; it is load-bearing, not decoration.
+
+   Story 43.5 copies these into `.claude/skills/design/references/tokens.md` —
+   that file is 43.2's and 43.5's, and nothing here writes it.
+
+   :root
+   *  --elevation-raised: 0 1px 3px 0 hsl(30 15% 12% / 0.10), 0 2px 8px -2px hsl(30 15% 12% / 0.08);
+   *  --elevation-overlay: 0 20px 48px -12px hsl(30 15% 12% / 0.28), 0 8px 16px -8px hsl(30 15% 12% / 0.18);
+
+   .dark
+   *  --elevation-raised: 0 2px 4px 0 hsl(0 0% 0% / 0.7), 0 4px 12px -2px hsl(0 0% 0% / 0.55);
+   *  --elevation-overlay: 0 24px 56px -12px hsl(0 0% 0% / 0.85), 0 8px 20px -6px hsl(0 0% 0% / 0.7), 0 0 0 1px hsl(36 12% 96% / 0.3);
+   ───────────────────────────────────────────────────────────────────────── */
 
 /* Tokens -> Tailwind-Utilities. Ein neues Token hier eintragen, sonst gibt es
    keine `bg-…`/`text-…`-Klasse dafuer. */
@@ -161,13 +227,83 @@
   --color-danger-border: var(--danger-border);
   --color-danger-foreground: var(--danger-foreground);
 
+  /* Elevation -> Tailwind's seven shadow sizes. All seven, onto the two tokens,
+     so that `shadow-sm` on a <Card> and `shadow-lg` on a <Dialog> resolve to a
+     value somebody chose — in BOTH modes, without one file under
+     `components/ui/` being edited. That is what `@theme inline` buys: the
+     utility keeps the `var(--elevation-…)` rather than baking today's value in,
+     so the `.dark` block's redefinition takes effect on the element. Exactly the
+     mechanism the colour tokens above already use. Written non-inline it would
+     resolve once on `:root` and inherit the LIGHT value into dark mode.
+
+     Which size wears which, in the shipped kit:
+       2xs  nothing today
+       xs   button (outline), input, textarea, switch, checkbox, radio-group,
+            select trigger          ────────────────────────>  raised
+       sm   card, and tabs.tsx:70 (the default variant's active tab)
+       md   dropdown-menu content, select content
+       lg   dialog, alert-dialog, sheet, dropdown-menu sub-content
+       xl   nothing today
+       2xl  nothing today          ────────────────────────>  overlay
+
+     🚨 `xs` on the raised step gives every form control in the app a card's
+     shadow. The answer is not a softer mapping but a calm VALUE: one raised
+     value has to look right on a <Card> and on an <Input>, and that constraint
+     is what fixes its strength. A third, weaker value for `xs` was considered
+     and refused — it would be a third elevation step, i.e. a fifth dial, and
+     Story 43.4 closes that list at four in this same release.
+
+     `--shadow-none` and Tailwind v4's `--inset-shadow-*` are deliberately not
+     mapped: neither sets an elevation value, so neither is this dial. */
+  --shadow-2xs: var(--elevation-raised);
+  --shadow-xs: var(--elevation-raised);
+  --shadow-sm: var(--elevation-raised);
+  --shadow-md: var(--elevation-overlay);
+  --shadow-lg: var(--elevation-overlay);
+  --shadow-xl: var(--elevation-overlay);
+  --shadow-2xl: var(--elevation-overlay);
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
-  --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  /* Named after the ROLE, not after the font: the sans is swappable (skill
+     `design`), and a variable called --font-geist-sans holding something that
+     is not Geist is the leftover the next reader trips on. Wired in
+     app/layout.tsx. */
+  --font-sans: var(--font-app-sans), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-app-mono, ui-monospace), monospace;
+
+  /* The heading face, and the nesting in that value is not a style — it is the
+     only form that degrades.
+
+     🚨 `font-family: var(--a), var(--b)` with `--a` UNDEFINED is invalid at
+     computed value time: the whole declaration is dropped and the element
+     INHERITS, it does not fall through to `--b`. So the comma form would
+     survive deleting the `localFont()` call only by accident — headings would
+     inherit from <body>, which happens to be `--font-sans` here. Written
+     `var(--a, var(--b))` the fallback is the cascade's own and holds wherever
+     the rule is used. Deleting the second `localFont()` call in app/layout.tsx
+     therefore puts headings on the BODY sans, which is checked by hand and by
+     app/globals.heading.test.ts.
+
+     ⚠️ `--font-mono` one line up USED to be the comma form, and with
+     `--font-app-mono` defined nowhere in this tree that made the whole
+     declaration invalid at computed-value time: `font-mono` silently inherited
+     the body sans, and `<code>` only looked right because Tailwind's preflight
+     sets it independently. It is the fallback form now, so the empty slot stays
+     empty — a second face is still a decision nobody has made
+     (docs/design-system.md §8) — while `font-mono` renders monospace as it says
+     on the tin. Measured before the change: getComputedStyle(:root) answered
+     the empty string for `--font-mono`.
+
+     ⚠️ This entry generates a `font-heading` utility, as every `--font-*` key
+     here does (`--font-sans` produces `font-sans`). Nobody may write it on a
+     page: the face's reach is the rule in `@layer base` below, not a class.
+     There is no naming that avoids the utility — it comes from the theme key —
+     so it is reported rather than prevented. */
+  --font-heading: var(--font-app-heading, var(--font-app-sans));
 }
 
 /* WICHTIG: in `@layer base`, nicht davor. CSS-Regeln ausserhalb aller Layer
@@ -193,5 +329,33 @@
   h3 {
     text-wrap: balance;
     letter-spacing: -0.015em;
+  }
+
+  /* The heading FACE, and its selector is deliberately narrower than the rule
+     directly above. Typographic hygiene may reach every heading; a different
+     voice may not, and the difference was measured on this tree rather than
+     assumed:
+
+       · `CardTitle` takes `level="h2" | "h3" | "h4"` (components/ui/card.tsx),
+         so an `h2` rule would have a reach that depends on a PROP — the rule
+         would live half here and half at every call site.
+       · Two of the app's own `h2`s are 14 px and muted: the mobile breadcrumb
+         in components/app-shell.tsx and a label on app/page.tsx. A display
+         serif there is a defect, not a look, and a selector that reaches them
+         chooses it on the reader's behalf.
+       · `h1` is the only level whose reach is a property of the PAGE: every
+         page has exactly one, nothing renders it conditionally, and it is the
+         line anybody reads first.
+
+     `h1, h2:not([data-slot])` was considered — every kit title carries a
+     `data-slot` — and refused: it does not fix the two 14-px cases and buys a
+     selector nobody can read. If a later story wants `h2` as well, the honest
+     route is the kit's slots plus fixing those two elements (which are arguably
+     a breadcrumb and a label rather than headings), not a wider rule here.
+
+     components/page-header.tsx INHERITS this — it renders a plain <h1> — so the
+     rule stays in one place. */
+  h1 {
+    font-family: var(--font-heading);
   }
 }

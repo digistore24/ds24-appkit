@@ -1,0 +1,63 @@
+{
+  "id": "api",
+  "version": "1.0.0",
+  "requiresTemplate": "0.19.0",
+  "title": {
+    "de": "HTTP-API",
+    "en": "HTTP API"
+  },
+  "summary": "the HTTP API a customer's own programs talk to, on per-member bearer keys",
+  "docs": "docs/api.md",
+  "skill": "mobile-companion",
+  "config": "config/api.json",
+  "app": [
+    "api/v1"
+  ],
+  "publicRoutes": {
+    "/api/v1/*": "has no session and cannot have one — every handler opens with guardApi(), which authenticates a per-member bearer key by its ds24api_ prefix and audience; guard-presence.test.ts reads the handlers rather than trusting this line"
+  },
+  "schema": "schema.ts",
+  "tables": [
+    "api_keys"
+  ],
+  "tablePrefix": "api_",
+  "content": "collected",
+  "migrations": "drizzle",
+  "migrationsTable": "__drizzle_migrations_api",
+  "messages": {
+    "namespaces": [
+      "apiKeys"
+    ],
+    "dir": "messages"
+  },
+  "errorCodes": {
+    "source": "keys/rules.ts",
+    "export": "API_KEY_ERROR_CODES"
+  },
+  "slots": {
+    "account": "components/account-card.tsx"
+  },
+  "commands": {
+    "api-check": {
+      "script": "check.mjs",
+      "help": "check the HTTP API's settings; --live mints a key and really calls it once"
+    }
+  },
+  "erase": true,
+  "privacy": {
+    "sections": [
+      "apiKeys"
+    ],
+    "accountNotes": {
+      "export": "apiKeys.accountExportNote",
+      "deletion": "apiKeys.accountDeletionNote"
+    },
+    "ts": "privacy/sections.ts",
+    "mjs": "privacy/sections.mjs"
+  },
+  "entry": "module.ts",
+  "coreExport": [
+    "keys/rules.ts"
+  ],
+  "presence": "presence/check.ts"
+}

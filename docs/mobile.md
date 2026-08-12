@@ -17,13 +17,106 @@ The web UI transfers **nothing** (it is DOM, Tailwind and Server Actions),
 and that is fine: the companion brings its own screens. The skill that walks
 through all of it is `mobile-companion`.
 
+**Read the next section before any of that.** "I want an app for my phone" has
+two answers, and most people asking for the second one wanted the first.
+
+---
+
+## First: an icon, or an app?
+
+The thing most people mean by "an app on my phone" is **an icon on the home
+screen that opens without a browser bar**. This app already does that, on both
+systems, with nothing to build, nothing to submit and nobody to pay.
+
+| | An icon (this app, today) | A native companion (the rest of this document) |
+|---|---|---|
+| What it takes | nothing — it is built in | a second repo, Expo/EAS, two paid developer accounts |
+| Getting it out | the customer adds it in three taps | store review, in days rather than minutes |
+| Every change | your next deploy | a new build, or an OTA update |
+| Push notifications | no (not on iOS) | yes |
+| Camera, offline, contacts | limited | yes |
+| **Selling inside it** | **the normal web checkout** | **see below — this is the one that surprises people** |
+
+### The one that surprises people: you cannot sell in the app
+
+Apple and Google both require digital goods sold **inside** an app to go through
+their own purchasing systems, and both take a cut of it — commonly quoted as
+15–30 %, and worth checking for your case, because the rules have been moving in
+several countries. A Digistore24 checkout opened inside your own app is exactly
+what that rule is about.
+
+So a native companion for a product billed through Digistore24 is a **companion
+and a viewer**: it shows what somebody bought, it lets them work with it, and
+when there is something to buy it hands them to the web. That is not a
+limitation this template invented — it is what the app stores allow — and it is
+the reason the honest order is *icon first, app only when something genuinely
+needs the phone itself*.
+
+So the reasons that survive that question are the ones about the phone: push on
+iOS, the camera, real offline use. **"My customers want an app" is not one of
+them** — an icon on the home screen is what they are describing, and they get it
+for nothing.
+
+### How a customer puts the icon there
+
+| | |
+|---|---|
+| **Android** | browser menu (⋮) → **"App installieren"** → confirm |
+| **iPhone / iPad** | **Teilen** (the square with the arrow) → **"Zum Home-Bildschirm"** → *Hinzufügen*. Needs iOS 16.4 or newer |
+| **From Instagram, Facebook, TikTok** | not possible in those in-app browsers. Open the page in Safari or Chrome first — the app says so when it detects one |
+
+The app offers this by itself: once in the dashboard from a customer's second
+visit, and permanently as **"Als App installieren"** in the menu under their
+name. Both disappear where installing is not possible, and on Android also once
+the app has been installed. On iOS nothing can detect that, which is why the
+notice shows once and never returns.
+
+### ⚠️ On iPhone the installed app signs in separately
+
+A home-screen app on iOS has **its own cookie store**. Somebody who was signed
+in in Safari opens the icon and lands on the sign-in page — and the sign-in link
+from an email opens *Safari*, not the installed app, so it does not help. From
+the outside that reads as "your app is broken".
+
+Two things follow, and both are worth doing before you tell customers about the
+icon:
+
+- **Make sure a password is reachable.** `/dashboard/account` is where a member
+  sets one, and it is the only sign-in that works inside the installed app.
+  An app offering nothing but magic links is, on iOS, an app that cannot be
+  used from its own icon.
+- **Google sign-in has the same shape of problem**: `accounts.google.com` is
+  outside the app's scope, and Google refuses OAuth in embedded views.
+
+The install text says this in one sentence, in both languages
+(`messages/*.json` → `pwa.stepsIosSignIn`). Do not delete it to make the dialog
+shorter.
+
+### Where it lives, and what to do if your copy does not have it
+
+| | |
+|---|---|
+| The manifest | `app/manifest.ts` → served at `/manifest.webmanifest`; what it says is `lib/pwa/manifest.ts` |
+| The icons | `public/icons/icon-192.png`, `icon-512.png`, `icon-maskable-512.png` — placeholders, replaced together with `app/icon.png` and `app/apple-icon.png` |
+| Who decides when to offer | `lib/pwa/rules.ts` (pure, tested); the surfaces are `components/install-app.tsx` |
+| Proof it works in a deployment | `node run.mjs smoke` calls the manifest and every icon in it |
+
+**If those files are not in your app, your copy of the template predates them.**
+`node run.mjs update` brings this text forward but never code — it deliberately
+never touches `app/`, `lib/` or `public/`. Retrofitting is four files, and two
+numbers decide whether it works at all: the icons **must** include a 192×192 and
+a 512×512, or Chrome refuses to install and says nothing useful about why.
+Pointing the manifest at the existing `app/icon.png` (256×256) is the mistake
+that gets made — it looks right and installs nowhere. The current files are in
+the template repo.
+
 ---
 
 ## The short version
 
 | | |
 |---|---|
-| The backend | switch on the API: `config/api.json`, [`docs/api.md`](api.md) |
+| The backend | install the API module and switch it on: `node run.mjs module add api`, then `config/api.json` — [`docs/api.md`](api.md) |
 | The core | `node run.mjs export-core ../my-app-mobile/core` — plan first, `--apply` writes |
 | What is in it | `config/core-export.json` — the explicit list, nothing else ever goes out |
 | The stamp | `.core-version` in the target — a file you changed there is yours, re-exports keep it |
@@ -94,7 +187,7 @@ Then the app signs in against the backend and stores its key
 ([`docs/api.md`](api.md) → *Getting a token*):
 
 ```ts
-import { looksLikeKey } from "@/lib/api-keys/rules";   // shared shape check
+import { looksLikeKey } from "@/modules/api/keys/rules";   // shared shape check
 import { allProducts, formatPrice } from "@/lib/digistore/products";
 ```
 
@@ -105,7 +198,21 @@ no globs, so adding a file is a deliberate, reviewable act. Shipped v1:
 the Digistore24 domain model (`products`, `plan-sections`, `next-payment`,
 `billing-mode`, the product registry JSON), the entitlement/token/user rules,
 `i18n/config.ts` (locale list + Accept-Language negotiation), `lib/roles.ts`,
-`lib/rate-limit.ts`, `lib/api-keys/rules.ts`.
+`lib/rate-limit.ts`, `modules/api/keys/rules.ts` — the one manifest entry that
+comes out of a module rather than the core, because the key shape it checks is
+the API module's.
+
+> ⚠️ **That last entry MOVED, and a companion exported before it did will not
+> build.** It used to be `lib/api-keys/rules.ts`. A renamed manifest file is a
+> breaking change for every already-exported copy — the companion's own
+> `import … from "@/core/lib/api-keys/rules"` goes red, and `export-core` reports
+> the old path only as `withdrawn` rather than fixing it. The repair is one line
+> in the companion: change the import to `@/core/modules/api/keys/rules`, then
+> `node run.mjs export-core <dir> --apply` again.
+>
+> It does **not** matter whether the `api` module is installed. An uninstalled
+> module's files are still in the tree doing nothing, so the export finds them
+> either way — installing is about what the app RUNS, not about what is on disk.
 
 **Kept out on purpose — do not add these:**
 
@@ -197,7 +304,8 @@ The server side is this app's job — a member's devices are rows the backend
 has to know about, so the companion needs an endpoint that stores and removes
 push tokens for the authenticated member. That endpoint is **not shipped**;
 build it the way every other endpoint is built —
-[`docs/api.md`](api.md) → *Adding an endpoint*: logic in `lib/`,
-`guardApi()`-first handler, no member id in the payload (the token belongs to
-the key's owner), colocated test. Sending then goes from your server to
+[`docs/api.md`](api.md) → *Adding an endpoint*: logic in `lib/`, a
+`guardApi()`-first handler in `modules/api/routes/` with its one-line
+`route.api.ts` declaration under `app/api/v1/`, no member id in the payload
+(the token belongs to the key's owner), colocated test. Sending then goes from your server to
 Expo's push API with the stored tokens.

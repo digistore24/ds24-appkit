@@ -5,14 +5,20 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   COMPAT_PROFILES,
+  ToolCallAccumulator,
   buildBody,
   compatAdapter,
   deltaFrom,
   stopReasonFrom,
   textFrom,
+  toolCallsFrom,
   usageFrom,
 } from "./openai-compat";
-import { unexplainedTokens, type NormalizedRequest } from "./types";
+import {
+  unexplainedTokens,
+  type NormalizedRequest,
+  type ToolDefinition,
+} from "./types";
 import { PROVIDERS_REPORTING_COST } from "./ids.mjs";
 
 const REQUEST: NormalizedRequest = {
@@ -247,7 +253,229 @@ function sseResponse(...lines: string[]): Response {
   return new Response(body, { status: 200 });
 }
 
+// ── Tools ───────────────────────────────────────────────────────────────────
+
+const TOOLS: ToolDefinition[] = [
+  {
+    name: "content_search",
+    description: "Searches the app's content.",
+    inputSchema: { type: "object", properties: { query: { type: "string" } } },
+  },
+];
+
+describe("buildBody with tools", () => {
+  it("maps tools into the function shape beside the transport flags", () => {
+    const body = buildBody({ ...REQUEST, tools: TOOLS }, COMPAT_PROFILES.openai, true);
+    expect(body.tools).toEqual([
+      {
+        type: "function",
+        function: {
+          name: "content_search",
+          description: "Searches the app's content.",
+          parameters: TOOLS[0].inputSchema,
+        },
+      },
+    ]);
+    expect(body.stream).toBe(true);
+    expect(body).not.toHaveProperty("tool_choice");
+  });
+
+  it('sends tool_choice "none" only when asked', () => {
+    const body = buildBody(
+      { ...REQUEST, tools: TOOLS, toolChoice: "none" },
+      COMPAT_PROFILES.openai,
+      false,
+    );
+    expect(body.tool_choice).toBe("none");
+  });
+
+  it("sends NEITHER field without tools — OpenAI 400s on tools: []", () => {
+    for (const req of [REQUEST, { ...REQUEST, tools: [] }]) {
+      const body = buildBody(req, COMPAT_PROFILES.openai, false);
+      expect(body).not.toHaveProperty("tools");
+      expect(body).not.toHaveProperty("tool_choice");
+    }
+  });
+
+  it("a stale binding key cannot clobber or invent tool wiring", () => {
+    const armed = buildBody(
+      { ...REQUEST, tools: TOOLS, providerOptions: { tools: "stale" } },
+      COMPAT_PROFILES.openai,
+      false,
+    );
+    expect(Array.isArray(armed.tools)).toBe(true);
+    const disarmed = buildBody(
+      { ...REQUEST, providerOptions: { tools: "stale", tool_choice: "auto" } },
+      COMPAT_PROFILES.openai,
+      false,
+    );
+    expect(disarmed).not.toHaveProperty("tools");
+    expect(disarmed).not.toHaveProperty("tool_choice");
+  });
+
+  it("replays an assistant tool-call turn with arguments as a JSON string", () => {
+    const body = buildBody(
+      {
+        ...REQUEST,
+        messages: [
+          {
+            role: "assistant",
+            content: "",
+            toolCalls: [{ id: "c1", name: "content_search", input: { query: "x" } }],
+          },
+        ],
+      },
+      COMPAT_PROFILES.openai,
+      false,
+    );
+    const message = (body.messages as Record<string, unknown>[]).at(-1)!;
+    expect(message.content).toBeNull();
+    expect(message.tool_calls).toEqual([
+      {
+        id: "c1",
+        type: "function",
+        function: { name: "content_search", arguments: '{"query":"x"}' },
+      },
+    ]);
+  });
+
+  it("expands one round's results into one role:tool message per result", () => {
+    const body = buildBody(
+      {
+        ...REQUEST,
+        messages: [
+          {
+            role: "tool",
+            results: [
+              { toolCallId: "c1", name: "a", content: "first" },
+              { toolCallId: "c2", name: "b", content: "second" },
+            ],
+          },
+        ],
+      },
+      COMPAT_PROFILES.openai,
+      false,
+    );
+    const messages = (body.messages as Record<string, unknown>[]).slice(-2);
+    expect(messages).toEqual([
+      { role: "tool", tool_call_id: "c1", content: "first" },
+      { role: "tool", tool_call_id: "c2", content: "second" },
+    ]);
+  });
+
+  it("serializes byte-identically across two builds — the cache condition", () => {
+    const a = JSON.stringify(buildBody({ ...REQUEST, tools: TOOLS }, COMPAT_PROFILES.openai, true));
+    const b = JSON.stringify(buildBody({ ...REQUEST, tools: TOOLS }, COMPAT_PROFILES.openai, true));
+    expect(a).toBe(b);
+  });
+});
+
+describe("toolCallsFrom", () => {
+  it("reads calls from a non-streamed answer and parses their arguments", () => {
+    const calls = toolCallsFrom({
+      choices: [
+        {
+          message: {
+            tool_calls: [
+              { id: "c1", function: { name: "content_search", arguments: '{"query":"x"}' } },
+            ],
+          },
+        },
+      ],
+    });
+    expect(calls).toEqual([{ id: "c1", name: "content_search", input: { query: "x" } }]);
+  });
+
+  it("marks unparseable arguments as parseFailed instead of throwing", () => {
+    const calls = toolCallsFrom({
+      choices: [
+        { message: { tool_calls: [{ id: "c1", function: { name: "a", arguments: "{broken" } }] } },
+      ],
+    });
+    expect(calls[0]).toEqual({ id: "c1", name: "a", input: {}, inputError: "parseFailed" });
+  });
+});
+
+describe("ToolCallAccumulator", () => {
+  it("reassembles two interleaved calls whose arguments arrive in fragments", () => {
+    const acc = new ToolCallAccumulator();
+    const chunks = [
+      { choices: [{ delta: { tool_calls: [{ index: 0, id: "c1", function: { name: "search", arguments: "" } }] } }] },
+      { choices: [{ delta: { tool_calls: [{ index: 1, id: "c2", function: { name: "get", arguments: '{"r' } }] } }] },
+      { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '{"query":' } }] } }] },
+      { choices: [{ delta: { tool_calls: [{ index: 1, function: { arguments: 'ef":"a"}' } }] } }] },
+      { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '"knots"}' } }] } }] },
+    ];
+    for (const chunk of chunks) acc.add(chunk);
+    expect(acc.finish()).toEqual([
+      { id: "c1", name: "search", input: { query: "knots" } },
+      { id: "c2", name: "get", input: { ref: "a" } },
+    ]);
+  });
+
+  it("marks a call whose reassembled arguments do not parse", () => {
+    const acc = new ToolCallAccumulator();
+    acc.add({ choices: [{ delta: { tool_calls: [{ index: 0, id: "c1", function: { name: "a", arguments: "{oops" } }] } }] });
+    expect(acc.finish()).toEqual([{ id: "c1", name: "a", input: {}, inputError: "parseFailed" }]);
+  });
+
+  it("synthesizes an id when a compat upstream sends none", () => {
+    const acc = new ToolCallAccumulator();
+    acc.add({ choices: [{ delta: { tool_calls: [{ index: 2, function: { name: "a", arguments: "{}" } }] } }] });
+    expect(acc.finish()[0].id).toBe("call_2");
+  });
+
+  it("drops nameless fragments and stays empty on text-only chunks", () => {
+    const acc = new ToolCallAccumulator();
+    acc.add({ choices: [{ delta: { content: "hello" } }] });
+    acc.add({ choices: [{ delta: { tool_calls: [{ index: 0, id: "c1" }] } }] });
+    expect(acc.finish()).toEqual([]);
+  });
+});
+
 describe("streaming", () => {
+  it("yields accumulated tool calls after the stream, before done", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        sseResponse(
+          JSON.stringify({ choices: [{ delta: { content: "Let me check." } }] }),
+          JSON.stringify({
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    { index: 0, id: "c1", function: { name: "content_search", arguments: '{"que' } },
+                  ],
+                },
+              },
+            ],
+          }),
+          JSON.stringify({
+            choices: [
+              { delta: { tool_calls: [{ index: 0, function: { arguments: 'ry":"knots"}' } }] }, finish_reason: "tool_calls" },
+            ],
+          }),
+          JSON.stringify({ choices: [], usage: { prompt_tokens: 12, completion_tokens: 3 } }),
+          "[DONE]",
+        ),
+      ),
+    );
+
+    const adapter = compatAdapter(COMPAT_PROFILES.openai);
+    const events = [];
+    for await (const event of adapter.stream({ ...REQUEST, tools: TOOLS }, "k")) {
+      events.push(event);
+    }
+
+    expect(events.map((e) => e.type)).toEqual(["delta", "tool_call", "done"]);
+    const call = events[1] as { call: { name: string; input: unknown } };
+    expect(call.call).toEqual({ id: "c1", name: "content_search", input: { query: "knots" } });
+    const done = events.at(-1) as { usage: { inputTokens: number }; stopReason: string };
+    expect(done.usage.inputTokens).toBe(12);
+    expect(done.stopReason).toBe("tool_calls");
+  });
+
   it("emits deltas and takes usage from the final chunk", async () => {
     vi.stubGlobal(
       "fetch",

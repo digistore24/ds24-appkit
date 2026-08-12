@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import { isSpendableAmount, spendErrorFor } from "./spend";
 import { InsufficientTokensError } from "./account";
 import { TokenError, MAX_TOKEN_AMOUNT } from "./rules";
+import { blankComments } from "@/scripts/lib/source-text.mjs";
 
 // The pure half of the debit. The impure half (`spendTokens`) is transcription
 // — session in, `consumeTokens` out — and there is no test database here, so
@@ -70,9 +71,7 @@ describe("the session, not an argument, decides whose balance moves", () => {
   // perfectly. §D2 of the story spells out why an optional `memberId`
   // defaulting to the session is not an acceptable version of this function.
   const source = readFileSync(new URL("./spend.ts", import.meta.url), "utf8");
-  const code = source
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/^\s*\/\/.*$/gm, "");
+  const code = blankComments(source);
   const signature = code.slice(
     code.indexOf("export async function spendTokens"),
     code.indexOf("): Promise<number>"),

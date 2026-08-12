@@ -1,0 +1,24 @@
+{
+  "companion": {
+    "disclaimer": "An AI reads what you write here and answers it. It can be wrong — for anything about money or access, ask support.",
+    "emptyBody": "Write down what you are working on — you will get a response to it.",
+    "emptyTitle": "Nothing here yet",
+    "loading": "Loading …",
+    "offBrokenConfig": "The settings are incomplete or contradictory. In the terminal: node run.mjs ai-check",
+    "offDisabledInConfig": "It is switched off. Set \"enabled\" to true in config/ai-companion.json.",
+    "offNoApiKey": "There is no provider key in the .env for the \"companion\" task (config/ai-models.json). In the terminal: node run.mjs ai-check",
+    "offTitle": "This companion is not available",
+    "placeholder": "Write what you are working on …",
+    "send": "Send",
+    "sending": "Reading …"
+  },
+  "errors": {
+    "companionBadSubject": "Nothing could be found for that.",
+    "companionEmptyMessage": "Please write something that can be answered.",
+    "companionFailed": "That did not work just now. Please try again.",
+    "companionInsufficientBalance": "Your balance is not enough for that. Nothing was charged.",
+    "companionMessageTooLong": "That is too long. Please shorten it a little.",
+    "companionRateLimited": "Too many requests in a short time. Please wait a moment.",
+    "companionUnavailable": "This companion is not available right now."
+  }
+}

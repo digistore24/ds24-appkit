@@ -8,6 +8,7 @@ import { APP_NAME } from "@/lib/app";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { BrandLink } from "@/components/brand-mark";
 
 // Header of the public pages (home, plans) — the counterpart to the AppShell
 // in the protected area. Carries language and light/dark so both are reachable
@@ -22,15 +23,7 @@ export async function PublicHeader() {
   return (
     <header className="sticky top-0 z-30 border-b bg-background/80 backdrop-blur-sm">
       <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-3 px-4 sm:px-6">
-        <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-          <span
-            aria-hidden
-            className="bg-primary text-primary-foreground grid size-7 shrink-0 place-items-center rounded-md text-xs font-bold"
-          >
-            {APP_NAME.slice(0, 1).toUpperCase()}
-          </span>
-          <span className="truncate">{APP_NAME}</span>
-        </Link>
+        <BrandLink appName={APP_NAME} href="/" />
 
         <div className="ml-auto flex items-center gap-1 sm:gap-2">
           <LanguageSwitcher />

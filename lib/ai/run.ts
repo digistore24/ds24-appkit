@@ -31,10 +31,12 @@ import { adapterFor, imageAdapterFor } from "./providers/registry";
 import {
   DEFAULT_TIMEOUT_MS,
   ProviderError,
-  type ChatMessage,
   type GeneratedImage,
+  type ModelMessage,
   type PromptBlock,
   type StreamEvent,
+  type ToolCall,
+  type ToolDefinition,
   type Usage,
 } from "./providers/types";
 import { bindingFor, type TaskId } from "./tasks";
@@ -47,11 +49,21 @@ export interface TaskInput {
    * see `lib/ai/providers/blocks.ts`.
    */
   system?: PromptBlock[];
-  messages: ChatMessage[];
+  messages: ModelMessage[];
   /** Whom this is for, when there is somebody. Recorded, never sent. */
   memberId?: string | null;
   /** Overrides the binding's cap for this one call. Rarely needed. */
   maxTokens?: number;
+  /**
+   * The tools the model may call. A MODULE CONSTANT, byte-stable across
+   * requests — the list sits in the cached prefix on every provider (see
+   * `ToolDefinition`). Most callers want `streamTaskWithTools` in
+   * `lib/ai/tool-loop.ts`, which executes the calls and loops; passing tools
+   * here directly gives one round with the calls handed back unexecuted.
+   */
+  tools?: ToolDefinition[];
+  /** "none" forces a text answer. Only sent when `tools` is present. */
+  toolChoice?: "auto" | "none";
 }
 
 export interface TaskResult {
@@ -60,6 +72,8 @@ export interface TaskResult {
   provider: string;
   model: string;
   stopReason: string | null;
+  /** The tools the model asked for. Empty when it answered in text. */
+  toolCalls: ToolCall[];
 }
 
 function buildRequest(task: TaskId, input: TaskInput) {
@@ -70,6 +84,8 @@ function buildRequest(task: TaskId, input: TaskInput) {
       model: binding.model,
       system: input.system ?? [],
       messages: input.messages,
+      tools: input.tools,
+      toolChoice: input.toolChoice,
       maxTokens: input.maxTokens ?? binding.maxTokens,
       timeoutMs: binding.timeoutMs || DEFAULT_TIMEOUT_MS,
       providerOptions: binding.providerOptions,
@@ -122,6 +138,7 @@ export async function runTask(task: TaskId, input: TaskInput): Promise<TaskResul
       provider: binding.provider,
       model: binding.model,
       stopReason: result.stopReason,
+      toolCalls: result.toolCalls,
     };
   } catch (error) {
     finish({

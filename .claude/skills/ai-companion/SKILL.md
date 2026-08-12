@@ -1,6 +1,6 @@
 ---
 name: ai-companion
-description: Makes an app work ALONGSIDE its customer rather than only delivering to them — decides whether it should at all, builds one of the patterns from the catalogue (a companion that walks a course or challenge, a reading of what somebody submitted, a tool whose result is the product, a check before they commit, a look back), decides who may use it and what one use costs, and checks one that already exists. Use this when the user says "my customers just get a list", "it does not do anything for them", "my app only saves what they type", "could it help my users while they work", or when a page takes work from a customer and answers "saved". For WHICH AI company and what a call costs use `ai-providers`; for the support assistant's handbook use `ai-chat-knowledge`.
+description: Makes an app work ALONGSIDE its customer rather than only delivering to them — a companion that walks a course or challenge, a reading of what somebody submitted, a tool whose result is the product, a check before they commit, a look back; also whether to have one at all, and an audit. Use this when the user says "my customers just get a list", "it does not do anything for them", "my app only saves what they type", "could it help my users while they work", "they put something in and get a real answer back", or when a page takes work from a customer and answers "saved". For WHICH AI company and what a call costs use `ai-providers`; for the support assistant's handbook use `ai-chat-knowledge`.
 requires: 0.8.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
@@ -16,6 +16,32 @@ The reference is
 [`docs/ai-in-product.md`](../../../docs/ai-in-product.md) — the catalogue, the
 recipes and what each pattern costs. **This skill does not repeat it.** Where a
 fact is needed, that file is named and the conversation moves on.
+
+## Step 0 — is the module part of this app?
+
+The seam is a **module**: it lives in `modules/companion/` and a fresh app does
+not have it, the same way a fresh app has no community. Nothing below works
+until it does.
+
+```bash
+node run.mjs module list         # is "companion" installed?
+node run.mjs module add companion
+```
+
+If `module list` shows it under *"present but not installed"*, its code is in
+the tree and does nothing: no registry, no texts, no error messages, nothing
+wired up. One command fixes that, and it belongs at the start of this skill
+rather than in the middle of the first recipe — see
+[`docs/modules.md`](../../../docs/modules.md).
+
+⚠️ **No `db-migrate` here, and that is not an omission.** This module declares no
+table of its own: what a companion says lives in the chat's own store, which is
+core. So `module add` is the whole installation.
+
+**Installed is still not switched on.** `config/ai-companion.json` ships
+`{ "enabled": false }` and stays the operator's file — item **4** below is where
+that gets flipped. Two different questions, and merging them is how an app ends
+up billing for a feature nobody chose.
 
 ## How to use this skill
 
@@ -101,7 +127,7 @@ the customer is alone with the work.
 Pick the pattern from `docs/ai-in-product.md` § 2, then follow Recipe A and
 Recipe B there. In outline, and the outline is the point of how little there is:
 
-1. an entry in `lib/ai/companions.ts` — the instruction, the plan or the price,
+1. an entry in `modules/companion/companions.ts` — the instruction, the plan or the price,
    the ceiling, and a `load()`;
 2. `<CompanionPanel companionId subject />` on the page that carries it.
 

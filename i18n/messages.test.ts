@@ -9,16 +9,17 @@ import { GRANT_ERROR_CODES } from "@/lib/entitlements/grant-rules";
 import { CREDENTIAL_ERROR_CODES } from "@/lib/credentials/rules";
 import { EMAIL_CHANGE_ERROR_CODES } from "@/lib/email-change/rules";
 import { CHAT_ERROR_CODES } from "@/lib/ai/rules";
-import { COMPANION_ERROR_CODES } from "@/lib/ai/companion-rules";
-import { API_KEY_ERROR_CODES } from "@/lib/api-keys/rules";
 import { PROVIDER_ERROR_CODES } from "@/lib/ai/providers/types";
 import { CONSENT_ERROR_CODES } from "@/lib/consent/rules";
 import { MEDIA_ERROR_CODES } from "@/lib/media/rules";
-import { ACTIVITY_ERROR_CODES } from "@/lib/learning/rules";
+import { ROLES } from "@/lib/roles";
 import { consentPurposes } from "@/lib/consent/config";
 import { CREDENTIAL_CHANGES } from "@/lib/email";
 import de from "@/messages/de.json";
+import { MODULE_MESSAGES } from "@/lib/modules/messages";
+import { mergeModuleMessages } from "@/lib/modules/messages-merge";
 import en from "@/messages/en.json";
+import { moduleErrorCodes } from "@/scripts/modules/inventory.mjs";
 
 // The guardian of the translations.
 //
@@ -28,7 +29,16 @@ import en from "@/messages/en.json";
 // breaks the build instead.
 //
 // New language? Create the file in `messages/`, add it to ALL_MESSAGES here.
-const ALL_MESSAGES: Record<string, unknown> = { de, en };
+//
+// ⚠️ Merged the same way `i18n/request.ts` merges it, and NOT a plain `{de, en}`.
+// A module's error codes live in the shared `errors` namespace — that is where
+// `t(`errors.${code}`)` looks — so a catalogue read straight off the core files
+// would report every module code as missing while the running app renders them
+// perfectly. Measured the moment the first module was installed.
+const ALL_MESSAGES: Record<string, unknown> = {
+  de: mergeModuleMessages(de as Record<string, unknown>, MODULE_MESSAGES.de ?? {}),
+  en: mergeModuleMessages(en as Record<string, unknown>, MODULE_MESSAGES.en ?? {}),
+};
 
 /** All keys of a nested object as "a.b.c". */
 function keyPaths(obj: unknown, prefix = ""): string[] {
@@ -111,13 +121,22 @@ const ERROR_CODE_UNIONS: Record<string, readonly string[]> = {
   "lib/credentials/rules.ts": CREDENTIAL_ERROR_CODES,
   "lib/email-change/rules.ts": EMAIL_CHANGE_ERROR_CODES,
   "lib/ai/rules.ts": CHAT_ERROR_CODES,
-  "lib/ai/companion-rules.ts": COMPANION_ERROR_CODES,
-  "lib/api-keys/rules.ts": API_KEY_ERROR_CODES,
   "lib/ai/providers/types.ts": PROVIDER_ERROR_CODES,
   "lib/consent/rules.ts": CONSENT_ERROR_CODES,
   "lib/media/rules.ts": MEDIA_ERROR_CODES,
-  "lib/learning/rules.ts": ACTIVITY_ERROR_CODES,
 };
+
+// Plus the unions an installed module declares. A module names its own source
+// file and the export in its manifest, and the codes are read from it — so a
+// module's refusals are held to the same bar as the core's: a code with no text
+// shows the member the literal key at the moment something went wrong.
+//
+// Read with a dynamic import, which is fine here and would not be in the app:
+// this is a test, and there is no bundler to satisfy. `ALL_MESSAGES` already
+// carries the module texts, because `i18n/request.ts` merges them in.
+for (const { source, codes } of await moduleErrorCodes()) {
+  ERROR_CODE_UNIONS[source] = codes;
+}
 
 describe("Error codes", () => {
   // These layers return codes rather than sentences. If a code has no text, the
@@ -135,6 +154,40 @@ describe("Error codes", () => {
       });
     }
   }
+});
+
+describe("Role names", () => {
+  // The same hole the error-code block above closes, one table further along:
+  // a role's display name is looked up with a COMPUTED key (`t(role)` in
+  // `components/role-badge.tsx`, `t(\`roles.${r}\`)` in the admin page), so the
+  // key-parity test cannot see it. A role added to `lib/roles.ts` and to
+  // NEITHER message file leaves both files in perfect agreement and renders
+  // the raw key path in the row menu, the create dialog and the badge.
+  //
+  // Story 19.2 added `moderator` to all the right places by hand; nothing
+  // would have said so if it had not. The badge's own header already carries
+  // the instruction ("Whoever adds a role enters it in lib/roles.ts AND in
+  // both message files") — this is that sentence as a build failure.
+  for (const locale of LOCALES) {
+    it(`${locale}: has a display name for every role in lib/roles.ts`, () => {
+      for (const role of ROLES) {
+        const label = messageAt(ALL_MESSAGES[locale], `roles.${role}`);
+        expect(label, `${locale}: roles.${role}`).toBeTypeOf("string");
+        expect(String(label).trim(), `${locale}: roles.${role} is empty`).not.toBe("");
+      }
+    });
+  }
+
+  it("has no display name for a role that no longer exists", () => {
+    // The other direction, and the cheaper half of keeping the table honest:
+    // a removed role leaves a label behind that reads as if the role were
+    // still there.
+    const declared = new Set<string>(ROLES);
+    const labelled = Object.keys(
+      (ALL_MESSAGES[DEFAULT_LOCALE] as { roles?: Record<string, string> }).roles ?? {},
+    );
+    expect(labelled.filter((key) => !declared.has(key))).toEqual([]);
+  });
 });
 
 // The mail texts are looked up with a COMPUTED key — `credentialSubject_${change}`

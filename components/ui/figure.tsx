@@ -19,10 +19,23 @@
 // cases are told apart by whoever is writing the page, which is the only place
 // they can be told apart.
 //
-// ── Why `next/image` and not `<img>` ───────────────────────────────────────
+// ── Why `next/image`, and the one case where it is a wrapper around nothing ──
 // Sizing. An app that hands a phone the 4 MB photo somebody took on a phone is
-// the finding `performance-gateway` reports next, and `next/image` resizes on
-// demand with the `sharp` that Next brings itself — no dependency of ours.
+// the finding `performance-gateway` reports next, and on this app's OWN origin
+// `next/image` resizes on demand.
+//
+// For BUCKET media it cannot: `next.config.ts` declares no
+// `images.remotePatterns` (two reasons, written out there), so anything remote is
+// already `unoptimized` — `next/image` then emits one `<img>` with the address it
+// was given and no `srcset` at all. That is the case `srcSet` below is for: the
+// narrower copies are derived at UPLOAD (`lib/media/variants.ts`, with the
+// `sharp` this app now declares explicitly rather than inheriting from Next's
+// hoist) and their addresses are minted on the server
+// (`lib/media/url.ts` → `mediaImageFor()`), because a `next/image` `loader` is a
+// FUNCTION and a function does not cross into a client component.
+//
+// So there are two branches, and which one runs is derived rather than chosen by
+// a caller — see `isRemote` below.
 import Image from "next/image";
 
 import { cn } from "@/lib/utils";
@@ -50,6 +63,22 @@ type FigureBase = {
   unoptimized?: true;
   priority?: boolean;
   sizes?: string;
+  /**
+   * The narrower copies a browser may fetch instead — `mediaImageFor().srcSet`.
+   *
+   * **Only used on the remote branch, and it is a whole string rather than a
+   * list on purpose:** every candidate is a signed address minted on the server
+   * beside the `src`, so composing it here would mean composing it twice.
+   * `mediaImageFor()` returns `null` when there is nothing to choose from — a
+   * picture with no variants, one whose pixel width was never measured, the local
+   * driver — and `null` renders exactly what this component rendered before.
+   *
+   * ⚠️ **Pass `sizes` with it.** Without one a browser assumes `100vw`, which on
+   * a picture laid out in a narrow column picks a candidate two steps too wide.
+   * It is not made required because `next/image` treats it as optional too and a
+   * second, stricter rule on one branch would be a trap of its own.
+   */
+  srcSet?: string | null;
 };
 
 /**
@@ -65,7 +94,7 @@ export type FigureProps = FigureBase &
   );
 
 export function Figure(props: FigureProps) {
-  const { src, width, height, className, caption, priority, sizes } = props;
+  const { src, width, height, className, caption, priority, sizes, srcSet } = props;
   // `?? ""` because `alt` is typed `string` and arrives `null` anyway: a
   // `media` row's `alt` column is nullable, and `createMedia()` — the path
   // `docs/visuals.md` documents for selling a file — accepts a row without one.
@@ -106,29 +135,66 @@ export function Figure(props: FigureProps) {
   const isRemote = /^https?:\/\//.test(src);
   const unoptimized = props.unoptimized ?? isRemote;
 
-  const image = (
-    <Image
-      src={src}
-      // Empty for a decorative image. That is the documented way to tell a
-      // screen reader to skip an element — not a missing attribute, which makes
-      // it read the filename out instead.
-      alt={alt}
-      width={width}
-      height={height}
-      sizes={sizes}
-      priority={priority}
-      unoptimized={unoptimized}
-      // `bg-muted` rather than nothing: a picture with a light background of its
-      // own sitting on a dark page is the dark-mode finding this template's own
-      // gateway looks for, and a neutral plate behind it is what stops the
-      // transparent parts of a PNG from disappearing into the page.
-      className={cn("h-auto max-w-full rounded-md bg-muted object-cover", className)}
-      // Decorative images are hidden from assistive technology entirely, which
-      // is the other half of an empty `alt` — some readers announce an
-      // `alt=""` image as "image" without it.
-      aria-hidden={props.decorative ? true : undefined}
-    />
-  );
+  // The plate and the shape are the same on both branches — a picture must not
+  // look different depending on which driver stored it.
+  const imageClassName = cn("h-auto max-w-full rounded-md bg-muted object-cover", className);
+
+  const image =
+    isRemote && srcSet ? (
+      // eslint-disable-next-line @next/next/no-img-element -- The rule exists to
+      // stop somebody bypassing Next's optimiser by accident. Here there is no
+      // optimiser to bypass: `next.config.ts` declares no `images.remotePatterns`,
+      // so this address is `unoptimized` either way and `next/image` would emit
+      // one `<img>` with no `srcset`. The candidates come from
+      // `lib/media/url.ts` → `mediaImageFor()`, derived at upload by
+      // `lib/media/variants.ts` — which is the sizing the rule is really about,
+      // done at a moment when the bytes are in hand rather than per request. Its
+      // `loader` prop cannot carry them: a loader is a function, these addresses
+      // are signed on the server, and a function does not cross into a client
+      // component.
+      <img
+        src={src}
+        srcSet={srcSet}
+        // Without this a browser assumes the picture fills the viewport and picks
+        // one candidate too wide. `100vw` is the honest default for a figure in a
+        // page's own column; a caller laying one out narrower says so.
+        sizes={sizes ?? "100vw"}
+        alt={alt}
+        width={width}
+        height={height}
+        loading={priority ? "eager" : "lazy"}
+        // `next/image` sets both by itself; on this branch they are ours to set,
+        // and leaving them off is a picture that blocks the first paint and one
+        // that jumps when it arrives.
+        fetchPriority={priority ? "high" : undefined}
+        decoding="async"
+        className={imageClassName}
+        aria-hidden={props.decorative ? true : undefined}
+      />
+    ) : (
+      <Image
+        src={src}
+        // Empty for a decorative image. That is the documented way to tell a
+        // screen reader to skip an element — not a missing attribute, which makes
+        // it read the filename out instead.
+        alt={alt}
+        width={width}
+        height={height}
+        sizes={sizes}
+        priority={priority}
+        unoptimized={unoptimized}
+        // `bg-muted` rather than nothing: a picture with a light background of
+        // its own sitting on a dark page is the dark-mode finding this
+        // template's own gateway looks for, and a neutral plate behind it is
+        // what stops the transparent parts of a PNG from disappearing into the
+        // page.
+        className={imageClassName}
+        // Decorative images are hidden from assistive technology entirely, which
+        // is the other half of an empty `alt` — some readers announce an
+        // `alt=""` image as "image" without it.
+        aria-hidden={props.decorative ? true : undefined}
+      />
+    );
 
   if (!caption) return image;
 

@@ -1,168 +1,21 @@
 // Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA
 // SPDX-License-Identifier: MIT
 
-// Database schema (Drizzle ORM / Postgres).
+// The app's schema — everything the core defines, plus every installed module's
+// tables. This is what `db/index.ts` hands to Drizzle, so `db.query.<table>`
+// works for a module's tables exactly as it does for the core's.
 //
-// Contains:
-//  - the Auth.js tables (users, accounts, sessions, verificationTokens) for the
-//    @auth/drizzle-adapter.
-//  - the Digistore tables (orders, subscriptions, …) — see schema-digistore.ts,
-//    which is re-exported here so `drizzle-kit` sees everything in one schema file.
-import {
-  pgTable,
-  text,
-  timestamp,
-  primaryKey,
-  integer,
-} from "drizzle-orm/pg-core";
-
-// --- Auth.js core tables -----------------------------------------------------
-
-export const users = pgTable("users", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  name: text("name"),
-  email: text("email").unique(),
-  emailVerified: timestamp("emailVerified", { mode: "date" }),
-  image: text("image"),
-  // Role for simple authorization (e.g. "owner" = SAAS operator).
-  // Canonical values: "owner" (admin) | "member" (customer) — see lib/authz.ts.
-  role: text("role").notNull().default("member"),
-  // Creation date — shown in the user management screen.
-  createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
-  // Corroborates this member's id inside the Digistore24 `tracking[custom]`
-  // value (see lib/digistore/custom.ts). 10 random alphanumerics, handed out on
-  // the first checkout rather than at sign-up — five different code paths
-  // create users, and a backfill would miss whichever is added next.
-  //
-  // NOT a credential: it never authenticates a session. It only makes a member
-  // id insufficient on its own inside a value the server alone writes.
-  checkoutToken: text("checkoutToken").unique(),
-  // Blocked since — NULL means "not blocked". Deliberately a timestamp rather
-  // than a yes/no: this way the database also records SINCE WHEN someone has
-  // had no access. How the block is enforced: see lib/users/blocked.ts.
-  blockedAt: timestamp("blockedAt", { mode: "date" }),
-  // The member's OPTIONAL password, as a scrypt hash — NULL means "this
-  // account has no password", which is the default and stays the common case.
-  // Signing in by magic link works either way; a password only ever ADDS a
-  // second door (lib/credentials/).
-  //
-  // Never the plaintext, and never readable back: the format is
-  // `scrypt$N$r$p$salt$hash` and lib/credentials/hash.ts is the only file that
-  // writes or reads it. No admin screen, no export and no log line may show
-  // it — an operator who can read a password can impersonate a customer, and
-  // customers reuse passwords elsewhere.
-  passwordHash: text("passwordHash"),
-});
-
-export const accounts = pgTable(
-  "accounts",
-  {
-    userId: text("userId")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    type: text("type").notNull(),
-    provider: text("provider").notNull(),
-    providerAccountId: text("providerAccountId").notNull(),
-    refresh_token: text("refresh_token"),
-    access_token: text("access_token"),
-    expires_at: integer("expires_at"),
-    token_type: text("token_type"),
-    scope: text("scope"),
-    id_token: text("id_token"),
-    session_state: text("session_state"),
-  },
-  (account) => [
-    primaryKey({ columns: [account.provider, account.providerAccountId] }),
-  ],
-);
-
-export const sessions = pgTable("sessions", {
-  sessionToken: text("sessionToken").primaryKey(),
-  userId: text("userId")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  expires: timestamp("expires", { mode: "date" }).notNull(),
-});
-
-export const verificationTokens = pgTable(
-  "verificationTokens",
-  {
-    identifier: text("identifier").notNull(),
-    token: text("token").notNull(),
-    expires: timestamp("expires", { mode: "date" }).notNull(),
-  },
-  (vt) => [primaryKey({ columns: [vt.identifier, vt.token] })],
-);
-
-// --- Digistore tables --------------------------------------------------------
-// Kept in a file of their own (domain separation), re-exported here.
-export * from "./schema-digistore";
-
-// --- Billing models (subscriptions + prepaid tokens) -------------------------
-// Subscriptions plus token balance/ledger for usage-based billing.
-// See schema-tokens.ts.
-export * from "./schema-tokens";
-
-// --- Entitlements ------------------------------------------------------------
-// `grants` — the app's own answer to "may this person use this". The one table
-// an access question touches. See schema-entitlements.ts.
-export * from "./schema-entitlements";
-
-// --- Self-service account management -----------------------------------------
-// `email_changes` — a Member's requested address change, until it is confirmed.
-// See schema-email-changes.ts.
-export * from "./schema-email-changes";
-
-// --- AI assistant -------------------------------------------------------------
-// `chat_messages` — the transcripts of the in-app assistant. Deleted with the
-// member, unlike the billing records. See schema-chat.ts.
-export * from "./schema-chat";
-
-// --- API & MCP keys -----------------------------------------------------------
-// `api_keys` — the credentials a Member issues to reach this app from a
-// program: an AI client (audience `mcp`) or their own app calling `/api/v1`
-// (audience `api`). Hashed, never readable back. See schema-api-keys.ts.
-export * from "./schema-api-keys";
-
-// --- AI usage -----------------------------------------------------------------
-// `ai_usage` — one row per model call: task, provider, model, tokens, outcome.
-// Numbers only, never content. See schema-ai-usage.ts.
-export * from "./schema-ai-usage";
-
-// --- Scheduled jobs -----------------------------------------------------------
-// `cron_runs` — one row per job: when it last ran, whether it worked, and the
-// lock that keeps two app instances from running it at once. See schema-cron.ts
-// and docs/cron.md.
-export * from "./schema-cron";
-
-// --- Signing in as a user ------------------------------------------------------
-// `impersonations` — one row per support session in which an Operator acted as
-// a customer. Written BEFORE the session changes, because the row is also what
-// authorises the change. See schema-impersonation.ts.
-export * from "./schema-impersonation";
-
-// --- Consent -------------------------------------------------------------------
-// `consent_records` — what a Member agreed to, which wording they read, and
-// when. Append-only: a withdrawal is a new row, never an edit. Empty in an app
-// that declares no purposes in config/consent.json, which is the shipped state.
-// See schema-consent.ts and docs/compliance.md.
-export * from "./schema-consent";
-
-// --- Media ---------------------------------------------------------------------
-// `media` — one row per stored picture, video, recording or downloadable file.
-// The BYTES are not here; they live in object storage (lib/media/store.ts), and
-// `deleteMedia()` is what keeps the two in step — a cascade removes the row and
-// leaves the object, which is a deletion request not honoured. Three
-// visibilities: product imagery, a customer's own upload, and the file a buyer
-// paid for (gated by hasPlan()). See schema-media.ts and docs/visuals.md.
-export * from "./schema-media";
-
-// --- Learning -----------------------------------------------------------------
-// `activity_results` — what a learner did on an interactive element: their own
-// attempt, score, resume point, per activity and subject. The verdict is only
-// ever written by the server. Deleted with the member, like `chat_messages` —
-// it is data about a person's ability, not a financial record.
-// See schema-learning.ts and lib/learning/.
-export * from "./schema-learning";
+// ── Why this is a barrel and `db/schema-core.ts` is the file ───────────────
+// `drizzle.config.ts` points at `schema-core.ts`, NOT here, and that split is
+// the whole reason this file exists: a module carries its own migration chain
+// with its own journal, so the CORE chain must not create the module's tables.
+// A core config pointing at this barrel would generate them into both chains,
+// and the second one to run would fail on a table that already exists.
+//
+// The module half is GENERATED from `config/modules.json` and the manifests
+// (`node run.mjs module sync`); with no module installed it exports nothing.
+//
+// ⚠️ A module's schema imports core tables from `./schema-core`, never from
+// here — importing the barrel would close a cycle (barrel → module → barrel).
+export * from "./schema-core";
+export * from "./schema-modules";

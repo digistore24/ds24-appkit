@@ -38,6 +38,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
+import { isPrunedPath, readAgentProfile } from "./agent-configs.mjs";
 import { confirmsApply, normalizeText, planUpdate, writable } from "./update-plan.mjs";
 
 const STAMP = ".template-version";
@@ -120,17 +121,17 @@ try {
 //
 // Absent file, absent profile: nothing is filtered, which is the right default
 // for everybody who never ran agent-setup.
-const pruned = (() => {
-  try {
-    const profile = JSON.parse(readFileSync(".agent-profile.json", "utf8"));
-    return Array.isArray(profile.pruned) ? profile.pruned : [];
-  } catch {
-    return [];
-  }
-})();
+// One reader, shared with agent-setup itself and with the two tests that walk
+// the tree — `readAgentProfile()` in agent-configs.mjs. A profile that is there
+// and unusable says so rather than looking like "nobody ever ran agent-setup":
+// silently filtering nothing would put the other three programs' wiring back,
+// which is the one thing this block exists to prevent.
+const profile = readAgentProfile();
+if (profile.found && !profile.ok) {
+  console.error(`⚠ ${profile.problem} — nothing is treated as pruned.`);
+}
 
-const isPruned = (file) =>
-  pruned.some((prefix) => file === prefix || file.startsWith(`${prefix}/`));
+const isPruned = (file) => isPrunedPath(profile, file);
 
 // Filtered once, here, and used for everything downstream — a pruned path that
 // survives into the plan comes back as "new" and undoes the tidy-up.

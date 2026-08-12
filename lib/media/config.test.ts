@@ -1,14 +1,79 @@
 // Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA
 // SPDX-License-Identifier: MIT
 
-// The shipped `config/media.json`, held to the same deal `lib/mcp/config.test.ts`
-// makes: a second source of truth is only safe while something checks it
-// against the first.
+// The shipped `config/media.json`, held to the same deal
+// `lib/ai/chat-config.test.ts` makes: a second source of truth is only safe
+// while something checks it against the first.
 import { describe, expect, it, vi } from "vitest";
 
-import { MEDIA_KINDS } from "./rules";
+import raw from "@/config/media.json";
+
+import {
+  MEDIA_KINDS,
+  SERVER_ACTION_BODY_LIMIT_BYTES,
+  refuseUpload,
+  slotCeilingBytes,
+} from "./rules";
+import { ROLES } from "@/lib/roles";
 import { DEFAULT_MEDIA_CONFIG, mediaConfig, mediaConfigProblems, planProblem } from "./config";
 import { driverFromEnv, mediaStoreProblems } from "./store";
+import { keysOrSkip, planShapedKey, tokenKey } from "@/lib/digistore/test-product-keys";
+
+describe("every role may upload something", () => {
+  // The trap this closes, found by a code review of Story 19.2: `refuseUpload()`
+  // reads `mayUpload[role] ?? []`, so a role that exists in `lib/roles.ts` but
+  // has no line here may upload NOTHING — every type answers
+  // `notAllowedForRole`, including the member's own avatar. It typechecks, no
+  // test rendered it, and the symptom reaches the customer as a refusal that
+  // names no cause. `moderator` shipped that way for exactly one commit.
+  //
+  // So the guard is against the CLASS: a new role is a new line here, in the
+  // shipped JSON and in the default, or the build fails while somebody can
+  // still read this comment.
+  for (const role of ROLES) {
+    it(`${role}: has a declared upload list, in the default and in the shipped file`, () => {
+      expect(
+        DEFAULT_MEDIA_CONFIG.mayUpload[role],
+        `DEFAULT_MEDIA_CONFIG.mayUpload has no "${role}" — that role may upload nothing at all`,
+      ).toBeDefined();
+      expect(DEFAULT_MEDIA_CONFIG.mayUpload[role].length).toBeGreaterThan(0);
+
+      const configured = mediaConfig().mayUpload[role];
+      expect(
+        configured,
+        `config/media.json → mayUpload has no "${role}"`,
+      ).toBeDefined();
+      expect(configured.length).toBeGreaterThan(0);
+    });
+
+    it(`${role}: can actually put a picture in, measured through refuseUpload`, () => {
+      // Not a restatement of the assertion above: this one goes through the
+      // real function with the real config, which is where the `?? []` lives.
+      expect(
+        refuseUpload(mediaConfig(), { role, mime: "image/jpeg", bytes: 1000 }),
+      ).toBeNull();
+    });
+  }
+
+  it("still refuses a role nobody declared", () => {
+    // The permissive direction is the one that must NOT be fixed by the above.
+    expect(
+      refuseUpload(mediaConfig(), { role: "guest", mime: "image/jpeg", bytes: 1000 }),
+    ).toBe("notAllowedForRole");
+  });
+
+  it("keeps the archive types the operator's", () => {
+    // A moderator keeps rooms clean; that is not a reason to let them hand
+    // every customer a .zip. If this ever legitimately changes, it changes
+    // here, deliberately.
+    expect(
+      refuseUpload(mediaConfig(), { role: "moderator", mime: "application/zip", bytes: 1000 }),
+    ).toBe("notAllowedForRole");
+    expect(
+      refuseUpload(mediaConfig(), { role: "owner", mime: "application/zip", bytes: 1000 }),
+    ).toBeNull();
+  });
+});
 
 describe("the shipped media config", () => {
   it("is coherent", () => {
@@ -26,6 +91,43 @@ describe("the shipped media config", () => {
       expect(config.kinds[kind].maxBytes).toBeGreaterThan(0);
       expect(config.kinds[kind].signedUrlSeconds).toBeGreaterThan(0);
     }
+  });
+
+  it("🚨 every declared ceiling survives the clamp", () => {
+    // ── The silent failure this exists for ────────────────────────────────
+    // `count()` CLAMPS with `Math.min` rather than refusing, so a `maxBytes`
+    // above `MAX_BYTES_CEILING` is quietly replaced and the app runs on a
+    // number nobody wrote. It really happened: Story 8.1 raised
+    // `video.maxBytes` to 2 GB for the direct-to-bucket path while the clamp
+    // still sat at 200 MB, and every test in this file stayed green — because
+    // each of them asked whether the value was plausible, and none asked
+    // whether it was the value in the file.
+    //
+    // Reading the JSON directly here is the point: comparing the effective
+    // config against itself could not fail.
+    const config = mediaConfig();
+    const declared = (raw as { kinds: Record<string, { maxBytes?: number }> }).kinds;
+    for (const kind of MEDIA_KINDS) {
+      const wanted = declared[kind]?.maxBytes;
+      if (typeof wanted !== "number") continue;
+      expect(
+        config.kinds[kind].maxBytes,
+        `config/media.json declares ${wanted} bytes for "${kind}" and the app runs on ` +
+          `${config.kinds[kind].maxBytes} — MAX_BYTES_CEILING in lib/media/config.ts clamped ` +
+          `it, silently. Raise the clamp or lower the declaration; do not leave them ` +
+          `disagreeing.`,
+      ).toBe(wanted);
+    }
+  });
+
+  it("gives the direct path a video ceiling a lesson recording fits in", () => {
+    // The number Story 8.1 exists for. Below the 10 MB a request body carries
+    // there is no direct path worth having, and `slotCeilingBytes()` keeps the
+    // through-the-app door at that lower figure whatever this says.
+    expect(mediaConfig().kinds.video.maxBytes).toBeGreaterThan(SERVER_ACTION_BODY_LIMIT_BYTES);
+    expect(slotCeilingBytes(mediaConfig().kinds.video.maxBytes)).toBe(
+      SERVER_ACTION_BODY_LIMIT_BYTES,
+    );
   });
 
   it("gives video and audio a longer address life than images", () => {
@@ -180,21 +282,38 @@ describe("a config problem does not disable delivery", () => {
 // mean "no access", it means the page rendering the item is a 500.
 
 describe("planProblem", () => {
-  it("accepts a Product Key that grants access", () => {
-    // A subscription is a right, which is what `entitled` visibility needs.
-    expect(planProblem("basis_monatlich")).toBeNull();
+  // 🚨 Read out of THIS app's registry, never written in. The shipped example
+  // products are the operator's to delete — CLAUDE.md tells them to — and a
+  // literal here turned that instruction into a red suite. Where a shape is
+  // genuinely absent the test skips and SAYS SO: see
+  // `lib/digistore/test-product-keys.ts`.
+  const PLAN = planShapedKey();
+  const TOKEN = tokenKey();
+
+  it("accepts a Product Key that grants access", (ctx) => {
+    // A subscription — or a one-off — is a right, which is what `entitled`
+    // visibility needs.
+    const [plan] = keysOrSkip(ctx, PLAN);
+    expect(planProblem(plan)).toBeNull();
   });
 
   it("refuses a key that is in no registry at all", () => {
-    // The case that takes a page down: `hasPlan()` throws on it.
+    // The case that takes a page down: `hasPlan()` throws on it. No lookup
+    // needed — a key nothing holds is the one shape every registry has.
     expect(planProblem("no_such_plan")).toMatch(/no product/);
   });
 
-  it("refuses a token package, naming why it could never work", () => {
+  it("refuses a token package, naming why it could never work", (ctx) => {
     // A balance is a quantity, not a right. `hasPlan()` answers false for it
     // for ever, so a file behind one is a file nobody can ever fetch — and the
     // failure is silent, which is worse than the 500 above.
-    const problem = planProblem("starter");
+    //
+    // ⚠️ It has to be a token package this app REALLY sells. Handed a key the
+    // registry does not hold, this test went on passing — on the "no product"
+    // branch above, which is a different refusal — and the claim it exists for
+    // was no longer measured by anything.
+    const [token] = keysOrSkip(ctx, TOKEN);
+    const problem = planProblem(token);
     expect(problem).toMatch(/token package/);
     expect(problem).toMatch(/hasPlan/);
   });

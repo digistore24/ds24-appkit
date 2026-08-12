@@ -41,6 +41,8 @@
 import postgres from "postgres";
 import "../lib/env.mjs";
 
+import { matchHostScope } from "../lib/host-env.mjs";
+
 /**
  * A cookie jar that knows no cookie names.
  *
@@ -193,64 +195,50 @@ export async function signInAsOwner(baseUrl) {
  * a lookalike domain, a staging URL against prod credentials — all land in
  * the refusal, never in a "probably meant" fallback.
  *
- * Pure, so the refusal is tested instead of hoped for.
+ * Pure, so the refusal is tested instead of hoped for. The loop under it is
+ * `matchHostScope()` (`scripts/lib/host-env.mjs`) since 0.24.0 — one host rule
+ * for all four commands that point at a deployed app. What is still HERE is the
+ * part that is genuinely this caller's: two scopes, a PAIR of values rather than
+ * one secret, and the fix sentence that names `smoke-account`.
+ *
+ * ⚠️ **The two variable names are derived from `suffix` and that is a shipped
+ * exception, not a licence.** `SMOKE_<SUFFIX>_EMAIL`/`_PASSWORD` are documented
+ * in `.env.example` exactly as spelled, and they are this file's own pair; the
+ * shared helper grows no such convenience, because `_PROD` vs `_PRODUCTION` is
+ * how an operator ends up setting a key nothing reads.
  *
  * @param {Record<string, string | undefined>} env
  * @param {string} baseUrl the URL smoke is about to sweep
  * @returns {{ email: string, password: string, envName: "prod" | "staging" } | { reason: string }}
  */
 export function smokeCredentials(env, baseUrl) {
-  let target;
-  try {
-    target = new URL(baseUrl).hostname.toLowerCase().replace(/\.+$/, "");
-  } catch {
-    return { reason: `not a usable URL: ${baseUrl}` };
-  }
-
   const scopes = [
     { envName: "prod", urlVar: "APP_URL_PROD", suffix: "PROD" },
     { envName: "staging", urlVar: "APP_URL_STAGING", suffix: "STAGING" },
   ];
 
-  const known = [];
-  for (const scope of scopes) {
-    const configured = env[scope.urlVar];
-    if (!configured) continue;
-    let host;
-    try {
-      host = new URL(configured).hostname.toLowerCase().replace(/\.+$/, "");
-    } catch {
-      continue;
-    }
-    known.push({ ...scope, host });
-    if (host !== target) continue;
+  const matched = matchHostScope(env, baseUrl, scopes, {
+    hostsLabel: "deployed hosts",
+    neverClause:
+      "smoke credentials are never sent to a host they were not provisioned for",
+    nothingConfigured: () =>
+      "APP_URL_PROD is not set — the smoke credentials are scoped to the deployed " +
+      "domain, and without it there is nothing to scope them to (.env, see .env.example)",
+  });
+  if ("reason" in matched) return matched;
 
-    const email = env[`SMOKE_${scope.suffix}_EMAIL`];
-    const password = env[`SMOKE_${scope.suffix}_PASSWORD`];
-    if (!email || !password) {
-      const envFlag = scope.envName === "staging" ? " --env staging" : "";
-      return {
-        reason:
-          `no smoke account configured for ${host} — create one: ` +
-          `DATABASE_URL="postgres://…" node run.mjs smoke-account${envFlag} --apply`,
-      };
-    }
-    return { email, password, envName: scope.envName };
-  }
-
-  if (known.length === 0) {
+  const { scope, host } = matched;
+  const email = env[`SMOKE_${scope.suffix}_EMAIL`];
+  const password = env[`SMOKE_${scope.suffix}_PASSWORD`];
+  if (!email || !password) {
+    const envFlag = scope.envName === "staging" ? " --env staging" : "";
     return {
       reason:
-        "APP_URL_PROD is not set — the smoke credentials are scoped to the deployed " +
-        "domain, and without it there is nothing to scope them to (.env, see .env.example)",
+        `no smoke account configured for ${host} — create one: ` +
+        `DATABASE_URL="postgres://…" node run.mjs smoke-account${envFlag} --apply`,
     };
   }
-  return {
-    reason:
-      `${target} matches none of the deployed hosts (${known
-        .map((s) => `${s.urlVar}=${s.host}`)
-        .join(", ")}) — smoke credentials are never sent to a host they were not provisioned for`,
-  };
+  return { email, password, envName: scope.envName };
 }
 
 /**

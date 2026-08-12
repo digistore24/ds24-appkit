@@ -33,29 +33,19 @@
 //  4. **It finishes in well under an hour.** That is the stale-lock window
 //     (`rules.mjs`), and a job still running when its lock goes stale can be
 //     started a second time beside itself.
-import { inArray, lt } from "drizzle-orm";
-
-import { db } from "@/db";
 import { aiUsage } from "@/db/schema";
 import { pruneIpnEvents, IPN_LOG_RETENTION_DAYS } from "@/lib/digistore/ipn-log";
 
+import { pruneDeadline, pruneInBatches, STOPPED_EARLY_NOTE } from "./prune";
 import { configuredNumber, retentionCutoff } from "./rules.mjs";
 import { JOB_IDS } from "./ids.mjs";
+import { MODULE_CRON_JOBS } from "@/lib/modules/cron-registry";
+import type { CronJob } from "./types";
 
-export interface CronContext {
-  /** The clock the whole tick reasons about — never `new Date()` inside a job. */
-  now: Date;
-  /** This job's entry from `config/cron.json`, over the defaults. */
-  settings: Record<string, unknown>;
-}
-
-export interface CronJob {
-  id: string;
-  /** One line for `node run.mjs cron --list`. Not translated — Operator tooling. */
-  describe: string;
-  /** Returns one line of numbers for `cron_runs.lastDetail`. Throws on failure. */
-  run(ctx: CronContext): Promise<string>;
-}
+// The shape lives in `./types` so a module's `cron.ts` can import it without
+// closing a cycle through this file — see that file's header. Re-exported here,
+// because this is where every existing caller looks for it.
+export type { CronContext, CronJob } from "./types";
 
 /** How long AI-usage rows are kept when the config says nothing. */
 export const AI_USAGE_RETENTION_MONTHS = 12;
@@ -66,6 +56,22 @@ export const AI_USAGE_RETENTION_MONTHS = 12;
  * rather than inlined: it is the number `docs/data-protection.md` quotes.
  */
 export const IMPERSONATION_RETENTION_MONTHS = 12;
+
+/**
+ * How long the record of what the setup surface did is kept.
+ *
+ * ⚠️ **Twenty-four, where everything else here keeps twelve, and the difference
+ * is the argument.** This is the only record of writes made to a production
+ * database by an AGENT — no session, no browser, nobody watching. The questions
+ * it answers arrive late: a billing dispute about an entitlement somebody was
+ * given by hand, an audit, a customer asking who created their account. A year
+ * is inside the window in which those still turn up; the trail should outlast
+ * it rather than end just before.
+ *
+ * It is the number `docs/data-protection.md` quotes, which is why it is a
+ * constant rather than an inline literal.
+ */
+export const SETUP_AUDIT_RETENTION_MONTHS = 24;
 
 // Both go through `configuredNumber`, NOT `Number()`. `Number(null)` is 0, and
 // zero retention means delete everything — see the warning in rules.mjs.
@@ -79,66 +85,22 @@ function days(settings: Record<string, unknown>, fallback: number): number {
   return raw !== null && raw >= 0 ? Math.floor(raw) : fallback;
 }
 
-/** Rows per DELETE. Big enough to be efficient, small enough to hold in memory. */
-const PRUNE_BATCH = 10_000;
-/** How long one prune may spend before it leaves the rest to the next run. */
-const PRUNE_BUDGET_MS = 60_000;
+// The batching helper used to live here, while `prune-ai-usage` was its only
+// caller. It is `lib/cron/prune.ts` now — a MODULE's job needs it too, and a
+// module importing THIS file would close a circle (jobs.ts → the generated cron
+// registry → the module's cron.ts → jobs.ts). Its header carries the four things
+// a sweep has to get right, including the one that is the caller's: an index that
+// serves "older than X" on its own.
 
 /**
- * Delete old rows in bounded batches, within a time budget.
+ * The core's own jobs. Every app has these.
  *
- * ── Why not one DELETE ────────────────────────────────────────────────────
- * `delete … where created_at < cutoff` is the obvious version and it has two
- * problems that only appear on the installation that needs it most — the app
- * that has been running for three years and is pruning for the first time:
- *
- *  1. **Memory.** `returning({ id })` on a million-row delete brings a million
- *     ids back to count them. The count is the only thing anybody wants.
- *  2. **The lock.** A delete that takes longer than the stale-lock window
- *     (an hour) lets a second instance start the same job beside it, and it
- *     holds a lock on the table the app is still writing to the whole time.
- *
- * Batching fixes the first, the budget fixes the second, and together they turn
- * "one enormous run that might not finish" into "a bounded amount of work every
- * day until it has caught up". The steady state — a daily run on a table that
- * was pruned yesterday — is one batch that finds nothing and stops.
+ * The registry the app actually runs on is `CRON_JOBS` below — this plus every
+ * installed module's. Kept as a named constant rather than spread inline so the
+ * boundary is readable: what is below this line ships to everybody, what is
+ * appended after it depends on `config/modules.json`.
  */
-export async function pruneInBatches(
-  cutoff: Date,
-  budgetMs = PRUNE_BUDGET_MS,
-): Promise<{ deleted: number; stoppedEarly: boolean }> {
-  const startedAt = Date.now();
-  let deleted = 0;
-
-  for (;;) {
-    // `id in (select … limit n)` rather than a bare `limit` on the DELETE:
-    // Postgres has no LIMIT on DELETE, and the subquery is served straight off
-    // `ai_usage_created`.
-    const batch = await db
-      .delete(aiUsage)
-      .where(
-        inArray(
-          aiUsage.id,
-          db
-            .select({ id: aiUsage.id })
-            .from(aiUsage)
-            .where(lt(aiUsage.createdAt, cutoff))
-            .limit(PRUNE_BATCH),
-        ),
-      )
-      .returning({ id: aiUsage.id });
-
-    deleted += batch.length;
-    // A short batch means the last one — there is nothing left to find.
-    if (batch.length < PRUNE_BATCH) return { deleted, stoppedEarly: false };
-    // Out of budget. Note that this does NOT prove rows remain: the final batch
-    // can be exactly full. So the flag is "I stopped early", not "there is
-    // more", and the message says only what is true.
-    if (Date.now() - startedAt >= budgetMs) return { deleted, stoppedEarly: true };
-  }
-}
-
-export const CRON_JOBS: readonly CronJob[] = Object.freeze([
+const CORE_JOBS: readonly CronJob[] = Object.freeze([
   {
     id: "prune-ai-usage",
     describe: "Delete AI-usage rows older than the retention window (default 12 months).",
@@ -155,7 +117,10 @@ export const CRON_JOBS: readonly CronJob[] = Object.freeze([
       // That is the trade the retention window is: a year of "what did AI cost
       // me last November", and no more. `docs/ai-providers.md` says so where
       // the Operator sets the number.
-      const { deleted, stoppedEarly } = await pruneInBatches(cutoff);
+      const { deleted, stoppedEarly } = await pruneInBatches(
+        { table: aiUsage, id: aiUsage.id, olderThan: aiUsage.createdAt },
+        cutoff,
+      );
 
       return (
         `${deleted} row(s) older than ${retentionMonths} month(s) deleted` +
@@ -163,7 +128,7 @@ export const CRON_JOBS: readonly CronJob[] = Object.freeze([
         // identical to one that finished, and an Operator reading "10,000
         // deleted" every day for a week would have no way to tell that it is
         // not keeping up.
-        (stoppedEarly ? " — stopped at the time budget, the next run continues" : "")
+        (stoppedEarly ? STOPPED_EARLY_NOTE : "")
       );
     },
   },
@@ -231,6 +196,141 @@ export const CRON_JOBS: readonly CronJob[] = Object.freeze([
     },
   },
   {
+    id: "check-advisories",
+    describe:
+      "Ask the advisory databases about the versions this app resolved, and record the answer.",
+    // ── The second job here that fixes nothing, and the first that MEASURES ──
+    // It writes nothing to the database, repairs nothing, and mails NOBODY. It
+    // asks the advisory rungs of the shipped security ladder and writes the
+    // answer into `.dev/security-check.json` — the record
+    // `node run.mjs security-check` already writes and the session greeting
+    // already reads.
+    //
+    // It exists because an advisory published on a Saturday is otherwise found
+    // on Monday by whoever happened to run a command. Nothing about that state
+    // looks like a fault from inside the app: nothing throws, no page breaks,
+    // and the only thing that changed is a database on somebody else's server.
+    // `check-stuck-reloads` above is its sibling in shape — measure, report a
+    // count, change nothing.
+    //
+    // 🚨 **It does not mail, and that is NFR-67 rather than an omission.**
+    // Reporting on the operator-mail channel belongs to the watchdog job alone.
+    // Two jobs racing for one `claimSend()` window would have one swallow the
+    // other's finding — a claimed key is spent for ever — and two keys would put
+    // two mails on one operator's morning. One producer per channel.
+    //
+    // 🚨 **The record it writes is always `complete: false`**, because it asks
+    // two of the ladder's rungs and marks every other one as not asked. That is
+    // the honest shape and the readers are built for it; the line below always
+    // says how many rungs were not asked, so "nothing found" and "nobody asked"
+    // can never look the same.
+    async run({ now, settings }) {
+      const { DEFAULT_BUDGET_MS, detailLine, measureAdvisories } = await import(
+        "@/lib/cron/security-record"
+      );
+      // A number a person may edit, so `configuredNumber()` and never `Number()`
+      // — `Number(null)` is 0, and a zero budget here would abandon every rung
+      // before it started and report a run in which nothing was measured.
+      const seconds = configuredNumber(settings.budgetSeconds);
+      const budgetMs =
+        seconds !== null && seconds >= 1 ? Math.floor(seconds) * 1000 : DEFAULT_BUDGET_MS;
+
+      // `now` comes from the context, never `new Date()` — it is the clock the
+      // whole tick reasons about, and it is what makes this testable.
+      const record = await measureAdvisories({ now, budgetMs });
+      // Numbers only (rule 2), and no rung's skip reason: those carry upstream
+      // text, and `cron_runs` is a table with no privacy question attached.
+      return detailLine(record);
+    },
+  },
+  {
+    id: "ops-watchdog",
+    describe:
+      "Mail the operator once when something has quietly stopped working — the security " +
+      "record, failing or stalled jobs, the media store, a payment webhook gone silent. " +
+      "One mail naming all of them, counts only, nobody named.",
+
+    // ── 🚨 `enabledByDefault: false`, beside `"enabled": true` in the config ──
+    // The pairing is deliberate and both halves are load-bearing. The registry
+    // says OFF so that an operator who DELETES the entry does not start getting
+    // mail by inheritance — a job with no entry inherits `JOB_DEFAULTS`, which
+    // is enabled and daily, and 1440 against a UTC-day window is the skip-a-day
+    // drift `docs/cron.md` warns about by name. `config/cron.json` then says
+    // `{"enabled": true, "everyMinutes": 360}`, which is the decision somebody
+    // wrote down.
+    //
+    // ⚠️ And that pairing is what keeps `config/notifications.json`'s own
+    // argument true: the channel ships ON *because* every sender through it
+    // ships OFF, and two off states in series make a channel nobody finds. Read
+    // that file's `_comment` before changing either half.
+    enabledByDefault: false,
+
+    // ── Three sentences that are not decoration ─────────────────────────────
+    //  1. **The standing-queue trade holds here** (`lib/notify/sent-once.ts`).
+    //     The claim stands before the first delivery, so a transport that then
+    //     fails loses that window's message — deliberately, because a lost
+    //     message is visible (this job throws) and self-healing. Self-healing is
+    //     only true of a job repeating a STANDING queue, and this is one: every
+    //     run re-reads the same four conditions.
+    //  2. **A process killed BETWEEN the claim and the delivery** — a redeploy,
+    //     an OOM kill — never reaches `finish()` in `lib/cron/run.ts`. The claim
+    //     row is committed, `cron_runs` keeps the previous detail, and that
+    //     message is gone with nothing saying so. Unfixable from here.
+    //  3. 🚨 **A mail the provider ACCEPTED and never delivered is invisible
+    //     from here.** `sendOperatorMail()` throwing is the only delivery signal
+    //     this app has; knowing that a message ARRIVED is a monitoring
+    //     provider's job and this job does not pretend otherwise.
+    //
+    // 🚨 It READS Story 31.4's record and never runs `security-check` — no
+    // spawn, no `capture()`, no dynamic import of the ladder. A scheduled job
+    // inside a customer's app shelling out to npm would put the network and half
+    // a minute of registry traffic on the request-serving process, and would
+    // make a command deliberately in no gate into the thing an app's health
+    // depends on.
+    //
+    // The body is `lib/ops/watchdog.ts` (dynamically, because that file reaches
+    // `lib/cron/run.ts` and a static import would close a circle through this
+    // file). Its four numbered steps are: read the facts and judge them; return
+    // the "nothing open" line BEFORE touching the channel when nothing is open;
+    // one `notifyOperators()` call naming every finding worst-first; then one
+    // line of numbers with the three states told apart.
+    async run({ now }) {
+      const { runWatchdog } = await import("@/lib/ops/watchdog");
+      // `now` is the tick's clock throughout — never `new Date()` in a job.
+      return runWatchdog({ now });
+    },
+  },
+  {
+    id: "prune-abandoned-uploads",
+    describe: "Remove direct-to-bucket uploads that were promised, never arrived, and expired.",
+    // ── The fourth requirement of the direct upload path ────────────────────
+    // `docs/visuals.md` names it: "a sweep for uploads that were started and
+    // abandoned". A ticket is minted, the browser gets an address, and then the
+    // tab is closed — or the write half-lands. Nothing else ever looks at that
+    // object again: it has no `media` row, so no page renders it, no export
+    // lists it, and account deletion does not reach it. Without this job it is
+    // storage nobody is billed for understanding.
+    //
+    // Idempotent because the work is "remove what is past its expiry": a second
+    // run finds what the first could not remove and nothing else. It writes no
+    // marker and needs none (rule 1).
+    async run({ now }) {
+      const { pruneAbandonedUploads } = await import("@/lib/media/manage");
+      const { removed, failed, stoppedEarly } = await pruneAbandonedUploads(
+        now,
+        pruneDeadline(),
+      );
+      // Numbers only (rule 2). A storage key carries the media id and the
+      // uploader's file extension, and `cron_runs` is a table with no privacy
+      // question attached — it stays one.
+      return (
+        `${removed} abandoned upload(s) removed` +
+        (failed > 0 ? `, ${failed} could not be removed and stay for the next run` : "") +
+        (stoppedEarly ? STOPPED_EARLY_NOTE : "")
+      );
+    },
+  },
+  {
     id: "prune-impersonations",
     describe: "Delete impersonation records older than the retention window (default 12 months).",
     async run({ settings }) {
@@ -245,6 +345,47 @@ export const CRON_JOBS: readonly CronJob[] = Object.freeze([
       return `${deleted} row(s) older than ${retentionMonths} month(s) deleted`;
     },
   },
+  {
+    id: "prune-setup-audit",
+    describe:
+      "Delete setup-surface records older than the retention window (default 24 months), and every spent confirmation.",
+    async run({ now, settings }) {
+      const retentionMonths = months(settings, SETUP_AUDIT_RETENTION_MONTHS);
+      // ⚠️ This deletes the answer to "what did an agent do to production last
+      // year". The floor lives in `pruneSetupAudit()` and it THROWS below one
+      // month rather than obeying: `retentionMonths: 0` is not a retention
+      // setting, it is switching the control off while leaving something that
+      // looks like a policy in the config. Whoever wants to keep everything
+      // disables this job.
+      const { pruneSetupAudit } = await import("@/lib/setup/manage");
+      const { acts, confirmations } = await pruneSetupAudit(retentionMonths, now);
+      // Numbers only — the line lands in `cron_runs.lastDetail`, which somebody
+      // reads to find out whether the job works. No tool name, no target, no
+      // member.
+      return (
+        `${acts} act(s) older than ${retentionMonths} month(s) deleted, ` +
+        `${confirmations} spent/expired confirmation(s) cleared`
+      );
+    },
+  },
+]);
+
+/**
+ * Every job this app runs — the core's, then every installed module's.
+ *
+ * ⚠️ **A module's jobs are appended, never merged in by name.** `loadModules()`
+ * refuses two modules claiming one job id and `manifest.mjs` requires a module's
+ * ids to start with its own, so a module cannot shadow `prune-ai-usage` or
+ * anything else the core runs. `lib/cron/rules.test.ts` asserts this list and
+ * `JOB_IDS` agree, in both directions, for whatever is installed.
+ *
+ * The module half is generated: `lib/modules/cron-registry.ts`, from the `cron`
+ * field of each installed manifest. In a fresh app it is empty and this is
+ * exactly `CORE_JOBS`.
+ */
+export const CRON_JOBS: readonly CronJob[] = Object.freeze([
+  ...CORE_JOBS,
+  ...MODULE_CRON_JOBS,
 ]);
 
 export function jobById(id: string): CronJob | undefined {

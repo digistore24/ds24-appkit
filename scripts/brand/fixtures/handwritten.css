@@ -1,0 +1,17 @@
+/* A hand-written site sheet. The grey is everywhere, the brand is on buttons. */
+:root { --brand-blue: #2e5aac; --ink: #333333; --cta: #f26430; }
+body { color: #6b7280; background: #ffffff; }
+p, li, td, span, small, label, figcaption { color: #6b7280; }
+h1, h2, h3, h4 { color: #333333; }
+.nav a { color: #6b7280; }
+a { color: #2e5aac; }
+a:hover { color: #2e5aac; border-color: #2e5aac; }
+.btn { background: #2e5aac; color: #fff; }
+.btn:hover { background: #2e5aac; }
+.btn-secondary { background: #f26430; color: #fff; }
+.card { border-color: #e5e7eb; background: #ffffff; }
+@media (prefers-color-scheme: dark) {
+  body { background: #111827; color: #d1d5db; }
+  a { color: #7aa5f0; }
+  .btn { background: #7aa5f0; color: #111827; }
+}

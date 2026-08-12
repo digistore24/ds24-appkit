@@ -11,6 +11,17 @@ export async function register() {
   // Check in the Node runtime only (not in the edge runtime pass).
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
+  // The tap on this process's own stderr, so a DEPLOYED app can answer
+  // `node run.mjs errors --url …` — there is no .dev/dev.log on a host
+  // (lib/diagnostics/capture.ts). FIRST, before the environment check below:
+  // that check's own console.error lines, and the scheduler's
+  // `[cron] tick failed`, are exactly what an operator wants to find.
+  //
+  // Dynamic like everything else here, and `capture.ts` stays import-light on
+  // purpose — it imports `redact.mjs` and nothing else.
+  const { installErrorCapture } = await import("@/lib/diagnostics/capture");
+  installErrorCapture();
+
   // Import env-guard only — NOT lib/email: that depends on nodemailer, and
   // this hook is built for the edge runtime too. An import from there breaks
   // startup with "Can't resolve 'stream'".

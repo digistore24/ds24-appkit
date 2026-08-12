@@ -50,6 +50,17 @@ export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  /**
+   * The complete `[link:…]` markers THIS message may render.
+   *
+   * Per message, not per window, and that is the design rather than an
+   * oversight: the set is composed while one particular answer is written, so
+   * it belongs to that answer. Keeping it here is also what makes the live
+   * path and the reload path the same code — streaming appends to it, the
+   * server hands it back with a stored turn, and `AnswerText` cannot tell the
+   * difference. Absent denies.
+   */
+  links?: readonly string[];
 }
 
 /** The id the answer being streamed right now carries until it is stored. */
@@ -84,6 +95,15 @@ export function ChatWindow({
    * because it reads the handbook off the filesystem. Optional, and absence
    * denies all markers (AD-54): a mount that forgot the set renders plain
    * text, never a card.
+   *
+   * ⚠️ **There is deliberately no `allowedLinks` beside this**, and the
+   * asymmetry is worth leaving alone. This set is STATIC — one handbook, one
+   * value for every member and every question — so a mount prop is the right
+   * shape for it. The Content Link set never is: it is composed while one
+   * particular answer is written, from what a source returned for that
+   * viewer. So it travels on the MESSAGE (`ChatMessage.links`). Tidying the
+   * two into a matching pair of props would mean either a stale set or one
+   * window-wide whitelist that outlives the answer it belongs to.
    */
   allowedMedia?: readonly string[];
 }) {
@@ -135,6 +155,20 @@ export function ChatWindow({
         ),
       );
 
+    /**
+     * A page this answer may link to. The endpoint sends every one of these
+     * BEFORE the delta that uses it, so by the time the marker appears in the
+     * text it is already allowed — no flash of bracket text.
+     */
+    const allowLink = (marker: string) =>
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === STREAMING_ID
+            ? { ...message, links: [...(message.links ?? []), marker] }
+            : message,
+        ),
+      );
+
     /** Drops the empty placeholder — an error must not leave a blank bubble. */
     const dropPlaceholder = () =>
       setMessages((current) =>
@@ -173,12 +207,13 @@ export function ChatWindow({
 
         for (const line of lines) {
           if (line.trim() === "") continue;
-          let event: { type?: string; text?: string; code?: string };
+          let event: { type?: string; text?: string; code?: string; marker?: string };
           try {
             event = JSON.parse(line);
           } catch {
             continue;
           }
+          if (event.type === "link" && event.marker) allowLink(event.marker);
           if (event.type === "delta" && event.text) appendDelta(event.text);
           if (event.type === "error") setErrorCode(event.code ?? "chatFailed");
         }
@@ -263,7 +298,11 @@ export function ChatWindow({
                         what somebody typed is shown as they typed it. */}
                     <div className="bg-muted min-w-0 rounded-lg px-3 py-2 text-sm">
                       {message.content ? (
-                        <AnswerText text={message.content} allowedMedia={allowedMedia} />
+                        <AnswerText
+                          text={message.content}
+                          allowedMedia={allowedMedia}
+                          allowedLinks={message.links}
+                        />
                       ) : (
                         <span className="text-muted-foreground">
                           {t("sending", { name: assistantName })}

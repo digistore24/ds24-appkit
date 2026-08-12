@@ -76,7 +76,7 @@ async function PlanCard({
   const interval = intervalKey(def);
 
   return (
-    <Card className={cn("flex flex-col", def.highlight && "border-primary shadow-sm")}>
+    <Card className={cn("flex flex-col", def.highlight && "border-primary")}>
       <CardContent className="flex flex-1 flex-col gap-4">
         {def.highlight && (
           <Badge className="self-start">{t("mostPopular")}</Badge>

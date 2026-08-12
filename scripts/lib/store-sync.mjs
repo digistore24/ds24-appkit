@@ -92,7 +92,7 @@ export function filesUnder(dir, prefix = "", skipped = []) {
 
 /**
  * Is one object in the store? The read half of the loop below, exported on
- * its own because `content-check` asks exactly this question without ever
+ * its own because the store question is asked in one place without ever
  * writing anything.
  *
  * @returns {Promise<{present: boolean} | {error: string}>}

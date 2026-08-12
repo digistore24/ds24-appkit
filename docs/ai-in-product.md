@@ -2,11 +2,21 @@
 
 # Working alongside your customer — what an AI in the product can be
 
-> **Needs template 0.8.0 or newer.** `lib/ai/companion.ts`, the `companion` task
-> and `<CompanionPanel>` arrived with it. Run `node run.mjs ai-check`: if it does
-> not list a `companion` task, this document is describing code your app does not
-> carry yet — `node run.mjs update` brings the text, not the code, so the way to
-> get both is a newer template.
+> **This is a MODULE, and a fresh app does not have it.** It lives in
+> `modules/companion/`; `node run.mjs module add companion` makes this app one
+> that has it, and nothing in this document works until it does. There is no
+> migration to run — the module declares no table of its own.
+>
+> ⚠️ **`node run.mjs ai-check` does NOT answer this question.** It lists a
+> `companion` task in every app, installed or not: the task id is core
+> vocabulary (the reasoning is in `modules/boundary.test.ts`, under the five
+> refusals), so seeing it there says nothing about whether the code is wired up.
+> The command that answers it is `node run.mjs module list`.
+>
+> **Needs template 0.8.0 or newer** for the code, 0.19.0 for the module seam. If
+> there is no `modules/` directory at all, this document is describing a newer
+> template than the one this app was built from — `node run.mjs update` brings
+> the text, never the code, so the way to get both is a newer template.
 
 Your app can do more than deliver things. It can **read what your customer
 wrote, judge it, walk them through the work, or produce the thing with them** —
@@ -27,7 +37,7 @@ thing with a different rule, and the two must not be merged.
 |---|---|---|
 | answers from | `content/knowledge/` — a handbook you wrote | what **this** customer produced |
 | is sent | the question, the last few turns, the handbook. **Nothing about the person** | exactly the fields the call site named, one at a time, plus the customer's own text as content |
-| lives in | `config/ai-chat.json`, the `chat` task | `lib/ai/companions.ts`, the `companion` task |
+| lives in | `config/ai-chat.json`, the `chat` task | `modules/companion/companions.ts`, the `companion` task |
 | the skill | `ai-chat-knowledge` | `ai-companion` |
 | the reference | [`ai-chat.md`](ai-chat.md) | this file |
 
@@ -119,6 +129,15 @@ at 20 000 — roughly 1 200 and 3 000 words). One submission is one call.
 fits where re-reading is optional and repeatable: *"ask for another pass"* is a
 button somebody presses on purpose, and charging for it is honest.
 
+🚨 **This is the shape most often built without a companion, and the fence
+still applies.** An activity's `grade()` reading a submission through `runTask`
+([`docs/learning.md`](learning.md), recipe C) is the same call one layer down:
+it builds its request with `buildFencedRequest()` from
+`@/lib/ai/customer-text` — **core** code, no module needed — and never
+assembles the prompt by hand. The submission is `work`; `ask` and `about` are
+appended outside the fence and are the app's own words. § 7 says where the file
+is.
+
 ### 2.3 The tool whose result is the product
 
 **What the customer gets** — the finished thing. The sales page, not the sales
@@ -200,7 +219,7 @@ Four things are already decided, and each is one place:
 1. **The switch ships off.** `config/ai-companion.json` → `enabled`, read
    through `isCompanionEnabled()` and never by re-reading the JSON. A malformed
    value counts as off.
-2. **The registry is your app's own list.** `lib/ai/companions.ts` ships empty.
+2. **The registry is your app's own list.** `modules/companion/companions.ts` ships empty.
    A second companion is a second entry — never a second component.
 3. **The disclosure comes before the customer writes.** `<CompanionPanel>`
    already renders it; `node run.mjs legal-check` reports one that is switched on
@@ -225,7 +244,7 @@ not `prefers-color-scheme`.
 The whole of it. One entry:
 
 ```ts
-// lib/ai/companions.ts
+// modules/companion/companions.ts
 export const COMPANIONS: readonly Companion[] = [
   {
     id: "day-coach",
@@ -243,8 +262,16 @@ export const COMPANIONS: readonly Companion[] = [
 and one line on the page:
 
 ```tsx
+import { CompanionPanel } from "@/lib/modules/component-registry";
+
 <CompanionPanel companionId="day-coach" subject={day.id} />
 ```
+
+🚨 **Import from the registry, never from `@/modules/companion/…`.** Your page
+lives under `app/`, and `modules/boundary.test.ts` refuses any file there that
+names a module directly — the generated barrel is what that refusal points at.
+This used to say the module path, and following it turned your own
+`npm run test` red about a page you wrote correctly.
 
 **What you do not write:** the server action, the guard order, the rate limit,
 the disclosure, the markdown renderer, the conversation key. All six exist, and
@@ -308,21 +335,49 @@ finds out what it cost after they pressed it has been surprised by their own app
 ### E — a one-shot run, with no conversation
 
 The § 2.3 tool. Here the app writes its own server action, and the order is
-visible rather than inherited:
+visible rather than inherited.
+
+> 🚨 **Do not copy this block yet — it is wrong in two ways, both known, and a
+> rewrite is scheduled.** It is left standing because the ORDER it shows
+> (check → work → charge) is right and is the point of the recipe; the two
+> defects are in the lines, and each is marked below.
+>
+> 1. **`ask: checked.text` hands the customer's own sentence to the model as
+>    instruction.** `ask` is appended AFTER the fence and is app-authored by
+>    contract — the customer's text belongs in `work`. This is the exact defect
+>    a review found in the shipped action, where it is fixed and where
+>    `modules/companion/actions.test.ts` now forbids the relapse. Follow
+>    `modules/companion/actions.ts` (`work: […, { label, text: checked.text }],
+>    ask: ASK`) rather than these lines. Writing the replacement sentence for
+>    `ask` is a decision about YOUR product, which is why it is not patched here
+>    in passing.
+> 2. **Two of the three names are not reachable from `app/`.**
+>    `isCompanionEnabled()` and `checkCompanionMessage()` are not in the
+>    module's `serverExports` (only `askCompanion` is), so the only way to them
+>    is `@/modules/companion/…` — and `modules/boundary.test.ts` fails any file
+>    under `app/` that names a module path. Following this recipe literally
+>    turns your own suite red about code you wrote correctly. Until it is
+>    rewritten, put the action inside your own module, or do without those two
+>    helpers and check the ceiling yourself.
 
 ```ts
 "use server";
 // 1. CHECK
 const session = await requireActiveUser();
+const memberId = session.user.id as string; // the session type has `id?: string`
+// 🚨 defect 2 above: these two are not in `serverExports` and are unreachable
+// from `app/`. Inside your own module they are fine.
 if (!isCompanionEnabled()) return { error: "companionUnavailable" };
-if (!(await hasPlan(session.user.id, "tool_jahr"))) return { error: "noAccess" };
-const account = await getTokenAccount(session.user.id);
+if (!(await hasPlan(memberId, "tool_jahr"))) return { error: "noAccess" };
+const account = await getTokenAccount(memberId);
 if (!hasSufficientBalance(account?.balance ?? 0, COST)) return { error: "insufficientBalance" };
 const checked = checkCompanionMessage(input, MAX_CHARS);
 if (!checked.ok) return { error: checked.code };
 
-// 2. WORK
-const answer = await askCompanion({ instruction, about, work, ask: checked.text, memberId: session.user.id });
+// 2. WORK — askCompanion returns a TaskResult; the answer is its `text`
+// 🚨 defect 1 above: `ask` is appended AFTER the fence. What the customer wrote
+// goes into `work`; `ask` is a sentence YOU write. Do not copy this line.
+const { text: answer } = await askCompanion({ instruction, about, work, ask: checked.text, memberId });
 
 // 3. CHARGE
 try {
@@ -392,13 +447,14 @@ needs speech to be the thing it is.
 
 | File | What it is |
 |---|---|
-| `lib/ai/companions.ts` | **the list your app edits.** One entry per companion; ships empty |
-| `lib/ai/companion.ts` | the call shape — `askCompanion()`, and the fence that makes customer text content |
-| `lib/ai/companion-rules.ts` | the conversation key, the two input checks, the ceilings, the error codes |
-| `lib/ai/companion-switch.ts` | `isCompanionEnabled()`, `companionProblems()`, `companionOffReason()` |
+| `modules/companion/companions.ts` | **the list your app edits.** One entry per companion; ships empty |
+| `modules/companion/companion.ts` | the call shape — `askCompanion()`, this module's binding to the `companion` task id |
+| `lib/ai/customer-text.ts` | **CORE.** the fence that makes customer text content — `buildFencedRequest()`, the `<customer-text …>` markers, the standing rule. Any caller may import it, companion or not |
+| `modules/companion/rules.ts` | the conversation key, the two input checks, the ceilings, the error codes |
+| `modules/companion/switch.ts` | `isCompanionEnabled()`, `companionProblems()`, `companionOffReason()` |
 | `config/ai-companion.json` | the switch. Ships `{ "enabled": false }` |
-| `app/companion-actions.ts` | the shipped server action — seven checks, then check → work → charge |
-| `components/companion-panel.tsx` | the one surface. `<CompanionPanel companionId subject />` |
+| `modules/companion/actions.ts` | the shipped server action — seven checks, then check → work → charge |
+| `modules/companion/components/companion-panel.tsx` | the one surface. `<CompanionPanel companionId subject />`, imported from `@/lib/modules/component-registry` |
 | `components/ai-disclosure.tsx` | the Art. 50(1) notice both AI surfaces mount |
 
 Commands: `node run.mjs ai-check` (which model, what it costs),

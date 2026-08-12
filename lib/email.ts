@@ -21,7 +21,8 @@ import {
 import { resolvedFrom } from "@/lib/email-from.mjs";
 import { availableLegalPages, legalDocument } from "@/lib/legal/pages";
 import { parse as parseLegalMarkdown } from "@/lib/legal/markdown";
-import type { Locale } from "@/i18n/config";
+import { DEFAULT_LOCALE, isLocale, type Locale } from "@/i18n/config";
+import { translatorFor } from "@/i18n/translator";
 
 /**
  * Product name for the email.
@@ -122,8 +123,11 @@ function escapeHtml(value: string): string {
 // anybody remembering that they exist. Mail clients render inline styles only
 // and the older ones do not understand `hsl()`, so the value is converted to
 // hex here; a format this parser cannot read (`oklch(…)`, a `var(…)` chain)
-// falls back to the shipped indigo rather than shipping a broken style.
-export const DEFAULT_ACCENT = "#4f46e5";
+// falls back to the shipped petrol rather than shipping a broken style. Keep
+// this value equal to `--primary` in `:root` — it is the answer for an app
+// whose stylesheet could not be read, and a fallback in last season's colour
+// is a drift nothing reports.
+export const DEFAULT_ACCENT = "#076a7e";
 
 /** The `--primary` value of a stylesheet as hex, or null when unreadable. */
 export function accentFromCss(css: string): string | null {
@@ -363,29 +367,49 @@ async function imprintFor(locale: string): Promise<string[]> {
  * base, so without a usable `APP_URL` (or with a non-HTTP one) there are none —
  * the mail is complete without them.
  */
-async function legalFooterLinks(locale: string): Promise<MailLink[]> {
+async function legalFooterLinks(locale: Locale): Promise<MailLink[]> {
   const base = process.env.APP_URL?.trim();
   if (!base || !/^https?:\/\//i.test(base)) return [];
-  const { getTranslations } = await import("next-intl/server");
-  const t = await getTranslations("legal");
-  const slugs = await availableLegalPages(locale as Locale);
+  const t = await translatorFor(locale, "legal");
+  const slugs = await availableLegalPages(locale);
   return slugs.map((slug) => ({
     label: t(`${slug}.title`),
     url: new URL(`/${slug}`, base).toString(),
   }));
 }
 
-/** The footer both link-carrying mails share: sender, links, Impressum. */
+/**
+ * The footer every link-carrying mail shares: sender, links, Impressum.
+ *
+ * 🚨 Its texts come from `translatorFor(locale)` rather than from the running
+ * request, and that is what makes the footer usable by a mail with no request
+ * behind it (`sendOperatorMail` below).
+ *
+ * For the three mails that had a footer already this is **almost** unchanged,
+ * and the difference is worth naming rather than rounding off: `footerSentBy`
+ * used to be resolved through the running request's cookie locale while the
+ * legal links beside it already used the locale passed in. The two could
+ * disagree — a mail whose links said `de` and whose closing line said `en`. Now
+ * both use the parameter, so they cannot. In practice all three senders pass
+ * `await getLocale()` and the two agreed anyway; this is a small fix, not an
+ * identity, and calling it identity is what would stop the next reader
+ * noticing the old inconsistency ever existed.
+ *
+ * An unknown string falls back to DEFAULT_LOCALE instead of throwing — the value
+ * reaches here from `MailTexts.locale`, which is typed `string`, and a mail that
+ * refuses to render is a worse answer than one rendered in the app's own
+ * language.
+ */
 async function mailFooter(
   locale: string,
 ): Promise<{ line?: string; links: MailLink[]; imprint: string[] }> {
+  const loc = isLocale(locale) ? locale : DEFAULT_LOCALE;
   const name = appName();
-  const { getTranslations } = await import("next-intl/server");
-  const t = await getTranslations("email");
+  const t = await translatorFor(loc, "email");
   return {
     line: name ? t("footerSentBy", { app: name }) : undefined,
-    links: await legalFooterLinks(locale),
-    imprint: await imprintFor(locale),
+    links: await legalFooterLinks(loc),
+    imprint: await imprintFor(loc),
   };
 }
 
@@ -675,6 +699,98 @@ export async function sendEmailChangeConfirmation(
     html: renderMailHtml(layout),
   });
 }
+
+// --- Operator mail ------------------------------------------------------------
+//
+// The fourth sender, and the first one that does not write to a MEMBER. It goes
+// to whoever owns this app, about the app's own operation — a queue that needs
+// answering, something that stopped working. `lib/notify/operators.ts` is what
+// decides who that is, whether the channel is on and whether this message has
+// already gone out; this function only renders and hands over.
+//
+// ── Three properties, and each is a decision ──────────────────────────────
+//
+//  1. **The locale is a PARAMETER.** Nothing here reads a request — no cookie,
+//     no header, no `getLocale`. A job has none of those, and a mail that
+//     silently rendered in the default language depending on how the job was
+//     triggered is the failure `i18n/translator.ts` was written against.
+//  2. **The WORDS belong to the caller.** This takes finished strings. A
+//     digest's sentences live in the digest's own namespace in
+//     `messages/{de,en}.json`, and it resolves them with the translator the
+//     channel hands it — so this file never grows a text key per feature.
+//  3. **One address.** Not a list, not a `bcc`. Two operators are third parties
+//     to each other, and a collective `to` is the shape in which their addresses
+//     become known to one another without anybody having decided that. The loop
+//     is in the channel, one `deliver()` per recipient.
+//
+// ── ⛔ It MAY carry a link, and the credential notice still may not ──────────
+// The no-link rule above `sendCredentialChangeEmail` is a statement about THAT
+// mail, not about this layout: it goes to somebody whose account may already be
+// in the wrong hands, and a security notice that acts on a click is a phishing
+// template with our sender address on it. Neither half of that holds here — the
+// recipient is the app's owner rather than a possibly compromised customer
+// account, and the whole point of the message is that they go and DO something.
+// A notice with no way to the thing it is about just moves the work into
+// searching.
+//
+// What follows from that, and it is the actual precaution: this sender does NOT
+// use `credentialBodies()` and must never be made to. That function is pure so a
+// test can hold it to the rule (`lib/email.test.ts`); the moment it grew an
+// optional link, the test would be an assertion about one branch instead of
+// about a function.
+
+/** One operator message, with its words already chosen by whoever sends it. */
+export interface OperatorMail {
+  /** Explicit, always — see property 1 above. */
+  locale: Locale;
+  subject: string;
+  heading: string;
+  /** The body, one string per paragraph. Numbers and sentences, never a row. */
+  paragraphs: string[];
+  /** Optional, and allowed — see the block above. */
+  cta?: { label: string; url: string };
+}
+
+/**
+ * Sends one operator message to one address. Throws like every other send.
+ *
+ * The caller catches: `notifyOperators()` turns a transport failure into a
+ * count, because the provider's own error text names the recipient and that
+ * string would otherwise reach `cron_runs.lastDetail`.
+ */
+export async function sendOperatorMail(to: string, mail: OperatorMail): Promise<void> {
+  const t = await translatorFor(mail.locale, "email");
+  const footer = await mailFooter(mail.locale);
+
+  const layout: MailLayout = {
+    locale: mail.locale,
+    app: appName(),
+    salutation: t("salutation"),
+    heading: mail.heading,
+    paragraphs: mail.paragraphs,
+    cta: mail.cta,
+    // `renderMailText` renders EITHER the button's wording or the paragraphs,
+    // never both — which is right for a sign-in mail whose whole body is the
+    // link, and wrong for a report whose body is the point. So the text version
+    // is handed the paragraphs plus the button's label through the field that
+    // exists for exactly this ("the text version's wording in place of button +
+    // fallback"). No second renderer, and the html is untouched.
+    textIntro: mail.cta ? [...mail.paragraphs, mail.cta.label].join("\n\n") : undefined,
+    footerLine: footer.line,
+    footerLinks: footer.links,
+    imprint: footer.imprint,
+    accent: await emailAccent(),
+  };
+
+  return deliver({
+    to,
+    subject: mail.subject,
+    text: renderMailText(layout),
+    html: renderMailHtml(layout),
+  });
+}
+
+// --- The Auth.js provider -----------------------------------------------------
 
 /**
  * Builds the Auth.js email provider (magic link). Uses the adapter for the

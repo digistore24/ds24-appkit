@@ -206,7 +206,7 @@ describe("presignUrl", () => {
   const input = {
     method: "GET",
     endpoint: "https://media.example.com",
-    path: "/image/2026/07/abc.png",
+    path: "/core/upload/2026/07/abc.png",
     credentials: { ...CREDENTIALS, service: "s3" },
     expiresSeconds: 300,
     now: NOW,
@@ -227,7 +227,7 @@ describe("presignUrl", () => {
   });
 
   it("keeps the path's slashes", () => {
-    expect(presignUrl(input)).toContain("/image/2026/07/abc.png?");
+    expect(presignUrl(input)).toContain("/core/upload/2026/07/abc.png?");
   });
 
   it("signs UNSIGNED-PAYLOAD, so the same URL is stable for the same second", () => {
@@ -247,5 +247,40 @@ describe("presignUrl", () => {
     });
     expect(withName).toContain("response-content-disposition=");
     expect(withName).not.toBe(presignUrl(input));
+  });
+});
+
+describe("presigning a PUT — the direct-to-bucket address", () => {
+  // Nothing in `presignUrl()` had to change for a write: the method flows into
+  // the canonical request, and only `host` is ever signed. These assertions
+  // exist because that is easy to break by "improving" the signer to sign
+  // `content-type` as well — which would then oblige the browser to send that
+  // header back byte for byte, and a charset appended is a 403 nobody can read.
+  const input = {
+    method: "PUT" as const,
+    endpoint: "https://fra1.example.com",
+    path: "/bucket/courses/video/2026/08/abc.mp4",
+    credentials: {
+      accessKeyId: "AKIDEXAMPLE",
+      secretAccessKey: "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY",
+      region: "auto",
+      service: "s3",
+    },
+    expiresSeconds: 3600,
+    now: new Date("2026-08-09T12:00:00Z"),
+  };
+
+  it("signs host and nothing else", () => {
+    expect(presignUrl(input)).toContain("X-Amz-SignedHeaders=host");
+  });
+
+  it("signs the METHOD — a GET address is not a write address", () => {
+    // The whole point. If the method were left out of the canonical request the
+    // two would share a signature, and a read address would be a write address.
+    expect(presignUrl(input)).not.toBe(presignUrl({ ...input, method: "GET" }));
+  });
+
+  it("carries the derived key in the path", () => {
+    expect(presignUrl(input)).toContain("/bucket/courses/video/2026/08/abc.mp4?");
   });
 });

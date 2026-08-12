@@ -13,9 +13,10 @@ answer the four questions that come before that: *what is this, who is it for,
 why should I believe you, and what do I do next.*
 
 **What ships at `/` is a placeholder, and its structure does not carry.** The
-shipped page — a badge, a headline, three feature cards — describes the
-*template* to a developer. Swapping its texts produces a page that still has
-the shape of a README: no visual, no proof, no offer. That is the single most
+shipped page — a badge, a headline and a spec sheet of what the template
+already does — describes the *template* to a developer. Swapping its texts
+produces a page that still has the shape of a README: it proves nothing and it
+sells nothing, whatever the words say. That is the single most
 common weak point of apps built here, and it is why building the real page is
 a skill (**`salespage`**) rather than a text edit.
 

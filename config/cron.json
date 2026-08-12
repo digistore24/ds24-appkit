@@ -1,4 +1,5 @@
 {
+  "_comment": "The schedule. `enabled` here is the whole in-app scheduler; each entry under `jobs` is one job's interval and settings. ⚠ Leaving a job OUT of this file is NOT off: a job with no entry inherits the defaults, which are enabled and daily (lib/cron/rules.mjs → JOB_DEFAULTS). A job that must not run says so in its own registry entry (`enabledByDefault: false`) — the community module's `community-prune` is the shipped example, and it deletes members' correspondence, so it arrives off. To turn such a job on, add it here with \"enabled\": true. Only jobs this app actually has may be named: a module's job exists once the module is installed, and `node run.mjs cron --list` is what says which those are. ⚠ `ops-watchdog` is the one job here that MAILS, and its two halves belong together: its registry entry says `enabledByDefault: false` so that DELETING the entry below cannot start it by inheritance, and the entry below is the decision to run it — set \"enabled\": false there to stop the operator mail. Its 360 minutes are not a preference either: its send key is nailed to the UTC day while due-ness counts from the last FINISH, so a daily interval eventually drifts past midnight and skips a day in silence.",
   "enabled": true,
   "jobs": {
     "prune-ai-usage": {
@@ -15,6 +16,11 @@
       "enabled": true,
       "everyMinutes": 5
     },
+    "prune-setup-audit": {
+      "enabled": true,
+      "everyMinutes": 1440,
+      "retentionMonths": 24
+    },
     "prune-impersonations": {
       "enabled": true,
       "everyMinutes": 1440,
@@ -23,6 +29,19 @@
     "check-stuck-reloads": {
       "enabled": true,
       "everyMinutes": 60
+    },
+    "prune-abandoned-uploads": {
+      "enabled": true,
+      "everyMinutes": 1440
+    },
+    "check-advisories": {
+      "enabled": true,
+      "everyMinutes": 1440,
+      "budgetSeconds": 120
+    },
+    "ops-watchdog": {
+      "enabled": true,
+      "everyMinutes": 360
     }
   }
 }

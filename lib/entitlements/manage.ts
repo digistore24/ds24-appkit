@@ -302,6 +302,66 @@ export async function hasPlan(
 }
 
 /**
+ * `min(created_at)` over a Member's active grants for one key — the aggregate
+ * `planStartedAt` runs.
+ *
+ * 🚨 `.mapWith(grants.createdAt)` is not decoration. A raw ``sql`…` `` has no
+ * mapper, so the driver's Postgres string is handed straight on: `sql<Date>`
+ * here would be a string wearing a `Date`'s clothes, and `db/sql-cast.test.ts`
+ * fails on it for exactly this reason. Borrowing the column's own mapper is the
+ * first of the three ways out that `docs/troubleshooting.md` → *Dates and raw
+ * SQL* names, and the only one that keeps the value a real `Date`. ⚠️ Never
+ * "fix" a wrong-looking result with `new Date(value)` — `created_at` is
+ * `timestamp` without a zone marker, so that shifts it by the host's offset.
+ *
+ * EXPORTED for the reason `ENTITLEMENT_ORDER` is: what this produces is
+ * invisible in a type and testable only by reading the statement.
+ */
+export const PLAN_START = sql`min(${grants.createdAt})`.mapWith(
+  grants.createdAt,
+);
+
+/**
+ * When did this Member's access to `productKey` START?
+ *
+ * The one question a course that unlocks week by week asks —
+ * `docs/courses.md` shape 2 — and the answer is the EARLIEST active grant for
+ * that key, so a Member who upgraded mid-programme keeps the week they are on
+ * instead of being sent back to week one.
+ *
+ * 🚨 **This is a query of its own, and the obvious alternative is wrong.** The
+ * tempting version is to add `grants.createdAt` to `ENTITLEMENT_COLUMNS` and
+ * take "the earliest `grantedAt` among the rows `entitlementsFor()` returns" —
+ * which is what `docs/courses.md` used to instruct. `entitlementsFor()` is a
+ * `DISTINCT ON (product_key)` ordered by `ENTITLEMENT_ORDER`, so it returns
+ * exactly ONE row per key and picks it by *purchase-beats-comp, then furthest
+ * `accessUntil`* — never by age. "The earliest among them" is therefore vacuous
+ * over a one-element set, and the date it would carry belongs to whichever row
+ * won a contest about something else. A Member who bought, refunded and bought
+ * again would have their programme clock started on the wrong grant, silently,
+ * and the failure surfaces as a week that opens on the wrong day.
+ *
+ * `null` means no ACTIVE grant for that key — never "no such product": an
+ * unknown key throws, exactly as `hasPlan()` does and for the same reason.
+ * A suspended grant (missed payment) is not active, so a paused Member's clock
+ * reads `null` rather than running on; say "your access is paused"
+ * (`suspendedKeysFor`), never silently show week one.
+ */
+export async function planStartedAt(
+  memberId: string,
+  productKey: string,
+): Promise<Date | null> {
+  getProduct(productKey); // throws on an unknown key — see hasPlan() above
+
+  const [row] = await db
+    .select({ startedAt: PLAN_START })
+    .from(grants)
+    .where(and(activeFor(memberId), eq(grants.productKey, productKey)));
+
+  return row?.startedAt ?? null;
+}
+
+/**
  * One grant row, whole — what the Operator view needs (story 3.1).
  *
  * Deliberately NOT `Entitlement`. That one is the app-facing access answer and

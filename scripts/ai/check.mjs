@@ -48,12 +48,19 @@ import {
   priceKey,
   recommendedCurrency,
 } from "../../lib/ai/pricing.mjs";
-// The ONE reader of `config/ai-companion.json`. This script, `lib/ai/disclosure.mjs`
-// and the app all import it rather than each writing `raw.enabled === true`:
-// three copies of one predicate mean the first rename of that file makes them
-// disagree, and the loudest symptom is the quietest one — this hint starts
-// firing in every installed app again and nothing goes red.
-import { companionConfigFrom } from "../../lib/ai/companion-config.mjs";
+// Every surface in this app that talks to a person — the core's assistant plus
+// whatever an installed module declares. The hint below asks it "is anything
+// beyond support switched on?" instead of naming a feature.
+//
+// ⚠️ It used to import `lib/ai/companion-config.mjs` directly, and that file
+// moved into `modules/companion/` — which left this script with a dangling
+// import, so `node run.mjs ai-check` died with ERR_MODULE_NOT_FOUND before
+// printing a line. Nothing caught it: a `scripts/` command is not something a
+// test imports. Two things changed as a result. This reads the registry rather
+// than a module's file, so the next module move cannot break it; and
+// `scripts/imports.test.ts` now walks every relative import under `scripts/`,
+// so the next dangling one is a red test rather than a dead command.
+import { DISCLOSURE_SURFACES } from "../../lib/ai/disclosure.mjs";
 import "../lib/env.mjs";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -213,28 +220,35 @@ const problems = bindingProblems(models, configured, { notes });
 // wants no companion is not broken, and a check that calls it broken is a check
 // people learn to skip.
 //
-// It keys on the SWITCH — `config/ai-companion.json`, read through the one
-// shared predicate in `lib/ai/companion-config.mjs` — and deliberately not on a
-// scan of the tree for call sites. A scan would answer
-// "found" in every generated app for ever, because the template itself ships a
-// companion server action; the hint would go silent with nothing ever going red.
-// The switch is also the better half to ask about: an empty registry is a state
-// of completion, a switch is a decision, and this note is about a decision
-// nobody has made. Reading `lib/ai/companions.ts` is not an option either —
-// this script cannot import TypeScript (CLAUDE.md → Three systems).
+// It keys on the SWITCHES the disclosure registry already names — each surface
+// carries its `configFile` and its own `isOn()` — and deliberately not on a scan
+// of the tree for call sites. A scan would answer "found" in every generated app
+// for ever, because the template itself ships a companion server action; the
+// hint would go silent with nothing ever going red. A switch is also the better
+// half to ask about: an empty registry is a state of completion, a switch is a
+// decision, and this note is about a decision nobody has made.
 //
-// The shipped template answers "off", so on any machine with a key this note
-// fires on the template itself. That is the observation, not a defect.
-if (
-  configured.length > 0 &&
-  !companionConfigFrom(readJsonIfPresent("config", "ai-companion.json")).enabled
-) {
+// Reading the registry rather than one module's predicate is what makes this
+// hint true in an app whose companion is not installed at all: with the module
+// absent there is no surface beyond `chat`, which is exactly the state the note
+// describes. It also means the note keeps working for the NEXT module that adds
+// an AI surface, without this file learning its name.
+//
+// The shipped template answers "off" — the companion is a module and ships
+// absent — so on any machine with a key this note fires on the template itself.
+// That is the observation, not a defect.
+const beyondSupport = DISCLOSURE_SURFACES.filter((surface) => surface.id !== "chat").some(
+  (surface) => surface.isOn(readJsonIfPresent(...surface.configFile.split("/"))),
+);
+
+if (configured.length > 0 && !beyondSupport) {
   notes.push(
     "You are paying for a model, and this app uses it only to answer support questions.\n" +
       "    An app can also work ALONGSIDE its customer — read what they submitted, walk them\n" +
-      "    through a course, check a plan before they commit to it. The call is\n" +
-      "    askCompanion() in lib/ai/companion.ts, from a server action; the shape and a\n" +
-      "    worked example are in docs/ai-providers.md → Working alongside your customer.",
+      "    through a course, check a plan before they commit to it. That is the `companion`\n" +
+      "    MODULE: `node run.mjs module add companion`, then askCompanion() from a server\n" +
+      "    action. The shape and a worked example are in docs/ai-providers.md → Working\n" +
+      "    alongside your customer.",
   );
 }
 

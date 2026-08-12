@@ -16,7 +16,7 @@
 //
 // ── It guards itself ──────────────────────────────────────────────────────
 // `proxy.ts` matches `/dashboard` only, so everything under `app/api/` is
-// public until it protects itself — the same rule `/api/ipn` and `/api/mcp`
+// public until it protects itself — the same rule `/api/ipn` and `/api/v1`
 // live by. Here that is a bearer token: set `CRON_SECRET` and send
 // `Authorization: Bearer <CRON_SECRET>`. **Without the secret configured the
 // endpoint refuses to run at all**, so it can never be left as an open "delete
@@ -65,7 +65,16 @@ async function handle(request: Request): Promise<Response> {
   if (one) {
     const result = await runJobById(one, new Date());
     return Response.json(
-      { results: [result] },
+      {
+        results: [result],
+        // The same `known` the bare run below sends, for the same reason and one
+        // question further: with it, "this app has no job called X" can say what
+        // it DOES have instead of repeating the name back. The 404 already says
+        // *that* it is unknown — `scripts/cron/run-report.mjs` reads the status
+        // first, so an app deployed before this line still gets the right
+        // answer, only a shorter one.
+        known: CRON_JOBS.map((job) => job.id),
+      },
       // A job the caller named and that does not exist is their mistake to see,
       // not a 200 with a failure buried in the body.
       { status: result.outcome === "failed" && result.detail.startsWith("no such job") ? 404 : 200 },

@@ -92,7 +92,7 @@ function appBaseUrl() {
 // Only for testing against a DS24 test host that lets localhost through.
 const noRelay = Boolean(args["no-relay"]);
 
-function showLink(url, hint) {
+async function showLink(url, hint) {
   console.log(`\n${hint}`);
   console.log(`\n  ${url}\n`);
   // `openUrl()` lives in scripts/lib/proc.mjs because opening a link is the one
@@ -102,10 +102,18 @@ function showLink(url, hint) {
   // ended the command line at the first `&` and the browser was handed a
   // truncated address. The link is on screen either way, which is why a failure
   // here is only worth one sentence.
-  if (!openUrl(url)) {
-    console.log("(The browser could not be opened automatically — copy the link above.)");
-  } else {
+  if (await openUrl(url)) {
     console.log("(The browser was opened. If not: copy the link above.)");
+  } else {
+    // Not an apology — an instruction, and it is addressed to the agent. This is
+    // the normal state in a cloud session, a container or a machine over SSH,
+    // and there nobody is going to see a window: somebody has to be handed the
+    // address. The old wording claimed the browser HAD opened whenever the
+    // spawn did not throw, which on those machines is always — so people sat in
+    // front of an unchanged screen while this waited eight minutes for a click
+    // they had no way of making.
+    console.log("(No browser can open on this machine. Give the link above to the");
+    console.log(" user and ask them to open it — nothing here continues until they do.)");
   }
 }
 
@@ -125,7 +133,17 @@ function done(apiKey, extras = {}) {
 // Route B — manual: open the page, paste the key in.
 // ---------------------------------------------------------------------------
 async function manualRoute() {
-  showLink(
+  // A key handed over on the command line needs neither a terminal to ask on nor
+  // a browser to open — the one path through this script that works where the
+  // person is not at this machine at all. The agent reads the key back from the
+  // user in the conversation and passes it in here.
+  const given = String(args.key === true ? "" : args.key || "").trim();
+  if (given) {
+    done(given);
+    return;
+  }
+
+  await showLink(
     `${baseUrl}/settings/account-access`,
     "Create an API key for yourself at Digistore24:",
   );
@@ -134,6 +152,18 @@ async function manualRoute() {
   console.log("");
   console.log("Without write permissions the app can neither create products nor");
   console.log("generate checkout links.\n");
+
+  // The question needs a person on the other end. Without a terminal — an agent
+  // running this through a tool, a pipe, a CI step — `rl.question` never
+  // returns: it waits on a stdin nobody is typing into, and the command hangs
+  // until something outside kills it. Refusing with the way through is the same
+  // contract `node run.mjs update` keeps.
+  if (!process.stdin.isTTY) {
+    console.error("\n✗ No terminal here to ask on — nothing saved.");
+    console.error("  Have the user create the key at the address above, then pass it in:");
+    console.error("    node run.mjs ds24-connect --manual --key <the key>");
+    process.exit(2);
+  }
 
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const key = (await rl.question("Paste the API key here: ")).trim();
@@ -168,10 +198,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * script goes and looks.
  */
 async function waitForApproval(token) {
-  const deadline = Date.now() + APPROVAL_TIMEOUT_MS;
+  const startedAt = Date.now();
+  const deadline = startedAt + APPROVAL_TIMEOUT_MS;
   let failures = 0;
+  let announcedMinutes = 0;
 
   for (;;) {
+    // Eight minutes without a word is where somebody decides the thing has hung
+    // — and the person this waits for is often not even at this screen, so the
+    // agent is the one who has to be able to say "it is still waiting". A line a
+    // minute is not noise; it is the difference between waiting and wondering.
+    const elapsedMinutes = Math.floor((Date.now() - startedAt) / 60_000);
+    if (elapsedMinutes > announcedMinutes) {
+      announcedMinutes = elapsedMinutes;
+      const left = Math.ceil((deadline - Date.now()) / 60_000);
+      console.log(`  … still waiting for the approval (${left} min left).`);
+    }
     if (Date.now() > deadline) {
       throw new Error(
         "Timed out (8 minutes) — nothing saved. Run the command again.",
@@ -224,7 +266,17 @@ async function automaticRoute() {
     process.exit(1);
   }
 
-  showLink(requestUrl, "Please approve the access at Digistore24:");
+  await showLink(requestUrl, "Please approve the access at Digistore24:");
+  // Which account gets connected is decided in the browser, by whoever is signed
+  // in there — this script never learns the name of it, and cannot offer a
+  // choice. Saying so is the difference between a person who can catch the wrong
+  // account and one who finds out weeks later, when products appear somewhere
+  // unexpected.
+  console.log("");
+  console.log("This connects whichever Digistore24 account is signed in when the");
+  console.log("approval is confirmed. If that is the wrong one: sign out there,");
+  console.log("sign in to the right account, and run this again.");
+  console.log("");
   console.log("Waiting for the approval — take your time, this waits for you.");
 
   const result = await waitForApproval(requestToken);

@@ -12,7 +12,7 @@
 // ── Why the template ships wired for all four ───────────────────────────────
 //
 // Because "it works out of the box" has to be literally true. A fresh clone
-// opened in Claude Code, Codex, Gemini or OpenCode greets you and finds the
+// opened in Claude Code, Codex, Antigravity or OpenCode greets you and finds the
 // skills before anybody has run anything. Wiring it up on demand would have made
 // that claim conditional on remembering a command, and the person who most needs
 // the greeting is exactly the one who does not know the command exists.
@@ -41,13 +41,32 @@
 //                                  for a program that reads only one, because
 //                                  switching later is a normal thing to do.
 //   anything you wrote             it only ever removes paths it can regenerate.
+//
+// ── What it says at the end, and why ────────────────────────────────────────
+//
+// Wiring is not the last step. Three of the four programs gate the MCP server
+// on trust or approval, and until that is cleared it is simply absent — no
+// error, no tools — so "I wrote the config and nothing happened" is the normal
+// first experience in three apps out of four. This command is the last thing
+// the operator reads before meeting that, so it ends on the one line that
+// applies to the program it has just wired up. The sentences live in
+// agent-configs.mjs beside the programs they belong to, one source for the
+// command and the document alike.
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { AGENTS, detectAgent, prunedPathsFor } from "./agent-configs.mjs";
+import {
+  AGENTS,
+  PROFILE_FILE,
+  detectAgent,
+  gateNotice,
+  gateSummary,
+  prunedPathsFor,
+  readAgentProfile,
+} from "./agent-configs.mjs";
 import { stubFor } from "./agent-skills.mjs";
 
 const ROOT = process.cwd();
-const PROFILE = ".agent-profile.json";
+const PROFILE = PROFILE_FILE;
 const STUBS = ".agents/skills";
 
 const abs = (file) => path.join(ROOT, file);
@@ -74,7 +93,7 @@ function stubFiles() {
  * Everything the chosen program needs, and everything it does not.
  *
  * Removal is per FILE and only when the file still holds what we put there.
- * Deleting a directory wholesale would take a `.gemini/skills/` somebody added,
+ * Deleting a directory wholesale would take a `.codex/skills/` somebody added,
  * or the `permissions` block they wrote into `.claude/settings.json`, and it
  * would do it without a word. Same rule the guidance update lives by: a file you
  * changed is yours, and this reports it instead of touching it.
@@ -191,21 +210,27 @@ if (undo) {
   for (const { file, content } of restore) write(file, content);
   rmSync(abs(PROFILE), { force: true });
   console.log(`\n✓ ${restore.length} file(s) written. ${PROFILE} removed.`);
+  // All four are wired now, so this run cannot know which gate the operator
+  // will meet — it names all of them rather than none.
+  console.log("");
+  for (const line of gateSummary()) console.log(line);
   process.exit(0);
 }
 
 // ── which program? ──────────────────────────────────────────────────────────
 
-const previous = (() => {
-  try {
-    return JSON.parse(readFileSync(abs(PROFILE), "utf8"));
-  } catch {
-    return null;
-  }
-})();
+// One reader for this file, `node run.mjs update` and the two tests that walk
+// the tree — see `readAgentProfile()` in agent-configs.mjs. A profile that is
+// there and unusable is not "no profile": it is said out loud, and then the
+// last-run fallback simply has nothing to offer.
+const previous = readAgentProfile(ROOT);
+if (previous.found && !previous.ok) {
+  console.error(`⚠ ${previous.problem}`);
+  console.error("  Ignoring it — say which program this is, or delete the file and run again.");
+}
 
 const detected = detectAgent();
-const agent = asked ?? detected ?? previous?.agent;
+const agent = asked ?? detected ?? previous.agent;
 
 if (!agent) {
   // Detection is a convenience, never the mechanism — the program running this
@@ -232,6 +257,10 @@ if (toWrite.length === 0 && toRemove.length === 0) {
     console.log("  Left alone, because you changed them:");
     for (const { file } of yours) console.log(`    · ${file}`);
   }
+  // Said here too, and deliberately: this is the exit an operator reaches when
+  // the tools did not appear and they ran the command again to find out why.
+  console.log("");
+  for (const line of gateNotice(agent)) console.log(line);
   process.exit(0);
 }
 
@@ -280,3 +309,6 @@ writeFileSync(
 
 console.log(`\n✓ Set up for ${label}. ${toWrite.length} written, ${toRemove.length} removed.`);
 console.log(`  Recorded in ${PROFILE}, so \`node run.mjs update\` will not put them back.`);
+
+console.log("");
+for (const line of gateNotice(agent)) console.log(line);

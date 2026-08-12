@@ -35,10 +35,14 @@ export interface SignedUrlOptions {
 /**
  * What every driver can do.
  *
- * Deliberately small. There is no `list`, no `copy` and no `move`: this app
- * knows what it stored because it wrote a row, and a store that can be
- * enumerated is one somebody will enumerate instead of querying the database —
- * at which point the row and the object have two sources of truth.
+ * Deliberately small. There is no `list` and no `move`: this app knows what it
+ * stored because it wrote a row, and a store that can be enumerated is one
+ * somebody will enumerate instead of querying the database — at which point the
+ * row and the object have two sources of truth.
+ *
+ * `copy` is the one addition, and it is not a convenience: it is what makes the
+ * direct-to-bucket path's checks a promise rather than a measurement of one
+ * moment. See `copy()` below.
  */
 export interface MediaStore {
   readonly driver: MediaDriver;
@@ -50,6 +54,72 @@ export interface MediaStore {
   publicUrl(key: string): string | null;
   /** A short-lived address, or null when this driver has none (local). */
   signedUrl(key: string, options: SignedUrlOptions): string | null;
+
+  /**
+   * A short-lived address the BROWSER may write one object to — or null when
+   * this driver has none.
+   *
+   * The second way into the same store, and the reason it exists is a ceiling:
+   * an upload that travels through the app is bounded by what a request body
+   * may carry, which is not enough for a lesson recording. Here the bytes never
+   * touch the process, so the size stops being the app's problem — and starts
+   * being a different one, stated plainly because it cannot be signed away: a
+   * presigned `PUT` **cannot enforce a length**. `X-Amz-SignedHeaders` is
+   * `host`, and a `content-length-range` condition exists only for POST
+   * policies. The bucket takes what the bucket takes; the app measures
+   * afterwards with `head()` and removes what is over. A short expiry is the
+   * other half of that answer.
+   *
+   * Null on `local` for the same reason `signedUrl()` is null there: on that
+   * driver there IS no address a browser can reach that is not the app.
+   *
+   * ⚠️ **There is no `contentType` parameter, and leaving it out is the
+   * decision.** Signing one would oblige the browser to send that header back
+   * byte for byte — a charset appended or the case changed is a 403 carrying
+   * S3's own text, which the app cannot translate and the operator cannot
+   * read. Nothing is lost: what a file IS gets decided by the confirm step
+   * from its first bytes, and delivery restates the recorded type through
+   * `response-content-type` (`signedUrl()`), so the type the bucket happens to
+   * have stored is never the type anybody is told.
+   */
+  createUploadUrl(key: string, expiresSeconds: number): string | null;
+
+  /**
+   * The first `n` bytes of a stored object, or null when it is not there.
+   *
+   * The confirm step's instrument, and the reason it is not `getBytes()`: what
+   * a file IS comes from its first bytes (`lib/media/sniff.ts` needs sixteen),
+   * and reading a two-gigabyte video into the process to learn that would give
+   * away everything `createUploadUrl()` just bought.
+   */
+  firstBytes(key: string, n: number): Promise<Uint8Array | null>;
+
+  /**
+   * Move an object's bytes from one key to another **inside the store**, and
+   * record the type this app measured for them.
+   *
+   * 🚨 **The reason the direct path is a promise and not a snapshot.** A
+   * presigned `PUT` is bounded by time, not by uses: whoever holds the address
+   * may write it again, and again, until it expires. So the browser writes to
+   * `stagingKey()`, the confirm step measures and sniffs THAT object, and then
+   * copies it here onto the delivery key — which the client has never been
+   * told and cannot reach. A later replay overwrites a key nothing serves.
+   *
+   * No byte travels through this process: on S3 this is a `PUT` carrying
+   * `x-amz-copy-source`, so the provider moves them internally, and a two
+   * gigabyte recording costs one request rather than one heap. The local driver
+   * copies on disk.
+   *
+   * `contentType` is written rather than inherited (`x-amz-metadata-directive:
+   * REPLACE`), and that is the second thing this buys: the type stored against
+   * the object becomes the one the app read out of its first bytes instead of
+   * the header the browser chose when it wrote to the bucket.
+   *
+   * ⚠️ A single-request copy tops out where a single presigned `PUT` does —
+   * five gigabytes at the major providers, which is exactly where
+   * `MAX_BYTES_CEILING` in `lib/media/config.ts` sits and why it sits there.
+   */
+  copy(fromKey: string, toKey: string, contentType: string): Promise<void>;
 }
 
 export function driverFromEnv(env: NodeJS.ProcessEnv = process.env): MediaDriver {

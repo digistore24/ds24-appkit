@@ -2,250 +2,197 @@
 // Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA
 // SPDX-License-Identifier: MIT
 
-// Checks that an environment really HOLDS the content this app declares —
-// the check that sees the empty-but-200 course page no other gate can.
+// `node run.mjs content-check` — does an environment hold what it should?
 //
-//   node run.mjs content-check              # this machine's environment
-//   node run.mjs content-check --env prod   # the PROD store (MEDIA_S3_*_PROD)
-//                                           # + the DATABASE_URL in your shell
+// ── The command is back, and it is not the old one ────────────────────────
+// The first `content-check` counted the appliers' rows from the core. That was
+// the whole answer only while the core could see everything there was; the
+// moment a MODULE owned rows, it was answering a smaller question than its name
+// while showing a green tick. It was withdrawn rather than extended.
 //
-// `smoke` proves pages answer; a course page over an empty table answers 200
-// with nothing on it. `content-check` asks the other question — is the
-// content THERE — in four passes, and it never writes anything:
+// This one asks. Each owner answers for its own rows — the core for product
+// media and the appliers, every module through the `presence` key in its
+// manifest — and this command aggregates and never inspects.
 //
-//  1. **Manifest ↔ disk.** Every entry parses, obeys the grammar, and its
-//     file is on one of the two legs (or its bytes are at least recorded);
-//     a shipped file past the 10 MB ceiling is named with where it goes.
-//  2. **Manifest ↔ store.** HEAD every key against the environment's store.
-//     An unreachable store is a failure, never a skip — "green because it
-//     checked" and "green because it could not look" must not share a colour.
-//  3. **Manifest ↔ database.** A `media` row exists for every entry.
-//  4. **Appliers ↔ database.** Every applier's `present(sql)` answers > 0.
-//     Appliers that exist while their rows are absent is THE red line: it is
-//     what a production database looks like when `content-apply` was never
-//     run against it.
+// ── And it asks the ENVIRONMENT, not a database ───────────────────────────
+// The question travels as a read-only setup tool, so `--env prod` needs no
+// production connection string in anybody's shell. That the target's setup
+// surface has to be switched on is not a new requirement: checking a remote
+// environment has always needed a door into it, and this is a narrower door
+// than the database.
 //
-// Green against `--env prod` is go-live §5's exit condition. No manifest and
-// no appliers is a clean pass — an app that ships no content has nothing to
-// hold.
-import { statSync, readdirSync } from "node:fs";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { join } from "node:path";
+// Usage:
+//   node run.mjs content-check                this machine's environment
+//   node run.mjs content-check --env prod
+import { fileURLToPath } from "node:url";
 
-import {
-  CONTENT_MEDIA_MANIFEST,
-  CONTENT_MEDIA_SHIPPED_DIR,
-  CONTENT_MEDIA_SHIPPED_MAX_BYTES,
-  CONTENT_MEDIA_STAGED_DIR,
-} from "../../lib/content-media/rules.mjs";
-import { loadManifest } from "./_manifest.mjs";
-import {
-  describeStore,
-  isLocalDatabaseUrl,
-  machineEnv,
-  resolveTargetEnv,
-  storeForEnv,
-} from "../lib/media-env.mjs";
-import { objectPresent } from "../lib/store-sync.mjs";
+import { CONTENT_MEDIA_MANIFEST, PRODUCT_MEDIA_ITEM } from "../../lib/content-media/rules.mjs";
+import { presenceProblems } from "../../lib/content/presence-rules.mjs";
+import { callSetup, reportRefusal, resolveEnvName } from "../setup/client.mjs";
+import { declaredVsReported, loadManifest } from "./_manifest.mjs";
 import "../lib/env.mjs";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
-const APPLIERS_DIR = join(ROOT, "scripts", "content", "appliers");
 
-const argv = process.argv.slice(2);
+const args = process.argv.slice(2);
+const flag = (name) => {
+  const i = args.indexOf(`--${name}`);
+  return i === -1 ? null : (args[i + 1] ?? null);
+};
 
-let failed = false;
-function ok(line) {
-  console.log(`  ✓ ${line}`);
+// 🚨 The environment table and NFR-60's three sentences live in
+// `scripts/setup/client.mjs`, not here. They were a copy per reader once, and a
+// second copy is how "unreachable", "the surface is off there" and "refused"
+// stop being three different answers.
+const resolved = resolveEnvName(flag("env"));
+if (resolved.error) {
+  console.error(`✗ ${resolved.error}`);
+  process.exit(2);
 }
-function warn(line) {
-  console.log(`  ! ${line}`);
-}
-function bad(line) {
-  console.log(`  ✗ ${line}`);
-  failed = true;
-}
+const target = resolved.env;
 
-function fileAt(dir, path) {
-  const full = join(ROOT, ...dir.split("/"), ...path.split("/"));
-  try {
-    const stats = statSync(full);
-    return stats.isFile() ? { full, bytes: stats.size } : null;
-  } catch {
-    return null;
-  }
-}
+const answer = await callSetup(target, { tool: "content_presence" });
+if (!answer.ok) process.exit(reportRefusal(answer));
 
-function applierFiles() {
-  let entries;
-  try {
-    entries = readdirSync(APPLIERS_DIR);
-  } catch {
-    return [];
-  }
-  return entries.filter((name) => name.endsWith(".mjs") && !name.startsWith("_")).sort();
-}
+const { data } = answer.body;
+const reports = data?.reports;
 
-async function main() {
-  const resolvedEnv = resolveTargetEnv(argv);
-  if (resolvedEnv.error) {
-    console.error(`✗ ${resolvedEnv.error}`);
-    process.exit(1);
-  }
-  const env = resolvedEnv.env;
-  const crossEnv = env !== machineEnv();
-
-  const manifest = loadManifest(ROOT);
-  const appliers = applierFiles();
-
-  if (manifest.missing && appliers.length === 0) {
-    console.log(
-      `\n✓ Nothing to check — no ${CONTENT_MEDIA_MANIFEST} and no scripts/content/appliers/.` +
-        "\n  An app that ships content declares it there (docs/content.md).\n",
-    );
-    return;
-  }
-
-  const entries = manifest.missing ? [] : manifest.entries;
-
-  // ── 1. Manifest ↔ disk ─────────────────────────────────────────────────────
-  console.log("\nManifest and files:");
-  if (!manifest.missing) {
-    for (const problem of manifest.problems) bad(problem);
-  }
-  for (const entry of entries) {
-    const shipped = fileAt(CONTENT_MEDIA_SHIPPED_DIR, entry.path);
-    const staged = fileAt(CONTENT_MEDIA_STAGED_DIR, entry.path);
-    if (shipped && shipped.bytes > CONTENT_MEDIA_SHIPPED_MAX_BYTES) {
-      bad(
-        `${entry.path} — ${(shipped.bytes / 1024 / 1024).toFixed(1)} MB in the repo; past ` +
-          `${CONTENT_MEDIA_SHIPPED_MAX_BYTES / 1024 / 1024} MB it belongs in ` +
-          `${CONTENT_MEDIA_STAGED_DIR}/ (then: content-media-sync)`,
-      );
-    } else if (shipped) {
-      ok(`${entry.path} — shipped (${CONTENT_MEDIA_SHIPPED_DIR}/)`);
-    } else if (staged) {
-      ok(`${entry.path} — staged (${CONTENT_MEDIA_STAGED_DIR}/)`);
-    } else if (entry.sha256 && entry.bytes) {
-      ok(`${entry.path} — not on this machine; sha256/bytes recorded, the store check decides`);
-    } else {
-      bad(
-        `${entry.path} — no file on either leg and no sha256/bytes recorded; ` +
-          "no environment can hold what nothing describes",
-      );
-    }
-  }
-  if (entries.length === 0 && !manifest.missing && manifest.problems.length === 0) {
-    warn("the manifest is valid and empty — appliers below are checked either way");
-  }
-
-  // ── 2. Manifest ↔ store ────────────────────────────────────────────────────
-  const store = storeForEnv(env);
-  console.log("\nStore:");
-  if (store.error) {
-    bad(store.error);
-  } else {
-    console.log(`  (${describeStore(env, store)})`);
-    for (const entry of entries) {
-      const answer = await objectPresent(store, entry.key);
-      if (answer.error) {
-        bad(answer.error);
-        // One unreachable store fails the pass; checking forty keys against
-        // it would print the same sentence forty times.
-        break;
-      }
-      if (answer.present) {
-        ok(`${entry.key} — in the store`);
-      } else {
-        bad(
-          `${entry.key} — NOT in the store. Shipped files travel with content-apply, ` +
-            `staged ones with content-media-sync${crossEnv ? ` --env ${env}` : ""} --apply`,
-        );
-      }
-    }
-    if (entries.length === 0) ok("no media entries — nothing the store has to hold");
-  }
-
-  // ── 3 + 4. Database ────────────────────────────────────────────────────────
-  console.log("\nDatabase:");
-  const dbUrl = process.env.DATABASE_URL;
-  if (crossEnv && isLocalDatabaseUrl(dbUrl)) {
-    bad(
-      `--env ${env} with a local DATABASE_URL — this would check YOUR database and call it ` +
-        `${env.toUpperCase()}. Set the ${env.toUpperCase()} database's DATABASE_URL in the ` +
-        "shell for this one command (the user-create procedure, docs/DEPLOY.md)",
-    );
-  } else if (!dbUrl) {
-    bad("DATABASE_URL is not set (see .env) — the database half cannot be checked, so it is not green");
-  } else {
-    let sql = null;
-    try {
-      const { default: postgres } = await import("postgres");
-      sql = postgres(dbUrl, { max: 1, connect_timeout: 10 });
-
-      if (entries.length > 0) {
-        const keys = entries.map((entry) => entry.key);
-        const found = await sql`select storage_key from media where storage_key = any(${keys})`;
-        const present = new Set(found.map((row) => row.storage_key));
-        for (const entry of entries) {
-          if (present.has(entry.key)) {
-            ok(`${entry.key} — media row exists`);
-          } else {
-            bad(`${entry.key} — NO media row. Run content-apply against this environment's database`);
-          }
-        }
-      } else {
-        ok("no media entries — no rows the database has to hold");
-      }
-
-      for (const name of appliers) {
-        let module;
-        try {
-          module = await import(pathToFileURL(join(APPLIERS_DIR, name)).href);
-        } catch (error) {
-          bad(`applier ${name} — cannot be loaded: ${error.message}`);
-          continue;
-        }
-        if (typeof module.present !== "function") {
-          bad(
-            `applier ${name} — exports no present(sql) function, so nobody can ask whether its ` +
-              "rows exist (docs/content.md has the convention)",
-          );
-          continue;
-        }
-        try {
-          const count = await module.present(sql);
-          if (Number.isFinite(count) && count > 0) {
-            ok(`applier ${name} — ${count} row(s) present`);
-          } else {
-            bad(
-              `applier ${name} — 0 rows present. The applier exists, its content does not: ` +
-                "this is what a database looks like when content-apply never ran against it",
-            );
-          }
-        } catch (error) {
-          bad(`applier ${name} — present(sql) failed: ${error.message}`);
-        }
-      }
-    } catch (error) {
-      bad(
-        `the database does not answer: ${error.message} — locally: node run.mjs start; ` +
-          "a checked environment that cannot be reached is not a green one",
-      );
-    } finally {
-      if (sql) await sql.end();
-    }
-  }
-
-  console.log(
-    failed
-      ? `\n✗ content-check: the ${env.toUpperCase()} environment does not hold this app's content.\n`
-      : `\n✓ content-check: the ${env.toUpperCase()} environment holds this app's content.\n`,
-  );
-  process.exit(failed ? 1 : 0);
-}
-
-main().catch((error) => {
-  console.error(`\n✗ content-check failed: ${error.message}\n`);
+// 🚨 An answer carrying no reports is a REFUSAL, never an empty environment.
+// `collectPresence()` puts the core in first and always — so an array that is
+// absent, not an array, or empty is a statement about the ANSWER (a build older
+// than this tool's shape, something that rewrote the body), and never about the
+// customer's content. A `?? []` here would collapse "it said nothing" into "it
+// said nothing is wrong", which is the fault this whole command is written
+// against.
+if (!Array.isArray(reports) || reports.length === 0) {
+  console.error(`✗ ${target} answered without a single presence report — nothing was measured.`);
+  console.error(`  At least the core answers for itself (lib/content/presence.ts), so this is`);
+  console.error(`  the answer being wrong, not that environment being empty. A deployed app`);
+  console.error(`  older than this checkout is the usual reason.`);
   process.exit(1);
-});
+}
+
+console.log(`\nWhat ${target} holds\n`);
+for (const report of reports) {
+  if (report.unanswered) {
+    // 🚨 A failure, never a pass. This command exists to catch an environment
+    // that is EMPTY, so "nothing to report" and "I could not look" must not
+    // render the same — which is the fault the old command had by construction.
+    console.log(`  ✗ ${report.owner.padEnd(12)} could not answer — ${report.unanswered}`);
+    continue;
+  }
+  if (report.items.length === 0) {
+    console.log(`  · ${report.owner.padEnd(12)} nothing of its own to hold`);
+    continue;
+  }
+  for (const item of report.items) {
+    const expected = item.expected === null ? "" : ` of ${item.expected}`;
+    // 🚨 Three marks for three states, and `⏭` is the one this command was
+    // missing. A named absence is a finding and outranks everything — an object
+    // that really is gone stays a `✗` even if the store then stopped answering
+    // for the rest. Otherwise an item with an unasked half is `⏭`, never `✓`:
+    // a tick that conceals a question nobody put is the defect, not the cure.
+    const mark = item.missing?.length ? "✗" : item.notChecked ? "⏭" : item.found === 0 ? "·" : "✓";
+    console.log(`  ${mark} ${report.owner.padEnd(12)} ${item.what}: ${item.found}${expected}`);
+    if (item.missing?.length) console.log(`      missing: ${item.missing.join(", ")}`);
+    // A word for a reader, never a problem: an item in a legitimate state that
+    // needs a sentence to be readable at all ("product media: 0" says nothing
+    // about what was looked for or where). For product media it is also the
+    // EVIDENCE — how many objects were really asked for — so that a tick can be
+    // told apart from a tick nobody earned.
+    if (item.note) console.log(`      ${item.note}`);
+    if (item.notChecked) console.log(`      ⏭ not checked: ${item.notChecked}`);
+  }
+}
+
+// ── What was not asked ──────────────────────────────────────────────────────
+// Neither a pass nor a finding, and it MUST be said out loud: this command
+// answers a go-live question, and "green because it checked" and "green because
+// it skipped" are the same colour. Collected across every owner, printed above
+// the verdict, and it does not change the exit code — an unreachable store is
+// not a statement about the customer's content.
+const unchecked = reports.flatMap((report) =>
+  (report.items ?? [])
+    .filter((item) => item.notChecked)
+    .map((item) => `${report.owner}: ${item.what} — ${item.notChecked}`),
+);
+
+// ── Does that environment know about the media THIS checkout declares? ──────
+// Only this process can ask: the app knows what it holds, and the repo the
+// deploy came from is here. The item is found by the shared label constant
+// rather than by matching a sentence — a comparison that silently finds nothing
+// looks exactly like one that found no disagreement.
+//
+// ⚠️ Deliberately NOT folded into `problems`. Those are one owner's statement
+// about its own rows; this is a disagreement BETWEEN two sides, and an operator
+// has to be able to tell which of the two they are reading — a checkout ahead
+// of the deployed commit is the legitimate version of this finding.
+const core = reports.find((report) => report.owner === "core") ?? null;
+const local = loadManifest(ROOT);
+let disagreement = null;
+
+if (!local.missing && local.problems.length > 0) {
+  console.log("");
+  console.log(`  ⚠️ this checkout's own ${CONTENT_MEDIA_MANIFEST} has ${local.problems.length} problem(s)`);
+  console.log(`     — run node run.mjs content-apply --dry-run; only the entries that`);
+  console.log(`     validated are counted below.`);
+}
+
+// A core that could not answer is compared against nothing: "I could not look"
+// must never be reworded as "that environment holds less".
+if (core && !core.unanswered) {
+  const declaredHere = local.missing ? 0 : local.entries.length;
+  const coreItem = (core.items ?? []).find((item) => item.what === PRODUCT_MEDIA_ITEM) ?? null;
+  disagreement = declaredVsReported(declaredHere, coreItem);
+}
+
+// ── The verdict, over the reports printed above ─────────────────────────────
+// 🚨 **The judgement is made HERE and not taken from the app, deliberately.**
+// The exit code has an input the server structurally cannot have: `disagreement`
+// compares THIS CHECKOUT's own manifest (`loadManifest(ROOT)`) against what that
+// environment reported, and only this process holds the repo the deploy came
+// from — sending the manifest up would be the wrong direction, since it is the
+// very file whose absence is the question. A verdict that lived over there
+// would therefore be half the verdict.
+//
+// So the reports are judged by the same function the app runs on them
+// (`lib/content/presence-rules.mjs` — one implementation, two readers), and the
+// `problems` array that travels in the payload is NOT read by this command.
+// It was, and it made the exit code the opinion of a build that can be older
+// than this checkout: measured in Story 42.3, a report carrying `unanswered`
+// beside an empty `problems` printed `✗ core could not answer` and then
+// `✓ every owner answered, nothing missing` and exited 0 — a cross on the
+// screen and a tick in the exit code, on the command that gates a go-live.
+// The array stays in the payload for a client that asks the tool directly over
+// MCP (`lib/setup/tools.ts`); it is not the source of this exit.
+const problems = presenceProblems(reports);
+
+console.log("");
+if (unchecked.length > 0) {
+  console.log(`⏭ ${unchecked.length} thing(s) NOT checked — neither a pass nor a finding:\n`);
+  for (const line of unchecked) console.log(`  ${line}`);
+  console.log("");
+}
+if (problems.length > 0) {
+  console.log(`✗ ${problems.length} problem(s):\n`);
+  for (const problem of problems) console.log(`  ${problem}`);
+  console.log("");
+}
+if (disagreement) {
+  console.log(`✗ this checkout and ${target} do not agree:\n`);
+  console.log(`  ${disagreement}`);
+  console.log("");
+}
+if (problems.length > 0 || disagreement) process.exit(1);
+
+// ⚠️ Green means "everything every owner covers is present". It does not mean
+// the pages render — that is your eyes, and `docs/content.md` says so. And when
+// something above was not asked, the sentence says so rather than claiming the
+// whole question: exit 0 with a `⏭` above it is "nothing is missing of what was
+// checked", which is a smaller statement and the true one.
+console.log(
+  unchecked.length > 0
+    ? `✓ every owner answered; nothing missing among what was checked.`
+    : `✓ every owner answered, nothing missing.`,
+);
+console.log(`  That is not the same as "it renders" — open a paid page and look.\n`);

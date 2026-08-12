@@ -12,6 +12,7 @@ import { PartyPopper } from "lucide-react";
 import { auth } from "@/auth";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
+import { Card, CardContent } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { OrderProcessing } from "./order-processing";
@@ -78,23 +79,44 @@ export default async function OptinPage({
           <h1 className="text-2xl font-semibold">{t("title")}</h1>
         </div>
 
-        {!order ? (
-          <OrderProcessing />
-        ) : (
-          <>
-            <Callout variant="success">
-              {t("received")}
-              {/* Two sentences, two keys — never stitched together in code:
-                  word order is not the same in every language. */}
-              {!signedIn && <span className="mt-2 block">{t("signInBody")}</span>}
-            </Callout>
-            <Button asChild className="w-full">
-              <Link href={signedIn ? "/dashboard" : "/login"}>
-                {signedIn ? t("dashboardCta") : t("signInCta")}
-              </Link>
-            </Button>
-          </>
-        )}
+        {/* 🚨 The card wraps the CONDITIONAL, not one of its branches. This
+            page waits: it polls while the IPN is still on its way and swaps a
+            spinner for the result underneath the same heading. A surface that
+            appeared only once the order arrived would make the page change
+            shape while somebody is watching it — and this is the page a buyer
+            lands on straight out of a payment, which is the worst possible
+            moment for the app to look uncertain.
+
+            Adding a card here at all is a decision, not a pattern: this page
+            has no <BrandMark> and no card today, it opens with a celebration.
+            The celebration is untouched — the medallion and the heading stay
+            ABOVE the surface. What changes is that its message now sits on the
+            same plate as the sign-in's form, which is the point: a buyer meets
+            /optin and /login minutes apart. app/ds24-connected/page.tsx carries
+            the argument for the shape at length. */}
+        <Card className="shadow-(--elevation-overlay)">
+          <CardContent className="flex flex-col gap-4">
+            {!order ? (
+              <OrderProcessing />
+            ) : (
+              <>
+                <Callout variant="success">
+                  {t("received")}
+                  {/* Two sentences, two keys — never stitched together in code:
+                      word order is not the same in every language. */}
+                  {!signedIn && (
+                    <span className="mt-2 block">{t("signInBody")}</span>
+                  )}
+                </Callout>
+                <Button asChild className="w-full">
+                  <Link href={signedIn ? "/dashboard" : "/login"}>
+                    {signedIn ? t("dashboardCta") : t("signInCta")}
+                  </Link>
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </main>
   );

@@ -1,0 +1,93 @@
+{
+  "id": "courses",
+  "version": "1.0.0",
+  "requiresTemplate": "0.20.0",
+  "title": {
+    "de": "Kurs",
+    "en": "Course"
+  },
+  "summary": "a course whose blocks and lessons live in tables: self-study, week by week, or accompanied",
+  "docs": "docs/courses.md",
+  "skill": "courses",
+
+  "app": [
+    "dashboard/course",
+    "dashboard/admin/course"
+  ],
+
+  "config": "config/course.json",
+  "configDefault": "config.default.json",
+
+  "messages": {
+    "namespaces": [
+      "courses",
+      "coursesAdmin"
+    ],
+    "dir": "messages"
+  },
+  "errorCodes": {
+    "source": "rules.ts",
+    "export": "COURSES_ERROR_CODES"
+  },
+
+  "schema": "schema.ts",
+  "tables": [
+    "courses_blocks",
+    "courses_completions",
+    "courses_submissions",
+    "courses_units"
+  ],
+  "tablePrefix": "courses_",
+  "content": "authored",
+  "migrations": "drizzle",
+  "migrationsTable": "__drizzle_migrations_courses",
+
+  "nav": "nav.ts",
+  "features": [
+    "courses",
+    "coursesAdmin"
+  ],
+  "navAreas": [
+    "course"
+  ],
+  "gate": "gate.ts",
+  "entry": "module.ts",
+
+  "erase": true,
+  "privacy": {
+    "sections": [
+      "coursesCompletions",
+      "coursesSubmissions"
+    ],
+    "accountNotes": {
+      "export": "courses.accountExportNote",
+      "deletion": "courses.accountDeletionNote"
+    },
+    "ts": "privacy/sections.ts",
+    "mjs": "privacy/sections.mjs"
+  },
+  "cron": "cron.ts",
+  "cronJobs": [
+    "courses-digest"
+  ],
+  "commands": {
+    "courses-check": {
+      "script": "check.mjs",
+      "help": "Check this app's course: the switch, the product key, the slugs and the media its content names"
+    },
+    "courses-diff": {
+      "script": "courses-diff.mjs",
+      "help": "What publishing this repo's course into an environment would create and change, and what is only there — reads, never writes"
+    }
+  },
+  "smoke": "smoke.mjs",
+
+  "setup": "setup/tools.ts",
+  "presence": "presence/check.ts",
+  "appliers": "content/appliers",
+  "contentSource": "content-source.ts",
+
+  "coreExport": [
+    "rules.ts"
+  ]
+}

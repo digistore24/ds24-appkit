@@ -368,26 +368,41 @@ try {
 }
 ```
 
-**`spendTokens` takes no member id, and must never be given one.** It resolves
-the account from the session (`requireActiveUser()`, which also turns away
-blocked accounts), so a `memberId` out of a `FormData` cannot drain another
-customer's balance. The underlying `consumeTokens({ memberId, … })` stays
-exported for the IPN and the Operator pages, where naming somebody else is the
-job — features do not call it. Charging on behalf of somebody else needs a
-function of its own, opening with `requireOwner()`, exactly as `adjustTokens`
-does. Full rules, including why an optional `memberId` parameter does not
-solve this: `CLAUDE.md` → **Charging tokens**.
+Four rules, and the first is the one this function exists for:
 
-A shortfall throws rather than returning `false`, and writes nothing. Every
-booking lands in the ledger, so a balance is always explainable.
+- **It takes no member id — never give it one.** The account charged is always the
+  session's own (`requireActiveUser()`, which also turns away blocked accounts), so
+  a `memberId` out of a `FormData` cannot drain another customer's balance. 🚨 **An
+  optional parameter defaulting to the session does not solve this** — it only makes
+  the bad call compile again. The underlying `consumeTokens({ memberId, … })` stays
+  exported for the IPN and the Operator pages, where naming somebody else is the
+  job; features do not call it. Charging on behalf of somebody else needs a function
+  of its own, opening with `requireOwner()`, exactly as `adjustTokens` does.
+- **The price is yours, computed in code.** Read `amount` from the request and the
+  customer sets it to 0.
+- **`note` is a label, not content** — it reaches a subject access request
+  (`node run.mjs data-export`). "report generation", never what the Member typed.
+- **It is not idempotent.** Two submissions charge twice — keep a double-click off
+  with `disabled={isPending}`, and never build a blind retry around it.
 
-The order is **check → work → charge**, gating on `hasSufficientBalance` before
-the expensive part starts. The gap between the check and the charge is real but
-bounded at one operation, and the row lock inside `consumeTokens` still stops a
-balance going negative under racing requests. Closing that gap properly would
-mean reserving tokens up front and settling afterwards — a reservation needs
-expiry and reconciliation of its own, and this template deliberately does not
-build one for a failure that costs at most one operation's worth of work.
+A shortfall throws `TokenError("insufficientBalance")` rather than returning
+`false`, and writes **nothing**. Every booking lands in the ledger, so a balance is
+always explainable.
+
+The order is **check → work → charge**, gating on `hasSufficientBalance` before the
+expensive part starts, and getting it the other way round fails in both directions:
+charging first bills for work that then fails, and working with no check in front
+gives the result away for free, because by the time `spendTokens` throws the
+expensive part has already run. That second one is the mistake that actually gets
+made. The gap between the check and the charge is real but bounded at one operation,
+and the row lock inside `consumeTokens` still stops a balance going negative under
+racing requests. Closing that gap properly would mean reserving tokens up front and
+settling afterwards — a reservation needs expiry and reconciliation of its own, and
+this template deliberately does not build one for a failure that costs at most one
+operation's worth of work.
+
+**Spending is never gated on `billingMode`** — that switch is cosmetic, and refusing
+to spend would strand customers still holding a paid balance.
 
 The two models combine well and are meant to: a subscription gates *whether*
 the feature exists for this customer, the balance limits *how much* they use it.

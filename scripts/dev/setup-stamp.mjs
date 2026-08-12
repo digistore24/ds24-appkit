@@ -18,6 +18,7 @@
 // `node run.mjs doctor` (when nothing is blocking). Never by the hook — a
 // greeting that writes files is a greeting that can fail.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { canOpenBrowser } from "../lib/proc.mjs";
 
 const STAMP = ".dev/setup-ok.json";
 
@@ -52,22 +53,37 @@ export function readStamp() {
 /**
  * Does the stamp still describe THIS machine?
  *
- * Two things void it, and both are things that really happen: somebody installs
- * a different Node (the check that was passed was passed under another one), and
- * a project folder that travels between systems — a clone in WSL opened from
- * Windows, a repo on a shared drive. Everything else is deliberately not asked
- * here: whether the dependencies are still fresh and whether the database
- * answers is what the quick checks are for, every session.
+ * Three things void it, and all three really happen: somebody installs a
+ * different Node (the check that was passed was passed under another one), a
+ * project folder that travels between systems — a clone in WSL opened from
+ * Windows, a repo on a shared drive — and the same folder opened somewhere the
+ * person is no longer at the screen, or is again. Everything else is
+ * deliberately not asked here: whether the dependencies are still fresh and
+ * whether the database answers is what the quick checks are for, every session.
+ *
+ * The third one is not covered by `platform`, and that is exactly why it is its
+ * own field: a session in a cloud VM and one in a desktop app on a Linux laptop
+ * are both `"linux"`, so a stamp written in one would otherwise stay valid in
+ * the other and carry "a browser can open here" across with it.
+ *
+ * A stamp written before the field existed has no `browser` and is NOT rejected
+ * for it — every already-installed app would re-run its whole setup for a
+ * question nobody had asked it yet.
  *
  * @param {Record<string, unknown> | null} stamp
- * @param {{ node?: string, platform?: string }} [machine] — this machine, so the
- *   test can hand it another one.
+ * @param {{ node?: string, platform?: string, browser?: boolean }} [machine] —
+ *   this machine, so the test can hand it another one.
  */
 export function stampValid(stamp, machine = {}) {
-  const { node = process.version, platform = String(process.platform) } = machine;
+  const {
+    node = process.version,
+    platform = String(process.platform),
+    browser = canOpenBrowser(),
+  } = machine;
   if (!stamp?.verifiedAt) return false;
   if (nodeMajor(stamp.node) !== nodeMajor(node)) return false;
   if (stamp.platform !== platform) return false;
+  if (typeof stamp.browser === "boolean" && stamp.browser !== browser) return false;
   return true;
 }
 
@@ -89,6 +105,7 @@ export function writeStamp() {
     verifiedAt: new Date().toISOString(),
     node: process.version,
     platform: process.platform,
+    browser: canOpenBrowser(),
     template: templateVersion(),
   };
   try {

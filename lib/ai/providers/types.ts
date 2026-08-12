@@ -74,11 +74,99 @@ export interface ChatMessage {
   content: string;
 }
 
+// ── Tools ───────────────────────────────────────────────────────────────────
+
+/**
+ * A tool the model may call. `inputSchema` is JSON Schema, sent verbatim.
+ *
+ * **The list MUST be byte-stable across requests** — a module constant, never
+ * rebuilt per request. Tool definitions sit inside the cached prefix on all
+ * five providers (Anthropic renders tools BEFORE system, so the existing
+ * breakpoint on the last cacheable system block caches both together; the
+ * others hash the serialized body prefix). A tools array that varies between
+ * requests switches the ~10× discount off with no error anywhere — the same
+ * failure mode `assertCacheableOrder` exists for, one field over.
+ *
+ * All five providers speak function calling, which is why there is no
+ * per-provider capability flag for this (unlike images): a capability every
+ * provider has discriminates nothing.
+ */
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+}
+
+/** One call the model asked for. */
+export interface ToolCall {
+  /**
+   * Provider-issued where one exists (Anthropic, the compat family);
+   * synthesized by the Gemini adapter, which has none. Keys the result
+   * matching inside the loop; ids never travel back to Gemini.
+   */
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+  /** The arguments arrived as invalid JSON. A code, not a sentence (AD-10). */
+  inputError?: "parseFailed";
+}
+
+/** What one call came back with. */
+export interface ToolResult {
+  toolCallId: string;
+  /** Gemini matches results by NAME, not id — both always travel. */
+  name: string;
+  /** Serialized result, or an error code when `isError`. */
+  content: string;
+  isError?: boolean;
+}
+
+/**
+ * The assistant turn that asked for tools — replayed to the provider on the
+ * next round exactly as it was received.
+ */
+export interface AssistantToolCallMessage {
+  role: "assistant";
+  /** Narration streamed before the calls; "" when there was none. */
+  content: string;
+  toolCalls: ToolCall[];
+}
+
+/**
+ * ALL results of one round in ONE message. Splitting them into one message
+ * per result trains models out of parallel calls on Anthropic; the compat
+ * adapter expands this into its one-message-per-result wire shape itself.
+ */
+export interface ToolResultMessage {
+  role: "tool";
+  results: ToolResult[];
+}
+
+/**
+ * What a request's history may carry. `ChatMessage` is a structural member,
+ * so every existing caller compiles unchanged — and the PERSISTED history
+ * (`chat_messages`) deliberately stays user/assistant strings only: tool
+ * turns live inside one loop invocation and are never written to the table.
+ */
+export type ModelMessage = ChatMessage | AssistantToolCallMessage | ToolResultMessage;
+
 export interface NormalizedRequest {
   /** The provider's own model id. Never translated between providers. */
   model: string;
   system: PromptBlock[];
-  messages: ChatMessage[];
+  messages: ModelMessage[];
+  /**
+   * The tools the model may call this round. Undefined or empty means the
+   * request goes on the wire WITHOUT a tools field — several providers 400 on
+   * `tools: []`, and a tool-less request must stay byte-identical to what
+   * this layer sent before tools existed.
+   */
+  tools?: ToolDefinition[];
+  /**
+   * "none" forces a text answer (the loop's last round). Only meaningful when
+   * `tools` is present; never sent without it.
+   */
+  toolChoice?: "auto" | "none";
   maxTokens: number;
   /** The layer's own ceiling, independent of any SDK default. */
   timeoutMs: number;
@@ -190,10 +278,18 @@ export interface Result {
   usage: Usage | null;
   /** Provider-specific, passed through for the log. Never interpreted. */
   stopReason: string | null;
+  /** The tools the model asked for. Empty when it answered in text. */
+  toolCalls: ToolCall[];
 }
 
 export type StreamEvent =
   | { type: "delta"; text: string }
+  /**
+   * One COMPLETE, parsed call — never incremental argument fragments. The
+   * arguments execute server-side; nothing downstream has a use for half a
+   * JSON string. Yielded before the `done` of its round.
+   */
+  | { type: "tool_call"; call: ToolCall }
   | { type: "done"; usage: Usage | null; stopReason: string | null };
 
 // ── Failure ─────────────────────────────────────────────────────────────────

@@ -49,7 +49,7 @@ import {
   senderDomainProblem,
 } from "../../lib/email-from.mjs";
 import { readEnvValue } from "../lib/env-write.mjs";
-import { capture, hasCommand, isWindows } from "../lib/proc.mjs";
+import { canOpenBrowser, capture, hasCommand, isWindows } from "../lib/proc.mjs";
 import { configuredDriver, dbDriver } from "../db/driver.mjs";
 import { depsFresh } from "./deps.mjs";
 import { portInUse, urlPort } from "./ports.mjs";
@@ -428,6 +428,27 @@ export async function inspect({ quick = false } = {}) {
     detail: "this looks like PowerShell or cmd — use Git Bash or WSL2",
     severity: "info",
     fix: FIXES.shell,
+  });
+
+  // Not a question about software, and never a reason to stop: it asks whether
+  // the person reading this is at the screen a browser window would appear on.
+  // A cloud session, a container, a machine over SSH all answer no — and three
+  // things here are written as if the answer were always yes: the Digistore24
+  // approval click, the hosting CLI logins, and every sentence that says "open
+  // http://localhost:3000". Nothing to install, so no `FIXES` entry: an entry
+  // there would have to name an install command on all three systems
+  // (scripts/setup.test.ts), and there is none to name.
+  add({
+    id: "browser",
+    label: "Browser on this machine",
+    ok: canOpenBrowser(),
+    detail: "no browser can open here — the user has to be given links to click",
+    severity: "info",
+    fix: everywhere({
+      note:
+        "Nothing to install — it means the person is somewhere else. Print links " +
+        "instead of opening them, and read docs/machine.md before promising a localhost address.",
+    }),
   });
 
   return checks;

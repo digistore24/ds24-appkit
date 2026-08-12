@@ -1,6 +1,6 @@
 ---
 name: market-research
-description: Start here if you do NOT yet have a clear SAAS idea (or want to sharpen it). Interviews you about expertise, interests and existing reach, suggests target audiences, researches their situation and challenges and derives from that a concrete SAAS product idea that can be sold through Digistore24. Leads into a product brief and hands over to build-app.
+description: Start here if you do NOT yet have a clear SAAS idea (or want to sharpen one) — interviews you about expertise, interests and existing reach, suggests target audiences, then derives a product idea that can be sold through Digistore24, a product brief, and a hand-over to `build-app`. Use this when the user says "I don't have an idea yet", "help me find something to sell", or asks what they could build.
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -57,7 +57,7 @@ one or two problems that are frequent, painful and solvable.
 **Ask two questions before you write a single feature down**, in one breath —
 they are the same move at two depths, and splitting them would double the
 ceremony for a one-sentence answer. It is the earliest place the rule in
-`CLAUDE.md` → *How a skill works* (**"Anything the customer will SEE, and
+`docs/guidance.md` → *How a skill works* (**"Anything the customer will SEE, and
 anything the app will DO for them, is proposed, never assumed"**) applies — here
 it shapes the product rather than a page.
 
@@ -180,8 +180,23 @@ Reword either label and the step that reads it silently turns back into an open
 question — the vendor is asked something they already answered, in a later
 session, by an agent with no way of knowing.
 
-Then continue with the skill **`build-app`** (archetype, data model, pages) and
-**`setup-digistore`** (connecting the billing).
+**Then write the plan — `docs/plan.md`.** The brief says what the product IS;
+nothing on disk yet says what is still TO be built, and the list you just agreed
+on is exactly that. One flat file, one line per thing the customer will be able
+to DO, plus what was decided against and why. The shape is the same one
+`build-app` uses:
+[`../build-app/references/plan-md-template.md`](../build-app/references/plan-md-template.md).
+Each line moves into `docs/app.md` once that thing exists and its tests are
+green, so the file is always the part still ahead — and a plan that lives only in
+this conversation is gone when the session is.
+
+Then continue with the skill **`design`** — the look of the app, phase 1.2 of the
+path: the four dials turned once, from their own brand if they have one, written
+into `docs/design.md` so every page built afterwards follows it. It costs nothing
+per use and about fifteen minutes, and it is far cheaper here than restyling six
+finished pages later. **Shall I start `design`?** After that come **`build-app`**
+(archetype, data model, pages) and **`setup-digistore`** (connecting the
+billing).
 
 ## Principles
 

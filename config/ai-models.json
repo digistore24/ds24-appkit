@@ -18,7 +18,7 @@
       "model": "auto"
     },
     "companion": {
-      "_comment": "Working alongside your customer — reading what they submitted, walking them through a course or a challenge, checking a plan before they commit to it. The call shape is askCompanion() in lib/ai/companion.ts; what calls it is your app. It has its own entry rather than inheriting 'default' so that what your companion costs is separable from what support costs on the AI-costs page — spend is grouped by task id. Bind it to another company here and no code changes. maxTokens is higher than chat's because a companion is usually reading something a customer wrote rather than answering a typed question.",
+      "_comment": "Working alongside your customer — reading what they submitted, walking them through a course or a challenge, checking a plan before they commit to it. The call shape is askCompanion() in modules/companion/companion.ts (the companion is a MODULE — `node run.mjs module add companion` puts it in the tree; this task id is core vocabulary and is listed by ai-check in every app); what calls it is your app. It has its own entry rather than inheriting 'default' so that what your companion costs is separable from what support costs on the AI-costs page — spend is grouped by task id. Bind it to another company here and no code changes. maxTokens is higher than chat's because a companion is usually reading something a customer wrote rather than answering a typed question.",
       "provider": "auto",
       "model": "auto",
       "maxTokens": 4000

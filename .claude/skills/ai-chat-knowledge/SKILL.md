@@ -1,6 +1,6 @@
 ---
 name: ai-chat-knowledge
-description: Builds the knowledge base for the app's in-app AI assistant — interviews the user about the questions their customers actually ask, then writes the handbook under content/knowledge/ in the required format (onboarding, reference, howto, glossary). Use this when the user wants the AI chat, mentions an assistant/support bot, or when the chat is switched on but answers "I do not know". Also the place to switch the chat on and give her a name.
+description: Builds the handbook for the app's in-app AI assistant — interviews the user about the questions their customers actually ask, then writes the answers she is allowed to give. Use this when the user wants the AI chat, mentions an assistant/support bot, says "my customers should be able to ask me questions and get MY answer", "how do I know she won't say something I never said", or when the chat is switched on but answers "I do not know". Also the place to switch the chat on and give her a name.
 requires: 0.10.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
@@ -282,8 +282,23 @@ cost bug, and `docs/ai-chat.md` says where to look.
 ## Important rules
 
 - **She may only say what is written down.** Every sentence she is expected to
-  produce has to exist in a file. There is no other source — no database, no
-  account data, no web.
+  produce has to exist in a file — or in a registered content source, which
+  she can search on demand: the handbook is her cached prompt, and the four
+  `content_*` tools reach whatever `lib/content-source/sources.ts` registers
+  (out of the box, the handbook again — harmless and simple). An app whose
+  REAL content should be findable by her registers it as a source instead of
+  copying it into the handbook; `docs/content-source.md` walks through it.
+  There is no other source — no account data, no web.
+- **Never write a URL, a path or a Markdown link into the handbook** in the hope
+  she will pass it along. She is told not to reproduce one, and the window would
+  show it to the customer as the literal characters you typed. Where you want to
+  send somebody, name the menu entry — she is given the sidebar labels in every
+  language the app speaks. *(On template 0.18.0 and newer there is one more way,
+  and it is still not handbook work: a lesson she found through a registered
+  content source arrives with a ready-made link marker and becomes clickable in
+  her sentence. That comes from the source's `url` + `anchor` —
+  `docs/content-source.md` — with nothing to write here and nothing to switch
+  on.)*
 - **She never sees the customer's account.** Balance, orders, plan and address
   are deliberately not sent to the API. So a question like "how many tokens do I
   have?" is answered with *where to look*, and the handbook must say where.

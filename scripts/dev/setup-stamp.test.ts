@@ -32,6 +32,28 @@ suite("stampValid", () => {
   it("rejects another platform — the same folder opened from Windows and WSL", () => {
     expect(stampValid(stamp, { ...here, platform: "win32" })).toBe(false);
   });
+
+  // A stamp written before the field existed carries no `browser`, and is not
+  // rejected for it: otherwise every app already installed would re-run its
+  // whole setup over a question nobody had put to it yet.
+  it("accepts a stamp written before the browser field existed, either way", () => {
+    expect(stampValid(stamp, { ...here, browser: true })).toBe(true);
+    expect(stampValid(stamp, { ...here, browser: false })).toBe(true);
+  });
+
+  // The distinction `platform` cannot make. A cloud session and a desktop app on
+  // a Linux laptop are both "linux", so without this field the stamp would carry
+  // "a browser can open here" from the one into the other — and with it the
+  // promise that somebody is looking at this screen.
+  it("rejects the same platform once nobody is at the screen any more", () => {
+    const withScreen = { ...stamp, browser: true };
+    expect(stampValid(withScreen, { ...here, browser: true })).toBe(true);
+    expect(stampValid(withScreen, { ...here, browser: false })).toBe(false);
+  });
+
+  it("rejects it the other way round too — the folder that gained a screen", () => {
+    expect(stampValid({ ...stamp, browser: false }, { ...here, browser: true })).toBe(false);
+  });
 });
 
 suite("verifiedOn", () => {

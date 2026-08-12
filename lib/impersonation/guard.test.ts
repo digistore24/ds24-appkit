@@ -19,6 +19,10 @@ import { join } from "node:path";
 
 import { describe, it, expect } from "vitest";
 
+import { ROLES } from "@/lib/roles";
+import { canImpersonate } from "@/lib/users/rules";
+import { blankComments } from "@/scripts/lib/source-text.mjs";
+
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
 function read(relative: string): string {
@@ -27,9 +31,7 @@ function read(relative: string): string {
 
 /** The file with comments stripped — several of them discuss these very rules. */
 function code(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/(^|[^:])\/\/.*$/gm, "$1");
+  return blankComments(source);
 }
 
 describe("the exit is not owner-guarded", () => {
@@ -86,6 +88,47 @@ describe("the token rewrite is authorised by the record row", () => {
       /payload\.memberId/,
     ]) {
       expect(source).not.toMatch(forbidden);
+    }
+  });
+});
+
+describe("the second refusal mirrors the rule, and cannot go stale", () => {
+  // ── What this catches ──────────────────────────────────────────────────
+  // Found by the code review of Story 19.2, after it had already happened:
+  // `canImpersonate()` gained a refusal for the new `moderator` role, and this
+  // layer — the one whose entire job is to re-ask the rule's questions on the
+  // path that never went through it — kept asking only about `"owner"`. The
+  // window is real: the row and the session update are two separate requests
+  // whose timing the operator controls, so a target promoted between them is
+  // exactly the case the re-check exists for.
+  //
+  // The fix that holds is an ALLOWLIST. `users.role` is `text` with no enum by
+  // decision (Story 19.2, AC 1), so the set of values is open — a denylist here
+  // goes stale every time a role is added, and goes stale silently.
+  it("session.ts refuses every target that is not a plain member", () => {
+    const source = code(read("lib/impersonation/session.ts"));
+    expect(source).toMatch(/member\.role\s*!==\s*"member"/);
+  });
+
+  it("session.ts does not refuse targets by naming individual roles", () => {
+    // `member.role === "owner"` was the shape that went stale. Naming a role
+    // here at all is the smell, whichever role it is.
+    const source = code(read("lib/impersonation/session.ts"));
+    expect(source).not.toMatch(/member\.role\s*===\s*"/);
+  });
+
+  it("every role the rule knows is refused by the rule too", () => {
+    // The other half: the source check above cannot tell whether the RULE still
+    // agrees. This runs it, for every role that exists, and every one of them
+    // that is not `member` must be refused with some code.
+    for (const role of ROLES) {
+      const denial = canImpersonate(
+        { id: "op", role: "owner" },
+        { id: "target", role, blockedAt: null },
+        { enabled: true, alreadyImpersonating: false },
+      );
+      if (role === "member") expect(denial).toBeNull();
+      else expect(denial, `role "${role}" was not refused`).not.toBeNull();
     }
   });
 });

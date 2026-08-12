@@ -44,9 +44,17 @@ export function schedulerEnabled(): boolean {
   return config.enabled !== false;
 }
 
-/** One job's settings: the file's entry over the defaults. */
-export function jobSettings(id: string): JobSettings {
-  return normalizeJob(config.jobs?.[id]) as JobSettings;
+/**
+ * One job's settings: the file's entry over the defaults.
+ *
+ * `enabledByDefault` is passed by the caller that has the job in hand — see
+ * `normalizeJob()` for why a job may ship off. This file cannot look it up
+ * itself: it must stay free of the job BODIES (`instrumentation.ts` reads it and
+ * is built for the edge runtime too), which is the whole reason `ids.mjs` exists
+ * apart from `jobs.ts`.
+ */
+export function jobSettings(id: string, enabledByDefault = true): JobSettings {
+  return normalizeJob(config.jobs?.[id], enabledByDefault) as JobSettings;
 }
 
 /** Everything wrong with the file — empty when it is coherent. */

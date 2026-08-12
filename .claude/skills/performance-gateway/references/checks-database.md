@@ -46,7 +46,7 @@ await sql.end();
 Postgres does **not** index foreign keys automatically. The template's own
 tables are indexed already — `orders_member`, `grants_member`,
 `grants_member_product`, `subscriptions_member`, `chat_messages_member`,
-`token_ledger_account_created`, `mcp_keys_member`, the `ai_usage_*` set. So the
+`token_ledger_account_created`, `api_keys_member`, the `ai_usage_*` set. So the
 gap is almost always in **the tables the user added themselves**.
 
 For every table in `db/` that is not part of the template: every column used in

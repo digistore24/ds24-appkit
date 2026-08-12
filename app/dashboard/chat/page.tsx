@@ -112,6 +112,10 @@ export default async function ChatPage() {
           id: turn.id,
           role: turn.role,
           content: turn.content,
+          // Stored with the turn, so a link the customer had yesterday is
+          // still a link today. `null` (every row older than the column, and
+          // every question) denies, which is the safe direction.
+          links: turn.links ?? undefined,
         }))}
         // The Media Marker whitelist (AD-54), derived on the server from the
         // same handbook load the prompt rides on. Passing it to the browser

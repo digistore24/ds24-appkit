@@ -3,8 +3,19 @@
 
 import { describe, expect, it } from "vitest";
 
-import { buildParams, buildSystem, textFrom, usageFrom } from "./anthropic";
-import { unexplainedTokens, type NormalizedRequest } from "./types";
+import {
+  buildMessages,
+  buildParams,
+  buildSystem,
+  textFrom,
+  toolCallsFrom,
+  usageFrom,
+} from "./anthropic";
+import {
+  unexplainedTokens,
+  type NormalizedRequest,
+  type ToolDefinition,
+} from "./types";
 
 const REQUEST: NormalizedRequest = {
   model: "claude-sonnet-5",
@@ -82,6 +93,137 @@ describe("buildParams", () => {
     });
     expect(params.thinking).toEqual({ type: "adaptive" });
     expect(params).not.toHaveProperty("cacheTtl");
+  });
+});
+
+// ── Tools ───────────────────────────────────────────────────────────────────
+
+const TOOLS: ToolDefinition[] = [
+  {
+    name: "content_search",
+    description: "Searches the app's content.",
+    inputSchema: { type: "object", properties: { query: { type: "string" } } },
+  },
+];
+
+describe("buildParams with tools", () => {
+  it("maps tools into Anthropic's shape and omits tool_choice by default", () => {
+    const params = buildParams({ ...REQUEST, tools: TOOLS });
+    expect(params.tools).toEqual([
+      {
+        name: "content_search",
+        description: "Searches the app's content.",
+        input_schema: TOOLS[0].inputSchema,
+      },
+    ]);
+    expect(params).not.toHaveProperty("tool_choice");
+  });
+
+  it('sends tool_choice none only when asked — the loop\'s last round', () => {
+    const params = buildParams({ ...REQUEST, tools: TOOLS, toolChoice: "none" });
+    expect(params.tool_choice).toEqual({ type: "none" });
+  });
+
+  it("sends NEITHER field without tools — the pre-tools request is byte-identical", () => {
+    const params = buildParams(REQUEST);
+    expect(params).not.toHaveProperty("tools");
+    expect(params).not.toHaveProperty("tool_choice");
+    const empty = buildParams({ ...REQUEST, tools: [] });
+    expect(empty).not.toHaveProperty("tools");
+  });
+
+  it("a stale binding key cannot clobber the tool wiring", () => {
+    // Tool wiring comes AFTER the passthrough spread on purpose: a `tools`
+    // left in a binding must not silently disarm the loop.
+    const params = buildParams({
+      ...REQUEST,
+      tools: TOOLS,
+      providerOptions: { tools: "stale", tool_choice: "stale" },
+    });
+    expect(Array.isArray(params.tools)).toBe(true);
+    expect(params).not.toHaveProperty("tool_choice");
+  });
+
+  it("keeps the cache breakpoint on the last cacheable system block with tools present", () => {
+    const params = buildParams({ ...REQUEST, tools: TOOLS });
+    const system = params.system as { cache_control?: unknown }[];
+    expect(system.map((b) => Boolean(b.cache_control))).toEqual([false, true, false]);
+  });
+
+  it("serializes byte-identically across two builds — the cache condition", () => {
+    const a = JSON.stringify(buildParams({ ...REQUEST, tools: TOOLS }));
+    const b = JSON.stringify(buildParams({ ...REQUEST, tools: TOOLS }));
+    expect(a).toBe(b);
+  });
+});
+
+describe("buildMessages", () => {
+  it("replays an assistant tool-call turn as tool_use blocks after its narration", () => {
+    const messages = buildMessages([
+      {
+        role: "assistant",
+        content: "Let me look.",
+        toolCalls: [{ id: "tu_1", name: "content_search", input: { query: "knots" } }],
+      },
+    ]);
+    expect(messages[0]).toEqual({
+      role: "assistant",
+      content: [
+        { type: "text", text: "Let me look." },
+        { type: "tool_use", id: "tu_1", name: "content_search", input: { query: "knots" } },
+      ],
+    });
+  });
+
+  it("omits the empty text block on a calls-only turn", () => {
+    const messages = buildMessages([
+      { role: "assistant", content: "", toolCalls: [{ id: "tu_1", name: "x", input: {} }] },
+    ]);
+    expect((messages[0].content as unknown[])[0]).toMatchObject({ type: "tool_use" });
+  });
+
+  it("batches one round's results into ONE user turn, is_error only when set", () => {
+    const messages = buildMessages([
+      {
+        role: "tool",
+        results: [
+          { toolCallId: "tu_1", name: "a", content: "found it" },
+          { toolCallId: "tu_2", name: "b", content: "toolFailed", isError: true },
+        ],
+      },
+    ]);
+    expect(messages).toHaveLength(1);
+    expect(messages[0].role).toBe("user");
+    const blocks = messages[0].content as Record<string, unknown>[];
+    expect(blocks[0]).toEqual({ type: "tool_result", tool_use_id: "tu_1", content: "found it" });
+    expect(blocks[1]).toEqual({
+      type: "tool_result",
+      tool_use_id: "tu_2",
+      content: "toolFailed",
+      is_error: true,
+    });
+  });
+});
+
+describe("toolCallsFrom", () => {
+  it("reads tool_use blocks out of a mixed content array", () => {
+    const calls = toolCallsFrom([
+      { type: "text", text: "Looking…" },
+      { type: "tool_use", id: "tu_1", name: "content_search", input: { query: "x" } },
+    ]);
+    expect(calls).toEqual([{ id: "tu_1", name: "content_search", input: { query: "x" } }]);
+  });
+
+  it("normalizes a missing input to an empty object and skips malformed blocks", () => {
+    const calls = toolCallsFrom([
+      { type: "tool_use", id: "tu_1", name: "a" },
+      { type: "tool_use", name: "no-id" },
+    ]);
+    expect(calls).toEqual([{ id: "tu_1", name: "a", input: {} }]);
+  });
+
+  it("answers empty for a text-only answer", () => {
+    expect(toolCallsFrom([{ type: "text", text: "hi" }])).toEqual([]);
   });
 });
 

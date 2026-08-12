@@ -12,6 +12,7 @@ import { Callout } from "@/components/ui/callout";
 import { Card, CardContent } from "@/components/ui/card";
 import { APP_NAME } from "@/lib/app";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { BrandMark } from "@/components/brand-mark";
 import { LanguageSwitcher } from "@/components/language-switcher";
 
 export async function generateMetadata() {
@@ -130,16 +131,16 @@ export default async function ConfirmEmailPage({
 
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6 p-6 pb-24">
         <div className="text-center">
-          <span
-            aria-hidden
-            className="bg-primary text-primary-foreground mx-auto mb-4 grid size-10 place-items-center rounded-xl font-bold"
-          >
-            {APP_NAME.slice(0, 1).toUpperCase()}
-          </span>
+          <BrandMark appName={APP_NAME} size="lg" className="mx-auto mb-5" />
           <h1 className="text-2xl font-semibold">{t("title")}</h1>
         </div>
 
-        <Card>
+        {/* The same raised surface the sign-in wears, and — since `cn()` learnt
+            the shorthand in lib/utils.ts — with no `!` on it; app/login/ui.tsx
+            carries the whole argument above its own <Card>. The four pages on
+            this frame get ONE face; two of them would otherwise differ only
+            because one happened to be edited. */}
+        <Card className="shadow-(--elevation-overlay)">
           <CardContent className="flex flex-col gap-4">
             <Callout variant={ok ? "success" : "danger"} title={heading}>
               {body}

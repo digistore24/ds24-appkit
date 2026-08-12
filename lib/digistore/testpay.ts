@@ -90,9 +90,9 @@ export interface TestpayState {
 
 /**
  * Refresh this long before `expires_at`. Generous on purpose: the DS24
- * timestamp carries no timezone (the "Dates and raw SQL" trap in CLAUDE.md),
- * so we parse it as UTC and let the margin swallow the unknown offset plus
- * any clock skew.
+ * timestamp carries no timezone (the "Dates and raw SQL" trap in
+ * `docs/troubleshooting.md`), so we parse it as UTC and let the margin swallow
+ * the unknown offset plus any clock skew.
  */
 const REFRESH_MARGIN_MS = 6 * 60 * 60 * 1000;
 

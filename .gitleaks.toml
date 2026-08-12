@@ -13,10 +13,32 @@ useDefault = true
 # requestApiKey/retrieveApiKey — the role of an OAuth client ID. The
 # rights-bearing API key comes into existence only once the merchant grants
 # access in the browser, and after that it lives exclusively in their local .env.
-# Full reasoning: scripts/ds24/connect-api-key.mjs (BUILT_IN_DEVELOPER_KEY).
-[[rules.allowlist]]
+# Full reasoning: lib/digistore/config.mjs (DIGISTORE_DEVELOPER_KEY).
+#
+# The paths are the files that spell the VALUE out. connect-api-key.mjs only
+# imports it and was the only path listed here for a while — a path exemption
+# pointing at the importer excuses nothing, which is why the file the value is
+# actually in now leads the list. `scripts/security/patterns.mjs` carries it as
+# the allowlist entry of `node run.mjs security-check`, so the two agree by
+# construction rather than by luck.
+#
+# 🚨 `[[allowlists]]`, not `[[rules.allowlist]]`, and that is a fix rather than a
+# preference. Measured against gitleaks 8.30.1 on 2026-08-10: the second spelling
+# does not load at all —
+#   FTL Failed to load config  error="1 error(s) decoding:
+#                                     * 'Rules[0].AllowList' expected a map, got 'slice'"
+# — so a scan started with `--config` REFUSED to run, which for
+# `node run.mjs security-check`'s history rung meant a `⏭ NOT ASKED` on every
+# machine that had gitleaks. `[[allowlists]]` is the global allowlist and applies
+# to every rule, which is what this exemption always meant. Re-measured after the
+# change: with default rules the key is reported in lib/digistore/config.mjs
+# (`generic-api-key`), with this file it is not — so the exemption still does
+# something, which is the half worth checking.
+[[allowlists]]
 description = "Eingebauter DS24-Developer-Key (Client-ID-Rolle, keine Rechte)"
 regexes = ["1706550-aASzoSnqcChueKmMDBvcwqUWvOqnfhXTncfkTN6X"]
 paths = [
+  '''lib/digistore/config\.mjs''',
   '''scripts/ds24/connect-api-key\.mjs''',
+  '''scripts/security/patterns\.mjs''',
 ]

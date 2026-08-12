@@ -35,6 +35,7 @@ import { spawn } from "node:child_process";
 import { chooseAppPort, DEV_DIR, LOG_FILE, rememberedPort } from "./app-port.mjs";
 import { portInUse } from "./ports.mjs";
 import { capture, isWindows, run, runScript, sleep } from "../lib/proc.mjs";
+import { composeProjectFlag } from "../db/compose.mjs";
 import { usesLocalPostgres } from "../db/driver.mjs";
 import { localDown, localStatus } from "../db/local.mjs";
 
@@ -198,7 +199,7 @@ export async function stop() {
   const kept = "(data is kept — to delete it: node run.mjs db-nuke)";
   if (await usesLocalPostgres()) {
     if (await localDown()) console.log(`✓ Database stopped ${kept}`);
-  } else if ((await run("docker", ["compose", "down"])) === 0) {
+  } else if ((await run("docker", ["compose", ...composeProjectFlag(), "down"])) === 0) {
     console.log(`✓ Database stopped ${kept}`);
   }
 }
@@ -213,7 +214,7 @@ export async function status() {
   );
   await runScript(TUNNEL_CLI, ["status"]);
   if (await usesLocalPostgres()) await localStatus();
-  else await run("docker", ["compose", "ps"]);
+  else await run("docker", ["compose", ...composeProjectFlag(), "ps"]);
 }
 
 /** Follow the dev log, like `tail -f` — but with fs.watch, which exists everywhere. */

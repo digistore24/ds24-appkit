@@ -1,6 +1,6 @@
 ---
 name: build-app
-description: THE ENTRY POINT for this template — use this skill as soon as the user wants to start building, wants to get oriented, or opens with something vague ("how do I start?", "Build my app", "what can I do here?"). First clarifies whether a product idea already exists (otherwise hands over to market-research), assigns the project an archetype, creates the data model and pages, and then hands over to setup-digistore for payment. The rules from guardrails apply alongside.
+description: THE ENTRY POINT for this template — use this skill as soon as the user wants to start building, wants to get oriented, or opens with something vague or short ("how do I start?", "hello", "Build my app", "what can I do here?", "I want an app I can sell through Digistore24", "can you build that?"). Without a product idea it hands over to `market-research` first; otherwise it gives the project its archetype, data model and pages, then `setup-digistore` for payment. `guardrails` applies alongside.
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -67,14 +67,14 @@ second skill — you ask exactly one question first:
 > find one together that fits your experience and your reach?"
 
 - **Idea is there** (the user can say in 1–2 sentences what the app does and for
-  whom) → write those sentences down as a **minimal product brief** in
-  `docs/product-brief.md` — the idea as the user said it, plus who it is for
-  and, if they volunteered it, how it bills. Half a page at most, no research,
-  no sources, and **none of the labels** `market-research` writes (their
-  absence is how steps 1b/1c know those questions are still open). Then
-  continue with step 1. The point: the first written record of what is being
-  built must exist BEFORE the code does — an app whose requirements live only
-  in a chat transcript gets rebuilt from memory in session three.
+  whom) → **do not build from those two sentences.** Run the short intake first
+  — announced, five questions, one bundle:
+  [`references/intake.md`](references/intake.md) — then write the answers as a
+  **minimal product brief** in `docs/product-brief.md`: half a page, no research,
+  no sources, and **none of the labels** `market-research` writes (their absence
+  is how steps 1b/1c know those questions are still open). Then step 1. The first
+  written record of what is being built must exist BEFORE the code does — an app
+  whose requirements live only in a chat transcript is rebuilt from memory later.
 - **No idea, or a vague one** ("don't know", "something with…", an industry) →
   start the skill **`market-research`**. It interviews the user about expertise
   and reach, researches a target audience along with their challenges and
@@ -124,6 +124,37 @@ Which archetype sells which, why the shipped `"both"` should not simply stay
 the billing-mode section of [`references/archetypes.md`](references/archetypes.md).
 Everything else about billing is the `billing-modes` skill.
 
+### The grammar of steps 1b–1d — asked once, answered in three ways
+
+Each of the next three steps lays its possibilities out as a numbered menu and
+**waits**. The rule they follow is in `docs/guidance.md` → *How a skill works*
+(**"Anything the customer will SEE, and anything the app will DO for them, is
+proposed, never assumed"**), and the answers are always the same three, the last
+two as real as the first:
+
+- **Numbers** → exactly those, and nothing else.
+- **"you choose"** → the ✅ rows, no further question — offer that shortcut in
+  the menu itself every time.
+- **`0`** → none of it is built, and it is **written into `docs/app.md`** under
+  *Decisions worth remembering*, with its reason.
+
+**A `0` is an answer, and it is not negotiated**: a skill that argues with it
+teaches people to stop answering. **The rows are read off the archetype, not
+invented**, and an archetype with a single ✅ is one row and a yes/no — what you
+must not do is drop the step because the list is short. **And skip these steps
+entirely for an experiment**, same boundary as the SAAS rule in `CLAUDE.md`:
+somebody trying the template out gets the small thing they asked for, without a
+menu.
+
+**If `docs/product-brief.md` already answers one of them** — an
+`Output artifact:` line for 1b, an `Alongside the customer:` line for 1c — that
+question is not open any more: read it, say what it implies, and ask for
+confirmation instead of a choice.
+
+Per step, [`references/menus.md`](references/menus.md) holds the verbatim menu,
+the worked confirmation wording, what each `0` records, and what not to ask
+alongside it.
+
 ## Step 1b — What the customer gets to SEE
 
 **Before the data model, not after the pages.** Whether a challenge message can
@@ -132,44 +163,15 @@ carry a picture is a column before it is a layout, and finding that out after
 
 Read the ✅ column of the archetype's row in
 [`references/archetypes.md`](references/archetypes.md) and put it to the user
-as a numbered menu — then **wait**. The rule this follows is in `CLAUDE.md` → *How a skill
-works* (**"Anything the customer will SEE, and anything the app will DO for
-them, is proposed, never assumed"**); what is below is the first half of that
-rule for this step, and Step 1c is the second.
+as a numbered menu — then **wait**. The answers, and what the brief may already
+have settled, are the grammar above.
 
-**If `docs/product-brief.md` has an `Output artifact:` line, this is not an open
-question any more.** Read it, say what it implies, and ask for confirmation
-instead of a choice — the worked wording is in
-[`references/menus.md`](references/menus.md).
-
-**Otherwise, the menu.** Say what each row costs and where it would come from —
-those two are what somebody actually decides on, and neither is in the archetype
-table. `node run.mjs ai-check` prints what one generated picture costs today;
+**Say what each row costs and where it would come from** — those two are what
+somebody actually decides on, and neither is in the archetype table.
+`node run.mjs ai-check` prints what one generated picture costs today;
 [`docs/visuals.md`](../../../docs/visuals.md) is where the rest of it is. The
-verbatim menu to show is in [`references/menus.md`](references/menus.md).
-
-**Two archetypes have a single ✅** — then this is one row and a yes/no, and
-rows may be added (notes in [`references/menus.md`](references/menus.md)); what
-you must not do is drop the step because the list is short.
-
-Three answers, and the last two are as real as the first:
-
-- **Numbers** → exactly those, and nothing else.
-- **"you choose"** → the ✅ rows, no further question. Offer it in the menu
-  itself every time; somebody who trusts the suggestion should not have to read
-  four rows to say so.
-- **`0`** → text only, and **write it into `docs/app.md`** under *Decisions
-  worth remembering* — the verbatim entry, and why it is the whole reason to
-  ask rather than to assume, is in [`references/menus.md`](references/menus.md).
-
-**Two things not to do here.** Do not ask what a picture should *look* like —
-that is the customer's business, at the moment they use the app, not a decision
-to make at build time. And do not turn a `0` into a negotiation: it is an
-answer, and a skill that argues with it teaches people to stop answering.
-
-**Skip this step entirely for an experiment.** Same boundary as the SAAS rule in
-`CLAUDE.md`: somebody trying the template out gets the small thing they asked
-for, without a menu.
+verbatim menu to show, and the two things not to ask here, are in
+[`references/menus.md`](references/menus.md).
 
 Whatever is chosen, the code for it exists — `docs/visuals.md` is the reference
 (store, upload, generation, and the recipes for charts and video), and
@@ -182,53 +184,20 @@ reads, the subject its turns hang on — and finding that out after
 `node run.mjs db-migrate` is a second migration for something the first one
 could have carried.
 
-The rule this follows is the same one Step 1b follows — `CLAUDE.md` → *How a
-skill works*. What is below is that rule for this step.
-
-**If `docs/product-brief.md` has an `Alongside the customer:` line, this is not
-an open question any more.** Read it, say what it implies, and ask for
-confirmation instead of a choice — the worked wording is in
-[`references/menus.md`](references/menus.md).
-
-**Otherwise, the menu.** Read the ✅ column of the archetype's row in
+Read the ✅ column of the archetype's row in
 [`references/archetypes.md`](references/archetypes.md) and put it to the user —
-then **wait**. Each row says three things, and only the first of them is in the
-archetype table: what the customer gets, which of their data the call needs, and
-what one use costs. `node run.mjs ai-check` prints what one companion call costs
-today; [`docs/ai-providers.md`](../../../docs/ai-providers.md) is where the rest
-of it is. The verbatim menu — its prices are an order of magnitude, said as
-rough numbers — is in [`references/menus.md`](references/menus.md).
-
-**The rows are read off the archetype, not invented** — the notes on adding one
-and on a single-✅ archetype are in [`references/menus.md`](references/menus.md);
-what you must not do is drop the step because the list is short.
-
-Three answers, and the last two are as real as the first:
-
-- **Numbers** → exactly those, and nothing else. Each one becomes an entry in
-  `lib/ai/companions.ts` and a `<CompanionPanel companionId subject />` on the
-  page that carries it. One surface, several call sites — never a second panel.
-- **"you choose"** → the ✅ rows, no further question. Offer it in the menu
-  itself every time; somebody who trusts the suggestion should not have to read
-  four rows to say so.
-- **`0`** → nothing is built, and it is **written into `docs/app.md`** under
-  *Decisions worth remembering* — the verbatim entry, and why a "no" is easier
-  to give here than in 1b (this menu costs money on every use, for ever), is in
-  [`references/menus.md`](references/menus.md).
-
-**And it is not negotiated.** Same rule as Step 1b: a `0` is an answer, and a
-skill that argues with it teaches people to stop answering.
-
-**Two things not to do here.** Do not ask which model or which company — that is
-`config/ai-models.json` and the skill `ai-providers`, the shipped binding is
-`"auto"`, and it runs on whichever key is in the `.env`. And do not build the
-companion now: this step decides, Step 2 gives it its columns and Step 3 its
-surface. A panel built before the data model is the second migration this step
-exists to avoid.
-
-**Skip this step entirely for an experiment.** Same boundary as Step 1b and as
-the SAAS rule in `CLAUDE.md`: somebody trying the template out gets the small
-thing they asked for, without a menu.
+then **wait**; the answers are the grammar above. Each row says three things,
+and only the first of them is in the archetype table: what the customer gets,
+which of their data the call needs, and what one use costs.
+`node run.mjs ai-check` prints what one companion call costs today;
+[`docs/ai-in-product.md`](../../../docs/ai-in-product.md) is the catalogue the
+rows come from — per archetype, with what each costs and how it is gated — and
+[`docs/ai-providers.md`](../../../docs/ai-providers.md) is the mechanics behind
+it. The verbatim menu — its prices are an order of magnitude, said as rough
+numbers — the two things not to ask, and what a chosen number becomes in
+`modules/companion/companions.ts` are in [`references/menus.md`](references/menus.md). **One
+surface, several call sites — never a second panel**, and do not build it now:
+this step decides, Step 2 gives it its columns and Step 3 its surface.
 
 Whatever is chosen, the code for it exists — what a chosen row switches on
 (the config switch, the registry entry with its member-scoped `load()`, the
@@ -239,7 +208,7 @@ reports a companion switched on without its notice.
 
 ## Step 1d — What the customer DOES, and how it is judged
 
-The third of the four sibling questions, in the same grammar as 1b and 1c, and
+The last of the three sibling questions, in the same grammar as 1b and 1c, and
 **only where the archetype's row in `references/archetypes.md` carries a ✅ in
 its DO column** (courses and programmes, mostly): a course that delivers videos
 and asks nothing back is the shape the market is leaving behind.
@@ -255,59 +224,43 @@ server**, never in the browser.
 rows, and a check per block changes what a "block" table carries. Once, at
 this point — later units inherit the decision.
 
-**A `0` is an answer** and goes into `docs/app.md` with its reason, like
-every other. **Skip entirely for an experiment.**
-
 **On an older clone** (before 0.9.0) the `learning-activities` skill is
 refused by `node run.mjs update` because its code is not there — then skip
 1d and say so in one sentence, rather than improvising an unmaintained menu.
 
-## Step 1e — How should it look?
+## Step 1e — The look: a check, not a menu
 
-The cheapest question of the four, asked last because it needs the answers of
-the others: a coaching app and a calculator wear their pages differently, and
-by now you know which one this is.
+The look belongs to phase 1, so it is normally chosen before this skill runs.
+Read `docs/design.md`; failing that, the recorded decline (*No custom
+identity*) in `docs/app.md`. **Either is an answer**: say in ONE sentence which
+look Step 3's pages follow, move on, and do not re-ask. Only if NEITHER is
+there — they came through the "Build my app" door and skipped phase 1 — offer
+`design` once, here, handing over the NUMBER so it never asks twice. Both
+paths, and what a `0` records: [`references/menus.md`](references/menus.md).
 
-Every app on this template starts with the same look — neutral grey, indigo
-accent, Geist. Ask once, as a yes/no, not a menu — the worked wording is in
-[`references/menus.md`](references/menus.md).
+## Step 1f — Show the end picture, wait, then write it down
 
-- **Yes, or "you choose"** → run the skill **`design`**. It researches how
-  comparable apps present themselves (bounded — two or three searches),
-  proposes two or three named directions, writes the choice into
-  `docs/design.md` and recolours the tokens. Then come back here.
-- **No** → the default stays, and **write it into `docs/app.md`** under
-  *Decisions worth remembering* — the verbatim entry is in
-  [`references/menus.md`](references/menus.md).
-
-Unlike 1b and 1c this is not a per-use cost and not a column — it can be done
-later without a second migration. It sits here anyway because the pages built
-in Step 3 follow `docs/design.md` when it exists, and restyling six pages
-afterwards is the expensive version of a decision that was free before the
-first one. **A "no" is an answer and is not negotiated.**
-
-**Skip this step entirely for an experiment.** Same boundary as 1b, 1c and 1d.
+Before Step 2 touches the data model: the pages, what a buyer does, what they
+pay, what is not in it — plain words, no file paths — then **wait for a yes**
+(not for an experiment). [`references/intake.md`](references/intake.md). **Then
+write the agreed picture into `docs/plan.md`** — the shape is
+[`references/plan-md-template.md`](references/plan-md-template.md). Nothing else
+on disk says what is still TO be built, and a plan that lives in the transcript
+is gone when the session is.
 
 ## Step 2 — Extend the data model
 
-- **Before the first content table, settle who authors the content** — when the
-  developer IS the author, the content lives in code, not in tables, and gets
-  no admin UI; only customer STATE gets tables. The fork is
-  [`docs/content-authority.md`](../../../docs/content-authority.md) — decide it
-  before `db-generate`, and record the answer in `docs/app.md` (the coach
-  reads it back as the `Content authority:` line).
-- **And settle, in the same breath, how that content reaches PROD** — because
-  the answer is never "by itself": each environment has its own database and
-  its own media store, and a deploy carries the repo and nothing else. Content
-  in code travels with every deploy; content in tables is written as content
-  files plus an idempotent applier (`scripts/content/appliers/`, upsert by
-  slug) from the FIRST table on — **never only INSERTed into the local
-  database**, which is how a finished course goes live with empty pages while
-  every local gate stays green. Product media are declared in
-  `content/media-manifest.json` and referenced **by path, never by media id**
-  (an id exists in one database only). The transport rules and the applier
-  convention are [`docs/content.md`](../../../docs/content.md); the go-live
-  proof is `node run.mjs content-check --env prod`.
+- **Before the first content table, settle who authors the content** — decide it
+  before `db-generate`, and record the answer in `docs/app.md`. The fork is
+  [`docs/content-authority.md`](../../../docs/content-authority.md), what each
+  answer means is
+  [`references/content-rules.md`](references/content-rules.md).
+- **And settle, in the same breath, how that content reaches PROD** — content in
+  tables is written as content files plus an idempotent applier from the FIRST
+  table on, **never only INSERTed into the local database**, and product media
+  are referenced **by path, never by media id**. The transport rules are
+  [`docs/content.md`](../../../docs/content.md), the reasoning and the go-live
+  proof are in [`references/content-rules.md`](references/content-rules.md).
 - New tables in `db/schema.ts` (or a separate file that is re-exported there —
   model to follow: `db/schema-digistore.ts`).
 - Link purchase-dependent content to the **Member** (`users.id`, the same id
@@ -326,31 +279,23 @@ built, one line each, BEFORE the first page is coded. That turns the brief
 into a true record of what was agreed on both entry paths (with and without
 `market-research`), and it is what session three reads instead of guessing.
 
-**One question per result surface, asked while you build it:** wherever a page
-hands the customer a RESULT, ask once whether it is a result to look at. Not a
-menu this time — Step 1b already settled what this app shows. This is the
-smaller, per-page version of it, and it exists because Step 1b decides the
-product while this decides a page nobody thought about at the time.
-
-**And one question per surface that takes work IN, asked the same way:**
-wherever a page takes a submission, an answer, a photo or a plan from the
+**One question per result surface, and one per surface that takes work IN:**
+wherever a page hands the customer a RESULT, ask once whether it is a result to
+look at; wherever it takes a submission, an answer, a photo or a plan from the
 customer, ask once whether they should get back more than a confirmation that it
-was saved. Not a menu — Step 1c already settled what this app does. This is the
-page nobody thought about at the time.
-
-Ask it **while that surface is built**, not later. The gateway that audits this
-afterwards is `ux-gateway`, and a question deferred to it is a question asked
-after the customer has already used the page.
-
-A page that returns nothing but paragraphs is a decision, and so is a page that
-answers work with nothing but "saved" — so make both visible: either put
-something there, or note in `docs/app.md` why not.
-[`docs/visuals.md`](../../../docs/visuals.md) is the reference for the first
-(what the store can hold, how a picture gets on a page, what one generated image
-costs) and [`docs/ai-providers.md`](../../../docs/ai-providers.md) → *Working
-alongside your customer* for the second.
+was saved. Not a menu this time — steps 1b and 1c already settled that for the
+product; this is the page nobody thought about at the time. Ask it **while that
+surface is built**, not later. A page that returns nothing but paragraphs is a
+decision, and so is a page that answers work with nothing but "saved" — so make
+both visible: either put something there, or note in `docs/app.md` why not. The
+reasoning, and the two references it points at, are in
+[`references/menus.md`](references/menus.md).
 
 - Protected pages under `app/dashboard/…` (already secured via `proxy.ts`).
+  Anything you put OUTSIDE that folder is **public the moment it exists** —
+  `app/route-protection.test.ts` will stop the build and ask you to say what
+  guards it (one line in its `PUBLIC` list) or to move it in. Answer it when it
+  asks; it is the cheapest security review this app has.
 - **Purchase-dependent content asks the entitlement API**, and it needs a
   signed-in Member — the worked snippet (auth, then `hasPlan()`, then redirect)
   is in [`references/gating-examples.md`](references/gating-examples.md).
@@ -376,7 +321,7 @@ alongside your customer* for the second.
   would drain somebody else's balance. The `amount` is your price, computed in
   code: read it from the request and the customer sets it to 0. Never
   hand-write `balance = balance - n`; the ledger and the row lock are the point.
-  Details: `CLAUDE.md` → **Charging tokens**.
+  Details: `docs/entitlements.md`.
 - UI with shadcn/ui: `npx shadcn@latest add <component>`. Colors only via tokens
   from `app/globals.css`, nothing hard-coded.
 - **If `docs/design.md` exists, a new page follows its composition section** —
@@ -396,6 +341,18 @@ alongside your customer* for the second.
   itself in the address. The table is in `CLAUDE.md`, under **UI**.
 - Every page has to be readable in light **and** dark; the app has a toggle
   (default: system). With tokens this follows by itself.
+- **A page that renders the app's CONTENT (a lesson, an article) gives its
+  blocks and media stable anchors from day one** — `id={slugifyAnchor(slug)}`
+  / `id={mediaAnchor(path)}` from `lib/content-source/anchors.ts`, plus
+  `scroll-mt-20`.
+- **And if that content is ever going to be searchable by the assistant, put
+  its access check in ONE function from the start** — `mayReadUnit(memberId,
+  slug)` in `lib/<area>/rules.ts`, called by the page now and by the content
+  source later, never two `hasPlan()` calls that agree today. What both cost
+  you if they are skipped is in
+  [`references/content-rules.md`](references/content-rules.md);
+  [`docs/content-source.md`](../../../docs/content-source.md) → *The five
+  things that make a link work* is the full checklist.
 
 ## Step 3b — The operator/admin account: locally there is nothing to create
 

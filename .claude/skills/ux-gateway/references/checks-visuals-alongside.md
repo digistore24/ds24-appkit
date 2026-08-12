@@ -44,8 +44,8 @@ Where:    /dashboard/reports
 Why:      a customer opening it monthly cannot see at a glance whether the
           month was good. The numbers answer "what exactly"; nothing answers
           "how is it going".
-Fix:      docs/visuals.md → "a report as a table" → a bar chart above it. The
-          table stays.
+Fix:      docs/visuals.md → *What to build instead of a wall of text*, the row
+          "a report as a table" → a bar chart above it. The table stays.
 Evidence: page renders 1 heading, 1 table, 0 images or charts.
 ```
 
@@ -88,6 +88,17 @@ and move on. `docs/product-brief.md` is the second place to look and the first i
 time: an `Alongside the customer:` line there says what was decided when the
 product was worked out.
 
+**That silence is per SURFACE, never per app.** A "no" recorded against a
+companion on the daily message says nothing about a submission page built three
+sessions later — read the entry for what it actually decided. Taken as a
+blanket, the first recorded "no" switches this check off for ever.
+
+**And it silences ONE row — the ⚠️ MEDIUM one below, and nothing else.** A
+decision not to build a companion says nothing about one that WAS built: if a
+companion exists and the customer is not told, or it is given away ungated and
+unmetered, those stay findings no matter what `docs/app.md` says. This is the
+reading that gets got wrong, so it is written out rather than implied.
+
 Then walk the app's **work surfaces**: the places where a customer hands
 something over — a submission, an answer, a photo, a plan. **Not every form.** A
 settings page, an address, a payment method, a support message: the customer is
@@ -120,7 +131,7 @@ an undisclosed AI at HIGH, and two reports of the same week contradicting each
 other is worse than one being a notch low.
 
 **The gating row's evidence is a file and a line** — the two fields in the
-entry, read out of `lib/ai/companions.ts`. A companion gated by a **token
+entry, read out of `modules/companion/companions.ts`. A companion gated by a **token
 package** is a different thing and not this check's: `companionProblems()`
 already refuses that config, because `hasPlan()` answers `false` for a balance
 for ever.
@@ -144,7 +155,7 @@ Evidence: the action inserts one row and returns { ok: true }; the page renders
 ```
 
 Some of it is countable — the two commands above, and reading
-`lib/ai/companions.ts` — and the rest is opening the pages, signing in as a
+`modules/companion/companions.ts` — and the rest is opening the pages, signing in as a
 member and **doing the thing the app is for**. `node run.mjs ux-check` measures
 nothing for this check, deliberately: whether a surface takes a customer's
 *work* or a *setting* is a question about what the app is for, and a scan for

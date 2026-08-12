@@ -31,11 +31,25 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
 import { describe, it, expect } from "vitest";
+import { blankComments as withoutComments } from "@/scripts/lib/source-text.mjs";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 
-/** Directories that can hold server actions. */
-const SEARCHED = ["app", "lib", "components", "hooks"];
+/**
+ * Directories that can hold server actions.
+ *
+ * ⚠️ **`modules/` belongs here, and its absence let the whole class back in for
+ * module code.** Four modules ship server actions — an `actions.ts` each, plus
+ * `modules/community/profile-actions.ts` — and they are bundled into the build
+ * the moment their module is installed. The failure this file exists for is
+ * green typecheck, green tests, green `next dev`, and `next build` failing with
+ * an error that names the PAGE rather than the file; nothing about that gets
+ * gentler because the file moved.
+ *
+ * Scanned whether or not a module is installed: an uninstalled module's
+ * `"use server"` file is not built, but it is what somebody installs next.
+ */
+const SEARCHED = ["app", "lib", "components", "hooks", "modules"];
 
 function sourceFilesIn(dir: string): string[] {
   let entries;
@@ -59,13 +73,6 @@ function sourceFilesIn(dir: string): string[] {
 }
 
 /** The file with comments removed — several of them discuss this very rule. */
-function withoutComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^\s*\/\/.*$/gm, "")
-    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
-}
-
 /**
  * Is this a whole-file `"use server"`?
  *

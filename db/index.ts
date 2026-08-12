@@ -49,3 +49,20 @@ const client = postgres(connectionString, {
 
 export const db = drizzle(client, { schema });
 export { schema };
+
+/**
+ * The raw postgres-js handle, for ONE caller.
+ *
+ * ⚠️ Not a general escape hatch, and not an invitation. Every query in this app
+ * goes through `db` and its column mappers — a raw expression carries none, and
+ * `db/sql-cast.test.ts` exists because a `sql<Date>` is a string wearing a
+ * Date's clothes.
+ *
+ * The exception is the content appliers. They are written for bare Node against
+ * `content-apply`, their contract is `apply(sql, helpers)` / `present(sql)` with
+ * a tagged-template handle, and that contract predates this file needing to call
+ * them. Duplicating every applier in a second dialect so the presence check
+ * could use `db` would be two copies of what an app contains — the exact fault
+ * `scripts/content/_appliers.mjs` was written to remove.
+ */
+export { client as applierSql };

@@ -1,0 +1,10 @@
+{
+  "_comment": "The app's brand mark — the logo in the header and on the sign-in page. Paths are relative to public/ and must live under public/brand/. Empty (null) means the letter tile built from APP_NAME, which is what a fresh app shows and is a perfectly good answer. Filled in by `node run.mjs brand`, or by hand. The guide is docs/design-system.md.",
+  "_comment_dark": "logoDark is only needed when the light mark disappears on the dark background — a dark wordmark on near-black. One file is the normal case.",
+  "_comment_size": "logoWidth/logoHeight are the file's own pixel (or viewBox) dimensions. They are not optional when logo is set: without them the <img> has no intrinsic ratio and the header row jumps on first paint.",
+  "_comment_svg": "An SVG is allowed HERE and nowhere else in this app. It is a build-time asset the operator put in their own repo, it never travels through lib/media/, and it is rendered only through <img>. See docs/design-system.md and components/brand-mark.test.ts.",
+  "logo": null,
+  "logoDark": null,
+  "logoWidth": null,
+  "logoHeight": null
+}

@@ -1,1 +1,0 @@
-ALTER TABLE "token_accounts" ADD COLUMN "reload_attempts" integer DEFAULT 0 NOT NULL;

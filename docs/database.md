@@ -134,3 +134,34 @@ together. If they do not match, `node run.mjs start` aborts with an explanation
 mix-up is the most common and most unpleasant local mistake — projects from this
 template all use the same credentials `app/app/app`, so they accidentally fit
 each other.
+
+### The container and the volume have a name too
+
+The port is only half the question. Docker Compose names its project — and with
+it the container **and the data volume** — after the folder the compose file sits
+in, and a folder called `test`, `app` or `demo` is one somebody has had before.
+Without anything in the way, a brand new app inherits a deleted app's database
+and dies on the first statement of its first migration with `type … already
+exists`.
+
+So the name comes from the folder's **path**, not from the folder:
+
+```bash
+COMPOSE_PROJECT_NAME=test-9c1f4ab2      # in .env, written by the first start
+```
+
+You do not set it. `scripts/db/compose.mjs` derives it once, records it, and
+every `docker compose` this app runs is pinned to it with `-p` — the `.env` line
+so that a `docker compose down` you type by hand in that folder reaches the same
+project, the flag because a `COMPOSE_PROJECT_NAME` exported in a shell would
+otherwise outrank the file.
+
+Once the line is there it stays, and that is what lets you **rename or move the
+project folder** without the app losing its database. Change it by hand only
+while the database holds nothing you want to keep — a different name is a
+different volume, which reads as "the app forgot everything".
+
+Only the Docker driver is affected: with `DB_DRIVER=local` the data lives in
+`.dev/pgdata` inside the project folder, which cannot collide with anything.
+The post-mortem is [`troubleshooting.md`](troubleshooting.md) → *The database
+that belonged to another app*.

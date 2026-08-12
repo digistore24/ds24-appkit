@@ -1,0 +1,15 @@
+{
+  "id": "companion",
+  "version": "1.0.0",
+  "requiresTemplate": "0.19.0",
+  "title": { "de": "KI-Begleiter", "en": "AI companion" },
+  "summary": "the app working alongside its customer while they work, not only delivering to them",
+  "docs": "docs/ai-in-product.md",
+  "skill": "ai-companion",
+  "config": "config/ai-companion.json",
+  "messages": { "namespaces": ["companion"], "dir": "messages" },
+  "errorCodes": { "source": "rules.ts", "export": "COMPANION_ERROR_CODES" },
+  "components": { "CompanionPanel": "components/companion-panel.tsx" },
+  "serverExports": { "askCompanion": "companion.ts" },
+  "disclosure": "disclosure.mjs"
+}

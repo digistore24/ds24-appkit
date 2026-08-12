@@ -9,9 +9,11 @@ import { chatConfig, isChatEnabled } from "@/lib/ai/chat-config";
 import { chatNavVisible, mayUseChat } from "@/lib/ai/rules";
 import { allowedMediaMarkers } from "@/lib/ai/knowledge";
 import { isOwner } from "@/lib/roles";
+import { MODULES } from "@/lib/modules/registry";
 import { hasPlan } from "@/lib/entitlements/manage";
 import { ChatLauncher } from "@/app/dashboard/chat/launcher";
 import { SiteFooter } from "@/components/site-footer";
+import { InstallHint } from "@/components/install-app";
 
 // The frame around ALL pages under /dashboard — sidebar, header, user menu.
 // New protected pages are simply created as `app/dashboard/…/page.tsx` and get
@@ -73,6 +75,28 @@ export default async function DashboardLayout({
       : false,
   );
 
+
+  // What the installed modules want the sidebar to show — features and unread
+  // dots, resolved on the server and handed over as booleans.
+  //
+  // ⚠️ A module that is switched off answers `{}` without touching the
+  // database; the guard lives inside each module's `shellState()`, exactly
+  // inside each module's `shellState()`. With no module installed this is one
+  // `Promise.all` over an empty array.
+  const moduleShell = await Promise.all(
+    MODULES.map(async (mod) =>
+      mod.shellState
+        ? await mod.shellState({
+            memberId: session.user.id as string,
+            role: session.user.role as string,
+            impersonating: Boolean(session.user.impersonation),
+          })
+        : {},
+    ),
+  );
+  const moduleFeatures = Object.assign({}, ...moduleShell.map((s) => s.features ?? {}));
+  const moduleBadges = moduleShell.flatMap((s) => s.badges ?? []);
+
   return (
     <>
       <AppShell
@@ -95,9 +119,22 @@ export default async function DashboardLayout({
             chat.enabled,
             isOwner(session.user.role),
           ),
+          // Whatever the installed modules resolved for their own entries. Last,
+          // so a module cannot quietly override a core key — `loadModules()`
+          // already refuses two modules claiming one, and the core's own keys
+          // are not a module's to answer.
+          ...moduleFeatures,
         }}
+        badges={moduleBadges}
         signOutAction={signOutAction}
       >
+        {/* "Put this app on your home screen" — once, from the second visit,
+            and then never again. Inside the shell so it sits in the page flow
+            above the content: a second sticky element would collide with the
+            header (see components/impersonation-banner.tsx). It renders nothing
+            at all wherever installing is not a thing that can happen, and the
+            permanent place for the same offer is the user menu. */}
+        <InstallHint />
         {children}
 
         {/* Inside the shell, below the page. § 5 DDG asks for the Impressum to

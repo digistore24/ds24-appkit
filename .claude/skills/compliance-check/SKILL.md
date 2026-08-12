@@ -1,6 +1,6 @@
 ---
 name: compliance-check
-description: The EU compliance check for this app — works out which rules actually reach it (GDPR, TDDDG §25, EU AI Act, DDG §5, consumer law, plus BFSG/DSA where they bite), fixes what can be fixed in code, writes the legal pages and the evidence pack, and leaves a dated report. Use it before go-live, when somebody asks "do I need a cookie banner?", "does the AI Act apply to me?", "what do I have to put in my privacy policy?", "can my customers delete their account?", or after adding anything that processes personal data. NOT legal advice — it prepares, a lawyer decides.
+description: The EU compliance check for this app — works out which rules actually reach it (GDPR, TDDDG §25, EU AI Act, DDG §5, consumer law, plus BFSG/DSA where they bite), then fixes, writes the legal pages and reports. Use it before go-live, when somebody asks "do I need a cookie banner?", "does the AI Act apply to me?", "what do I have to put in my privacy policy?", "can my customers delete their account?", "am I allowed to sell this yet?", mentions an Impressum, a warning letter (Abmahnung) or a data protection authority, or after adding anything that processes personal data. NOT legal advice — it prepares, a lawyer decides.
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -70,7 +70,9 @@ have actually run.
 
 ## What counts as a finding
 
-**Severity — what it costs if it stays:**
+The ladder and the four-line `Where:` / `Why:` / `Fix:` / `Evidence:` format are
+the shipped ones — [`docs/guidance.md`](../../../docs/guidance.md) → *One report
+shape*. What each rung means here:
 
 | | Severity | Meaning |
 |---|---|---|
@@ -79,28 +81,12 @@ have actually run.
 | ⚠️ | **MEDIUM** | Real, but it needs a second condition — a threshold you have not crossed yet, a feature you have not built yet. |
 | ℹ️ | **LOW** | Hardening, or documentation that would help you later. |
 
-**Confidence — only report what you can show.** A finding needs a file you have
-actually read or a command you have actually run. Anything resting on an
-assumption goes into **Worth a look** at the end of the report and is not
-counted. In this domain a confident wrong finding is worse than in most: it
-sends somebody to a lawyer with the wrong question and a bill.
-
-**The format of a finding — the same everywhere, and the same as
-`security-gateway`:**
-
-```
-❌ HIGH — The app has no privacy policy
-   Where:    content/legal/datenschutz.de.md is still the shipped placeholder
-   Why:      Art. 13 GDPR requires the information to be given at the time the
-             data is collected — which here is the moment somebody signs up.
-             The page currently tells visitors it has not been written.
-   Fix:      Check 3 (`pages`) drafts it from docs/data-protection.md.
-   Evidence: node run.mjs legal-check reports it as a placeholder.
-```
-
-Four lines, always in that order. **Why** says what actually goes wrong, in
-plain words and with the article that says so — not "GDPR non-compliance".
-**Fix** is a change somebody can make.
+**What counts as shown, here:** a file you have actually read or a command you
+have actually run. Anything resting on an assumption goes into **Worth a look**
+and is not counted — in this domain a confident wrong finding is worse than in
+most, because it sends somebody to a lawyer with the wrong question and a bill.
+And **Why** says what actually goes wrong, in plain words **and with the article
+that says so** — not "GDPR non-compliance".
 
 ## 1 · `all` — the full pass
 
@@ -124,12 +110,12 @@ Read from disk first, and say what you found rather than asking about it:
 | Question | Where the answer is |
 |---|---|
 | Is there a support **assistant**? | `config/ai-chat.json` (`enabled`) — she answers from `content/knowledge/` and is sent nothing about the person |
-| Is there a **companion** — anything that reads, judges or advises on what a customer produced? | `config/ai-companion.json` (`enabled`) **and** the entries in `lib/ai/companions.ts`. `node run.mjs legal-check` reports the switch; each entry's `load()` is the list of customer data that call sends, and it is what §8a and the policy paragraph are drafted from |
+| Is there a **companion** — anything that reads, judges or advises on what a customer produced? | `config/ai-companion.json` (`enabled`) **and** the entries in `modules/companion/companions.ts`. `node run.mjs legal-check` reports the switch; each entry's `load()` is the list of customer data that call sends, and it is what §8a and the policy paragraph are drafted from |
 | Which AI company receives data? | `node run.mjs ai-check` |
 | Is there tracking? | grep `app/`, `components/` for analytics — the template ships none |
 | Is there **ingested third-party material**? | `content/knowledge-sources/` — a rights question the Licence Gate at intake already governs (verbatim storage only for own or licensed content; third-party sources are distilled, source cited): [`docs/knowledge.md`](../../../docs/knowledge.md) |
 | What personal data is held? | `docs/data-protection.md` |
-| Is the MCP interface on? | `config/mcp.json` |
+| Is the HTTP API on? | `node run.mjs module list` (is the `api` module installed?) **and** `config/api.json`. ⚠️ Switched off is not the same as never used — the keys minted while it ran are still held and still in both exports (`docs/data-protection.md` §9) |
 | What is sold, and how? | `config/digistore-products.json` (`billingMode`) |
 
 Then ask — and **only** these, in one message, because none of them leaves a
@@ -302,16 +288,27 @@ in [`references/consumer-and-info-duties.md`](references/consumer-and-info-dutie
 
 ## The report
 
-Into `docs/reports/compliance-<YYYY-MM-DD>.md`, always, even when everything
-passes — "have we already done that?" needs an answer next month. Structure:
+Into **`docs/reports/compliance-YYYY-MM-DD.md`**, always, even when everything
+passes — "have we already done that?" needs an answer next month. Its shape — the
+header above the tally, the sections in their order, the accepted register, the
+spoken summary — is [`docs/guidance.md`](../../../docs/guidance.md) → *One report
+shape*. Two sections are this skill's own, and they bracket the rest:
 
-1. **Scope** — the seven answers, dated. Everything else depends on them.
-2. **Findings** by severity, in the four-line format.
-3. **What was built** in this run — files created, pages filled, purposes declared.
-4. **Accepted risks**, if the user accepted any (same table as
-   `security-gateway`: risk, where, why accepted, by whom, when, review when).
-   Only the user accepts a risk, never you, and never silently.
-5. **Still needs a human** — the honest list. See below.
+- **`## Scope` comes first**, before the findings: the seven answers, dated.
+  Everything else in the report depends on them, which is why they are above and
+  not in an appendix.
+- **`## Still needs a human` comes last** — the honest list, drawn from the STOP
+  section below. It is not `## Open`: `## Open` is work somebody here could do and
+  has not, this is work nobody here may do at all.
+
+`## Fixed in this run` is called **`## What was built`** here, because that is what
+a fix looks like in this domain: files created, pages filled, purposes declared.
+
+⚠️ **This skill has never named a `compliance-accepted.md` register**, unlike the
+three gateways — an accepted risk here has only ever been a row in the report
+itself, with the shared table and the shared rules. So a later run does not find
+it by looking anywhere but the previous report, which is worth knowing before
+somebody trusts a clean one.
 
 ## STOP — get a lawyer, not a better prompt
 

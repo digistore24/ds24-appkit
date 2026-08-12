@@ -18,9 +18,12 @@ export DATABASE_URL="postgresql://…"   # the same DB as the app (see .env)
 The `users` table has a `role` field (see `db/schema.ts`):
 
 - **`owner`** — SAAS operator (admin). Access to admin areas (`requireOwner()`).
+- **`moderator`** — trusted member who keeps community rooms clean. NOT an
+  admin: no user management, no roles, no billing.
 - **`member`** — regular customer (the default for self sign-in).
 
-`--role` accepts the aliases `admin` (→ `owner`) and `user` (→ `member`).
+`--role` accepts the aliases `admin` (→ `owner`) and `user` (→ `member`);
+`moderator` has no alias.
 
 ## Creating a user / setting a role (upsert by email)
 

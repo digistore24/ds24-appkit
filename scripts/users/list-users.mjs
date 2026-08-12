@@ -6,13 +6,20 @@
 //
 // Usage:
 //   node scripts/users/list-users.mjs
-//   node scripts/users/list-users.mjs --role owner   # filter for owners only
-import { parseArgs, resolveRole, connect } from "./_db.mjs";
+//   node scripts/users/list-users.mjs --role owner       # operators only
+//   node scripts/users/list-users.mjs --role moderator   # moderators only
+import { parseArgs, resolveRole, connect, CANONICAL_ROLES } from "./_db.mjs";
 
 const args = parseArgs(process.argv.slice(2));
 const roleFilter = args.role === undefined ? null : resolveRole(args.role);
 if (args.role !== undefined && roleFilter === null) {
-  console.error("ERROR: invalid role for --role (owner|member).");
+  // Derived, never typed out: this line is what an operator reads the moment
+  // they mistype, and a hand-kept list here said "owner|member" for a whole
+  // release after the third role shipped. `create-user.mjs` does the same.
+  console.error(
+    `ERROR: invalid role for --role. Allowed: ${CANONICAL_ROLES.join(", ")} ` +
+      "(aliases: admin, user).",
+  );
   process.exit(2);
 }
 

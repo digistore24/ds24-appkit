@@ -30,7 +30,7 @@ Do not guess this. Ask if you are unsure.
 **Can you run commands on this person's computer and write files to it?**
 
 - **Yes** — you are a coding agent in a terminal: Claude Code, OpenAI Codex CLI,
-  Gemini CLI, OpenCode, the Code tab of the Claude desktop app, or something
+  Antigravity CLI, OpenCode, the Code tab of the Claude desktop app, or something
   similar. → **Branch A**.
 - **No** — you are a chat: claude.ai, ChatGPT, Gemini in a browser, or an
   assistant in some other app. You can read and write text and nothing else. →
@@ -38,6 +38,17 @@ Do not guess this. Ask if you are unsure.
 
 Say which one you concluded, in one line, before you continue. If you get this
 wrong the person will follow instructions that cannot work.
+
+**And read "this person's computer" literally, because for several of the
+programs above it is a setting rather than a fact.** The same desktop app can
+put you on their machine or in a cloud session on a different one; so can a
+terminal over SSH. You are still Branch A either way — you have a shell and you
+can write files — but a second thing is then also true, and it is the one that
+catches people out: **they cannot see what you can see.** No browser opens where
+you are, `http://localhost:3000` on their computer is not the app you started,
+and your work reaches them only once it travels. Say which of the two it is,
+in the same line, and once the project exists read
+[`machine.md`](machine.md) — it is written for exactly this.
 
 ---
 
@@ -140,7 +151,7 @@ their repository. Started one level up, you will not find the project's guidance
 or its skills, and everything after this will feel oddly empty.
 
 So: end this session, and start again in that folder — `claude`, `codex`,
-`gemini` or `opencode`, whichever you are.
+`agy` or `opencode`, whichever you are.
 
 ### A4. Hand over
 
@@ -188,7 +199,7 @@ and stop. The template cannot help someone who has nothing to sell yet.
 ### B2. Hand them the next prompt
 
 They need a coding agent on a real computer. The template works with **Claude
-Code, OpenAI Codex CLI, Gemini CLI and OpenCode** — if they already use one,
+Code, OpenAI Codex CLI, Antigravity CLI and OpenCode** — if they already use one,
 that is the one. If they use none, Claude Code is the one the project's
 walkthroughs are written against: https://claude.com/download
 

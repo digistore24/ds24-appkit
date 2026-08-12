@@ -1,6 +1,6 @@
 ---
 name: ai-providers
-description: Chooses which AI company this app pays and what it may spend — picks a provider (OpenAI, Anthropic, Gemini, Mistral or OpenRouter), gets the key into .env, binds each task to a model, fills in the price table and explains what the AI-costs page will show. Use this when the user asks which AI to use, wants to switch provider, mentions an OpenAI/Gemini/Mistral/OpenRouter key, asks what AI costs them, or when `node run.mjs ai-check` reports a problem.
+description: Chooses which AI company this app pays and what it may spend — picks a provider (OpenAI, Anthropic, Gemini, Mistral or OpenRouter), binds each task to a model and says what a call costs. Use this when the user asks which AI to use, wants to switch provider, mentions an OpenAI/Anthropic/Gemini/Mistral/OpenRouter key, asks what AI costs them, fears the AI will cost more than it earns, or when `ai-check` reports a problem.
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -192,9 +192,15 @@ rather than restating them; `guardrails` wins where anything disagrees.
 **If what they want is AI working alongside their customer** — reading a
 submission, walking somebody through a course, checking a plan before they commit
 to it — that task already ships as `companion`, and so does the call shape:
-`askCompanion()` in `lib/ai/companion.ts`. Do not build a second one. The rule it
+`askCompanion()` in `modules/companion/companion.ts`. Do not build a second one. The rule it
 follows (a call is given exactly the rows its call site names) and a worked
 example are in `docs/ai-providers.md` → *Working alongside your customer*.
+
+**And if what they want is not a companion but still sends a model something a
+customer wrote** — an activity's `grade()`, a submission read, whatever comes
+next — the fence is core and they import it: `buildFencedRequest()` from
+`@/lib/ai/customer-text`, then `runTask("their.task", …)` with what it returns.
+Never a second fence, never the tag spelled out at a call site.
 
 Then `runTask("their.task", { system, messages, memberId })`.
 

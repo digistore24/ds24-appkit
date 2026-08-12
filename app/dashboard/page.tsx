@@ -4,7 +4,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getFormatter, getTranslations } from "next-intl/server";
-import { CalendarClock, CreditCard, CircleUser, ArrowRight } from "lucide-react";
+import { CalendarClock, CreditCard } from "lucide-react";
 
 import { auth } from "@/auth";
 import { hasDigistoreApiKey } from "@/lib/digistore/settings";
@@ -37,6 +37,7 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import { Callout } from "@/components/ui/callout";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export async function generateMetadata() {
   const t = await getTranslations("dashboard");
@@ -113,6 +114,58 @@ export default async function DashboardPage({
     ? ((await getTokenAccount(session.user.id as string))?.balance ?? 0)
     : 0;
 
+  // The plan is named, not counted. "1 plan active" is the answer to a
+  // question nobody asked; the customer wants to read the name they paid for.
+  // `findProduct` returns null for a key the registry no longer knows — then
+  // the key itself is the honest fallback.
+  //
+  // 🚨 A Member holds TWO plans at once routinely, not exceptionally: a
+  // Digistore24 plan switch delivers two events days apart, in either order, so
+  // an upgrading Member briefly holds both keys (CLAUDE.md → Access). This
+  // expression is therefore the ONE place the names are resolved, and both
+  // readers below take the whole list from it. `owned[0]` would name one of the
+  // two and would be right on every account anybody tests with.
+  const ownedNames = owned.map(
+    (e) => findProduct(e.productKey)?.name ?? e.productKey,
+  );
+
+  // ── What the member HAS — the card that leads the page ────────────────────
+  //
+  // Everything it says is already loaded above; it adds no query. In
+  // particular `planStartedAt()` is NOT called: "member since" is tempting on a
+  // card this size and it is a second aggregate over `grants`.
+  //
+  // ⚠️ Both halves are written the way lib/billing-mode.ts:30-37 requires — a
+  // mode may hide an EMPTY thing, never a non-empty one:
+  //
+  //   · in a tokens-only app `owned` is `[]` because nothing ASKED, not because
+  //     the member has nothing. So the plan half is absent there rather than
+  //     saying "no plan", which would be the app answering a question it never
+  //     put.
+  //   · in a subscriptions-only app `tokenBalance` is `0` for the mirror-image
+  //     reason, so the balance is hidden — but only while it is zero
+  //     (`sellsTokens() || tokenBalance > 0`), never on the mode alone. A
+  //     legacy balance somebody paid for stays visible after a mode flip.
+  //
+  // Adding either query "to be safe" is the one move that must not happen: it
+  // buys a card that has nothing to say with a round trip on the busiest page
+  // in the app.
+  const showBalance = sellsTokens() || tokenBalance > 0;
+  const holdsSomething = owned.length > 0 || tokenBalance > 0;
+
+  // The empty state of that card, and it ABSORBS the plan card that used to
+  // stand in this grid — two buttons to /plans is not a hierarchy. The
+  // sentences are that card's own, so nothing was invented; in a tokens-only
+  // app its plan wording would be false, so the token step's own words stand
+  // there instead.
+  const offer = sellsPlans()
+    ? { title: t("planTitle"), body: t("planBody"), cta: t("planCta") }
+    : {
+        title: t("onboardingTokensTitle"),
+        body: t("onboardingTokensBody"),
+        cta: t("onboardingTokensCta"),
+      };
+
   const onboardingSteps: OnboardingStepView[] = [];
   if (sellsPlans()) {
     onboardingSteps.push({
@@ -121,15 +174,9 @@ export default async function DashboardPage({
       title: t("onboardingPlanTitle"),
       description:
         owned.length > 0
-          ? // The plan is named, not counted. "1 plan active" is the answer to a
-            // question nobody asked; the customer wants to read the name they
-            // paid for. `findProduct` returns null for a key the registry no
-            // longer knows — then the key itself is the honest fallback.
-            t("onboardingPlanDone", {
-              products: owned
-                .map((e) => findProduct(e.productKey)?.name ?? e.productKey)
-                .join(", "),
-            })
+          ? // Named, not counted — and the whole list, never the first of it.
+            // The reasoning is on `ownedNames` above.
+            t("onboardingPlanDone", { products: ownedNames.join(", ") })
           : t("onboardingPlanBody"),
       href: "/plans",
       cta: t("onboardingPlanCta"),
@@ -167,7 +214,16 @@ export default async function DashboardPage({
       <PageHeader
         title={t("welcome")}
         description={t("signedInAs", { email: session.user.email ?? "" })}
-      />
+      >
+        {/*
+          The role, and nothing else. The address stood on this page TWICE —
+          here in the description and again in a stat card of its own — and a
+          page that says the same thing twice at the same size has no hierarchy
+          left to read. The card went; the badge it carried, which is the one
+          thing that was not already said, moved up here.
+        */}
+        <RoleBadge role={session.user.role} />
+      </PageHeader>
 
       {/*
         Above the status cards, deliberately. A customer who has just paid opens
@@ -179,6 +235,96 @@ export default async function DashboardPage({
       <OnboardingChecklist steps={onboardingSteps} className="mb-6" />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {/*
+          THE LEADING CARD. Four cards of one size used to stand here and none
+          of them was what the member came for; the page was a row of equally
+          important answers to questions nobody had asked.
+
+          It leads by COMPOSITION and by nothing else — two of the three
+          columns, two of the rows, a heading that is not the other cards'
+          muted 14 px, and the figure at `text-2xl`. Deliberately no colour
+          class and no shadow class: elevation is a DIAL with two values
+          (app/globals.css), `<Card>` already wears the raised one, and
+          `node run.mjs ux-check` counts a size class written here as a value
+          past that dial. A card that is bigger and says more does not need to
+          be louder as well.
+        */}
+        <Card className="sm:col-span-2 lg:row-span-2">
+          <CardHeader>
+            <CardTitle level="h2">{t("holdingTitle")}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {holdsSomething ? (
+              <div className="space-y-6">
+                {owned.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-muted-foreground text-sm font-medium">
+                      {t("holdingPlanLabel")}
+                    </p>
+                    {/*
+                      A LIST, one line per plan — the shipped checklist step
+                      joins the same names with commas, which is right in a
+                      sentence and wrong as a figure. Two plans at once is the
+                      ordinary state during an upgrade, so this is the state
+                      the layout is built for rather than the one it survives.
+                    */}
+                    <ul className="space-y-1">
+                      {owned.map((entitlement, index) => (
+                        <li
+                          key={entitlement.productKey}
+                          className="text-2xl leading-tight font-semibold text-pretty"
+                        >
+                          {ownedNames[index]}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {showBalance && (
+                  <div className="space-y-1.5">
+                    <p className="text-muted-foreground text-sm font-medium">
+                      {t("holdingTokensLabel")}
+                    </p>
+                    {/*
+                      `format.number`, never a bare `{balance}` and never
+                      `toLocaleString`: the language comes from the request,
+                      not from the server's environment (CLAUDE.md →
+                      Languages). `tabular-nums` so a balance that changes does
+                      not shift on the spot.
+                    */}
+                    <p className="text-2xl leading-tight font-semibold tabular-nums">
+                      {format.number(tokenBalance)}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /*
+                Empty is a state, and it gets the kit's own component rather
+                than a blank card (CLAUDE.md → UI, rule 3). It carries the call
+                to action the plan card used to carry, which is why that card
+                is gone rather than standing beside this one.
+              */
+              <EmptyState
+                icon={CreditCard}
+                title={offer.title}
+                description={offer.body}
+              >
+                {/*
+                  `variant="outline"`, exactly as the plan card's button was:
+                  the checklist above is already driving this member towards
+                  /plans with a filled button, and two filled buttons to one
+                  route on one screen is not a hierarchy either.
+                */}
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/plans">{offer.cta}</Link>
+                </Button>
+              </EmptyState>
+            )}
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="text-muted-foreground text-sm font-medium">
@@ -189,36 +335,6 @@ export default async function DashboardPage({
             <Badge variant={connected ? "default" : "secondary"}>
               {connected ? t("statusConnected") : t("statusDisconnected")}
             </Badge>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-muted-foreground text-sm font-medium">
-              {t("accountTitle")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex items-center gap-2">
-            <CircleUser aria-hidden className="text-muted-foreground size-4" />
-            <span className="truncate text-sm">{session.user.email}</span>
-            <RoleBadge role={session.user.role} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-muted-foreground text-sm font-medium">
-              {t("planTitle")}
-            </CardTitle>
-            <CardDescription>{t("planBody")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button asChild variant="outline" size="sm">
-              <Link href="/plans">
-                <CreditCard aria-hidden />
-                {t("planCta")}
-              </Link>
-            </Button>
           </CardContent>
         </Card>
 
@@ -258,15 +374,17 @@ export default async function DashboardPage({
         </Callout>
       )}
 
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            {t("nextTitle")}
-            <ArrowRight aria-hidden className="text-muted-foreground size-4" />
-          </CardTitle>
-          <CardDescription>{t("nextBody")}</CardDescription>
-        </CardHeader>
-      </Card>
+      {/*
+        A closing <Card> used to stand here whose CardHeader had a title and a
+        description and whose body did not exist — the emptiest block on the
+        page, and against this app's own rule that an area which can hold
+        nothing gets an <EmptyState> and never a bare heading (CLAUDE.md → UI,
+        rule 3). It had no next action to carry either: what it said was
+        "replace this page", addressed to the developer and read by every
+        paying customer. It was removed rather than filled, and its two message
+        keys went with it — a key rendered nowhere is weight the next reader
+        has to disprove.
+      */}
     </>
   );
 }

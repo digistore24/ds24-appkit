@@ -55,7 +55,7 @@
 // is the very thing § 25 TDDDG governs — that case belongs on the device, not
 // in this table. See `docs/compliance.md` §2.
 import { pgTable, text, timestamp, boolean, index } from "drizzle-orm/pg-core";
-import { users } from "./schema";
+import { users } from "./schema-core";
 
 export const consentRecords = pgTable(
   "consent_records",

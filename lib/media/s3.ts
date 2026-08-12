@@ -31,6 +31,7 @@
 // R2 and Backblaze hand you an endpoint without the bucket, AWS and Spaces let
 // you use either, and all four therefore work with nothing extra to set.
 import {
+  copySource,
   credentialsFor,
   objectPath as objectPathRaw,
   s3SettingsFromEnv as settingsFromEnvRaw,
@@ -70,7 +71,8 @@ export function createS3Store(settings: S3Settings): MediaStore {
     key: string,
     body?: Uint8Array,
     contentType?: string,
-  ): Promise<Response> => sendS3(settings, method, key, body, contentType);
+    extraHeaders?: Record<string, string>,
+  ): Promise<Response> => sendS3(settings, method, key, body, contentType, extraHeaders);
 
   return {
     driver: "s3",
@@ -112,8 +114,71 @@ export function createS3Store(settings: S3Settings): MediaStore {
       return new Uint8Array(await response.arrayBuffer());
     },
 
+    async firstBytes(key, n) {
+      // A ranged GET. 206 is the answer when the bucket honoured the range and
+      // 200 when it ignored it and sent the whole object — both are usable, so
+      // the slice below is not belt-and-braces: it is what makes a provider
+      // that does not do ranges cost bandwidth rather than correctness.
+      const response = await send("GET", key, undefined, undefined, {
+        range: `bytes=0-${Math.max(0, n - 1)}`,
+      });
+      if (response.status === 404) return null;
+      if (!response.ok && response.status !== 206) {
+        throw new Error(`media: GET ${key} (range) failed (${response.status})`);
+      }
+      return new Uint8Array(await response.arrayBuffer()).slice(0, n);
+    },
+
+    async copy(fromKey, toKey, contentType) {
+      // `CopyObject`: a PUT on the destination naming the source in a header.
+      // The bytes never leave the provider, which is the whole point — see
+      // `MediaStore.copy`.
+      //
+      // `REPLACE` rather than the default `COPY` for the metadata: the source
+      // object was written by a browser, so its stored `Content-Type` is
+      // whatever that browser chose. What is recorded here is what the app read
+      // out of the object's own first bytes.
+      const response = await send("PUT", toKey, undefined, contentType, {
+        "x-amz-copy-source": copySource(settings, fromKey),
+        "x-amz-metadata-directive": "REPLACE",
+      });
+      if (!response.ok) {
+        throw new Error(
+          `media: COPY ${fromKey} -> ${toKey} failed (${response.status}): ` +
+            `${(await response.text()).slice(0, 300)}`,
+        );
+      }
+      // 🚨 **A CopyObject can fail with a 200.** S3 keeps the connection warm
+      // on a long copy and writes the outcome into the body, so a status check
+      // alone reports success for a copy that did not happen — and the confirm
+      // step would then write a row pointing at a key with nothing behind it.
+      // The body is a few hundred bytes either way.
+      const body = await response.text();
+      if (/<Error[\s>]/.test(body)) {
+        throw new Error(
+          `media: COPY ${fromKey} -> ${toKey} failed with a 200 body: ${body.slice(0, 300)}`,
+        );
+      }
+    },
+
     publicUrl(key) {
       return settings.publicBaseUrl ? `${settings.publicBaseUrl}/${key}` : null;
+    },
+
+    createUploadUrl(key, expiresSeconds) {
+      // The first presigned request in this app that is not a GET. Nothing in
+      // `presignUrl()` needed changing for it: the method flows into the
+      // canonical request, and `X-Amz-SignedHeaders` is `host` either way.
+      // Why no content type is signed: see `MediaStore.createUploadUrl`.
+      return presignUrl({
+        method: "PUT",
+        endpoint: settings.endpoint,
+        path: objectPath(settings, key),
+        query: {},
+        credentials,
+        expiresSeconds,
+        now: new Date(),
+      });
     },
 
     signedUrl(key, options: SignedUrlOptions) {

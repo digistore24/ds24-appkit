@@ -21,8 +21,8 @@
 //
 // BOUNDARY: nothing server-side is imported here — not `@/auth`, not
 // `@/lib/email`, not `@/lib/credentials/*`. This file ends up in the browser
-// bundle, and CLAUDE.md records mail delivery being dragged into one exactly
-// this way. Everything happens in actions.ts.
+// bundle, and `docs/auth-setup.md` records mail delivery being dragged into one
+// exactly this way. Everything happens in actions.ts.
 
 import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -78,7 +78,49 @@ export function SignInForm({
   const step = restarted ? "email" : state.step;
 
   return (
-    <Card>
+    // The sign-in sits on a raised surface, and the elevation is the whole
+    // mechanism — because on this page a surface is all there is.
+    //
+    // 🚨 In LIGHT mode `--background`, `--card` and `--popover` are the same
+    // colour: `hsl(0 0% 100%)`, all three. A white card on a white page has a
+    // contrast ratio of exactly 1.00 against it, so "put the form on a card"
+    // buys nothing there — only in dark mode, where app/globals.css lifts
+    // `--card` a shade above the page on purpose. The elevation dial is what
+    // works in BOTH, so it carries this alone.
+    //
+    // `overlay` and not `raised`: `raised` is the step every <Input>, <Switch>
+    // and <Checkbox> wears (`--shadow-xs`), tuned to be calm at that size, and
+    // in light mode it is a 6 %-alpha hairline. On a page where the card IS the
+    // page it reads as nothing. `overlay` is 18 % at 24 px in light, and in
+    // dark it additionally carries the light rim that app/globals.css says is
+    // the only construction a near-black page can actually show.
+    //
+    // 🚨 And it needs NO `!` — which is worth a paragraph, because it used to.
+    // <Card> carries `shadow-sm` in its own class list, and tailwind-merge
+    // 2.6.1 does not know Tailwind v4's `(--var)` shorthand: it kept both
+    // classes instead of resolving them, and `.shadow-sm` is emitted last, so
+    // this line rendered `raised` and looked applied. That was a silent no-op —
+    // it compiled, it type-checked, the page answered 200 — and it is fixed at
+    // the cause in `lib/utils.ts`, where `cn()` is now an `extendTailwindMerge`
+    // that teaches the merger the shorthand. `lib/utils.test.ts` is the needle;
+    // do not put the `!` back to "make sure". An `!important` here would beat
+    // every later override too — a variant, a `shadow-none` from a caller — and
+    // the trailing `!` is itself a form tailwind-merge 2.6.1 cannot parse, so
+    // it would keep a dead `shadow-sm` in the DOM beside this one.
+    //
+    // The bracketed arbitrary form would resolve through tailwind-merge as
+    // well, and is still the wrong answer: `node run.mjs ux-check` rejects it,
+    // because an arbitrary shadow is a depth nobody chose.
+    //
+    // ⚠️ And that form is not written out anywhere above ON PURPOSE. Tailwind
+    // v4 scans this file as RAW TEXT — it does not know what a comment is — so
+    // a shadow utility with square brackets and an ellipsis inside them,
+    // written here to explain why it is wrong, becomes a real class emitting
+    // `var(…)`, which is not a custom-property name. The stylesheet then fails
+    // to parse and EVERY page in the app answers 500. Measured on this tree,
+    // by writing it: eight pages down, `node run.mjs smoke` naming
+    // app/globals.css and a line number in generated CSS.
+    <Card className="shadow-(--elevation-overlay)">
       <CardContent>
         <form action={formAction} className="flex flex-col gap-3">
           {/* Only ever ONE message here, and it is about what just happened —

@@ -1,6 +1,6 @@
 ---
 name: visuals
-description: Makes an app something to look at rather than something to read — decides WHAT the customer should see (per app shape), builds one of the patterns from the catalogue, switches on image generation or customer uploads, and checks what is already there. Use this when the user says "my app is only text", "there is nothing to look at", "I want pictures in it", "can it make images?", "customers should be able to upload a photo", "where do I put the PDF my buyers get?", or when they are about to build a page whose whole output is a block of text. For "this looks unfinished" ask which they mean — hand-built-looking pages are `ux-gateway`, pages that hand out only paragraphs are this one.
+description: Makes an app something to look at rather than something to read — what the customer should SEE, the patterns available, image generation, customer uploads, and a check of what is already there. Use this when the user says "my app is only text", "there is nothing to look at", "I want pictures in it", "can it make images?", "customers should be able to upload a photo", "where do I put the PDF my buyers get?", "where do my videos go", "my video is too big to upload", or when they are about to build a page whose whole output is a block of text. For "this looks unfinished" ask which they mean — hand-built-looking pages are `ux-gateway`, pages that hand out only paragraphs are this one.
 requires: 0.7.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
@@ -9,7 +9,7 @@ requires: 0.7.0
 
 Apps built on this template hand their customers paragraphs unless somebody
 decides otherwise. That is what this skill is for — and the decision is always
-the user's, never yours (`CLAUDE.md` → *How a skill works*: **anything the
+the user's, never yours (`docs/guidance.md` → *How a skill works*: **anything the
 customer will SEE is proposed, never assumed**).
 
 **The reference is [`docs/visuals.md`](../../../docs/visuals.md).** Read it; do
@@ -52,7 +52,7 @@ The same question `build-app` step 1b asks, for an app that is already built.
 
 **Look before you ask.** `docs/app.md` says what this app does and what was
 decided against; `docs/product-brief.md` may carry an `Output artifact:` line.
-If a previous session already decided *no pictures in the messages*, that is an
+If a previous session already decided **No customer-facing visuals**, that is an
 answer — say you found it and ask whether it still holds, rather than proposing
 it again as if it were new.
 
@@ -78,6 +78,15 @@ Give me numbers, or say "you choose" and I take the ones marked ✅.
 Whatever is decided — including a `0` — goes into `docs/app.md` under
 *Decisions worth remembering*, with the date and the reason. That entry is what
 stops the same conversation happening again in three sessions.
+
+🚨 **A `0` is written with the verbatim entry, and that entry has one home** —
+[`build-app`'s menus reference](../build-app/references/menus.md) → *Step 1b*,
+because this step and that one ask the same question and two copies of one entry
+are two wordings waiting to disagree. It opens
+`- **No customer-facing visuals.**`, and those three words are load-bearing: they
+are what *Look before you ask* above stops on, and what anything else reading this
+step back reads the refusal by. Write the sentence after them in the app's own
+words; leave those three exactly as they are.
 
 ## 2 · pattern — build one
 
@@ -115,7 +124,7 @@ this is the short path.
 3. **Build the call** — `generateImage()` from `lib/media/generate.ts`. `alt` is
    required and is NOT the prompt; the reference says why.
 4. **Charge for it**, if a customer triggers it: `spendTokens`, in the order
-   check → work → charge (`CLAUDE.md` → *Charging tokens*). And show the price
+   check → work → charge (`docs/entitlements.md`). And show the price
    next to the button, not in the ledger afterwards.
 5. **Offer three, not one.** The reference's rules for asking a customer to
    produce something are the difference between a feature people use and one
@@ -124,17 +133,27 @@ this is the short path.
 ## 4 · upload — let customers put things in
 
 `docs/visuals.md` → *Putting files in*. The endpoint exists
-(`app/api/media/route.ts`); what a page needs is a form that posts to it and a
-place to show the result.
+(`app/api/media/route.ts`) and so does the FIELD:
+**`<MediaUpload>` (`components/ui/media-upload.tsx`) is the app's one file
+input** — never build a second one, `components/ui/media-upload.test.ts` fails
+the build on it. What a page adds is where the bytes go and a place to show the
+result.
 
 Two decisions to put to the user rather than make:
 
 - **What may go in.** `config/media.json` → `mayUpload`, per role. A member
   uploads pictures and PDFs by default; archives are the operator's, because a
   customer who can hand every other customer a `.zip` is not a media feature.
-- **How big.** The ceiling is per kind, and it is what fits through a request.
-  A lesson recording does not — say so before somebody tries it with a 400 MB
-  file, and the reference says what the way past would involve.
+- **How big, and therefore which of the two routes.** Through the app the limit
+  is **10 MB** from a form on one of your pages and **50 MB** through
+  `/api/media` — what a Server Action body and a route handler respectively
+  carry, neither of them the per-kind number in `config/media.json`, which says
+  what may be stored. A lesson recording does not fit either, and for that
+  there is the direct route: `POST /api/media/upload-url` → `PUT` to the bucket
+  → `POST /api/media/confirm`. It needs a CORS rule on the bucket (the
+  reference has it) and it does **not** take pictures — location data comes off
+  images, which needs the bytes in the app. Say which route the page is
+  building before somebody tries a 400 MB file against the wrong one.
 
 **Do not soften the checks.** The type comes from the file's bytes, not from
 what the browser claimed, and location data comes off images on the way in.
@@ -183,7 +202,7 @@ Not a full pass; that is `ux-gateway`. This is the media-specific half:
    fourth way of giving feedback (`CLAUDE.md` → **UI**).
 
 Everything else this skill runs on — propose rather than decide, say the price
-before it is spent, no decoration — is `CLAUDE.md` → *How a skill works* and the
+before it is spent, no decoration — is `docs/guidance.md` → *How a skill works* and the
 catalogue in `docs/visuals.md`. Read them there rather than a second copy here.
 
 ## What comes next

@@ -4,6 +4,10 @@
 [features]
 codex_hooks = true
 
+[mcp_servers.ds24-setup]
+command = "node"
+args = ["scripts/mcp/server.mjs"]
+
 [[hooks.SessionStart]]
 command = "if ! command -v node > /dev/null 2>&1; then echo '[Setup: blocked — node. Node.js is not installed on this machine, so the greeting below could not run. Run the skill setup-machine BEFORE writing any code.]'; fi"
 

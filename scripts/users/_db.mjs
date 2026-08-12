@@ -27,18 +27,22 @@ export function parseArgs(argv) {
   return out;
 }
 
-// Canonical roles (convention from db/schema.ts):
-//   "owner"  = SAAS operator (admin)
-//   "member" = regular customer
-export const CANONICAL_ROLES = ["owner", "member"];
+// Canonical roles (convention from db/schema.ts; the app's copy of this list
+// is ROLES in lib/roles.ts — a bare-Node script cannot import that, so this
+// second copy exists by necessity and the two are kept in step by hand):
+//   "owner"     = SAAS operator (admin)
+//   "moderator" = trusted member who keeps community rooms clean — NOT an admin
+//   "member"    = regular customer
+export const CANONICAL_ROLES = ["owner", "moderator", "member"];
 
 // Friendly aliases → canonical. That way both --role owner and --role admin
 // work (member/user likewise), without mixing two vocabularies in the code.
+// "moderator" has no alias: nothing shorter is a name anybody reaches for.
 const ROLE_ALIASES = { admin: "owner", user: "member" };
 
 /**
  * Normalises a role input to a canonical role.
- * @returns "owner" | "member", or null for invalid input.
+ * @returns one of CANONICAL_ROLES, or null for invalid input.
  */
 export function resolveRole(input) {
   if (input == null || input === true) return null;

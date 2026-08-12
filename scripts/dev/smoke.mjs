@@ -29,8 +29,15 @@
 //   - deployed (--url): the smoke MEMBER, via the real password sign-in —
 //     provisioned once with `node run.mjs smoke-account`. Owner-only pages
 //     answer a member with a redirect, so remotely they count as redirects,
-//     never as rendered. The log check below is local-only too. A remote run
-//     is therefore the smaller half of smoke — run it locally as well.
+//     never as rendered. A remote run is therefore the smaller half of smoke —
+//     run it locally as well.
+//
+// The LOG check now runs on both. Locally it reads `.dev/dev.log` around the
+// sweep; remotely it asks the deployed app for its own bounded, redacted stderr
+// window over `DIAGNOSTICS_SECRET` (lib/diagnostics/capture.ts) — same parser,
+// same verdict. Where no secret resolves for that host, it says so and names
+// the command that would run it. Browser-side errors are in neither remote
+// answer: `[browser] …` is a dev-server channel.
 //
 // Either pass can be unavailable — and then it SAYS SO, in one line, with the
 // reason. A sweep that quietly stopped being signed in would report green
@@ -48,10 +55,20 @@
 // the error to stderr and renders the raw value into the cell. The page is 200
 // and visibly wrong. So the log is read around the sweep, and anything that
 // appeared in it counts (scripts/dev/log-errors.mjs).
-import { readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+// ⚠️ **This script reads `process.env.APP_URL` raw and needs the `.env` loaded
+// for that and for the diagnostics secret below.** It used to have no
+// `lib/env.mjs` import at all and worked by accident: `errors-remote.mjs`
+// side-effect-imports it. Written down here rather than left as an accident,
+// because somebody reordering imports would take the `.env` with them and the
+// remote log check would go quiet without a word.
+import "../lib/env.mjs";
+
 import { findErrors, markLog } from "./log-errors.mjs";
+import { diagnosticsCredentials, readRemoteFindings, describeWindow } from "./errors-remote.mjs";
+import { collectPageRoutes } from "./routes.mjs";
+import { renderFindings } from "../../lib/diagnostics/parse.mjs";
 import { signInAsOwner, signInAsSmokeMember } from "./sign-in.mjs";
+import { runModuleSmoke } from "../modules/inventory.mjs";
 
 const args = process.argv.slice(2);
 const wantSignedIn = !args.includes("--no-signed-in");
@@ -61,42 +78,11 @@ const baseUrl = (
     : process.env.APP_URL || "http://localhost:3000"
 ).replace(/\/$/, "");
 
-/**
- * Collects the static routes from the app/ directory.
- *
- * Deliberately skipped:
- *   [param]  — dynamic segments; not sensibly callable without a real ID
- *   (group)  — route groups, which do not show up in the URL
- *   api/     — not pages; those have tests of their own
- */
-function collectRoutes(dir = "app", urlPath = "") {
-  const found = [];
-  let entries;
-  try {
-    entries = readdirSync(dir);
-  } catch {
-    return found;
-  }
-
-  if (entries.includes("page.tsx") || entries.includes("page.jsx")) {
-    found.push(urlPath === "" ? "/" : urlPath);
-  }
-
-  for (const entry of entries) {
-    const full = join(dir, entry);
-    if (!statSync(full).isDirectory()) continue;
-    if (entry === "api" || entry.startsWith("_")) continue;
-    if (entry.startsWith("[")) continue; // dynamic — no real ID at hand
-    if (entry.startsWith("(")) {
-      found.push(...collectRoutes(full, urlPath)); // group: URL unchanged
-      continue;
-    }
-    found.push(...collectRoutes(full, `${urlPath}/${entry}`));
-  }
-  return found;
-}
-
-const routes = [...new Set(collectRoutes())].sort();
+// What counts as a page is `scripts/dev/routes.mjs` — the same walk the security
+// check's `live` rung uses, so the sweep and the rung can never disagree about
+// which pages this app has. The de-duplication, the sort and the refusal below
+// stay HERE: they are this sweep's behaviour, not the walker's.
+const routes = [...new Set(collectPageRoutes())].sort();
 if (routes.length === 0) {
   console.error("✗ No pages found under app/ — start from the project root.");
   process.exit(1);
@@ -104,12 +90,34 @@ if (routes.length === 0) {
 
 console.log(`Checking ${routes.length} page(s) on ${baseUrl}\n`);
 
-// The log only exists for a dev server on this machine. `node run.mjs smoke`
-// always passes --url (so that it cannot green-light another project answering
-// on 3000), which is why the test is "is this host local", not "was --url given".
+// The FILE log only exists for a dev server on this machine. `node run.mjs
+// smoke` always passes --url (so that it cannot green-light another project
+// answering on 3000), which is why the test is "is this host local", not "was
+// --url given".
 const isLocal = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::|\/|$)/.test(baseUrl);
 // Taken before the first request: everything after this mark was caused by us.
 const logMark = isLocal ? markLog() : 0;
+
+/**
+ * The remote twin of `markLog()`.
+ *
+ * A deployed app has no `.dev/dev.log` — it keeps a bounded, redacted window of
+ * its own stderr instead (`lib/diagnostics/capture.ts`). Taking its `seq` before
+ * the sweep and asking with `after=<seq>` afterwards gives the errors THIS
+ * sweep caused, exactly as the file offset does locally.
+ *
+ * Where no secret resolves for this host, the answer is a reason — never a
+ * silent pass. It is printed at the end, next to the findings it stands in for.
+ */
+async function markRemote() {
+  const credentials = diagnosticsCredentials(process.env, baseUrl);
+  if (credentials.reason) return { reason: credentials.reason };
+  const body = await readRemoteFindings({ baseUrl, secret: credentials.secret });
+  if (!body.ok) return { reason: body.reason };
+  return { secret: credentials.secret, seq: body.seq };
+}
+
+const remoteMark = isLocal ? null : await markRemote();
 
 let failures = 0;
 
@@ -167,11 +175,96 @@ async function callPage(route, cookie = "") {
   }
 }
 
+/**
+ * The web app manifest and its icons, called the way a browser calls them.
+ *
+ * Why this is not part of the page sweep: `/manifest.webmanifest` comes out of
+ * `app/manifest.ts`, a Next FILE CONVENTION — there is no `page.tsx` for it, so
+ * `collectRoutes()` cannot see it, and adding it there would be a lie about
+ * what that function walks.
+ *
+ * It earns its own call because it is the one thing in this app whose failure is
+ * completely invisible from the inside: `npm run build` stays green, every page
+ * renders, and the only symptom is on somebody's phone — no offer to install,
+ * or an icon showing the browser's default glyph. The failures this catches are
+ * real deploy shapes: an image built without `public/`, a bucket that never got
+ * the icons, a new domain the manifest does not know it is on.
+ *
+ * Called WITHOUT a cookie, deliberately. A browser fetches the manifest before
+ * anybody is signed in, and on iOS while the user is standing in the share
+ * sheet — a manifest that answers 307 to /login is an app that cannot be
+ * installed at all.
+ */
+async function callManifest() {
+  const url = `${baseUrl}/manifest.webmanifest`;
+  let manifest;
+  try {
+    const answer = await fetch(url, { redirect: "manual" });
+    if (answer.status !== 200) {
+      failures++;
+      console.log(
+        `  ✗ ${answer.status}  /manifest.webmanifest — must answer 200 without a session`,
+      );
+      return;
+    }
+    const type = answer.headers.get("content-type") ?? "";
+    if (!type.includes("manifest+json")) {
+      failures++;
+      console.log(`  ✗ 200  /manifest.webmanifest — content-type is "${type}"`);
+      return;
+    }
+    manifest = await answer.json();
+  } catch (err) {
+    failures++;
+    console.log(`  ✗ ---  /manifest.webmanifest — ${err.message}`);
+    return;
+  }
+
+  const icons = Array.isArray(manifest.icons) ? manifest.icons : [];
+  if (icons.length === 0 || !manifest.start_url || !manifest.display) {
+    failures++;
+    console.log("  ✗ 200  /manifest.webmanifest — no icons, start_url or display in it");
+    return;
+  }
+
+  let broken = 0;
+  for (const icon of icons) {
+    try {
+      const answer = await fetch(`${baseUrl}${icon.src}`, { redirect: "manual" });
+      const type = answer.headers.get("content-type") ?? "";
+      if (answer.status !== 200 || !type.startsWith("image/")) {
+        broken++;
+        console.log(`  ✗ ${answer.status}  ${icon.src} — declared in the manifest ("${type}")`);
+      }
+    } catch (err) {
+      broken++;
+      console.log(`  ✗ ---  ${icon.src} — ${err.message}`);
+    }
+  }
+
+  // `related_applications` is what `navigator.getInstalledRelatedApps()` matches
+  // against, and a wrong origin there is not a broken link — it is a silent
+  // empty answer, i.e. an install hint that never goes away with nothing saying
+  // why. It only ever shows up on a domain nobody tested on, which is this one.
+  const related = manifest.related_applications?.[0]?.url ?? "";
+  if (!related.startsWith(`${baseUrl}/`)) {
+    broken++;
+    console.log(
+      `  ✗ 200  /manifest.webmanifest — related_applications points at "${related}",\n` +
+        `         not at ${baseUrl}; "is it already installed?" will never be answered`,
+    );
+  }
+
+  failures += broken;
+  if (broken === 0) console.log(`  ✓ 200  /manifest.webmanifest (${icons.length} icons)`);
+}
+
 const gated = [];
 for (const route of routes) {
   const { toLogin } = await callPage(route);
   if (toLogin) gated.push(route);
 }
+await callManifest();
 
 // ── the second pass ─────────────────────────────────────────────────────────
 // Locally as the owner (development login), remotely as the smoke member (the
@@ -182,7 +275,10 @@ let signedInPages = 0;
 if (gated.length > 0 && wantSignedIn) {
   const session = isLocal ? await signInAsOwner(baseUrl) : await signInAsSmokeMember(baseUrl);
   if (session.skipped) {
-    console.log(`\n·  ${gated.length} protected page(s) NOT checked — ${session.reason}`);
+    console.log(
+      `\n·  ${gated.length} protected page(s) NOT checked — ${session.reason}; ` +
+        "the community-off 404 assertion did not run either",
+    );
   } else {
     console.log(
       `\nSigned in as ${session.as} (${session.role}) — the ${gated.length} protected page(s) again:\n`,
@@ -192,9 +288,28 @@ if (gated.length > 0 && wantSignedIn) {
     }
     for (const route of gated) await callPage(route, session.cookie);
     signedInPages = gated.length;
+
+    // Whatever an INSTALLED MODULE claims about the running app. A module
+    // declaring `smoke` in its manifest ships an `assert(context)` that returns
+    // its own failure count, and this loop is the only way such a claim runs.
+    //
+    // ⚠️ There used to be a second call above this one, naming the community's
+    // off-state assertion (AD-67) by importing `./smoke-community.mjs`. That was
+    // the sweep's one feature-specific claim, and it survived the community's
+    // move into `modules/community/` as a dangling import — the whole script
+    // died with ERR_MODULE_NOT_FOUND before it called a single page. Nothing
+    // caught it: `smoke` is the tool that finds what tests cannot, so nothing
+    // tests `smoke`. The claim did not go away; it is `modules/community/smoke.mjs`
+    // and this loop runs it. Whoever adds the next feature-specific assertion
+    // puts it in the module it belongs to — a core sweep that names one optional
+    // feature is a core sweep that breaks when that feature moves.
+    failures += await runModuleSmoke({ baseUrl, cookie: session.cookie, isLocal });
   }
 } else if (gated.length > 0) {
-  console.log(`\n·  ${gated.length} protected page(s) NOT checked — --no-signed-in`);
+  console.log(
+    `\n·  ${gated.length} protected page(s) NOT checked — --no-signed-in; ` +
+      "no installed module's own smoke claim ran either",
+  );
 }
 
 if (failures > 0) {
@@ -228,9 +343,42 @@ if (isLocal) {
     process.exit(1);
   }
   console.log("✓ Nothing in the log either.");
-} else {
+} else if (remoteMark?.reason) {
+  // The skip that says it skipped. This branch used to read "that check exists
+  // only for the local app, so a 200 with an error behind it passes here" — it
+  // does not any more, and a sentence saying a check does not exist is worse
+  // than one saying it did not run, because it stops anybody looking for a way
+  // to run it.
   console.log(
-    "·  the server log was not read — that check exists only for the local app,\n" +
-      "   so a 200 with an error behind it passes here. Run smoke locally too.",
+    `·  the deployed app's log was NOT read — ${remoteMark.reason}\n` +
+      "   so a 200 with an error behind it passes here. Set DIAGNOSTICS_SECRET in the\n" +
+      `   host's secrets and in your .env, then: node run.mjs errors --url ${baseUrl}`,
   );
+} else if (remoteMark) {
+  const body = await readRemoteFindings({
+    baseUrl,
+    secret: remoteMark.secret,
+    after: remoteMark.seq,
+  });
+  if (!body.ok) {
+    console.log(
+      `·  the deployed app's log was NOT read — ${body.reason}\n` +
+        `   Ask it directly: node run.mjs errors --url ${baseUrl}`,
+    );
+  } else if (body.findings.length > 0) {
+    console.error(
+      `\n✗ …but the deployed app logged ${body.findings.length} error(s) while they were ` +
+        "being called:\n",
+    );
+    const { head, body: lines, tail } = renderFindings(body.findings, {
+      source: describeWindow(body),
+      logHint:
+        "The full context, with stack traces, is in the HOST's own log — this app keeps only\n" +
+        "a bounded, redacted window of it and cannot read the host's.",
+    });
+    for (const line of [...head, ...lines, ...tail]) console.error(line);
+    process.exit(1);
+  } else {
+    console.log(`✓ Nothing ${describeWindow(body)} either.`);
+  }
 }

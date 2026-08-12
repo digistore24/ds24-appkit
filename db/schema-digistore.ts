@@ -25,7 +25,7 @@ import {
   unique,
   index,
 } from "drizzle-orm/pg-core";
-import { users } from "./schema";
+import { users } from "./schema-core";
 
 // Status machine of an order, driven by Digistore24 IPN events.
 export const orderStatusEnum = pgEnum("order_status", [

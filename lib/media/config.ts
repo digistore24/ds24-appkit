@@ -3,7 +3,7 @@
 
 // `config/media.json`, read once and defaulted field by field.
 //
-// The same five-part shape as `lib/mcp/config.ts` and `lib/ai/chat-config.ts`:
+// The same five-part shape as `lib/api/config.ts` and `lib/ai/chat-config.ts`:
 // a typed interface, a default that is safe, coercion helpers, one reader, and
 // a `…Problems()` function a test fails the build on. Read it through
 // `mediaConfig()` and never by importing the JSON somewhere else — a second
@@ -72,6 +72,16 @@ export const DEFAULT_MEDIA_CONFIG: MediaConfig = {
   },
   mayUpload: {
     member: ["image/jpeg", "image/png", "image/webp", "application/pdf"],
+    // A moderator uploads exactly what a member uploads, and this entry is not
+    // optional politeness: `refuseUpload()` reads `mayUpload[role] ?? []`, so a
+    // role missing from this table cannot upload ANYTHING — not their own
+    // avatar, not a PDF. Leaving it out would mean promoting somebody to a role
+    // the app calls "a member the operator trusts" silently takes away a
+    // capability every plain member has, and the refusal a customer would read
+    // is `notAllowedForRole`, which points at nothing they can act on.
+    // Moderating rooms is not a reason to hand out the operator's archive
+    // types, so this is the member list, deliberately, and not the owner's.
+    moderator: ["image/jpeg", "image/png", "image/webp", "application/pdf"],
     owner: [
       "image/jpeg",
       "image/png",
@@ -90,10 +100,14 @@ export const DEFAULT_MEDIA_CONFIG: MediaConfig = {
 /**
  * A bounded number.
  *
- * The upper bound is not decoration. `maxBytes` of a gigabyte is not a
- * configuration, it is a route handler that runs the process out of memory on
- * one request — the bytes are buffered to be checked and stripped. Whoever
- * genuinely needs that needs the direct-to-bucket path instead.
+ * The upper bound is a **typo brake**, and no longer the thing that keeps a
+ * route handler from running the process out of memory — that is
+ * `routeCeilingBytes()` at the door, since a kind may now legitimately declare
+ * gigabytes for the direct-to-bucket path. What it still catches is a digit too
+ * many in `config/media.json`. ⚠️ It CLAMPS rather than refusing, which is
+ * exactly why `MAX_BYTES_CEILING` below carries its own reasoning and
+ * `config.test.ts` checks every declared ceiling against the file: a clamp
+ * nobody notices is how 2 GB silently ran as 200 MB.
  */
 function count(value: unknown, fallback: number, max: number): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return fallback;
@@ -115,7 +129,25 @@ function mimeList(value: unknown, fallback: readonly string[]): readonly string[
     .map((item) => item.trim().toLowerCase());
 }
 
-const MAX_BYTES_CEILING = 200 * 1024 * 1024;
+/**
+ * The largest `maxBytes` this file will believe — a typo brake, not a policy.
+ *
+ * ⚠️ **`count()` CLAMPS, it does not refuse**, so this number silently wins
+ * over anything larger in `config/media.json`. It sat at 200 MB with no comment
+ * from the day uploads only ever travelled through the app, where the real
+ * limit was a tenth of that anyway and nobody could reach it. Story 8.1 gave
+ * the app a second way in, `video.maxBytes` became 2 GB — and the clamp turned
+ * that into 200 MB without a word anywhere, which is the exact shape of failure
+ * this template writes tests about.
+ *
+ * 5 GB because that is where the physics is: a single presigned `PUT` tops out
+ * there at every major provider, and going past it needs multipart uploads,
+ * which bring their own abandoned-upload state and their own sweep. So the
+ * brake now sits at the first real wall instead of at an arbitrary number, and
+ * `config.test.ts` asserts the shipped video ceiling survives it — a clamp that
+ * quietly eats a configured value is only safe while something notices.
+ */
+const MAX_BYTES_CEILING = 5 * 1024 * 1024 * 1024;
 
 export function mediaConfig(): MediaConfig {
   const file = raw as Record<string, unknown>;
@@ -222,7 +254,7 @@ export function mediaConfigProblems(): string[] {
  * script. **`hasPlan()` throws on an unknown Product Key**, so an unchecked key
  * does not mean "no access", it means the page that renders the item is a 500.
  * That is the trap this function exists for, and it is the same refusal
- * `mcpConfigProblems()` makes for the same reason.
+ * `apiConfigProblems()` makes for the same reason.
  */
 export function planProblem(productKey: string): string | null {
   const plan = allProducts().find((p) => p.key === productKey);

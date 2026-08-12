@@ -1,372 +1,188 @@
 ---
 name: setup-digistore
-description: Sets up Digistore24 billing for the app — fetch the API key into the `.env` via `node run.mjs ds24-connect`, then create products with `node run.mjs ds24-sync` and register the IPN connection (webhook + SHA512 passphrase) via API, test the connection and generate checkout links. The agent runs the commands itself. Use this as soon as the app is meant to receive sales or process completed purchases.
+description: Sets up Digistore24 billing — the API key, the products, the IPN connection (webhook + SHA512 passphrase) and the checkout links; the agent runs the commands itself (`ds24-connect`, `ds24-sync`). Use this as soon as the app is meant to receive sales or process completed purchases, and when the user says "somebody paid and the app knows nothing about it", "a test purchase never arrives", "connect Digistore24", or asks for a checkout link.
 requires: 0.14.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
 # Setting up Digistore24 billing
 
-The entire Digistore integration is ready to use in `lib/digistore/` and
-`app/api/ipn/route.ts`. You set up the billing **yourself** — you don't merely
-explain it to the user. You don't rewrite the integration.
+The integration is already built (`lib/digistore/`, `app/api/ipn/route.ts`) and the
+reference behind every step below is
+[`docs/digistore-integration.md`](../../../docs/digistore-integration.md). **Read
+it once before step 1**: this file is the ORDER of the work, never a second copy of
+the mechanics.
 
 ## You do this — not the user
 
-You call the commands below through your Bash tool. Do *not* tell the user to
-type `make …` or `! make …` — most users are not developers and wouldn't know
-what to do with that.
+You set the billing up yourself and you do not rewrite the integration: you call
+the commands through your Bash tool, and you never hand the user a `make …` or a
+`! node run.mjs …` line — most of them are not developers.
 
 **Never say that you "cannot obtain" the API key or the products for the user.**
-That is wrong: the commands exist for exactly that purpose.
-
-- **Obtain the API key** → you call `node run.mjs ds24-connect` (fetches the operator's
-  key and writes it into the `.env`).
-- **Create products + IPN** → you call `node run.mjs ds24-sync` (creates
-  the plans from `config/digistore-products.json` at Digistore24 — one product
-  per plan **and language** — writes the ids back and registers the IPN
-  connection via API). Product IDs are
-  **nothing the user has to obtain** — the app brings the plans with it, the
-  script generates the IDs.
-
-The **only** step that necessarily stays with the user is one click: the
-authorization in the browser at Digistore24 (the authorization itself — no tool
-can click that away for them). Everything else you do.
-
-## First: is the operator the only vendor?
-
-Almost always yes, and then everything below applies unchanged: **one** Digistore24
-account per installation, the key in the `.env`, the operator gets paid. That is
-what this template is built as.
-
-Ask the other question only when it is genuinely open — **does anybody other than
-the operator get paid?** If the app's own users are meant to sell to *their*
-customers (a course platform, a booking tool for coaches, a shop builder), that
-is the **platform** shape: each user connects their own Digistore24 account, and
-you need a **Developer** API key of your own. It is not a setting and it is not
-built here — the API key, the IPN passphrase, the product ids and the order table
-all become per-tenant. **Do not start building it from memory:**
-`docs/digistore-integration.md` carries both shapes and the full design for the
-platform one, including the two mistakes that cost money (a checkout URL cached
-across tenants, and attribution taken from the payload instead of the
-connection).
-
-Do not raise the question unprompted with a user who simply wants to sell their
-own app, and do not build the platform shape "just in case".
+That is wrong: the commands exist for exactly that purpose, and product ids are
+**nothing anybody has to fetch**. The **only** step that necessarily stays with
+the user is one click: the authorization in the browser at Digistore24.
 
 ## How the billing works
 
-Digistore24 is the payment provider. Your app doesn't handle any money, it
-**reacts to events** from Digistore24:
+Digistore24 is the payment provider and the app touches no money — it **reacts to
+events**. A purchase arrives as the IPN event `on_payment`, is attributed to a
+Member out of `tracking[custom]` and recorded; refunds, chargebacks and missed
+subscription payments update that record, and every event is idempotent.
 
-- Purchase → IPN event `on_payment` → the payload's `tracking[custom]` is parsed
-(`m:<memberId>;t:<checkoutToken>;p:<productKey>;k:<kind>`), the payment is
-attributed to a Member — the identity first, the buyer email only as an
-unauthenticated fallback, ambiguity refused — and a row is written to `orders`
-with `memberId`, `productKey`, `credits`, `ds24PurchaseId` and status `paid`.
-**An unattributed payment is recorded but never credited**; it is credited when
-the buyer first signs in, or when the operator attaches it under
-`/dashboard/admin/purchases`.
-- Refund/chargeback/missed subscription payment → status gets updated.
-- Every order is unique via `ds24OrderId` (idempotent).
+🚨 **The IPN is what grants access, never the billing row.** The event is the
+authority, the row is the record — ask `hasPlan(memberId, productKey)` when you need
+to know what somebody may use, and set no status by hand. The events, the payload,
+the attribution rules and what an unattributed payment does are
+*The IPN* and *What "one vendor" means in the code* in that reference.
 
-## Setup steps (guide the user through these)
+## 0. Is the operator the only vendor — and is this already done?
 
-The credentials are fetched **in the terminal**, not in the app. There is
-deliberately no interface for entering or generating a key.
+The vendor question first, and almost always the answer is yes — then everything
+below applies unchanged: **one** Digistore24 account per installation, the key in
+the `.env`, the operator gets paid.
 
-1. **Connect the API key.** **Run `node run.mjs ds24-connect` yourself** (your Bash
-   tool) — do *not* ask the user to type `! node run.mjs ds24-connect`. Most users are
-   not developers and wouldn't know what to do with a command like that; your
-   job is to run it for them.
+Ask the other question only when it is genuinely open — **does anybody other than
+the operator get paid?** If the app's own users are meant to sell to *their*
+customers (a course platform, a booking tool for coaches, a shop builder), that is
+the **platform** shape: not a setting, not built here, and not something to start
+from memory or to build "just in case". Both shapes, and the full design of the
+platform one including the two mistakes that cost money, are *Pick the shape first*
+and *Shape B* in that reference. Do not raise it unprompted with somebody who simply
+wants to sell their own app.
 
-   This is how you go about it:
-   - Tell the user **beforehand** in one sentence what is about to happen: "I'm
-     now establishing the connection to Digistore24. Your browser will open in a
-     moment — sign in to Digistore24 there and confirm the access. I'll take
-     care of the rest."
-   - Then call `node run.mjs ds24-connect`. Choose a **generous timeout (10 minutes /
-     600000 ms)**, because the script waits until the user has granted access in
-     the browser (it gives up after 8 min).
-   - The script opens the authorization page and then asks Digistore24 every
-     couple of seconds whether the approval has happened — it does **not** wait
-     for anything to be delivered to this machine. Once it has, it fetches the
-     key and writes `DIGISTORE_API_KEY` into the `.env` — plus
-     `DIGISTORE_IPN_PASSPHRASE`, if Digistore24 supplies it. For checkout links
-     a **`writable`** key is required (the script's default requirement).
-   - **Never open a second web server for this, and never suggest one.** The
-     script used to, on a high port, for that one redirect back — and it was
-     regularly already gone by the time the user finished clicking, so the
-     browser said "this page cannot be loaded" while the approval had gone
-     through fine. The app's own server is running anyway; that is the one that
-     is used.
-   - If **no** browser opens (headless/remote), the script prints the URL as
-     text — pass it on to the user to click.
-   - Once the call has finished with `✓ DIGISTORE_API_KEY saved in .env`,
-     confirm that to the user and continue with step 2.
+**Then look before you run anything:** with `DIGISTORE_API_KEY` in the `.env` and ids
+already in `config/digistore-products.json` for this environment, this skill is done
+— say so and go to **Next step**.
 
-   - Digistore24 does not accept `localhost` as a `return_url` — not as a
-     `site_url` either. That's why both run through the public redirect page
-     (`https://ds24-appkit.com/redir/?port=3000&path=/ds24-connected`),
-     which sends the browser back to `http://localhost:<port>/ds24-connected` —
-     a page of the app itself (`app/ds24-connected/page.tsx`). Neither that page
-     nor the redirect ever sees the API key; the script fetches it directly from
-     Digistore24. The address is hard-wired in `lib/digistore/config.mjs`;
-     `--no-relay` uses localhost directly (only on test hosts).
-   - **The app does not have to be running.** The landing page is a courtesy for
-     whoever is looking at the browser — the key arrives in the terminal either
-     way. If the user reports that the page after the approval did not load, do
-     **not** treat that as a failed setup: read the terminal output, which says
-     `✓ Approval received.` and then `✓ DIGISTORE_API_KEY saved in .env`.
-   - Flags: `--print` only displays the key without saving it; `--port <n>` says
-     which port the app runs on, for the rare case the script guesses wrong
-     (normally it takes `APP_URL` from the `.env`). `--manual` asks for a key you
-     created yourself (Digistore24 → Settings → API) — that needs a keyboard
-     entry and is the **emergency route** for when the user runs the command
-     themselves in the terminal; you yourself always use the automatic route
-     (without `--manual`).
-2. **Create products and IPN.** **Run `node run.mjs ds24-sync` yourself.**
-   One command, idempotent, does both:
-   - **Products:** reads the plans from `config/digistore-products.json` (the
-     source of truth that also feeds `/plans`), creates each one at Digistore24
-     or updates it and writes the ids back into the config.
+## 1. Connect the API key — `node run.mjs ds24-connect`
 
-     **One product set per ENVIRONMENT.** `--env dev|staging|prod` says which
-     set a run maintains; without the flag it follows `APP_ENV`, so here — on
-     the user's machine — a plain `ds24-sync` creates the **DEV set**: its
-     product names visibly carry ` [DEV]`, its ids land in `productIds.dev`,
-     and the live set stays untouched. That is the right set for this skill —
-     the prod set is a go-live step (`--env prod`, skill `go-live`), and
-     staging is optional (most apps go dev → prod, fine as long as they test;
-     see `docs/environments.md`). All of the app's products are collected in
-     one Digistore24 product group (folder), created on the first sync and
-     recorded in the registry (`productGroupId`) — tell the user that is where
-     to look in their DS24 backend.
+Run it yourself, in this order:
 
-     **One Digistore24 product per plan AND language.** A DS24 product carries
-     exactly one language, and that language is the language of the **order
-     form** the buyer fills in — `createBuyUrl` cannot override it. So a
-     bilingual app needs two products per plan, declared as
-     `"productIds": { "dev": { "de": null, "en": null }, "prod": … }`, and the
-     visitor's locale decides which one their checkout goes to. **Read the
-     sync's warnings out loud to the user**: a plan missing a language still
-     sells, but those buyers get an order form in the wrong language, and
-     nothing else in the app will ever mention it.
-   - **IPN connection:** registers the webhook `…/api/ipn` **via API** directly
-     at Digistore24 (`ipnSetup`) — the user has to enter **nothing** in the DS24
-     interface for that. The SHA512 passphrase is generated in the process and
-     written into the `.env` as `DIGISTORE_IPN_PASSPHRASE`; a stable
-     `DIGISTORE_IPN_DOMAIN_ID` keeps the connection idempotent across runs.
-     The same call is the update — Digistore24 looks a connection up by
-     (merchant, API key, `domain_id`) and updates the one it finds.
+1. Say in **one sentence** what is about to happen: *"I'm establishing the
+   connection to Digistore24 now. Your browser will open in a moment — sign in
+   there and confirm the access; I'll take care of the rest."* Where the greeting
+   says `[Machine: no browser here]`, promise the other thing: *"I'll give you a
+   link in a moment — open it and confirm there; I'll wait."*
+2. **Say which account this will connect, because the script cannot.** It is
+   whichever Digistore24 account is signed in in that browser at the moment of
+   confirming, no choice is offered, and nothing afterwards reports the name back —
+   somebody with two accounts otherwise finds out weeks later, when the products
+   turn up in the wrong one.
+3. Call it with a **generous timeout (10 minutes / 600000 ms)**: the script polls
+   Digistore24 until the approval has happened, and gives up after 8 minutes.
+4. Stop on `✓ DIGISTORE_API_KEY saved in .env`, confirm that to the user, and go
+   to step 2.
 
-   - **Two things about that registration are worth knowing, because both fail
-     silently when they are wrong** (full version in
-     `docs/digistore-integration.md`):
-     - **The `domain_id` has to be UNIQUE, not just stable.** A generic value —
-       `test-local-1`, `local-app` — is a collision with the user's own other
-       project: the second sync overwrites the first project's connection, and
-       that project's purchases arrive nowhere afterwards. The script puts a
-       random tail on every id it derives (`local-my-app-diw2hvnz73`). **If you
-       ever set one by hand (`--domain`), put random characters in it yourself.**
-     - **`product_ids` says which products the connection covers** (comma
-       separated, `111,222,333`; Digistore24's default is `all`). `ds24-sync`
-       sends the ids of the environment being synced (out of
-       `config/digistore-products.json`), so the connection stays on this
-       app's products AND this environment's — a dev purchase reports to your
-       machine, a live purchase to the live app, in the same vendor account.
-       `all` is safe too (an unknown product is recorded and grants nothing),
-       it just does not separate. Force either with
-       `node run.mjs ds24-ipn --auto --products 111,222 --apply`.
+**The one failure that must not be misread: the app does not have to be running,
+so the landing page after the approval failing to load is NOT a failed setup.**
+The key arrives in the terminal either way — read the output, which says
+`✓ Approval received.` and then `✓ DIGISTORE_API_KEY saved in .env`. What to do
+when no browser opens at all, and the route for a user who has neither a browser
+nor a terminal, are both [`docs/machine.md`](../../../docs/machine.md).
 
-   Only needs the `DIGISTORE_API_KEY` from step 1, no browser, no user input.
-   `node run.mjs ds24-sync` **applies** — a preview that changes nothing is
-   `node run.mjs ds24-sync --dry-run`.
+Why the flow looks like this — the developer key, the polling, why there is never a
+local web server, why a `localhost` address travels through the public redirect
+page — is
+[`docs/digistore-integration.md`](../../../docs/digistore-integration.md) →
+*How an API key comes into being* and *Localhost URLs travel through the redirect*.
+The flags are [`references/one-off-setup.md`](references/one-off-setup.md).
 
-   - **The thank-you page goes through the redirect while you develop.**
-     Digistore24 stores public https URLs only, so `http://localhost:3000/optin/…`
-     is handed over as
-     `https://ds24-appkit.com/redir/?port=3000&path=/optin/[ORDER_ID]`
-     — the buyer's browser is sent back to the local app from there. This is
-     automatic (`scripts/ds24/_public-url.mjs`, `lib/digistore/public-url.ts`).
-     If the user asks why a foreign domain is on their product: that is why, and
-     it disappears by itself as soon as `APP_URL` is a real domain.
-   - **IPN needs a public https URL** (Digistore24 calls it to verify it —
-     localhost doesn't work, and the redirect above does not help here: it needs
-     a browser, and the IPN is a server-to-server call). The IPN part follows
-     `APP_URL`:
-     - If `APP_URL` is a public https domain (live), the IPN gets set up on it.
-     - Otherwise (local development) `ds24-sync` **opens a free Cloudflare Quick
-       Tunnel by itself**, registers it as the IPN address and prints what it
-       did. Nothing else to do — a local purchase works right away. The tunnel
-       runs in the background; `node run.mjs status` shows it, `node run.mjs stop` ends it.
-       **Tell the user their machine is reachable from the internet while it
-       runs** — they must not learn that from a log line later.
-     - It only skips when it truly cannot: app not running, or `cloudflared`
-       not installed (the message names which). That is not an error in the
-       sync — the products are done. Fix what it named and run it again.
-     - `node run.mjs ds24-tunnel` does the same on its own, without touching products.
-     - Do not set `APP_URL` to the tunnel address: that switches off the
-       development login and locks the user out of their own app.
-   - Prices do **not** belong on the DS24 product: the API discards
-     `data[amount]` ("*is deprecated — create a payment plan instead*").
-     `priceCents` and `billingInterval` go along at checkout as
-     `payment_plan[...]` instead (`lib/digistore/checkout.ts`). So **no**
-     payment plans are needed in the DS24 interface.
-   - There *is* a `createPaymentPlan` API — we deliberately do not use it. A
-     stored plan would put the price in a second place, and it cannot do free
-     trials, upgrades/downgrades, vouchers or per-link affiliate commissions.
-     Those only work when the plan travels with the checkout call. If the user
-     asks why: one price, one place.
-   - If the bundled plan list doesn't fit the user's product yet, edit
-     `config/digistore-products.json` first (one entry per plan), then sync.
-     Don't create a second price list in the code.
-3. **Check the connection:** as soon as the IPN is set up, the user can trigger
-   "Test connection" in Digistore24. A validly signed IPN is answered with
-   `200`; with an invalid signature it's `403`.
+## 2. Create products and the IPN — `node run.mjs ds24-sync`
 
-   **On a `403`, do not start guessing** — `node run.mjs ds24-ipn-verify` answers
-   it. The IPN log keeps the raw body of every call, so the script recomputes the
-   signature over exactly what arrived: once with our canonical rule
-   (`lib/digistore/ipn.ts`) and once with each known variant. The variant that
-   matches names the rule Digistore24 actually used; if none matches, the
-   passphrase is the suspect and not the code. `--order ABC123` picks a specific
-   purchase, `--all` walks every rejected one.
+One command, idempotent, and it **applies** — the preview is
+`node run.mjs ds24-sync --dry-run`. It creates or updates the plans from
+`config/digistore-products.json`, writes the ids back, and registers the webhook
+`…/api/ipn` **via API** with its SHA512 passphrase: the user enters **nothing** in
+the Digistore24 interface.
 
-   **"The purchase went through and nothing happened in the app" is a different
-   sentence, and you can answer it yourself** — do not ask the user to look in
-   their Digistore24 backoffice:
+Four things to do while it runs, and only the first is a command:
 
-   ```bash
-   node run.mjs ds24-purchase --order ABC12345      # --json for the full payload
-   ```
+- **Run it plain.** Without `--env` it follows `APP_ENV`, so on the user's machine
+  it maintains the **DEV** set and the live set stays untouched. The prod set is a
+  go-live step (`go-live`), staging is optional:
+  [`docs/environments.md`](../../../docs/environments.md).
+- 🚨 **Read the sync's warnings out loud to the user.** A plan missing a language
+  still sells, and those buyers get an order form in the wrong language, which
+  nothing else in the app will ever mention. Why, and what the registry has to look
+  like: *The order form's language* in that reference.
+- **Say that their machine is reachable from the internet** if the sync opened a
+  Cloudflare Quick Tunnel for the IPN — it does that by itself while `APP_URL` is
+  local, and they must not learn it from a log line later
+  ([`docs/environments.md`](../../../docs/environments.md)).
+- **A skipped IPN is not a failed sync** — the products are done. It skips only when
+  it truly cannot (app not running, `cloudflared` missing) and names which; fix that
+  and run it again.
 
-   `getPurchase` returns Digistore24's own view of that order — status, product,
-   buyer, billing type, next payment, invoice/cancel links. It reads only. Two
-   outcomes, two different faults:
-   - **Digistore24 does not know the id** → there was no purchase, or it was
-     made in a different vendor account than this `DIGISTORE_API_KEY`. Nothing
-     in the app is broken.
-   - **Digistore24 knows it, `/dashboard/admin/purchases` does not** → paid, and
-     no IPN reached this app. Look at the connection, in this order: is the
-     registered URL still answering (a closed tunnel is the usual cause), did
-     another project overwrite the `domain_id`, is this product in the
-     connection's `product_ids`? `node run.mjs ds24-ipn --auto --apply`
-     re-registers it.
-4. **Test a purchase from the app (before the approval):** a product sold
-   through one of the four Digistore24 **resellers** — Germany (1), USA (2),
-   UK (3), Ireland (4) — is initially **not approved**, and then only **test
-   purchases** are possible. (**A Direct Seller has no approval step at all**;
-   the whole subject does not apply to them, and nothing in this app will ask
-   them about it. See `docs/digistore-integration.md`.)
-   **In DEV that works by itself:** every checkout link the app builds
-   carries the Digistore24 test-payment parameter (fetched via the API, cached
-   in `.dev/testpay.json` — `lib/digistore/testpay.ts`). Click a plan card and
-   the checkout opens in test-payment mode, approved or not; there is nothing
-   to set up and no cookie to set. `node run.mjs ds24-testpay` shows the key,
-   `--recreate` rotates it.
-   Two things to know: the parameter **never activates outside DEV** (an
-   allowlist like the development login; hard off: `DS24_TESTPAY=off` in
-   `.env`), and the key is **account-level — treat it like a secret**. Pasted
-   onto any checkout URL of this vendor account, live ones included, it would
-   unlock test purchases there too. That is why it lives in `.dev/`
-   (gitignored) and is rotated before go-live.
-   **Outside DEV** — e.g. on a STAGING domain — the manual way remains: the
-   vendor sets the test-purchase cookie once, following this DS24 guide:
-   <https://help.digistore24.com/hc/de/articles/23901169396241>. The approval
-   (`node run.mjs ds24-approval --apply`, sets `approval_status = pending`) is
-   only requested once the product description and the app are mature — a
-   go-live step (skill `go-live`). Which marketplace it goes to follows **each
-   product's own language** in `config/digistore-products.json` (German → 1,
-   anything else → 2). Since a plan is one product per language, a bilingual
-   plan is submitted to **both** marketplaces and each gets its own verdict
-   (listed as `pro (de)` / `pro (en)`); the command's dry run prints the target
-   per product.
+If the bundled plan list does not fit the user's product yet, edit
+`config/digistore-products.json` first — one entry per plan, never a second price
+list in the code, and no prices on the Digistore24 product at all.
 
-## Generating checkout links (with cache)
+## 3. Check the connection
 
-There are **two paths**, and `/plans` uses both (`app/plans/page.tsx`):
+The user can trigger "Test connection" in Digistore24 as soon as the IPN is
+registered: a validly signed IPN is answered `200`, an invalid signature `403`.
+**Neither complaint below is a thing to guess at — each has its own command:**
 
-- **Signed in → built on click.** A button posts to a server action
-  (`app/plans/actions.ts`), which calls `ensureCheckoutToken(memberId)` and
-  then `checkoutLinkFor(def, { buyer, customTracking: buildIdentity({...}) })`.
-  The identity travels to Digistore24 in `tracking[custom]` and comes back on
-  every later event, which is how the payment finds its owner even when the
-  buyer pays under a different address. Nothing is requested from Digistore24
-  while the page renders.
-- **Signed out → the shared cached link.** `checkoutLinksFor` maps registry
-  entries onto offers, sets the thank-you URL (`/optin/[ORDER_ID]`) and returns
-  `{ url }` or `{ url: null, blocker }` so a page never renders a dead link.
+| What you hear | What you run |
+|---|---|
+| the test connection returns `403` | `node run.mjs ds24-ipn-verify` — recomputes the signature over the raw body that arrived, against every known variant (`--order ABC123`, or `--all`) |
+| "the purchase went through and nothing happened in the app" | `node run.mjs ds24-purchase --order ABC12345` — Digistore24's own read-only view of that order; do not send the user into their backoffice for it |
 
-`getOrCreateBuyUrl` (`lib/digistore/buyUrl.ts`) is the layer underneath. All of
-it needs a **`writable`** key.
+Both verdicts and what each of them means are *"The purchase worked but nothing
+happened"* in that reference. Where no IPN ever arrived,
+`node run.mjs ds24-ipn --auto --apply` re-registers the connection.
 
-⚠️ **Take one of the two paths above unless you have a reason not to — the
-layer underneath returns an UNFINISHED URL.** It does not carry the DEV
-test-payment parameter, so a checkout built by hand on `createBuyUrl` /
-`getOrCreateBuyUrl` leaves the developer with no way to make a local test
-purchase, and nothing anywhere reports a fault. If you do build your own path,
-its last step is `await withTestpayParam(url)` (`lib/digistore/testpay.ts`) —
-on the **return value**, after the cache, never inside `buyUrl.ts`, because a
-decorated URL in `buy_url_cache` is served to every visitor. The parameter
-activates in **DEV on localhost only** and the function re-checks that itself;
-never re-implement or loosen the gate, and never append the parameter by hand —
-it takes free "payments" and the key works on this vendor's live checkout URLs
-too. Full rules: `docs/digistore-createbuyurl.md`.
+## 4. Test a purchase from the app
 
-A complete custom payment plan travels with the call — one base product per
-plan is enough, price/currency/interval are decided by the app at runtime.
+**In DEV that works by itself, approved or not:** every checkout link the app
+builds carries the Digistore24 test-payment parameter, so clicking a plan card
+opens the checkout in test-payment mode — nothing to set up, no cookie to set.
+`node run.mjs ds24-testpay` shows the key, `--recreate` rotates it. It **never
+activates outside DEV**, and the key is **account-level — treat it like a
+secret**; outside DEV, on a STAGING domain, the vendor sets the test-purchase
+cookie once instead
+([`docs/digistore-createbuyurl.md`](../../../docs/digistore-createbuyurl.md) →
+*Test payments in DEV*).
 
-- URLs are **cached for 20h** per offering (table `buy_url_cache`).
-- **If the offering changes** (price, title, interval …), a new URL is generated
-  automatically (`offerHash`).
-- User-specific URLs are **never** cached: buyer/affiliate/upgrade, and any
-  URL whose `tracking[custom]` names a Member (`m:…;t:…`).
+**Approval is not this skill's job.** A product sold through one of the four
+Digistore24 resellers is unapproved at first and only test purchases work; a
+Direct Seller has no approval step at all. Requesting it
+(`node run.mjs ds24-approval --apply`) waits until the description and the app are
+mature — a go-live step, in the skill `go-live`.
 
-Details & example: `docs/digistore-createbuyurl.md`.
+## 5. Checkout links
 
-## One-off setup via script (idempotent)
+`/plans` already builds them, on **two paths** — one for a signed-in member, whose
+identity travels in `tracking[custom]` so that a later payment finds its owner, and
+one shared cached link for a visitor. Neither ever renders a dead button.
 
-Some steps don't belong in the runtime app. That's what the scripts under
-`scripts/ds24/` are for (Node ESM, dry run by default, `--apply` to execute).
-The two common ones run conveniently through `make` (see the steps above):
+⚠️ **Take one of those two unless you have a reason not to — the layer underneath
+returns an UNFINISHED URL**, without the DEV test-payment parameter, so a checkout
+built by hand on `getOrCreateBuyUrl` leaves the developer unable to buy anything
+locally and nothing reports a fault. Its last step would have to be
+`await withTestpayParam(url)` on the **return value**, after the cache. Both paths,
+that rule, the cache and the language:
+[`docs/digistore-createbuyurl.md`](../../../docs/digistore-createbuyurl.md).
 
-- **Products + IPN (the normal case):** `node run.mjs ds24-sync`.
-  Synchronizes the entire plan list from `config/digistore-products.json` for
-  ONE environment (idempotent, writes the ids back into `productIds.<env>`)
-  **and** registers that environment's IPN connection via API
-  (`ipn-setup.mjs --auto`). That is the route from step 2 — use it. This
-  target applies by itself; the preview is `node run.mjs ds24-sync --dry-run`.
-- **A single product (special case):** `node scripts/ds24/create-product.mjs
-  --saas "…" --plan "…" --apply`. Only needed if you deliberately want to
-  create a single product outside the registry; normally take `ds24-sync`.
-- **IPN on its own (special case):** `node run.mjs ds24-ipn --url
-  https://YOUR-DOMAIN/api/ipn --domain 'YOUR-DOMAIN' --apply` (idempotent via
-  the `domain_id`). Only needed if you want to set up the IPN deliberately
-  outside of `ds24-sync` or with a fixed URL/domain. DS24 generates the SHA512
-  passphrase in the process → it gets written into the `.env` as
-  `DIGISTORE_IPN_PASSPHRASE`, or pass an existing one via `--passphrase`.
-  Prerequisite: `DIGISTORE_API_KEY` in the environment.
+## 6. The one-off cases
 
-See `scripts/ds24/README.md`.
+A single product outside the registry, the IPN with a fixed URL, a flag of
+`ds24-connect`: [`references/one-off-setup.md`](references/one-off-setup.md).
 
 ## Next step
 
-Should the app bill **recurring (subscription) or by usage (prepaid tokens)**?
-Then **`billing-modes`** now — it sets up subscriptions (monthly/yearly),
-prepaid tokens with auto top-up (`createBillingOnDemand`) and the subscription
-self-service (cancel, payment details, invoices).
+**`billing-modes`** if the app should bill recurring or by usage — subscriptions
+(monthly/yearly), prepaid tokens with auto top-up (`createBillingOnDemand`) and
+the subscription self-service (cancel, payment details, invoices).
 
-Worth offering in the same breath: **`salespage`**. From this moment the app
-has real products, real prices and a working checkout — everything the home
-page needs to stop being the template's placeholder and start selling. It is
-also step one of the launch order below.
-
-After that, before the launch, in this order: **`salespage`** (the home page
-sells the product) → **`ux-gateway`** (the experience — now that there is a
-checkout, the first five minutes can be checked) → **`security-gateway`**
-(security) → **`performance-gateway`** (scaling) → **`compliance-check`**
-(legal) → **`go-live`** (putting it online) → **`go-to-market`** (marketing).
+**`salespage`** is worth offering in the same breath: from this moment the app has
+real products, real prices and a working checkout, which is everything the home
+page needs to stop being the template's placeholder. Then, before the launch:
+`salespage` → `ux-gateway` (now that there is a checkout, the first five minutes
+can be checked) → `security-gateway` → `performance-gateway` →
+`compliance-check` → `go-live` → `go-to-market`.
 
 ## Important rules
 
@@ -378,10 +194,7 @@ checkout, the first five minutes can be checked) → **`security-gateway`**
   in the hoster's secret management) and are read exclusively through
   `lib/digistore/settings.ts` — never in the code, in the repo or in logs.
   `ds24ApiKey()` throws if the key is missing; no silent fallback.
-- Field reference (IPN payload, events, createBuyUrl parameters, the API
-  functions and which key each one needs): `docs/digistore-integration.md`,
-  `docs/DEPLOY.md` and the comments in `lib/digistore/`. The authoritative
-  sources are Digistore24's own — the event/payload list at
-  <https://dev.digistore24.com/hc/en-us/articles/32480561422353-Events> and the
-  API reference at <https://www.digistore24.com/api/docs/index.html>. Look there
-  rather than guessing a field name.
+- **Look a field name up, never guess it.** The payload, the events, the
+  `createBuyUrl` parameters, which API function needs which key, and Digistore24's
+  own authoritative references:
+  [`docs/digistore-integration.md`](../../../docs/digistore-integration.md).

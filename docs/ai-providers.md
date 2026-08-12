@@ -196,7 +196,8 @@ Two worked examples of what a task can be, neither of which ships:
 
 - **Content generation** — a `content.draft` task on a cheap fast model, with
   your house style as the cacheable block. Charge the Member for it with
-  `spendTokens` (see `CLAUDE.md` → *Charging tokens*), and the margin
+  `spendTokens` (`CLAUDE.md` → *Access*; the long form is
+  [`entitlements.md`](entitlements.md)), and the margin
   between what you pay the provider and what you charge is visible as two
   numbers: the AI-costs page and the token ledger.
 - **Moderation** — a `moderation.text` task on the smallest model there is,
@@ -208,8 +209,11 @@ Two worked examples of what a task can be, neither of which ships:
 ## Working alongside your customer
 
 `companion` is the third task that ships, and it is the only one whose *shape*
-ships without a caller: `askCompanion()` in `lib/ai/companion.ts` is the
-function, and what calls it is the app you build. It exists as template code for
+ships without a caller: `askCompanion()` in `modules/companion/companion.ts` is the
+function — three lines binding this module to that task id — and what calls it
+is the app you build. The prompt it sends is assembled one layer down, in
+`lib/ai/customer-text.ts`, which is core code and is described under *Two things
+the layer does* below. It exists as template code for
 the same reason `image` does — an app that wrote its own would have to break the
 leak guard or rebuild the abstraction, and its spend would land on your cost page
 as `chat`, mixed in with support.
@@ -232,16 +236,26 @@ stated the other way round:
 
 > **A call is given exactly the rows its call site names, one field at a time.**
 
-That is why `about` is a list of labelled values rather than a member id.
-`lib/ai/companion.ts` imports no database, no entitlement function and no token
-function — and a test reads the file to prove it, because a call that could fetch
-for itself is a call whose call site no longer names what it sends. `memberId`
-travels for the usage row and for nothing else, exactly as `runTask` documents.
+That is why `about` is a list of labelled values rather than a member id. Neither
+`modules/companion/companion.ts` nor `lib/ai/customer-text.ts` imports a
+database, an entitlement function or a token function — and a test beside each
+reads the file to prove it, because a call that could fetch for itself is a call
+whose call site no longer names what it sends. `memberId` travels for the usage
+row and for nothing else, exactly as `runTask` documents — it is not even a field
+of the fenced request, because the request is the prompt and the member is the
+ledger.
 
 ### A worked call
 
+🚨 **Import from the registry, never from `@/modules/companion/…`.** Your server
+action lives under `app/`, and `modules/boundary.test.ts` refuses any file there
+that names an installed module — so following the module path turns your own
+`npm run test` red about code you wrote correctly. `server-exports` is the
+server-side barrel; `component-registry` is the client-safe one, and they are
+separate so a client component cannot drag the AI layer into the browser.
+
 ```ts
-import { askCompanion } from "@/lib/ai/companion";
+import { askCompanion } from "@/lib/modules/server-exports";
 
 const answer = await askCompanion({
   // Stable for the life of this companion → it is the cached prefix.
@@ -266,6 +280,16 @@ const answer = await askCompanion({
 ```
 
 ### Two things the layer does so a call site cannot get them wrong
+
+**And "the layer" here is the CORE, not the companion module.** Both properties
+below live in `lib/ai/customer-text.ts` — `buildFencedRequest()`, which returns
+the `{ system, messages }` that `askCompanion()` hands straight to `runTask`.
+That matters for anybody who is not building a companion: an activity whose
+`grade()` judges a submission through `runTask` ([`learning.md`](learning.md))
+sends a model something a customer wrote, which is exactly this case, and it can
+import the fence from the core in an app that has never installed the companion
+module. Do not rebuild either property at a call site; do not spell the tag out
+yourself — a test refuses a second place in the tree that writes the markers.
 
 **Customer data never touches `system`.** The system array is exactly two
 cacheable blocks — your `instruction` and the layer's standing rule about
@@ -305,7 +329,7 @@ Four things, and each is in exactly one place.
 { "enabled": false }
 ```
 
-Read it through `isCompanionEnabled()` in `lib/ai/companion-switch.ts`, never
+Read it through `isCompanionEnabled()` in `modules/companion/switch.ts`, never
 by re-reading the JSON — and a malformed value counts as off, the same
 direction as the chat's switch and for the same reason: the failure mode of a
 feature that switches itself on is a bill.
@@ -314,8 +338,8 @@ One field, and it stays one field. Which plan gates a companion, what it may
 take in and how much history it carries all belong to the **entry**, because a
 second companion needs different answers to all three.
 
-**2. The registry** — `lib/ai/companions.ts`, the list your app edits, exactly
-the role `lib/mcp/tools.ts` and `lib/cron/jobs.ts` play. It ships empty with a
+**2. The registry** — `modules/companion/companions.ts`, the list your app edits, exactly
+the role `lib/ai/tools.ts` and `lib/cron/jobs.ts` play. It ships empty with a
 worked example in a comment.
 
 ```ts
@@ -363,7 +387,7 @@ ids exist.
 <CompanionPanel companionId="writing-coach" subject={day.slug} />
 ```
 
-**4. The conversation** — you never name one. `app/companion-actions.ts` composes
+**4. The conversation** — you never name one. `modules/companion/actions.ts` composes
 the key server-side from the companion it just looked up and the subject the
 browser sent, so two subjects of one companion are two conversations and two
 companions on one subject are two more. If the browser could send the whole key
@@ -498,7 +522,8 @@ await spendTokens({ amount: COST, note: "image generation" });
 charging first bills for a picture that may never arrive, and working with no
 check in front gives it away. `generateImage()` deliberately does not charge:
 that belongs in the Server Action, where a person is present and the price is
-yours. `CLAUDE.md` → *Charging tokens* has the rest.
+yours. `CLAUDE.md` → *Access* states the order; the rest is
+[`entitlements.md`](entitlements.md).
 
 ---
 
@@ -532,6 +557,47 @@ A prompt whose cacheable block sits *after* a varying one is refused outright,
 by name, rather than quietly costing money. Below roughly 1,000–4,000 tokens
 Gemini and OpenAI do not cache at all, and that is correct rather than a fault —
 a short moderation prompt was never eligible.
+
+---
+
+## Tools — a task that looks things up before it answers
+
+A task can hand the model tools and let it call them mid-answer. All five
+providers speak function calling, so there is no capability flag and no
+provider question — the entry point is:
+
+```ts
+import { streamTaskWithTools, type ServerTool } from "@/lib/ai/tool-loop";
+
+for await (const event of streamTaskWithTools("chat", input, tools)) {
+  // { type: "delta" } · { type: "tool", name } · { type: "done" }
+}
+```
+
+A `ServerTool` is a wire definition (`{ name, description, inputSchema }`)
+plus an `execute(input)` that runs in-process and returns what the model
+reads. The assistant's tools are the four `content_*` tools, built in
+`lib/ai/chat-endpoint.ts` over the shared `runTool` path — see
+[`content-source.md`](content-source.md).
+
+Four things worth knowing before you touch it:
+
+- **The tool list must be byte-stable across requests** — a module constant,
+  never rebuilt per request. Tool definitions sit inside the cached prefix on
+  every provider (Anthropic renders them BEFORE the system blocks and caches
+  both together), so a list that varies switches the ~10× discount off with
+  no error anywhere. The first request after ADDING tools to a task rewrites
+  the cache once — expected; do not misread the one-time `cache_write` spike.
+- **One `ai_usage` row per round.** Each tool round-trip is its own provider
+  call and records itself; a three-round answer is three rows under the same
+  task. The bill is the table — the loop's final `done` event carries only
+  the last round's usage.
+- **`MAX_TOOL_ROUNDS` is 5**, and the final round forces a text answer
+  (`toolChoice: "none"`) instead of cutting the conversation dead. Worst-case
+  wall clock is rounds × the binding's `timeoutMs`.
+- **Both directions are untrusted.** An executor re-validates its input (the
+  schema is a hint to a model) and throws `ToolError("<code>")` for refusals —
+  the model reads codes, never raw error messages, which stay in the log.
 
 ---
 
@@ -720,13 +786,14 @@ site, not a task, not the usage schema, not the cost page.
 | File | What it is |
 |---|---|
 | `lib/ai/run.ts` | **The entry point.** `runTask` / `streamTask`. |
-| `lib/ai/companion.ts` | The shape a product-side call takes — `askCompanion()`, and the fence that makes customer text content. |
-| `lib/ai/companions.ts` | **The list your app edits.** One entry per companion; ships empty. |
-| `lib/ai/companion-config.mjs` | The **one** reader of the switch. `.mjs` because `scripts/ai/check.mjs` and `node run.mjs legal-check` need it too and neither can import TypeScript. |
-| `lib/ai/companion-switch.ts` | The typed shell over it: `isCompanionEnabled()`, `companionProblems()`, `companionOffReason()`. |
-| `lib/ai/companion-rules.ts` | Pure rules — the conversation key, the two input checks, the ceilings, the error codes. |
-| `app/companion-actions.ts` | The server action. Seven checks in the chat route's order, then check → work → charge. |
-| `components/companion-panel.tsx` | The one surface. `<CompanionPanel companionId subject />`, N call sites. |
+| `lib/ai/customer-text.ts` | **The fence that makes customer text content.** `buildFencedRequest()`, the `<customer-text …>` markers and the standing rule that names them. Core, and the import for any caller — a `grade()` as much as a companion. |
+| `modules/companion/companion.ts` | The shape a product-side call takes — `askCompanion()`, this module's binding to the `companion` task id. |
+| `modules/companion/companions.ts` | **The list your app edits.** One entry per companion; ships empty. |
+| `modules/companion/config.mjs` | The **one** reader of the switch. `.mjs` because `scripts/ai/check.mjs` and `node run.mjs legal-check` need it too and neither can import TypeScript. |
+| `modules/companion/switch.ts` | The typed shell over it: `isCompanionEnabled()`, `companionProblems()`, `companionOffReason()`. |
+| `modules/companion/rules.ts` | Pure rules — the conversation key, the two input checks, the ceilings, the error codes. |
+| `modules/companion/actions.ts` | The server action. Seven checks in the chat route's order, then check → work → charge. |
+| `modules/companion/components/companion-panel.tsx` | The one surface. `<CompanionPanel companionId subject />`, N call sites. |
 | `lib/ai/task-rules.mjs` | Declared tasks + binding resolution. Pure, shared with the check command. |
 | `lib/ai/tasks.ts` | The same, with the union type the compiler enforces. |
 | `lib/ai/pricing.mjs` | The cost arithmetic. Pure. |

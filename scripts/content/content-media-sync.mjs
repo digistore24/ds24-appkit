@@ -126,7 +126,7 @@ async function main() {
 
   // The plan: every manifest entry whose file is staged here. Shipped-leg
   // files travel with the repo and are content-apply's step B; an entry with
-  // no file anywhere is content-check's finding, here it is a warning.
+  // no file anywhere is content-apply's finding, here it is a warning.
   const items = [];
   const recorded = [];
   for (const entry of manifest.entries) {

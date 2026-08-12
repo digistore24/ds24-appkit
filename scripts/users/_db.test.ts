@@ -3,10 +3,12 @@
 
 import { describe, it, expect } from "vitest";
 import { resolveRole, CANONICAL_ROLES } from "./_db.mjs";
+import { ROLES } from "@/lib/roles";
 
 describe("resolveRole", () => {
   it("accepts canonical roles", () => {
     expect(resolveRole("owner")).toBe("owner");
+    expect(resolveRole("moderator")).toBe("moderator");
     expect(resolveRole("member")).toBe("member");
   });
 
@@ -27,7 +29,9 @@ describe("resolveRole", () => {
     expect(resolveRole(true)).toBeNull(); // --role without a value
   });
 
-  it("CANONICAL_ROLES contains owner and member", () => {
-    expect(CANONICAL_ROLES).toEqual(["owner", "member"]);
+  it("CANONICAL_ROLES matches ROLES in lib/roles.ts — the copy by necessity", () => {
+    // A bare-Node script cannot import lib/roles.ts, so _db.mjs keeps its own
+    // list. This test CAN import both, and is what keeps them from drifting.
+    expect(CANONICAL_ROLES).toEqual([...ROLES]);
   });
 });

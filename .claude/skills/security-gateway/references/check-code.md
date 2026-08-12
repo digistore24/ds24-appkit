@@ -15,7 +15,7 @@ neither list is public by accident, not by design.**
 Public on purpose, and this list is exhaustive: the home page, `/login`,
 `/plans`, `/optin/*`, `/account/confirm-email`, the legal pages
 (`/impressum`, `/datenschutz`, and `/agb` / `/widerruf` where they exist),
-`/api/ipn`, `/api/mcp`, `/api/healthz`, `/api/readyz`, `/api/cron`.
+`/api/ipn`, `/api/healthz`, `/api/readyz`, `/api/cron`.
 
 The legal pages are public **because they have to be** — § 5 DDG wants the
 Impressum easily reachable, and a privacy policy behind a sign-in cannot be read
@@ -35,7 +35,7 @@ it exists for. Leave it.
 
 Every query on a customer-owned table needs an ownership condition. The column
 is **`memberId`** — on `orders`, `grants`, `subscriptions`, `tokenAccounts`,
-`chatMessages`, `mcpKeys`, `impersonations`. `userId` exists only on the Auth.js
+`chatMessages`, `apiKeys`, `impersonations`. `userId` exists only on the Auth.js
 `accounts` and `sessions` tables and is **not** an ownership column; grepping
 for it finds nothing and proves nothing.
 
@@ -63,28 +63,94 @@ No cached access booleans either — not a flag on the user row, not a claim in
 the session. Entitlement is derived per request; a stored yes survives the
 chargeback that should have revoked it.
 
-### The MCP server, if it is on
+### The assistant's tools
 
-Check `config/mcp.json` → `"enabled"`. It ships off; if it is on, go through
-`lib/mcp/tools.ts` tool by tool. It has no session, so nothing above applies to
-it automatically. See `docs/mcp.md`.
+Go through `lib/ai/tools.ts` tool by tool — above all when the app has
+registered tools of its own beyond the four shipped `content_*` tools. What a
+tool returns is read, and acted on, by a model; what it takes as arguments is
+written by one. See `docs/content-source.md`.
 
 - **No tool takes a member, user or account id as an argument.** The account is
-  `ctx.memberId`, proven by the key. Arguments are written by a model reading
-  text somebody else may have authored — an id among them is an IDOR with a
-  language model holding the pen. **CRITICAL.** `lib/mcp/tools.test.ts` checks
-  the obvious spellings; read the schemas yourself for the ones it cannot guess.
+  `ctx.memberId`, proven by the session. Arguments are written by a model
+  reading text somebody else may have authored — an id among them is an IDOR
+  with a language model holding the pen. **CRITICAL.** `lib/ai/tools.test.ts`
+  checks the obvious spellings; read the schemas yourself for the ones it
+  cannot guess.
 - **`readOnly: true` is a lie on anything that writes, charges, mails or calls a
-  paid API.** It is the boundary a `read`-scope key is measured against, so a
-  wrongly-flagged tool is a read-only key that can spend somebody's balance.
-  **HIGH.**
+  paid API.** It is the boundary a read-only runner is measured against
+  (`lib/ai/run-tool.ts`), so a wrongly-flagged tool is a read-only caller that
+  can spend somebody's balance. **HIGH.**
 - **Every argument is re-validated in the handler.** `inputSchema` is a hint to
   a model, not a check — treat `args` exactly like a `FormData`. **HIGH.**
 - **No operator capability is exposed.** No tool blocks a user, adjusts a
   balance, grants a plan, deletes a record, sends mail or places an order.
   Anything `requireOwner()` guards belongs nowhere in that file. **CRITICAL.**
 - **No tool returns a secret** — no API key, no `passwordHash`, no other
-  member's data. **CRITICAL.**
+  member's data. And member-scoped content flowing into the chat is a
+  recorded decision (`docs/app.md`), never a default. **CRITICAL.**
+
+### The community, if it is installed and switched on
+
+The community is a MODULE, so ask first whether this app has it at all:
+`node run.mjs module list`. An app without it has no community routes and no
+community tables, so there is nothing here to check — skip the section.
+
+Installed, check `config/community.json` next. If `"enabled"` is false, the whole
+surface answers not-found — and **that is itself a check**: walk `/dashboard/community`,
+`/dashboard/admin/community`, one discussion URL, one server action in
+`modules/community/pages/**/actions.ts` and `POST /api/community/live`. Anything
+but a not-found in that state is 🚨 **CRITICAL** — the switch is this module's
+incident response, and a switch that leaves a door open is not one.
+
+Switched on, this is the app's largest personal-data surface, and the IDOR hunt
+above covers **every** one of its routes. Five probes on top of that read, each
+of them a thing no other gate catches:
+
+- **A non-participant reading a private message.** Every read of
+  `community_conversations` / `community_messages` takes a participant's member
+  id and puts it in the `WHERE` clause. Read the calls in the app's own code:
+  a conversation id from a URL with no participant scoping is 🚨 **CRITICAL**.
+  The shipped `modules/community/lib/dm-guard.test.ts` refuses a new unscoped reader —
+  so **a finding here almost always means somebody added an allowlist entry or
+  weakened that test.** Check its allowlist and its git history before
+  believing a clean read.
+- **A non-entitled member reading a gated discussion — by embed.** Every
+  declaration in `modules/community/lib/embeds.ts`: request the discussion for a
+  Subject Key the member is not entitled to, and for one nobody declared. Both
+  must give the **same** refusal; a distinguishable "no such discussion" turns
+  Subject Keys into an enumerable table of contents. ❌ **HIGH**. And check no
+  page passes an access level or a plan key as a prop — a gate the browser
+  sends is no gate: 🚨 **CRITICAL**.
+- **The live channel.** `POST /api/community/live` with a cursor for a scope
+  the viewer may not enter, and with no session at all. It must re-derive
+  access per answer, not per connection, and it must write nothing. An answer
+  carrying rows from a room the caller cannot enter is 🚨 **CRITICAL**.
+- **Activity leaking out of a space the viewer cannot enter.** The friends feed
+  (`/dashboard/community/feed`) and every unread indicator: a room the viewer
+  may not enter contributes nothing — not a post, not the room's name, not a
+  thread title, not a count, not a gap in the ordering. An indicator that lights
+  up is a second, cheaper access path into a paid room: ❌ **HIGH**, and 🚨 when
+  it reveals content.
+- **An impersonated session.** Start one and open the community: the rooms work
+  as the member, and the private-message surfaces are **absent** — the same
+  not-found a switched-off feature gives. Anything readable there is 🚨
+  **CRITICAL**: the impersonation record says an operator was in an account, not
+  what they read.
+
+Two more reads while you are in the module, both of them the kind of thing that
+gets added by a well-meaning session:
+
+- **A member list, a member count, a "who is here", or a follower count**
+  anywhere — profile, room, operator page, export. Presence in a plan-gated
+  room IS purchase information. ❌ **HIGH**, and the shipped
+  `modules/community/lib/follow.test.ts` should have refused the counter, so check
+  whether it was weakened.
+- **Moderation authority taken from the session.** `session.user.role ===
+  "moderator"` anywhere is ❌ **HIGH** — a JWT carries the role somebody had
+  when they signed in, and every act must call `moderationAuthority()`, which
+  re-reads the database.
+
+The reference for all of it is [`docs/community.md`](../../../../docs/community.md).
 
 ### Signing in as a user, if it is on
 
@@ -140,7 +206,7 @@ text. If it has been deleted or weakened, that is the finding.
 - **Compare secrets in constant time.** Any token, API key, HMAC or signature
   compared with `===`, `!==` or `strcmp` is a timing side channel — the value
   becomes guessable byte by byte. The template does this correctly in
-  `lib/digistore/ipn.ts`, `lib/mcp/keys.ts` and `lib/credentials/hash.ts`
+  `lib/digistore/ipn.ts`, `modules/api/keys/keys.ts` and `lib/credentials/hash.ts`
   (`crypto.timingSafeEqual`, after a length check). A new comparison that does
   not is **HIGH**.
 - **Random that is not random.** `Math.random()` or `Date.now()` as the source

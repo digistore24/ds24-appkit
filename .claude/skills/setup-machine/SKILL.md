@@ -1,8 +1,15 @@
 ---
 name: setup-machine
-description: Gets this machine ready to develop the app — checks what is missing (Node, git, optionally Docker and cloudflared), installs it after asking, and prepares the project (.env, dependencies, database, migrations). Works the same on Linux, macOS and Windows. Use this on the first run in a fresh clone, whenever the session start reports `setup=blocked`, and whenever a command fails with something like "node: command not found", "docker: not found", "npm not found", "the database does not answer" or "cannot connect". Also use it when there is NO session greeting at all, or a startup hook error mentioning `node` — that is a machine without Node, and this skill installs it.
-requires: 0.2.0
+description: Gets this machine ready to develop the app — checks what is missing (Node, git, optionally Docker and cloudflared), installs it after asking, and prepares the project — Linux, macOS and Windows alike. Use this on the first run in a fresh clone, whenever the session start reports `setup=blocked`, and whenever a command fails with something like "node: command not found", "docker: not found", "npm not found", "the database does not answer" or "cannot connect". Also use it when there is NO session greeting at all, or a startup hook error mentioning `node` — that is a machine without Node, and this skill installs it.
+requires: 0.20.0
 ---
+<!-- requires: raised from 0.2.0 when Gemini CLI was replaced by Antigravity CLI.
+     Step 5b names `--agent antigravity`, and that value lives in
+     scripts/dev/agent-configs.mjs — which is CODE, and `node run.mjs update`
+     ships text only. Without this line an app from before the change would take
+     the new instructions and run a flag its own copy does not have, failing with
+     "Unknown program". Refused is the right answer there: it keeps the old text,
+     which matches the old code. -->
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
 # Getting this machine ready
@@ -156,23 +163,30 @@ database and the pending migrations, in one go.
 
 ### 5b. Which program is this?
 
-This app ships wired for four — Claude Code, Codex CLI, Gemini CLI and OpenCode —
-so that it works whichever one it was opened in. Now that somebody is actually
-working here, take the other three out:
+This app ships wired for four — Claude Code, Codex CLI, Antigravity CLI and
+OpenCode — so that it works whichever one it was opened in. Now that somebody is
+actually working here, take the other three out:
 
 ```bash
-node run.mjs agent-setup --agent claude|codex|gemini|opencode --apply
+node run.mjs agent-setup --agent claude|codex|antigravity|opencode --apply
 ```
 
 **You know which one you are, so say it** — do not leave it to detection. The
 command reads environment variables when nobody tells it, which is a convenience
 and not a mechanism: it cannot distinguish reliably, and a wrong guess removes
-the wiring somebody is using.
+the wiring somebody is using. **In Antigravity CLI it cannot guess at all** —
+that program sets no environment variable of its own — so there the flag is the
+only way and the command will refuse without it.
 
 Nothing is lost either way. The skills, the guidance and the greeting are shared
 and stay; only the other programs' config goes, and `--agent <other>` or `--undo`
 puts it back. Mention it in half a sentence — it is housekeeping, not a decision
 the user has to make.
+
+⚠️ **If you are Antigravity CLI, one thing is not housekeeping**: that program
+has no session-start event, so nothing greeted you and nothing will. Run
+`node run.mjs greet` yourself before writing any file — it prints the
+`[Setup: …]` line the rest of this skill turns on.
 
 ### 6. Prove it
 
@@ -196,7 +210,13 @@ finding.
 **There is nothing to create for it.** The first account in a fresh app becomes
 `owner` by itself in DEV (`lib/users/bootstrap.ts`) — the user signs in at
 http://localhost:3000/login with any address and that is the admin. Say that,
-rather than asking them for an address. Only if you need the signed-in pass
+rather than asking them for an address.
+
+**Unless the greeting says `[Machine: no browser here]`.** Then that address is
+theirs, not this machine's, and sending them to it sends them nowhere — they
+open it and find nothing running. What to say instead is
+[`docs/machine.md`](../../../docs/machine.md); the first account still makes
+itself, it just cannot be made from a screen nobody is sitting at yet. Only if you need the signed-in pass
 *before* anybody has signed in once is there a command, because
 `scripts/dev/sign-in.mjs` deliberately creates no account:
 `node run.mjs user-create --email … --role owner --apply`.

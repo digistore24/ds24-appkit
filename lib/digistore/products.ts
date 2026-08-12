@@ -47,7 +47,7 @@
 //
 // What does NOT follow from this: translated product copy. `name`,
 // `description`, `tagline` and `features` stay single-language on purpose (it
-// is the vendor's own copy — see template/CLAUDE.md → Languages), and the same
+// is the vendor's own copy — see CLAUDE.md → Languages), and the same
 // text is sent to every one of the language products.
 // ============================================================================
 import productsFile from "@/config/digistore-products.json";

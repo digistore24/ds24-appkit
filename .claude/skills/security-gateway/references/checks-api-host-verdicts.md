@@ -12,7 +12,6 @@ SKILL.md.
 | Route | What it must do |
 |---|---|
 | `/api/ipn` | 403 on an invalid signature, always. Send it a payload with a broken `sha_sign` and watch. |
-| `/api/mcp` | 401 without a bearer key, 401 on a wrong one, scope enforced on write tools. |
 | `/api/chat` | signed-in only, and rate-limited or token-metered — it costs money per call |
 | `/api/cron` | secret-guarded (`docs/cron.md`); an open cron endpoint is a free job runner |
 | `/api/healthz` `/api/readyz` | public on purpose, and must leak nothing — no versions, no env, no DB error text |
@@ -41,10 +40,14 @@ Then the questions that apply to all of them, and to every server action:
 
 - **Security headers.** `next.config.ts` sets `Referrer-Policy`,
   `X-Content-Type-Options`, `X-Frame-Options` and HSTS on every response. Check
-  they are still there and actually arriving (`curl -sI`). There is deliberately
+  they are still there and actually arriving. There is deliberately
   **no CSP** — Next.js emits inline scripts, so a useful policy needs per-request
   nonces, and a `unsafe-inline` policy pasted in to look green is not protection.
   Its absence is a documented decision, not a finding.
+  **Do not do this by hand:** `node run.mjs security-check --url https://…`
+  asks the live domain for exactly these headers, the cookie flags and every
+  `/dashboard` route with no session, and prints what each one is set to. The
+  command is described in the skill's §7; do not restate its ratings here.
 - **HTTPS everywhere**, `APP_URL` on `https://`, valid certificate. All four
   hosts in `docs/DEPLOY.md` do this for you; verify rather than assume.
 - **Secrets live in the host's secret store**, not in a committed file, not in

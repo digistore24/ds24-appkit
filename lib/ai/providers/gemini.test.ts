@@ -12,11 +12,17 @@ import {
   buildBody,
   endpointFor,
   geminiAdapter,
+  idSequence,
   stopReasonFrom,
   textFrom,
+  toolCallsFrom,
   usageFrom,
 } from "./gemini";
-import { unexplainedTokens, type NormalizedRequest } from "./types";
+import {
+  unexplainedTokens,
+  type NormalizedRequest,
+  type ToolDefinition,
+} from "./types";
 
 const REQUEST: NormalizedRequest = {
   model: "gemini-2.5-pro",
@@ -97,6 +103,138 @@ describe("buildBody", () => {
 
   it("omits systemInstruction entirely when there is no system prompt", () => {
     expect(buildBody({ ...REQUEST, system: [] })).not.toHaveProperty("systemInstruction");
+  });
+});
+
+// ── Tools ───────────────────────────────────────────────────────────────────
+
+const TOOLS: ToolDefinition[] = [
+  {
+    name: "content_search",
+    description: "Searches the app's content.",
+    inputSchema: { type: "object", properties: { query: { type: "string" } } },
+  },
+];
+
+describe("buildBody with tools", () => {
+  it("declares tools as functionDeclarations and omits toolConfig by default", () => {
+    const body = buildBody({ ...REQUEST, tools: TOOLS });
+    expect(body.tools).toEqual([
+      {
+        functionDeclarations: [
+          {
+            name: "content_search",
+            description: "Searches the app's content.",
+            parameters: TOOLS[0].inputSchema,
+          },
+        ],
+      },
+    ]);
+    expect(body).not.toHaveProperty("toolConfig");
+  });
+
+  it("forces a text answer with mode NONE when asked", () => {
+    const body = buildBody({ ...REQUEST, tools: TOOLS, toolChoice: "none" });
+    expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: "NONE" } });
+  });
+
+  it("sends NEITHER field without tools", () => {
+    for (const req of [REQUEST, { ...REQUEST, tools: [] }]) {
+      const body = buildBody(req);
+      expect(body).not.toHaveProperty("tools");
+      expect(body).not.toHaveProperty("toolConfig");
+    }
+  });
+
+  it("a stale binding key cannot clobber the tool wiring", () => {
+    const body = buildBody({
+      ...REQUEST,
+      tools: TOOLS,
+      providerOptions: { tools: "stale", toolConfig: "stale" },
+    });
+    expect(Array.isArray(body.tools)).toBe(true);
+    expect(body).not.toHaveProperty("toolConfig");
+  });
+
+  it("replays a model turn with functionCall parts after its narration", () => {
+    const body = buildBody({
+      ...REQUEST,
+      messages: [
+        {
+          role: "assistant",
+          content: "Looking.",
+          toolCalls: [{ id: "call_1", name: "content_search", input: { query: "x" } }],
+        },
+      ],
+    });
+    expect((body.contents as unknown[])[0]).toEqual({
+      role: "model",
+      parts: [
+        { text: "Looking." },
+        { functionCall: { name: "content_search", args: { query: "x" } } },
+      ],
+    });
+  });
+
+  it("sends a round's results as functionResponse parts on ONE user turn, matched by name", () => {
+    const body = buildBody({
+      ...REQUEST,
+      messages: [
+        {
+          role: "tool",
+          results: [
+            { toolCallId: "call_1", name: "search", content: "found" },
+            { toolCallId: "call_2", name: "get", content: "toolFailed", isError: true },
+          ],
+        },
+      ],
+    });
+    expect((body.contents as unknown[])[0]).toEqual({
+      role: "user",
+      parts: [
+        { functionResponse: { name: "search", response: { result: "found" } } },
+        { functionResponse: { name: "get", response: { error: "toolFailed" } } },
+      ],
+    });
+  });
+});
+
+describe("toolCallsFrom", () => {
+  it("reads functionCall parts beside text and synthesizes ids in order", () => {
+    const calls = toolCallsFrom(
+      {
+        candidates: [
+          {
+            content: {
+              parts: [
+                { text: "Let me see." },
+                { functionCall: { name: "search", args: { query: "x" } } },
+                { functionCall: { name: "get", args: { ref: "a" } } },
+              ],
+            },
+          },
+        ],
+      },
+      idSequence(),
+    );
+    expect(calls).toEqual([
+      { id: "call_1", name: "search", input: { query: "x" } },
+      { id: "call_2", name: "get", input: { ref: "a" } },
+    ]);
+  });
+
+  it("normalizes missing args to an empty object", () => {
+    const calls = toolCallsFrom(
+      { candidates: [{ content: { parts: [{ functionCall: { name: "a" } }] } }] },
+      idSequence(),
+    );
+    expect(calls).toEqual([{ id: "call_1", name: "a", input: {} }]);
+  });
+
+  it("answers empty for a text-only candidate", () => {
+    expect(
+      toolCallsFrom({ candidates: [{ content: { parts: [{ text: "hi" }] } }] }, idSequence()),
+    ).toEqual([]);
   });
 });
 
@@ -265,6 +403,47 @@ describe("streaming", () => {
     for await (const event of geminiAdapter.stream(REQUEST, "k")) events.push(event);
 
     expect((events.at(-1) as { usage: unknown }).usage).toBeNull();
+  });
+
+  it("yields functionCall parts as complete tool_call events, ids distinct across chunks", async () => {
+    // Parts are new per chunk (never resent), so calls stream out as they
+    // appear — unlike the compat adapter, which must accumulate fragments.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        sseResponse(
+          {
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    { text: "Checking." },
+                    { functionCall: { name: "content_search", args: { query: "knots" } } },
+                  ],
+                },
+              },
+            ],
+          },
+          {
+            candidates: [
+              { content: { parts: [{ functionCall: { name: "content_get", args: { ref: "a" } } }] } },
+            ],
+          },
+        ),
+      ),
+    );
+
+    const events = [];
+    for await (const event of geminiAdapter.stream({ ...REQUEST, tools: TOOLS }, "k")) {
+      events.push(event);
+    }
+
+    expect(events.map((e) => e.type)).toEqual(["delta", "tool_call", "tool_call", "done"]);
+    const calls = events
+      .filter((e) => e.type === "tool_call")
+      .map((e) => (e as { call: { id: string; name: string } }).call);
+    expect(calls.map((c) => c.id)).toEqual(["call_1", "call_2"]);
+    expect(calls.map((c) => c.name)).toEqual(["content_search", "content_get"]);
   });
 });
 

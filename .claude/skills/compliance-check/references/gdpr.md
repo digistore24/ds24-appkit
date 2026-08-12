@@ -49,7 +49,7 @@ policy is only as true as the list it was drafted from.
 | Right | Art. | Where | Verify by |
 |---|---|---|---|
 | Information | 15 | member's own download; `node run.mjs data-export --email …` | run the command |
-| — and it covers learning performance | 15 | `activity_results` in BOTH exports (`docs/data-protection.md` §8b) | where `lib/learning/` exists (0.9.0+): the export carries an `activityResults` section. Older clone: not applicable, not a finding |
+| — and it covers learning performance | 15 | `activity_results` in BOTH exports (`docs/data-protection.md` §8b) | where `modules/activity/` exists (0.9.0+): the export carries an `activityResults` section. Older clone: not applicable, not a finding |
 | Rectification | 16 | `/dashboard/account`, and the Operator's user page | open the page |
 | Erasure | 17 | account deletion, both self-service and Operator | read the dialog text |
 | Restriction | 18 | blocking the account | — |
@@ -89,7 +89,7 @@ not as a bug.
 | File | What | Derive from |
 |---|---|---|
 | `verarbeitungsverzeichnis.md` | record of processing (Art. 30) | `docs/data-protection.md` + `config/ai-models.json` + the mail and host setup |
-| `tom.md` | technical and organisational measures (Art. 32) | the real ones: scrypt hashes, SHA-512 IPN signature, `lib/rate-limit.ts`, `requireOwner()`, `readOnly` as the MCP boundary, no IP storage |
+| `tom.md` | technical and organisational measures (Art. 32) | the real ones: scrypt hashes, SHA-512 IPN signature, `lib/rate-limit.ts`, `requireOwner()`, `readOnly`/scopes as the API-key boundary, no IP storage |
 | `loeschkonzept.md` | deletion concept | the windows in `lib/cron/jobs.ts`; the proof is `node run.mjs cron --list` |
 | `avv-register.md` | processor agreements (Art. 28) | recipients from `docs/data-protection.md` §5, with the AI company actually in use |
 | `ki-register.md` | AI systems, role, risk class, Art. 50 measures | check 4 — **one row per surface**: the assistant and any companion are two systems, possibly on two companies |

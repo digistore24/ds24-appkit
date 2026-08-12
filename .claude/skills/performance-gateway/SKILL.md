@@ -1,6 +1,6 @@
 ---
 name: performance-gateway
-description: The performance check for this app. Measures where it is slow and fixes it — response times per route, database queries and missing indexes, N+1 patterns, the connection pool, behaviour under ~100 parallel users, memory leaks, a blocked event loop, bundle size and Core Web Vitals — then writes a report. Use it after the security gateway and before the launch, and whenever somebody says "it is slow", "it times out", "will it hold under load?".
+description: The performance check for this app. Measures where it is slow and fixes it — response times per route, database queries and missing indexes, N+1 patterns, the connection pool, behaviour under ~100 parallel users, memory leaks, a blocked event loop, bundle size and Core Web Vitals — then reports. Use it after the security gateway and before the launch, and whenever somebody says "it is slow", "it times out", "the live app feels slow", "will it hold under load?".
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -75,7 +75,9 @@ pretending the number is clean.
 
 ## What counts as a finding
 
-**Severity — measured, not felt:**
+The ladder and the four-line `Where:` / `Why:` / `Fix:` / `Evidence:` format are
+the shipped ones — [`docs/guidance.md`](../../../docs/guidance.md) → *One report
+shape*. **Severity here is measured, not felt:**
 
 | | Severity | Meaning |
 |---|---|---|
@@ -88,20 +90,9 @@ The thresholds per check are in each check's reference file, linked from its
 section below. They are the boundary, not a
 target: an endpoint at 190 ms is not "fine", it is "not a finding".
 
-**The format of a finding — the same as in `security-gateway`:**
-
-```
-❌ HIGH — /dashboard/billing loads the order list per row
-   Where:    app/dashboard/billing/page.tsx:48
-   Why:      One query per order. At 40 orders that is 41 round trips, and it
-             gets worse for every customer who buys again.
-   Fix:      One query with a join — Drizzle `with: { invoices: true }`.
-   Evidence: p95 1.9 s, 41 queries in the log for one page view.
-```
-
-**Every performance finding carries a number.** "Feels slow" is not a finding;
-"p95 1.9 s against a 300 ms threshold" is. If you cannot measure it, it goes in
-**Worth a look** at the end of the report, not in the count.
+**What counts as shown, here, is a number.** "Feels slow" is not a finding; "p95
+1.9 s against a 300 ms threshold" is, and it goes on the `Evidence:` line. If you
+cannot measure it, it goes in **Worth a look**, not in the count.
 
 ## 1 · `all` — the full pass
 
@@ -202,44 +193,43 @@ Every run writes one, whether it found anything or not — so that "have we
 already tested this under load?" is answerable in three months, and so the next
 run has a number to compare against.
 
-Write it to **`docs/reports/performance-YYYY-MM-DD.md`** (add `-2`, `-3` for a
-second run the same day). Create the folder if it is not there.
+It goes to **`docs/reports/performance-YYYY-MM-DD.md`**, and its shape — the
+header above the tally, the five sections in their order — is
+[`docs/guidance.md`](../../../docs/guidance.md) → *One report shape*. Two things
+are this skill's own:
 
-```markdown
-# Performance report — 2026-07-26
+- **The line that says where this ran is called `Measured:`**, because here it
+  also carries the build and the load generator's own pessimism:
 
-Checks:   response, db, load, frontend     (memory, cpu: skipped — no finding pointed there)
-Measured: production build, localhost:3100, commit a1b2c3d
-          (load generator on the same machine — expect ~20 % pessimism)
+  ```markdown
+  Checks:   response, db, load, frontend     (memory, cpu: skipped — no finding pointed there)
+  Measured: production build, localhost:3100, commit a1b2c3d
+            (load generator on the same machine — expect ~20 % pessimism)
+  ```
 
-🚨 CRITICAL 0   ❌ HIGH 1   ⚠️ MEDIUM 2   ℹ️ LOW 3   ✅ accepted 1
+- **A `## Numbers` table, above the findings.** It is the reason the next run has
+  something to compare against, and `## Fixed in this run` carries a before → after
+  for the same reason:
 
-## Numbers
-| Route | p50 | p95 | p95 @ -c 100 | errors |
-|---|---|---|---|---|
-| /            | 40 ms | 70 ms  | 210 ms | 0 |
-| /plans       | 60 ms | 120 ms | 340 ms | 0 |
-| /dashboard   | 180 ms | 1.9 s | 6.2 s  | 0 |
+  ```markdown
+  ## Numbers
+  | Route | p50 | p95 | p95 @ -c 100 | errors |
+  |---|---|---|---|---|
+  | /            | 40 ms | 70 ms  | 210 ms | 0 |
+  | /plans       | 60 ms | 120 ms | 340 ms | 0 |
+  | /dashboard   | 180 ms | 1.9 s | 6.2 s  | 0 |
+  ```
 
-## Findings
-(four-line format, highest severity first)
-
-## Fixed in this run
-(with before → after)
-
-## Open
-## Worth a look
-## Accepted baselines
-```
-
-Then say it out loud in three or four sentences: what is slow, what was fixed,
-what the app now does at 100 parallel users, and whether it is ready to launch.
-A straight answer — "yes", or "no, because X".
+The spoken summary says what is slow, what was fixed and what the app now does at
+100 parallel users; its straight yes or no is whether it is ready to launch.
 
 ## Accepted baselines
 
-Some slowness is a deliberate trade. Rather than rediscovering it every run, it
-goes into **`docs/reports/performance-accepted.md`**:
+Some slowness is a deliberate trade. This skill's register is
+**`docs/reports/performance-accepted.md`**, and the rules that go with it (not
+counted, its own section, only the user accepts one) are
+[`docs/guidance.md`](../../../docs/guidance.md) → *Accepted is not the same as
+fixed*. Its table has two columns of its own, and they are the point:
 
 ```markdown
 | Route / thing | Metric | Accepted | Why | By | Date | Review |
@@ -247,10 +237,8 @@ goes into **`docs/reports/performance-accepted.md`**:
 | /dashboard/admin/purchases | p95 1.4 s | ≤ 2 s | owner-only, twice a week | Anna | 2026-07-26 | when it has staff |
 ```
 
-An accepted baseline is **not counted** in the totals and appears in its own
-section of the report. Only the user accepts one. If the measured value drifts
-past what was accepted, it is a normal finding again — the acceptance covers a
-number, not a route.
+If the measured value drifts past what was accepted, it is a normal finding again
+— **the acceptance covers a number, not a route.**
 
 ## STOP — get a human
 

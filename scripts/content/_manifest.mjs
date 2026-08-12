@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 // Reading and judging `content/media-manifest.json` — once, for all three
-// content commands (`content-apply`, `content-media-sync`, `content-check`).
+// content commands (`content-apply`, `content-media-sync`).
 //
 // The manifest is the DECLARATION of the product's media: one entry per file,
 // carrying what a `media` row needs and a file on disk cannot say — who may
@@ -26,12 +26,14 @@
 //
 // Validation is pure functions over parsed JSON — `manifest.test.ts` pins
 // them without touching a disk.
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import {
   CONTENT_MEDIA_BUCKET_PREFIX,
   CONTENT_MEDIA_MANIFEST,
+  CONTENT_MEDIA_SHIPPED_DIR,
+  CONTENT_MEDIA_STAGED_DIR,
   CONTENT_MEDIA_TYPES,
   isValidContentMediaPath,
 } from "../../lib/content-media/rules.mjs";
@@ -39,6 +41,39 @@ import {
 /** The bucket key of one manifest entry. */
 export function keyFor(path) {
   return CONTENT_MEDIA_BUCKET_PREFIX + path;
+}
+
+/**
+ * Where an entry's file is on THIS machine: shipped leg first, then staged.
+ *
+ * 🚨 **One spelling of "which leg is this file on".** It lived in
+ * `scripts/content/apply.mjs` while that was the only command asking, and moved
+ * here when `content-publish` became the second — a copy of it there would have
+ * been a second opinion about which of two folders a file counts as being in,
+ * and the two commands would then disagree about whether a declared file is
+ * missing at all.
+ *
+ * The order is not arbitrary: a file present on both legs is the SHIPPED one,
+ * because that is the copy the deploy carries and therefore the copy every
+ * environment can already see.
+ *
+ * @param {string} root  the app root
+ * @param {string} path  a manifest entry's `<topic>/<file>.<ext>`
+ * @returns {{leg: "shipped"|"staged", full: string} | null}
+ */
+export function localFileFor(root, path) {
+  for (const [leg, dir] of [
+    ["shipped", CONTENT_MEDIA_SHIPPED_DIR],
+    ["staged", CONTENT_MEDIA_STAGED_DIR],
+  ]) {
+    const full = join(root, ...dir.split("/"), ...path.split("/"));
+    try {
+      if (statSync(full).isFile()) return { leg, full };
+    } catch {
+      // keep looking
+    }
+  }
+  return null;
 }
 
 const VISIBILITIES = ["public", "entitled"];
@@ -202,6 +237,55 @@ export function loadManifest(root, e = process.env) {
   }
 
   return { ...validateManifest(data, { productKeys: productKeysFrom(root) }), data };
+}
+
+/**
+ * Does the environment know about the media THIS checkout declares?
+ *
+ * The fourth state, and the only one no owner inside the app can see: the two
+ * facts live in two processes. The running app knows what it holds; only the
+ * machine running `content-check` has the repo the deploy came from. So the
+ * comparison happens here, in the CLI, and never by shipping the repo's
+ * declaration into the image a second time — which would be the manifest
+ * itself, the very file whose absence is the question.
+ *
+ * @param {number} declaredCount  entries in this checkout's own manifest
+ * @param {{expected: number|null, note?: string}|null} coreItem
+ *   the environment's product-media item, found by the shared label constant —
+ *   `null` when its answer carried no such item at all. Pass `null` for it only
+ *   when the core ANSWERED; an owner that could not look is a different state
+ *   and comparing against it would turn "I could not see" into "it holds less".
+ * @returns {string|null}  one sentence carrying both numbers and both sides, or
+ *   `null` when there is nothing to say
+ */
+export function declaredVsReported(declaredCount, coreItem) {
+  // Two absences agree. Inventing a problem out of them would be the mirror
+  // image of the defect this whole comparison exists to close.
+  if (!Number.isFinite(declaredCount) || declaredCount <= 0) return null;
+
+  const declares = `this checkout declares ${declaredCount} product media file(s), `;
+
+  if (!coreItem) {
+    return (
+      declares +
+      "that environment reported no product media item at all — it is running a build " +
+      "from before the item existed, so nothing there answered this question"
+    );
+  }
+  if (coreItem.expected === null) {
+    return (
+      declares +
+      `that environment answered: ${coreItem.note ?? "no manifest"}. ` +
+      `${CONTENT_MEDIA_MANIFEST} did not reach it — check the deploy, and ` +
+      "outputFileTracingIncludes if it runs a standalone build"
+    );
+  }
+  // Fewer only. MORE is the legitimate version of this finding: a checkout
+  // behind the deployed commit is somebody else's push, not a broken PROD.
+  if (coreItem.expected < declaredCount) {
+    return declares + `that environment declares only ${coreItem.expected} — it is behind this tree`;
+  }
+  return null;
 }
 
 /**

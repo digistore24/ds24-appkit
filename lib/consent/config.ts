@@ -4,7 +4,7 @@
 // Which purposes this app asks consent for.
 //
 // Read it through `consentPurposes()`, never by re-reading the JSON — the same
-// rule `lib/ai/chat-config.ts`, `lib/mcp/config.ts` and `lib/billing-mode.ts`
+// rule `lib/ai/chat-config.ts`, `lib/api/config.ts` and `lib/billing-mode.ts`
 // follow. One reader means one place where a malformed file is handled, and
 // one place to change when the shape grows.
 //

@@ -1,6 +1,6 @@
 ---
 name: user-onboarding
-description: Gives an app a real first session for its END USER — the person who paid. Pins down the activation event, replaces the blueprint checklist with this app's own steps, builds a welcome survey or a comeback nudge where they earn their place, and checks the onboarding that already exists. Use this when the user says "my customers sign up and never come back", "nobody finishes the setup", "how do I explain my app to new users", "people buy and then do nothing", "I want a welcome tour / first steps", or when the dashboard still shows the two shipped blueprint steps on an app that does something of its own. The audit twin is ux-gateway (check first-run); building what it found is this skill.
+description: Gives an app a real first session for its END USER — the person who paid: the activation event, this app's own first steps instead of the shipped blueprint, a welcome survey or a comeback nudge, and a check of what exists. Use this when the user says "my customers sign up and never come back", "nobody finishes the setup", "how do I explain my app to new users", "people buy and then do nothing", "nobody uses it after they buy", "I want a welcome tour / first steps", or when the dashboard still shows the two shipped blueprint steps. The audit twin is `ux-gateway` (check first-run); building what it found is this skill.
 requires: 0.4.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
@@ -169,7 +169,7 @@ them:
 Narrow on purpose: `ux-gateway` (check `first-run`) walks the whole first five
 minutes; this item audits the onboarding *machinery* on an app that already
 has some. Findings in the four-line shape (*Where · Why · Fix · Evidence*), the
-severity ladder from `CLAUDE.md` → *How a skill works*:
+severity ladder from `docs/guidance.md` → *How a skill works*:
 
 | | Severity | What |
 |---|---|---|
@@ -198,7 +198,7 @@ what makes "did we already look?" answerable.
    records an action the app took, not a truth about the customer.
 3. **Anything the customer will SEE is proposed, never assumed** — the steps,
    the survey questions, the nudge mail. Numbered menu, `0` row, "you choose"
-   offered in the menu (`CLAUDE.md` → *How a skill works*).
+   offered in the menu (`docs/guidance.md` → *How a skill works*).
 
 ## What comes next
 

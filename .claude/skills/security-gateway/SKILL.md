@@ -1,6 +1,6 @@
 ---
 name: security-gateway
-description: The security check for this app. Scans it for holes — unprotected routes, access to other people's data (IDOR), secrets in the code, a bypassed IPN signature, an MCP tool that hands out too much, XSS, vulnerable packages, a misconfigured host — judges each finding by severity, fixes what has to be fixed and writes a report. Use it before the app processes real payments and customer data, after larger changes, and whenever somebody asks "is this safe?", "is this route protected?", "is there a secret in the code?".
+description: The security check for this app. Scans it for holes — unprotected routes, access to other people's data (IDOR), secrets in the code, a bypassed IPN signature, a chat tool that hands out too much, XSS, vulnerable packages, a misconfigured host — then fixes and reports. Use it before the app processes real payments and customer data, after larger changes, and whenever somebody asks "is this safe?", "is this route protected?", "is there a secret in the code?".
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -22,7 +22,7 @@ single copy, this one is the audit against it. Where the two ever disagree,
 
 ## How to use this skill
 
-Nine checks. You do not have to know which one you want.
+Ten checks. You do not have to know which one you want.
 
 | # | Check | What it looks at | Roughly |
 |---|---|---|---|
@@ -35,14 +35,18 @@ Nine checks. You do not have to know which one you want.
 | 7 | **`host`** | environment, headers, the live configuration | 5 min |
 | 8 | **`verdicts`** | judged elements: is the solution where the customer can read it | 5–10 min |
 | 9 | **`fix`** | fix the findings of the last report | depends |
+| 10 | **`since`** | the recurring pass: only what changed since the last report *(needs template 0.24.0)* | 3–10 min |
 
 **How to dispatch:**
 
-- If the user already said what they want ("check the secrets", "is `/api/mcp`
+- If the user already said what they want ("check the secrets", "is `/api/v1`
   safe?"), start that check. Do not show the menu first.
 - Otherwise show the table, say that **`all`** is the one to run before a
   launch, and wait for an answer. A number, a name or a description all count.
 - Before a launch, after a security-relevant change, or when in doubt: **`all`**.
+- For the recurring round on an app that has **already been reviewed once**, and
+  only then: **`since`** (§10). No previous report means `all` — a diff against
+  nothing is not a review.
 - **You run the commands** — through your Bash tool, not by telling the user to
   type them. That is the rule for the whole template.
 
@@ -51,7 +55,10 @@ offer to fix.
 
 ## What counts as a finding
 
-**Severity — what it costs if it stays:**
+The ladder, the four-line `Where:` / `Why:` / `Fix:` / `Evidence:` format and the
+confidence rule are the shipped ones and are **not** restated here in other words
+— read them in [`docs/guidance.md`](../../../docs/guidance.md) → *One report
+shape*. What is this skill's own is what each rung means here:
 
 | | Severity | Meaning |
 |---|---|---|
@@ -60,26 +67,10 @@ offer to fix.
 | ⚠️ | **MEDIUM** | Real, but it needs a second condition to become dangerous. Fix soon. |
 | ℹ️ | **LOW** | Hardening. When you get around to it. |
 
-**Confidence — only report what you can show.** A finding needs a code path you
-have actually read, or a request you have actually sent. Anything resting on an
-assumption about code you did not read goes into a separate **Worth a look**
-section at the end of the report, not into the count. A confident wrong finding
-costs the user an afternoon and teaches them to ignore the next report.
-
-**The format of a finding — the same everywhere:**
-
-```
-🚨 CRITICAL — Admin action reachable without an owner check
-   Where:    app/dashboard/admin/users/actions.ts:34
-   Why:      A server action is an HTTP endpoint. Any signed-in member can POST
-             to it and change another member's role.
-   Fix:      requireOwner() at the top of the action, before the first query.
-   Evidence: The action calls auth() but never checks session.user.role.
-```
-
-Four lines, always in that order. **Why** says what somebody gets out of it, in
-plain words — not "Broken Function Level Authorization". **Fix** is a change
-someone can make, not a principle.
+**What counts as shown, here:** a code path you have actually read, or a request
+you have actually sent. Anything resting on an assumption about code you did not
+read goes into **Worth a look**, not into the count. And **Why** says what
+somebody gets out of it — not "Broken Function Level Authorization".
 
 ## 1 · `all` — the full pass
 
@@ -112,11 +103,23 @@ list is short because the template is fixed:
 ```
 proxy.ts  auth.config.ts  auth.ts  lib/authz.ts  lib/roles.ts
 lib/entitlements/manage.ts        lib/tokens/spend.ts
-lib/mcp/tools.ts  lib/mcp/keys.ts
+lib/ai/tools.ts  modules/api/keys/keys.ts   (when the api module is installed)
 lib/impersonation/session.ts  lib/impersonation/guard.ts
 lib/credentials/hash.ts  lib/rate-limit.ts  lib/email-change/manage.ts
+db/schema.ts             lib/privacy/export.ts
+lib/setup/               (the third delivery layer — the ONLY one that takes
+                          member ids by design, so an id it fails to check is
+                          an id nothing else would have accepted)
+modules/community/lib/embeds.ts   (when the community module is installed and
+                                   switched on)
 every app/**/actions.ts           every app/api/**/route.ts
+every modules/*/routes/*.ts       (the v1 handlers; app/api/v1/**/route.api.ts
+                                   only re-exports them)
 ```
+
+The last three joined in template 0.24.0 — all three were customer-data surfaces
+by this skill's own definition already, so naming them makes the full pass
+slightly larger and lets §10 hold its own list against this one.
 
 Plus everything the user has built themselves — their own pages under
 `app/dashboard/`, their own tables in `db/`, their own actions. That is where
@@ -125,8 +128,9 @@ new holes come from; the template's own code has been through this before.
 The recipes for this check are in **`references/check-code.md`** — which
 routes are public on purpose and which by accident, IDOR and the `memberId`
 ownership column, why entitlement is answered by `hasPlan(memberId,
-productKey)` and never by a billing table, the MCP tool audit, the
-impersonation audit, and the
+productKey)` and never by a billing table, the chat-tool audit, the community
+pass (the kill switch, DM scoping, embeds, the live channel, activity leaks,
+an impersonated session), the impersonation audit, and the
 input/output fingerprints (SQL injection, XSS, timing-safe comparison, weak
 randomness, secrets shipped to the browser). Read that file in full while
 running this check; it carries the severity for every finding.
@@ -155,12 +159,44 @@ Small check, sharp questions. `lib/digistore/`, `app/api/ipn/route.ts`,
 
 ## 4 · `secrets` — what must never be in git
 
+```bash
+node run.mjs security-check
+```
+
+That is where this check starts, exactly as §5 does — one rung of it scans the
+**working tree** and needs nothing installed. It reads git's index and the
+staged blobs, its rules are anchored on credential SHAPES rather than on
+variable names, and there is deliberately no entropy rule. A finding gives you
+`path:line` and never the value. What exactly it reads, and the measurement
+behind that refusal, are in **`references/checks-secrets-and-deps.md`**.
+Needs template 0.23.0.
+
+🚨 **The working tree is always covered; git HISTORY only where `gitleaks` is
+already on the machine.** They are two rungs, deliberately: the working-tree one
+needs nothing installed and always runs, and `secrets-history` runs `gitleaks`
+over the history where that tool happens to be there — it is **never
+downloaded**, so on a machine without it the rung reports `⏭ not asked` with the
+reason and the one-line way to get it, which is never a pass. The tree rung says
+so in its own covers line rather than letting its silence answer for history: a
+value that was committed and later deleted is invisible to it. So the command
+settles the first row of the verdict table below (in the tree now → 🚨 CRITICAL),
+and the second row (not in the tree, but in history) is either the higher rung's
+(❌ HIGH, with the commit and the value redacted) or yours with
+`git log -p --all -S`.
+
+**A skipped rung goes into the report's `Checks:` line as skipped** — exactly the
+treatment `host` gets before the first deploy: `(history: skipped — gitleaks not
+installed)`. A check nobody ran must be visible in the header, or three months
+later the report reads as if everything had been looked at.
+
 The rule that keeps this check honest: **a secret is a finding when the concrete
 value is in git and has not been rotated.** Not the file — the value. A local
 `.env` full of live keys that was never committed is the setup working as
-designed, and reporting it as CRITICAL teaches the user to ignore you.
+designed, and reporting it as CRITICAL teaches the user to ignore you — the
+command rates that one ℹ️ LOW and carries a count rather than a value, for
+exactly this reason.
 
-How to run it is in **`references/checks-secrets-and-deps.md`** — the tools,
+How to run the rest of it is in **`references/checks-secrets-and-deps.md`** — the tools,
 the skip list (sandbox keys, publishable keys, the shipped developer key a
 scanner *will* raise and that is not a finding), the two verification commands
 and the verdict table, the checks that apply regardless of tools, and the fix
@@ -170,17 +206,48 @@ reporting anything as a leaked secret, and before fixing one.
 ## 5 · `deps` — the packages
 
 ```bash
-npm audit --omit=dev --audit-level=high
+node run.mjs security-check
 ```
 
-Dev-only vulnerabilities do not ship and rarely deserve a launch delay — say so
-rather than counting them.
+That is the command, not a bare `npm audit`. Six rungs of the ladder ask about
+the packages: **two advisory databases** (npm, asked twice — what SHIPS and the
+whole tree — and **OSV.dev** over the versions the lockfile resolved, reporting
+only what npm did not), **`signatures`** and **`registry`** for what no advisory
+database can answer yet, and **`posture`** and **`drift`**, which are about the
+app rather than about its packages. It needs nothing installed (it answers off
+the lockfile and says so) and `--json` gives you the same facts as data. What
+each rung measures, what it deliberately does not, its ratings, the three
+answers `npm ci --dry-run` can give, the two skips that are never findings —
+and how to fix the ones that do ship (updates, `overrides`, framework versions,
+and which eslint-chain findings are already judged and **not yours to fix**) —
+are in **`references/checks-secrets-and-deps.md`**. Read it before writing any
+of this up and before touching `package.json` over an audit finding.
 
-How to fix the ones that do ship — updates, `overrides`, framework versions —
-and the nine known dev-only eslint findings that are **not yours to fix** (two
-obvious fixes are refused, with the measurements behind the refusal) are in
-**`references/checks-secrets-and-deps.md`**. Read it before touching
-`package.json` over an audit finding.
+Four rules hold whatever the ladder says:
+
+- **What is accepted is a SET, never a count.** `scripts/security/accepted.mjs`,
+  one written reason per id; an empty set is the normal state and a set that
+  matches nothing is good news, so never report a count of accepted findings as
+  if it were a measurement.
+- 🚨 **`registry`'s three are facts, and you write them up as facts.**
+  "Published 2 days ago" is a fact about a release, not an accusation about a
+  package. Report what was measured and what the operator should look at (the
+  changelog, the diff, who publishes it now); never `npm audit fix`, which fixes
+  none of them, and never a word like "malicious" the measurement does not
+  support. Each rung's line names both numbers — asked and deliberately not
+  asked — and your report repeats that scope.
+- **Dev-only vulnerabilities do not ship** and rarely deserve a launch delay —
+  say so rather than counting them.
+- 🚨 **Read the `⏭ not asked` blocks before you write anything down.** A rung
+  that could not look prints its reason and what it would have covered, and that
+  is never a pass — the closing line says "nothing found in the rungs that ran".
+  It goes into the report's `Checks:` line as skipped with its reason, exactly as
+  `host` does before the first deploy. An app whose report says `deps` passed
+  when the registry never answered is worse than one with no report.
+
+*(If this command is not in your app, this copy of the template predates it —
+`node run.mjs update` carries text and never code. Run the two `npm audit`
+commands by hand and judge the dev-only findings as described below.)*
 
 ## 6 · `api` — the endpoints that answer without a session
 
@@ -203,9 +270,35 @@ The checklist is in **`references/checks-api-host-verdicts.md`** — security
 headers (and why there is deliberately no CSP), HTTPS, secrets in the host's
 secret store, `APP_ENV`, the database, the cron secret and backups.
 
+**The countable half of it is one command:
+`node run.mjs security-check --url https://<the live domain>`.** Its `live` rung
+asks the deployed app what a **stranger** gets — the four security headers as
+they actually arrive after every proxy and CDN, the cookie flags on the real
+origin, and every `/dashboard` route probed once with **no session**, where a
+2xx is 🚨 CRITICAL. Run it before you write this section up and repeat what it
+measured; it needs no account and no key, and it sends nothing at all — no
+cookie, no bearer token, no `DIAGNOSTICS_SECRET`.
+
+Three things to read correctly rather than argue with:
+
+- **A missing CSP is reported in its evidence line and is NOT a finding.** That
+  is the documented decision above, not an oversight in the rung — do not "fix"
+  it into a finding, and do not write it up as one.
+- **"the home page set no cookies, so no cookie flag was inspected" is not a
+  pass.** It is the rung saying nobody looked, and it is the normal answer for a
+  signed-out home page. Repeat the sentence; never turn it into a tick.
+- **Before there is a deployed address it skips**, with that as its reason.
+  Say so and move on — a skip here is never a failure, and the rest of this
+  section is still yours to judge by hand.
+
+⚠️ It does not replace §2 (`code`) or `app/route-protection.test.ts`: those ask
+whether anybody DECIDED about a route, and this asks whether the decision is
+being honoured by whatever is serving it. A green rung is not evidence that a
+gate is right, only that the world is not being shown the page.
+
 ## 8 · `verdicts` — is the solution where the customer can read it?
 
-Only where `ACTIVITIES` (`lib/learning/activities.ts`) has entries. The
+Only where `ACTIVITIES` (`modules/activity/activities.ts`) has entries. The
 failure this section exists for is invisible to every other check: a judged
 element whose answers reach the browser renders, returns 200 and stays green
 everywhere — and is worthless.
@@ -221,79 +314,127 @@ the browser*; the deeper audit (keyboard included) is the skill
 ## 9 · `fix` — fixing what was found
 
 Fix in severity order: every CRITICAL, then every HIGH. MEDIUM and LOW are the
-user's call — name what each one costs and let them decide.
+user's call — name what each one costs and let them decide. 🚨 **A fix that has
+not been measured is a claim**, so this is a pass with seven steps, per finding:
 
-For each fix:
+1. **Name the finding and its proof shape** — countable (it came out of
+   `node run.mjs security-check`) or semantic (you read the code). A finding no
+   test can reach is a third case and ends up *unproven*.
+2. **Apply the change. One finding, one change** — a fix bundled into a
+   refactor cannot be reviewed or reverted — plus **a test where a test is
+   possible** (`lib/digistore/ipn.test.ts` is the model), written BEFORE the
+   fix and watched to fail.
+3. **The four checks**, each with three outcomes — passed, failed, *could not
+   look*: `npm run typecheck`, `npm run test`, `node run.mjs smoke`,
+   `node run.mjs errors`. 🚨 `smoke` proves itself by the clause **`, N of them
+   signed in`** in its success line, never by the absence of a complaint: a run
+   that could not sign in says `N protected page(s) NOT checked` and exits 0
+   anyway. `errors` exits **2** for *could not look*, and needs the app running.
+4. **Prove it — two halves, neither enough alone**: the same check again in the
+   same scope with the finding gone, AND a needle that it could have found it.
+   Countable: that rung's `state` in `security-check --json` is `clean` or
+   `found`, 🚨 **never `skipped`**. Semantic: the test was RED before.
+5. **Show the diff** beside the result of every check, in the fixed evidence
+   shape — a line nothing can fill says what happened there, never a `✓`.
+6. **Update the report.** `## Fixed in this run` is for proven fixes, `## Open`
+   for everything else, with the reason. *Changed* and *fixed* are two words.
+7. **Stop.** A failing or unlooked check means not done: name it, offer the fix
+   or the revert, and never start the next finding while anything is red.
 
-1. **One finding, one change.** Small and targeted. A security fix bundled into
-   a refactor cannot be reviewed and cannot be reverted.
-2. **A test where a test is possible.** The template already tests the sharp
-   edges — `lib/digistore/ipn.test.ts`, `lib/mcp/tools.test.ts`,
-   `lib/impersonation/guard.test.ts`. A new guarantee gets a new test, or it
-   will quietly disappear in six months.
-3. **Verify the actual behaviour**, not the diff. Invalid signature → 403.
-   Another member's id → nothing. Unauthenticated route → redirect to `/login`.
-4. **`node run.mjs test`** at the end, and `node run.mjs smoke` if routes moved.
-5. **Update the report** — what was fixed, what stays open, and why.
-
+Three shortcuts are **refusals** and each of them works: weakening a shipped
+test, writing the finding into `accepted.mjs` yourself, and `npm audit fix`.
 Anything you cannot fix without a decision (a rotation at a provider, a host
-setting, deleting data) goes back to the user as one clear question.
+setting, deleting data) goes back to the user as one clear question. Both proof
+shapes, the four checks with their exit codes and their two traps, the evidence
+block, the three refusals with the file that argues each, and a worked example
+are in **`references/fix-pass.md`** — read it in full before the first fix.
+
+🚨 **You do not deploy.** Not a push, not a host CLI: that is the operator's
+next decision (`go-live`, or their host's own deploy), and so is the commit —
+offer both, do neither.
+
+## 10 · `since` — the recurring pass
+
+Only for an app that already has a dated report. It asks the smaller question —
+**what changed after it** — so that the second review costs minutes and
+therefore happens at all.
+
+```bash
+node run.mjs security-scope        # --json for the same facts as data
+```
+
+That names the report it measures from, the base commit, the changed files
+(**untracked ones included**), the areas pulled in whole, and the line this
+check exists for: `NOT looked at: n of m files`. Where it answers `mode: full` —
+no dated report, no git, no commit at or before that report's day — run **`all`**
+instead and say so out loud.
+
+| Check | In a `since` pass | Why |
+|---|---|---|
+| `secrets` (§4) | **FULL, always** | the only class that stays dangerous after you fix it — a key in an untouched file is still out |
+| `deps` (§5) | **FULL, always** | an advisory appears without any file changing, and the ladder costs seconds |
+| `code` (§2) | diff-scoped | this is where the 20–40 minutes live |
+| `pay` (§3) | full **iff** the diff touches the money surfaces, else a **named skip** | small, but it reads four whole subsystems |
+| `api` (§6) | the changed handlers, **plus** full when `proxy.ts`, `auth.config.ts` or `guardApi()` changed | one changed door does not move the others; one changed guard moves all of them |
+| `verdicts` (§8) | full when `ACTIVITIES` or a `load()` changed, else its existing skip | unchanged from today |
+| `host` (§7) | unchanged — skipped before a deploy; `live` still runs with `--url` | it asks about a server, not about a file |
+
+A diff into money, authentication, entitlements or customer data widens the
+scope to that whole area (`ALWAYS_IN_FULL` in `scripts/security/scope.mjs`, held
+against §2/§3 above by a test), and the report says which file pulled it in.
+
+🚨 **A scoped run that finds nothing looks exactly like a clean app.** The scope
+goes in the report header **above** the tally, with a `## Not covered by this
+run` section — and *clean*, *safe* and *no findings* never appear without the
+scope in the same sentence. The mechanics, both refusal cases, the empty diff
+and a worked report are in **`references/recurring-pass.md`**; read it in full
+while running this check.
 
 ## The report
 
 Every run writes one, whether it found anything or not. That is what makes "did
 we already do the security pass?" answerable in three months.
 
-Write it to **`docs/reports/security-YYYY-MM-DD.md`** (add `-2`, `-3` if the day
-already has one). Create the folder if it is not there.
+It goes to **`docs/reports/security-YYYY-MM-DD.md`**, and its shape — the header
+above the tally, the five sections in their order, the spoken summary at the end
+— is [`docs/guidance.md`](../../../docs/guidance.md) → *One report shape*. Three
+things are this skill's own:
 
-```markdown
-# Security report — 2026-07-26
+- **`Checks:` names the seven checks above**, and for every one that did not run
+  in full it says **scoped** or **skipped with its reason** — the treatment
+  `host` already gets before the first deploy.
 
-Checks: secrets, deps, code, pay, api        (host: skipped — not deployed yet)
-App:    local, commit a1b2c3d
+- **A `Scope:` block, and a `## Not covered by this run` section after the
+  findings, belong to a `since` pass (§10) and to nothing else.** Where they do
+  belong they are required, in numbers, above the tally:
 
-🚨 CRITICAL 0   ❌ HIGH 2   ⚠️ MEDIUM 3   ℹ️ LOW 1   ✅ accepted 2
+  ```markdown
+  Scope:  since docs/reports/security-2026-08-01.md (base a1b2c3d) — 14 files changed,
+          2 areas reviewed in full. NOT looked at: 812 of 826 files.
+          This is not a full pass.
+  ```
 
-## Findings
-(each in the four-line format, CRITICAL first)
+  🚨 A scoped run that finds nothing looks exactly like a clean app, so *clean*,
+  *safe* and *no findings* never appear without the scope in the same sentence.
+  The worked report is in **`references/recurring-pass.md`**.
 
-## Fixed in this run
-(what changed, with the commit or the file)
+- 🚨 **`## Fixed in this run` is a claim about measurements, not about diffs.** A
+  fix whose proof is missing or partial — a check that could not look, a rung
+  that skipped — belongs under `## Open`, with what would prove it (§9, step 6).
 
-## Open
-(what stays, and the reason — a decision, a cost, a dependency)
-
-## Worth a look
-(the low-confidence observations — no severity, no count)
+The spoken summary carries two clauses the shared shape does not: **what was
+proven and by what**, and — after a `since` pass — that it **was** a scoped pass,
+what it covered, and when the last FULL pass was. Its straight yes or no is
+whether the app can go live.
 
 ## Accepted risks
-(from docs/reports/security-accepted.md, with the reason and who accepted it)
-```
 
-Then say it out loud, in three or four sentences: what was found, what was
-fixed, what is still open, and whether the app can go live. That last one is a
-straight answer — "yes", or "no, because X". Not a summary of the report.
-
-## Accepted risks
-
-Some findings are deliberate. Rather than rediscovering them every run, they go
-into **`docs/reports/security-accepted.md`** — create it the first time
-something is accepted:
-
-```markdown
-| Finding | Where | Why accepted | By | Date | Review |
-|---|---|---|---|---|---|
-| Rate limiter is per process | lib/rate-limit.ts | single instance for now | Anna | 2026-07-26 | when scaled out |
-```
-
-Rules: an accepted risk is **not counted** in the severity totals and appears in
-its own section of the report. Only the user accepts a risk — never you, and
-never silently. If the `Review` condition has come true (the app was scaled out,
-the date has passed), raise it again as a normal finding.
-
-A CRITICAL is not accepted. If somebody wants to accept one, that is the moment
-to say plainly what it means.
+Some findings are deliberate. This skill's register is
+**`docs/reports/security-accepted.md`** — create it the first time something is
+accepted. Its table and the rules that go with it (not counted, its own section,
+only the user accepts one, a CRITICAL never) are
+[`docs/guidance.md`](../../../docs/guidance.md) → *Accepted is not the same as
+fixed*.
 
 ## STOP — get a human
 

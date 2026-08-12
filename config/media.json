@@ -1,7 +1,7 @@
 {
   "_comment": "What this app may hold and hand out: pictures, video, recordings and the files a vendor sells. Four kinds, and each one has its own ceiling, its own accepted types and its own address lifetime — because a picture and a forty-minute recording are not the same problem. A type that is not listed under any kind is refused before a single byte is written. Check it with: node run.mjs media-check. Details: docs/visuals.md.",
   "_whereItLives": "The BYTES live in object storage, not in this app and not on its disk — MEDIA_DRIVER in the .env, and the local disk is DEV only. An app that stores files on the machine it runs on loses them at the next redeploy and shows different files from each node once there are two. lib/env-guard.ts refuses to start rather than let that reach STAGING or PROD.",
-  "_uploadCeiling": "The ceilings below are what fits THROUGH the app, because that is how an upload travels today: the request carries the bytes, the app checks them and puts them away. A lesson recording of several hundred megabytes needs the other path — the browser writing straight to the bucket — and that is deliberately not built yet. docs/visuals.md says what it involves.",
+  "_uploadCeiling": "There are TWO ways in and the ceilings below belong to the second of them. Through the app — the request carries the bytes, the app checks them, puts them away — the real limit is what a request body may carry (10 MB, next.config.ts), and slotCeilingBytes() takes the lower of the two, so raising a number here never raises that one. Straight to the bucket — the browser writes the object and the app reads back what landed — the number below IS the limit, which is why video sits at 2 GB. Pictures always take the first way: location data comes off them on the way in, and that needs the bytes in this process. docs/visuals.md walks both.",
   "enabled": true,
   "kinds": {
     "image": {
@@ -16,7 +16,8 @@
     },
     "video": {
       "_comment": "Six hours, because a player re-requests byte ranges as somebody scrubs through it and an address that expired mid-view looks like a broken video. The cost is that the address can be passed on for that long — for paid content that is a real trade, and docs/visuals.md states it.",
-      "maxBytes": 52428800,
+      "_maxBytes": "2 GB, and it applies to the DIRECT path only: through the app a video still stops at the 10 MB a request body carries (slotCeilingBytes()). This is the number Story 8.1 raised, and it is the one a lesson recording needs.",
+      "maxBytes": 2147483648,
       "mimeTypes": [
         "video/mp4",
         "video/webm"
@@ -44,8 +45,14 @@
     }
   },
   "mayUpload": {
-    "_comment": "Who may put WHAT in, by role. A member uploads pictures and documents; archives are the operator's, because a customer who can hand every other customer a .zip is not a media feature. Every type here must also appear under some kind above — media-check says so if it does not.",
+    "_comment": "Who may put WHAT in, by role. A member uploads pictures and documents; a moderator the same (keeping rooms clean is not a reason to hand out the operator's archive types); archives are the operator's, because a customer who can hand every other customer a .zip is not a media feature. EVERY role in lib/roles.ts needs a line here — a role that is missing may upload nothing at all, not even an avatar. Every type here must also appear under some kind above — media-check says so if it does not.",
     "member": [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "application/pdf"
+    ],
+    "moderator": [
       "image/jpeg",
       "image/png",
       "image/webp",

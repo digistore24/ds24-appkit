@@ -248,6 +248,32 @@ job, a chunking strategy, a migration and a second thing that can silently
 return the wrong paragraph — all of which is worth it for a large corpus and
 none of which is worth it for forty pages.
 
+## She can look things up — the content tools
+
+The handbook answers "how does this app work". What it deliberately does not
+carry is the app's own CONTENT — a course's nineteen lessons do not belong in
+a prompt, however cacheable. For that she has tools: the four `content_*`
+tools over the content-source registry (`lib/ai/tools.ts`), executed
+in-process mid-answer (`lib/ai/tool-loop.ts`). She searches when the question calls for
+it, fetches the page that answers, and tells the member where it is.
+
+What that changes, and what it does not:
+
+- **What she can reach is the content-source registry**
+  (`lib/content-source/sources.ts`) and nothing else — out of the box that is
+  the handbook itself, and it grows exactly when the app registers a source
+  for its own content. The guide is [`content-source.md`](content-source.md),
+  including the one decision to take consciously: whatever a tool returns is
+  sent to the AI provider, so member-scoped content behind a chat tool is a
+  deliberate, recorded decision, never a default.
+- **"Nothing about the person is sent to the API" still holds** — the shipped
+  tools return the same content for every member.
+- **Each lookup is its own provider round-trip** with its own `ai_usage` row,
+  up to `MAX_TOOL_ROUNDS` per question — a question that searches costs two
+  to three calls instead of one, on a cached prompt. The wire shows a
+  `{"type":"tool","name":"…"}` line while she looks; the client ignores
+  unknown types, so older UIs simply keep streaming.
+
 ## What she can and cannot do
 
 **Nothing about the person is sent to the API.** Not their name, address,
@@ -311,10 +337,31 @@ sanitiser to keep current, and anything outside the subset (a table, a heading,
 a link) is shown to the customer literally. That is the safe direction, and the
 persona tells her so rather than pretending the window renders more.
 
-One extension: a media marker she repeats **verbatim from the handbook**
-renders as a small suggestion card — a video, a worksheet — and anything that
-is not an exact copy stays plain text. The markers, the files behind them and
-the two delivery legs are [`docs/knowledge.md`](knowledge.md).
+**Two extensions, and they are the same mechanism twice.** Both are bracket
+text she repeats *verbatim*; both become something clickable only when the
+COMPLETE marker string is in a whitelist she has no way to add to; and anything
+that is not an exact copy stays plain text in front of the customer. She never
+writes either one herself.
+
+| | Where the whitelist comes from | What it renders as |
+|---|---|---|
+| `[media:path\|label]` | the loaded **handbook** — static, the same for everybody | a small suggestion card (a video, a worksheet) |
+| `[link:path\|label]` *(template 0.18.0+)* | **this answer's own lookups** — the pages a registered content source returned for this member, this turn | an in-app link *inside the sentence* |
+
+So she can now say *"das Thema wird in **Lektion 3: Knoten binden** erklärt"*
+with the title clickable — but only about content she actually looked up, and
+only to a page of this app. She cannot link to a lesson that does not exist
+(the marker would not be in the set) and she cannot link off-site at all (the
+target grammar cannot express it). The links a turn used are stored with it, so
+they still work after a reload.
+
+There is one thing to know if you register a content source: **a link only
+works if the route, the source, the anchor and the visibility gate ship
+together**, and the gate must be one function called from both the source and
+the page. The checklist is in
+[`docs/content-source.md`](content-source.md) → *The five things that make a
+link work*. The media markers, the files behind them and the two delivery legs
+are [`docs/knowledge.md`](knowledge.md).
 
 ## Where she appears
 

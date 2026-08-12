@@ -42,7 +42,7 @@ function row(over: Partial<MediaRow> = {}): MediaRow {
     kind: "video",
     visibility: "entitled",
     requiresPlan: "basis_monatlich",
-    storageKey: "video/2026/08/m1.mp4",
+    storageKey: "courses/video/2026/08/m1.mp4",
     mime: "video/mp4",
     filename: null,
     bytes: 10,
@@ -82,7 +82,7 @@ describe("deliverMedia — bucket redirect or app stream", () => {
     // reorders the branches would look green while shipping the silent
     // failure back in.
     findMedia.mockResolvedValue(
-      row({ mime: "text/vtt", kind: "file", storageKey: "file/2026/08/m1.vtt" }),
+      row({ mime: "text/vtt", kind: "file", storageKey: "courses/subtitle/2026/08/m1.vtt" }),
     );
     signedUrl.mockReturnValue("https://bucket.example/signed");
     getBytes.mockResolvedValue(new TextEncoder().encode("WEBVTT\n\n"));

@@ -12,7 +12,8 @@
 // string can prove a call exists but not that a Set-Cookie deletion comes out.
 import { readFileSync } from "node:fs";
 import type { NextFetchEvent } from "next/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { blankComments } from "@/scripts/lib/source-text.mjs";
 
 const source = readFileSync(new URL("./proxy.ts", import.meta.url), "utf8");
 
@@ -22,7 +23,7 @@ const source = readFileSync(new URL("./proxy.ts", import.meta.url), "utf8");
  * an assertion over raw text would fail on its own documentation; conversely, a
  * `toContain` over raw text would stay green on a commented-out matcher line.
  */
-const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+const code = blankComments(source);
 
 describe("proxy.ts", () => {
   it("still protects /dashboard", () => {
@@ -86,3 +87,36 @@ describe("the cookie sweep, executed", () => {
     expect(deletions.some((cookie) => cookie.startsWith(`${own.sessionToken.name}=`))).toBe(false);
   });
 });
+
+// ── The community's off-state, executed ────────────────────────────────────
+//
+// This is the enforcement point of FR-180 — "off" must be indistinguishable
+// from "never built" — and until the code review of Epic 19 it had no unit test
+// at all: `smoke` fetches the literal path once against a real boot, and that
+// was the whole of it. Three of the branches below had never been executed by
+// anything.
+//
+// Reaching them needs Auth.js stubbed, which is why the sweep test above stops
+// at a public path: `/dashboard/*` goes through `protect()` first. Stubbing
+// `next-auth` is the smallest thing that makes the REST of the function real —
+// the config read, the decode, the location guard, the cookie carry and the
+// rewrite target are all the shipped code.
+//
+// What this cannot prove, stated so nobody reads more into it than is here:
+// that Next's ROUTER resolves `/dashboard/%63ommunity` to the community page.
+// That claim belongs to the framework and is measured by the smoke assertion
+// against a real boot. What is proven here is our half — that the proxy treats
+// the escaped form as the community path rather than letting it through.
+// ⚠️ The community's off-state used to be executed HERE, against a mock of
+// `@/lib/community/config` and the rewrite target
+// `/dashboard/__community-is-not-built__`. That block is gone with the feature:
+// the community is a module now, and `proxy.ts` runs one generic loop over
+// `MODULE_GATES` instead of a hand-written comparison per feature.
+//
+// The property did not go with it. `scripts/modules/gate.test.ts` executes the
+// same refusal for any installed module — including the Set-Cookie carry-over,
+// which is the half that would go missing in a second copy — and
+// `modules/community/gate.ts` is what supplies the paths, read from the `app`
+// list in the manifest rather than typed out a second time. That is what fixed
+// the original defect: the hand-written version covered `/dashboard/community`
+// and missed `/dashboard/admin/community`.

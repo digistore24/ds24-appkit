@@ -26,7 +26,7 @@ notice is missing, unreadable or no longer rendered.
 
 One surface that is invisible to every check above: a companion somebody
 hand-wrote instead of mounting `<CompanionPanel>`. `legal-check` looks for
-`<AiDisclosure surface="companion" />` in `components/companion-panel.tsx`, so a
+`<AiDisclosure surface="companion" />` in `modules/companion/components/companion-panel.tsx`, so a
 bespoke surface can carry its notice under the send button with everything
 green. Ask.
 

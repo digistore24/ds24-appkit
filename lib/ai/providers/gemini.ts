@@ -40,7 +40,9 @@ import {
   emptyUsage,
   passthroughOptions,
   type Adapter,
+  type ModelMessage,
   type NormalizedRequest,
+  type ToolCall,
   type Usage,
 } from "./types";
 import { assertCacheableOrder, flattenBlocks } from "./blocks";
@@ -63,6 +65,43 @@ export const GEMINI_ENV_VAR = "GEMINI_API_KEY";
  *     `assistant`, so a multi-turn conversation fails while a single-turn one
  *     works — which is the worst way to find out.
  */
+/**
+ * One history turn as a `Content` object. The third message shape lives here:
+ * a round's results ride a `user` turn as `functionResponse` parts — Gemini
+ * has no tool-call ids, so **matching is by NAME and by ORDER**. The results
+ * are emitted in call order and must never be resorted; a model that called
+ * the same function twice in one round is disambiguated by position alone.
+ * `response` must be an OBJECT on this API, hence the {result}/{error} wrap.
+ */
+function contentFor(message: ModelMessage): Record<string, unknown> {
+  if (message.role === "tool") {
+    return {
+      role: "user",
+      parts: message.results.map((result) => ({
+        functionResponse: {
+          name: result.name,
+          response: result.isError ? { error: result.content } : { result: result.content },
+        },
+      })),
+    };
+  }
+  if ("toolCalls" in message) {
+    return {
+      role: "model",
+      parts: [
+        ...(message.content !== "" ? [{ text: message.content }] : []),
+        ...message.toolCalls.map((call) => ({
+          functionCall: { name: call.name, args: call.input },
+        })),
+      ],
+    };
+  }
+  return {
+    role: message.role === "assistant" ? "model" : "user",
+    parts: [{ text: message.content }],
+  };
+}
+
 export function buildBody(req: NormalizedRequest): Record<string, unknown> {
   assertCacheableOrder(req.system);
 
@@ -73,10 +112,7 @@ export function buildBody(req: NormalizedRequest): Record<string, unknown> {
   const options = passthroughOptions(req.providerOptions);
 
   const body: Record<string, unknown> = {
-    contents: req.messages.map((message) => ({
-      role: message.role === "assistant" ? "model" : "user",
-      parts: [{ text: message.content }],
-    })),
+    contents: req.messages.map(contentFor),
     generationConfig: {
       maxOutputTokens: req.maxTokens,
       ...((options.generationConfig as Record<string, unknown>) ?? {}),
@@ -93,6 +129,28 @@ export function buildBody(req: NormalizedRequest): Record<string, unknown> {
   for (const [key, value] of Object.entries(options)) {
     if (key === "generationConfig") continue;
     body[key] = value;
+  }
+
+  // AFTER the passthrough loop, the same anti-clobber rule as everywhere: tool
+  // wiring comes from calling code, never from a binding — both keys stripped
+  // first, so a stale binding value can neither disarm the loop nor arm a
+  // tool-less request. No tools ⇒ neither field — a tool-less request stays
+  // byte-identical to the pre-tools shape.
+  delete body.tools;
+  delete body.toolConfig;
+  if (req.tools && req.tools.length > 0) {
+    body.tools = [
+      {
+        functionDeclarations: req.tools.map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.inputSchema,
+        })),
+      },
+    ];
+    if (req.toolChoice === "none") {
+      body.toolConfig = { functionCallingConfig: { mode: "NONE" } };
+    }
   }
 
   return body;
@@ -167,6 +225,46 @@ export function stopReasonFrom(payload: unknown): string | null {
   return typeof reason === "string" ? reason : null;
 }
 
+/**
+ * The `functionCall` parts of the first candidate, as our shape.
+ *
+ * Gemini issues no call ids — `nextId` synthesizes them (`call_1`, …) so the
+ * loop can key its results. The ids never travel back to Google; the replay
+ * matches by name and order (see `contentFor`). `args` arrives parsed, so
+ * there is no `parseFailed` path on this provider either.
+ */
+export function toolCallsFrom(payload: unknown, nextId: () => string): ToolCall[] {
+  const candidates = (payload as { candidates?: unknown })?.candidates;
+  if (!Array.isArray(candidates) || candidates.length === 0) return [];
+  const parts = (candidates[0] as { content?: { parts?: unknown } })?.content?.parts;
+  if (!Array.isArray(parts)) return [];
+
+  const calls: ToolCall[] = [];
+  for (const part of parts) {
+    const fc = (part as { functionCall?: { id?: unknown; name?: unknown; args?: unknown } })
+      ?.functionCall;
+    if (!fc || typeof fc.name !== "string") continue;
+    calls.push({
+      id: typeof fc.id === "string" && fc.id !== "" ? fc.id : nextId(),
+      name: fc.name,
+      input:
+        typeof fc.args === "object" && fc.args !== null && !Array.isArray(fc.args)
+          ? (fc.args as Record<string, unknown>)
+          : {},
+    });
+  }
+  return calls;
+}
+
+/** `call_1`, `call_2`, … — one counter per stream, deterministic. */
+export function idSequence(): () => string {
+  let n = 0;
+  return () => {
+    n += 1;
+    return `call_${n}`;
+  };
+}
+
 // ── The I/O shell ───────────────────────────────────────────────────────────
 
 async function send(
@@ -218,6 +316,7 @@ export const geminiAdapter: Adapter = {
       text: textFrom(json),
       usage: usageFrom((json as { usageMetadata?: unknown })?.usageMetadata),
       stopReason: stopReasonFrom(json),
+      toolCalls: toolCallsFrom(json, idSequence()),
     };
   },
 
@@ -228,6 +327,7 @@ export const geminiAdapter: Adapter = {
 
     let usage: Usage | null = null;
     let stopReason: string | null = null;
+    const nextId = idSequence();
 
     try {
       const response = await send(req, key, true, idle.signal);
@@ -244,6 +344,12 @@ export const geminiAdapter: Adapter = {
         // two lines down.
         const text = textFrom(chunk);
         if (text !== "") yield { type: "delta", text };
+
+        // Parts are new per chunk, so calls are yielded as they appear —
+        // complete already, because Gemini sends whole functionCall parts.
+        for (const call of toolCallsFrom(chunk, nextId)) {
+          yield { type: "tool_call", call };
+        }
 
         const reason = stopReasonFrom(chunk);
         if (reason !== null) stopReason = reason;

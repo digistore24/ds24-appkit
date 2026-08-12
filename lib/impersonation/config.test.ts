@@ -26,9 +26,9 @@ describe("the impersonation switch", () => {
   });
 
   it("ships ON, so the feature exists in a fresh app", () => {
-    // Deliberately the opposite of `config/mcp.json`. An unconfigured MCP
-    // server exposes example tools; this exposes nothing until an Operator
-    // clicks it — and the alternative to having it is the email-swap
+    // Deliberately the opposite of `config/api.json`. An enabled API is
+    // attack surface nobody decided on; this exposes nothing until an
+    // Operator clicks it — and the alternative to having it is the email-swap
     // workaround, which is worse in every way.
     expect(isImpersonationEnabled()).toBe(true);
   });

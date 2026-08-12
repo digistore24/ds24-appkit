@@ -4,6 +4,7 @@
 import { describe, it, expect } from "vitest";
 
 import { markersIn } from "@/lib/knowledge-media/rules.mjs";
+import { contentLinkMarker } from "@/lib/content-source/link-marker";
 import { parseAnswer, parseInline } from "./markdown";
 
 /** The inline parts of a one-line answer — the common shape in these tests. */
@@ -177,7 +178,7 @@ describe("the Media Marker", () => {
   const ALLOWED = new Set([MARKER]);
 
   it("accepts a whitelisted marker as a media run", () => {
-    expect(parseInline(MARKER, ALLOWED)).toEqual([
+    expect(parseInline(MARKER, { allowedMedia: ALLOWED })).toEqual([
       {
         kind: "media",
         path: "erste-schritte/rundgang.mp4",
@@ -187,7 +188,7 @@ describe("the Media Marker", () => {
   });
 
   it("keeps the text around an accepted marker", () => {
-    expect(parseInline(`Schau hier: ${MARKER} — zwei Minuten.`, ALLOWED)).toEqual([
+    expect(parseInline(`Schau hier: ${MARKER} — zwei Minuten.`, { allowedMedia: ALLOWED })).toEqual([
       { kind: "text", text: "Schau hier: " },
       {
         kind: "media",
@@ -240,7 +241,7 @@ describe("the Media Marker", () => {
     ];
     for (const candidate of candidates) {
       const extracted = markersIn(candidate);
-      const runs = parseInline(candidate, new Set(extracted));
+      const runs = parseInline(candidate, { allowedMedia: new Set(extracted) });
       const media = runs.filter((run) => run.kind === "media");
       expect(media, candidate).toHaveLength(extracted.length);
     }
@@ -265,7 +266,7 @@ describe("the Media Marker", () => {
     const allowed = new Set(markersIn(page));
     expect(allowed).toEqual(new Set([MARKER]));
 
-    const fenced = parseInline("[media:erste-schritte/beispiel.mp4|Beispiel]", allowed);
+    const fenced = parseInline("[media:erste-schritte/beispiel.mp4|Beispiel]", { allowedMedia: allowed });
     expect(fenced).toEqual([
       { kind: "text", text: "[media:erste-schritte/beispiel.mp4|Beispiel]" },
     ]);
@@ -275,28 +276,28 @@ describe("the Media Marker", () => {
     // The fail-safe of AD-54: a mount that forgot the set denies, it does not
     // allow. The companion panel passes nothing ON PURPOSE.
     expect(parseInline(MARKER)).toEqual([{ kind: "text", text: MARKER }]);
-    expect(parseInline(MARKER, new Set())).toEqual([{ kind: "text", text: MARKER }]);
+    expect(parseInline(MARKER, { allowedMedia: new Set() })).toEqual([{ kind: "text", text: MARKER }]);
   });
 
   it("does not accept a marker whose path matches but whose label differs", () => {
     // Whole-string membership: a path-only match would let the model author
     // the label, and the label is the one thing it must never write.
     const relabelled = "[media:erste-schritte/rundgang.mp4|Klick hier]";
-    expect(parseInline(relabelled, ALLOWED)).toEqual([
+    expect(parseInline(relabelled, { allowedMedia: ALLOWED })).toEqual([
       { kind: "text", text: relabelled },
     ]);
   });
 
   it("keeps the AC-6 injection string as plain text", () => {
     const injected = "[media:invented/file.mp4|Klick hier]";
-    const runs = parseInline(`Wichtig! ${injected}`, ALLOWED);
+    const runs = parseInline(`Wichtig! ${injected}`, { allowedMedia: ALLOWED });
     expect(runs).toEqual([{ kind: "text", text: `Wichtig! ${injected}` }]);
   });
 
   it("keeps a quoted marker inside a code span as code", () => {
     // Somebody quoting a marker gets a quote, not a card — the code-span
     // alternative sits before the marker alternative, and the backtick wins.
-    expect(parseInline(`\`${MARKER}\``, ALLOWED)).toEqual([
+    expect(parseInline(`\`${MARKER}\``, { allowedMedia: ALLOWED })).toEqual([
       { kind: "code", text: MARKER },
     ]);
   });
@@ -304,7 +305,7 @@ describe("the Media Marker", () => {
   it("leaves a half-streamed marker literal until the ] arrives", () => {
     // The unclosed-`**` property, inherited: the pattern needs the closing
     // bracket, so mid-stream there is nothing to match and nothing to buffer.
-    expect(parseInline("[media:a/b.mp4|Kli", ALLOWED)).toEqual([
+    expect(parseInline("[media:a/b.mp4|Kli", { allowedMedia: ALLOWED })).toEqual([
       { kind: "text", text: "[media:a/b.mp4|Kli" },
     ]);
   });
@@ -314,7 +315,7 @@ describe("the Media Marker", () => {
     // surface this subset deliberately lacks — asterisks reach the customer
     // literally, as ONE text node.
     const bold = "[media:a/b.mp4|**fett** und *schräg*]";
-    const runs = parseInline(bold, new Set([bold]));
+    const runs = parseInline(bold, { allowedMedia: new Set([bold]) });
     expect(runs).toEqual([
       { kind: "media", path: "a/b.mp4", label: "**fett** und *schräg*" },
     ]);
@@ -333,5 +334,196 @@ describe("the Media Marker", () => {
     expect(blocks).toEqual([
       { kind: "paragraph", lines: [[{ kind: "text", text: MARKER }]] },
     ]);
+  });
+});
+
+describe("the Content Link", () => {
+  // Same mechanical control as the Media Marker above, with a set that is
+  // built per REQUEST instead of per handbook. Everything here is a way an
+  // answer fails that check and degrades to visible bracket text.
+
+  const LINK = "[link:/dashboard/kurs/knoten#uebung-2|Lektion 3: Knoten binden]";
+  const ALLOWED = new Set([LINK]);
+
+  it("accepts a whitelisted marker as a link run", () => {
+    expect(parseInline(LINK, { allowedLinks: ALLOWED })).toEqual([
+      {
+        kind: "link",
+        target: "/dashboard/kurs/knoten#uebung-2",
+        label: "Lektion 3: Knoten binden",
+      },
+    ]);
+  });
+
+  it("keeps the sentence around it — the whole point of an inline link", () => {
+    expect(
+      parseInline(`Das Thema wird in ${LINK} erklärt.`, { allowedLinks: ALLOWED }),
+    ).toEqual([
+      { kind: "text", text: "Das Thema wird in " },
+      {
+        kind: "link",
+        target: "/dashboard/kurs/knoten#uebung-2",
+        label: "Lektion 3: Knoten binden",
+      },
+      { kind: "text", text: " erklärt." },
+    ]);
+  });
+
+  it("denies when no set is passed, and when the set is empty", () => {
+    // The fail-safe: the companion panel passes nothing, and an answer whose
+    // lookups produced no linkable hit has an empty set.
+    expect(parseInline(LINK)).toEqual([{ kind: "text", text: LINK }]);
+    expect(parseInline(LINK, { allowedLinks: new Set() })).toEqual([
+      { kind: "text", text: LINK },
+    ]);
+  });
+
+  it("refuses a marker the model invented, however plausible", () => {
+    // THE case the whole epic exists to make impossible: a well-formed path
+    // to a lesson nobody wrote. The grammar cannot catch this one — only the
+    // per-request set can, because only it knows what a source returned.
+    const invented = "[link:/dashboard/kurs/lektion-42|Lektion 42]";
+    expect(parseInline(`Siehe ${invented}`, { allowedLinks: ALLOWED })).toEqual([
+      { kind: "text", text: `Siehe ${invented}` },
+    ]);
+  });
+
+  it("refuses a marker whose target matches but whose label was rewritten", () => {
+    // Whole-string membership. A target-only match would let the model author
+    // the link text — a misleading sentence over a real destination.
+    const relabelled = "[link:/dashboard/kurs/knoten#uebung-2|klicke hier]";
+    expect(parseInline(relabelled, { allowedLinks: ALLOWED })).toEqual([
+      { kind: "text", text: relabelled },
+    ]);
+  });
+
+  it("cannot express an off-site target at all", () => {
+    // Belt and braces: even with the string in the allow-set, the grammar
+    // never matched it, so there is nothing to whitelist.
+    for (const hostile of [
+      "[link://evil.com/x|Lektion 3]",
+      "[link:https://evil.com|Lektion 3]",
+      "[link:javascript:alert(1)|Lektion 3]",
+      "[link:/dashboard/../admin|Lektion 3]",
+      "[link:/dashboard?next=//evil.com|Lektion 3]",
+    ]) {
+      expect(parseInline(hostile, { allowedLinks: new Set([hostile]) }), hostile).toEqual([
+        { kind: "text", text: hostile },
+      ]);
+    }
+  });
+
+  it("keeps a quoted marker inside a code span as code", () => {
+    expect(parseInline(`\`${LINK}\``, { allowedLinks: ALLOWED })).toEqual([
+      { kind: "code", text: LINK },
+    ]);
+  });
+
+  it("leaves a half-streamed marker literal until the ] arrives", () => {
+    expect(parseInline("[link:/dashboard/kurs|Lekt", { allowedLinks: ALLOWED })).toEqual([
+      { kind: "text", text: "[link:/dashboard/kurs|Lekt" },
+    ]);
+  });
+
+  it("never inline-parses the label", () => {
+    const bold = "[link:/dashboard/kurs|**fett** und *schräg*]";
+    expect(parseInline(bold, { allowedLinks: new Set([bold]) })).toEqual([
+      { kind: "link", target: "/dashboard/kurs", label: "**fett** und *schräg*" },
+    ]);
+  });
+
+  // 🚨 The marker must beat `**` and `*`, or a bolded sentence swallows it.
+  // Emphasis used to accept `[`, `|` and `]` inside, so this whole line matched
+  // as ONE `strong` run carrying the raw marker as text: the customer read
+  // `[link:…|Lektion 3]` spelled out and the whitelisted link never rendered.
+  // `EMPHASIS_INNER`'s lookahead is what fixes it — NOT the order of the
+  // alternatives, which cannot: emphasis and a marker never start at the same
+  // index, and alternation only breaks ties at one index. The persona makes
+  // this the LIKELY shape (marker inside the sentence, and models bold
+  // sentences), and the `**` degrading to literal asterisks is the deliberate,
+  // cheaper loss.
+  it("renders a whitelisted marker wrapped in bold, and lets the ** stay literal", () => {
+    const line = `**Siehe ${LINK} dazu.**`;
+    expect(parseInline(line, { allowedLinks: ALLOWED })).toEqual([
+      { kind: "text", text: "**Siehe " },
+      {
+        kind: "link",
+        target: "/dashboard/kurs/knoten#uebung-2",
+        label: "Lektion 3: Knoten binden",
+      },
+      { kind: "text", text: " dazu.**" },
+    ]);
+  });
+
+  it("renders a whitelisted marker wrapped tightly in bold or italic", () => {
+    for (const wrapped of [`**${LINK}**`, `*${LINK}*`]) {
+      const runs = parseInline(wrapped, { allowedLinks: ALLOWED });
+      expect(runs, wrapped).toContainEqual({
+        kind: "link",
+        target: "/dashboard/kurs/knoten#uebung-2",
+        label: "Lektion 3: Knoten binden",
+      });
+    }
+  });
+
+  // The same swallow, on the media marker — it has always been possible, and
+  // only the media rule's "on a line of its own" kept it rare.
+  it("renders a whitelisted media marker wrapped in bold", () => {
+    const media = "[media:erste-schritte/rundgang.mp4|Der Rundgang]";
+    const runs = parseInline(`**${media}**`, { allowedMedia: new Set([media]) });
+    expect(runs).toContainEqual({
+      kind: "media",
+      path: "erste-schritte/rundgang.mp4",
+      label: "Der Rundgang",
+    });
+  });
+
+  // ⚠️ THE regression test for the positional capture groups. The link
+  // alternative had to go LAST in `INLINE`; anywhere earlier reassigns the
+  // media groups, breaks the card, and typechecks perfectly.
+  it("parses bold, a media marker and a link marker on one line", () => {
+    const media = "[media:erste-schritte/rundgang.mp4|Der Rundgang]";
+    const line = `**Kurz:** ${media} und ${LINK}`;
+    expect(
+      parseInline(line, { allowedMedia: new Set([media]), allowedLinks: ALLOWED }),
+    ).toEqual([
+      { kind: "strong", text: "Kurz:" },
+      { kind: "text", text: " " },
+      { kind: "media", path: "erste-schritte/rundgang.mp4", label: "Der Rundgang" },
+      { kind: "text", text: " und " },
+      {
+        kind: "link",
+        target: "/dashboard/kurs/knoten#uebung-2",
+        label: "Lektion 3: Knoten binden",
+      },
+    ]);
+  });
+
+  // The by-construction pin: whatever the composer emits, the parser accepts.
+  // Both are built from `CONTENT_LINK_PATTERN`, and this is what keeps that
+  // true rather than merely intended.
+  it("accepts exactly what contentLinkMarker composes", () => {
+    const cases: [string, string | null, string][] = [
+      ["/dashboard/kurs/knoten", "uebung-2", "Lektion 3: Knoten binden"],
+      ["/dashboard/kurs", null, "Der Kurs"],
+      ["/dashboard/kurs/x", "media-koeder-knoten-mp4", "Das Video (2 Min.)"],
+      ["/dashboard/Kurs/Lektion_3", null, "Lektion 3 – Teil 1"],
+    ];
+    for (const [url, anchor, label] of cases) {
+      const marker = contentLinkMarker(url, anchor, label);
+      expect(marker, `${url}#${anchor}`).not.toBeNull();
+      const runs = parseInline(marker!, { allowedLinks: new Set([marker!]) });
+      expect(runs, marker!).toEqual([
+        { kind: "link", target: anchor ? `${url}#${anchor}` : url, label },
+      ]);
+    }
+  });
+
+  it("threads the set through parseAnswer into paragraphs and lists", () => {
+    const blocks = parseAnswer(`Dazu gibt es:\n- ${LINK}`, { allowedLinks: ALLOWED });
+    expect(blocks.map((block) => block.kind)).toEqual(["paragraph", "list"]);
+    const list = blocks[1];
+    if (list.kind !== "list") throw new Error("expected a list");
+    expect(list.items[0][0].kind).toBe("link");
   });
 });

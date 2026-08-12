@@ -46,6 +46,13 @@ export const CONVERSATION_PAGE_SIZE = 100;
 export interface StoredTurn extends ChatTurn {
   id: string;
   createdAt: Date;
+  /**
+   * The `[link:…]` markers this turn's text may render — see the column's own
+   * note in `db/schema-chat.ts`. `null` for every row written before the
+   * column existed, and for every user message; the renderer treats that as
+   * "no links", which is the fail-safe direction.
+   */
+  links: string[] | null;
 }
 
 /**
@@ -74,6 +81,7 @@ export async function listConversation(
       id: chatMessages.id,
       role: chatMessages.role,
       content: chatMessages.content,
+      links: chatMessages.links,
       createdAt: chatMessages.createdAt,
     })
     .from(chatMessages)
@@ -94,6 +102,12 @@ export async function appendTurn(args: {
   content: string;
   /** Omitted or `null` = the assistant's one conversation. */
   conversationId?: string | null;
+  /**
+   * The link markers this text may render. Only what the answer actually USED
+   * — not everything the model was offered. Omitted for a question, and for
+   * any answer that pointed at nothing.
+   */
+  links?: readonly string[];
 }): Promise<string> {
   const [row] = await db
     .insert(chatMessages)
@@ -102,6 +116,10 @@ export async function appendTurn(args: {
       conversationId: args.conversationId ?? null,
       role: args.role,
       content: args.content,
+      // `null` rather than `[]` for "none": it is the same value every row
+      // that predates the column carries, so there is one representation of
+      // "this turn renders no links" instead of two.
+      links: args.links && args.links.length > 0 ? [...args.links] : null,
     })
     .returning({ id: chatMessages.id });
 

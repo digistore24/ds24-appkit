@@ -1,6 +1,6 @@
 ---
 name: content-production
-description: Produces the media a course or page still lacks — writes lesson scripts in one tool-neutral format, recommends and sets up a video toolset on request (Remotion for animated explainers, a camera plus Descript or the HeyGen API for talking heads, a TTS voice per video in de/en/fr/es with edge-tts as the free default — the developer stays free to pick others), renders explainers WITH their voice track and a subtitle file that stays off until the viewer switches it on, and delivers the finished files into the app behind the right plan. Use this when the user says "create my course content", "I need videos for my lessons", "can you produce the videos?", "make an explainer video", "I want a talking-head video", "give the videos a voice", "add subtitles", or when a course exists whose units have no media. Material that ALREADY exists is `knowledge-intake`; delivering an existing file is `visuals`; this skill is for media that do not exist yet.
+description: Produces the media a course or page still lacks — lesson scripts, animated explainers (Remotion), talking-head video (a camera plus Descript, or HeyGen), a TTS voice track in de/en/fr/es (edge-tts free by default) and subtitles. Use this when the user says "create my course content", "I need videos for my lessons", "can you produce the videos?", "make an explainer video", "I want a talking-head video", "give the videos a voice", "add subtitles", "my lessons have no videos yet", or when a course exists whose units have no media. Material that ALREADY exists is `knowledge-intake`; delivering an existing file is `visuals`.
 requires: 0.15.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
@@ -176,7 +176,7 @@ automated check sees an empty CC menu.
 **Say the environment sentence out loud once, because it is the failure that
 stays silent:** everything this step filled is THIS machine's database and
 store. PROD gets the rows and bytes at go-live — `content-media-sync --env
-prod --apply`, `content-apply --env prod`, and `content-check --env prod`
+prod --apply`, `content-apply --env prod`, and `content-check --env prod` is what proves it arrived.**
 green as the exit condition (go-live §5 carries the step). A course finished
 locally and never applied to production goes live empty, with every local
 gate green.

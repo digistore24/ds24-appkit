@@ -76,9 +76,33 @@ One consequence follows from "content in the database", and skipping it is a
 known field failure: **rows do not deploy.** Everything built and filled
 locally goes live as empty tables. The editing surface writes into the LIVE
 database once the app is deployed; the initial fill the agent produced
-locally travels as an idempotent applier plus the media manifest —
-[`docs/content.md`](content.md), and `node run.mjs content-check --env prod`
-at go-live is the proof it arrived.
+locally travels one of two ways, and a row class belongs to exactly one of
+them:
+
+- **an idempotent applier plus the media manifest** —
+  [`docs/content.md`](content.md). Right for catalog data the repo authors, and
+  **this is where courses live**: the applier writes those rows from
+  `content/course/*.json`, keyed by slug, on every run.
+- **your agent, over the setup surface** —
+  [`docs/setup-mcp.md`](setup-mcp.md). This is the **transport and the reader**,
+  never a second author. It asks an environment what it holds
+  (`courses_outline`, `content_presence`), carries bytes into its store
+  (`media_upload`), and *triggers* that applier inside the running app
+  (`content_publish`) — which is how a course reaches production with no
+  connection string in anybody's shell. 🚨 **Triggering an applier is not
+  authoring a row.** What this route does author is what no repo file owns and
+  an editor keeps changing afterwards: community rooms, accounts.
+
+A module states which of the two its rows are, in its own manifest — `content:
+"authored"` when they come from the repo, `"collected"` when they come from the
+people using the app ([`modules.md`](modules.md)). `courses` is `authored`,
+`community` is `collected`, and that declaration is what decides the duties
+rather than a habit anybody has to remember.
+
+⚠️ **Never both for the same rows.** Two lawful ways to create one thing drift,
+and the drift is invisible until an environment holds both shapes.
+
+`node run.mjs content-check --env prod` is what proves it arrived — every owner answers for its own rows ([`content.md`](content.md)).
 
 ## The honest trade-off
 

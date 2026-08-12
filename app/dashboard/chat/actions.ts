@@ -41,6 +41,9 @@ export async function loadChatAction(): Promise<ChatMessage[]> {
     id: turn.id,
     role: turn.role,
     content: turn.content,
+    // The launcher's transcript hydrates identically to the page's — a link
+    // must not depend on which of the two the customer opened.
+    links: turn.links ?? undefined,
   }));
 }
 

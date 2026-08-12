@@ -29,8 +29,26 @@
 //    the Member's own page and does not apply here.** A subject access request
 //    asks what you hold, and you hold those. Stripping them from this file
 //    would be answering the request untruthfully.
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { connect } from "../users/_db.mjs";
+import { moduleExportSections } from "../modules/inventory.mjs";
+
+// ── Where the community's thirteen sections went ───────────────────────────
+// They were spelled out below until Epic 24 made the community a module; the
+// SQL now lives in `modules/community/privacy/sections.mjs` and reaches this
+// report through `moduleExportSections()` at the bottom. That file is also the
+// one allowed to name the two direct-message tables — the allowance moved with
+// the query, and `dm-guard.test.ts` still holds the line.
+//
+// What did NOT move is the ruling those sections were the occasion for: no
+// section here is gated on a feature switch. This file used to read
+// `config/community.json` and drop them when it said off — with a comment
+// claiming "same coercion the module applies", which was half of it: the app's
+// `isCommunityEnabled()` is `enabled && problems.length === 0`, so one typo in
+// that file made the operator's answer and the member's own download describe
+// different applications. Switching a feature off deletes nothing, and an
+// access request is about the data rather than about which features are
+// currently enabled.
 
 const argv = process.argv.slice(2);
 function arg(name) {
@@ -132,7 +150,7 @@ try {
   // a deletion request correctly finds none. Empty when the chat is switched
   // off, and empty for a purchase with no account behind it.
   const chatMessages = memberId
-    ? await sql`select id, conversation_id, role, content, created_at from chat_messages where member_id = ${memberId} order by created_at`
+    ? await sql`select id, conversation_id, role, content, links, created_at from chat_messages where member_id = ${memberId} order by created_at`
     : [];
 
   // What this person's use of the AI features consumed.
@@ -152,10 +170,6 @@ try {
   // Learning performance — the member's results on interactive elements.
   // Deleted with the account (cascade), so a post-deletion export correctly
   // finds none. See docs/data-protection.md §8b.
-  const activityResults = memberId
-    ? await sql`select activity_id, subject, state, score, max_score, passed, attempts, started_at, updated_at, completed_at from activity_results where member_id = ${memberId} order by started_at`
-    : [];
-
 
   // --- Who signed in as this person --------------------------------------------
   // Every time an operator used "sign in as this user" on this account. The
@@ -175,16 +189,36 @@ try {
         where i.member_id = ${memberId} order by i.started_at`
     : [];
 
+  // --- What the setup surface did about them -----------------------------------
+  // The operator's coding agent creating their account, granting them a plan,
+  // ending one. Personal data, and sliceable only because `setup_audit` carries
+  // `subject_member_id` beside the human-readable `target`.
+  //
+  // Identifiers and numbers — never the payload. `role` and `reason` are the two
+  // named exceptions, and both are about the person this section belongs to.
+  const setupActs = memberId
+    ? await sql`
+        select created_at, app_env, tool, outcome, role, reason
+        from setup_audit
+        where subject_member_id = ${memberId} order by created_at`
+    : [];
+
   // --- What they uploaded ------------------------------------------------------
   // The rows, not the files. An export is a JSON document; somebody who wants
-  // their pictures back downloads them from the app. `owner`-visible only —
-  // product imagery an operator uploaded carries their id too and belongs to
-  // the application, not to them.
+  // their pictures back downloads them from the app.
+  //
+  // `owner` and `members` — the two visibilities that make an item the person's
+  // own: what they uploaded for themselves, and the face they showed other
+  // members. This list is `OWNED_MEDIA_VISIBILITIES` in lib/media/rules.ts,
+  // spelled out here because this is bare Node and must not import TypeScript;
+  // the three copies are kept in step by hand and by lib/privacy/export.test.ts.
+  // `public` and `entitled` stay out: product imagery an operator uploaded
+  // carries their id too and belongs to the application, not to them.
   const mediaRows = memberId
     ? await sql`
         select id, kind, mime, filename, bytes, alt, created_at
         from media
-        where owner_id = ${memberId} and visibility = 'owner'
+        where owner_id = ${memberId} and visibility in ('owner', 'members')
         order by created_at`
     : [];
 
@@ -225,6 +259,7 @@ try {
         "`webhookEvents[].payload` is the RAW body Digistore24 posted. It can contain fields about OTHER people — an affiliate, for instance. Third-party data must be redacted before this file is handed over; only this person's data belongs in the answer.",
         "`grants[].note` and `tokenLedger[].note` are what the operator wrote about this person, and `issued_by` is who wrote it. They belong in the answer — the app hides them from the customer's own page as a matter of tone, which is not an exemption. Read them before sending.",
         "`chatMessages[].content` is what this person typed into the assistant. People paste things into a chat box that nobody asked for, occasionally including data about somebody else — the same redaction rule as the webhook payloads applies.",
+        "A private-message section, if this app has a module that contributes one, is a private CORRESPONDENCE and carries BOTH halves — every message marked `from_me: false` is the other participant's own words. That is right for the person who asked (their inbox already shows them all of it) and it is the part of this file to think hardest about before it leaves your hands: running this command puts a private conversation in front of somebody who was not in it. The app itself has no operator view of a conversation, deliberately; this report is the one exception and it is answered by hand for a named request.",
       ],
       alsoIncluded: [
         "`aiUsage[]` is what this person's use of the AI features consumed — task, provider, model, token counts, timestamps. It contains NO prompt and NO answer, because that table holds none. It is here because it records this person's activity, not because it records their words.",
@@ -250,11 +285,18 @@ try {
     tokenLedger,
     grants,
     chatMessages,
-    activityResults,
     aiUsage,
     impersonations,
+    setupActs,
     media: mediaRows,
     webhookEvents,
+    // 🚨 And whatever the installed modules hold about this person — the same
+    // merge `lib/privacy/export.ts` does, from the same manifests. Neither is
+    // gated on a module being switched ON: an export says what the app HOLDS,
+    // and the only thing that may make a module's sections absent is the module
+    // being ABSENT. `module remove` refuses while its tables hold rows, so
+    // absent code and absent data stay the same statement.
+    ...(await moduleExportSections(sql, memberId)),
   };
 
   const json = JSON.stringify(report, null, 2);

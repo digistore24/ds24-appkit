@@ -3,22 +3,40 @@
 ## 5 · `kit` — the design system
 
 **If the app has `docs/design.md`, read it first.** That file is the look this
-app chose — tokens, type pairing, page composition, the signature element —
-and this check audits **against it**: a page that ignores the composition its
-own file names, a hand-picked colour beside the chosen tokens, a second look
+app chose — the four dials it turned (accent, radius, type and **elevation**,
+the last one written as `flat` or `lifted`), the type pairing **including its
+heading family**, page composition, the signature element — and this check
+audits **against it**: a page that ignores the composition its own file names, a
+hand-picked colour beside the chosen tokens, a heading face nothing in that file
+names, a depth on a card the elevation line did not ask for, a second look
 growing beside the first. It is a baseline, never a restyling licence — what
 to change about the look is the skill `design`, not this gateway. An app
 without the file is on the shipped default, which is a decision (see *What
 counts as a finding* in `SKILL.md`).
 
+⚠️ **Two of those lines are absent on purpose when the app kept the default,
+and absence is an ANSWER here rather than a gap.** No elevation line means
+`flat` and no heading line means the shipped Source Serif 4 — the file's own
+bracket says everything unlisted keeps the shipped value. Reading a missing line
+as "nobody decided" produces a finding about a decision that was made.
+
 Mostly measured. Run `node run.mjs ux-check` and fold the findings in; then look
 at the two things it cannot see.
 
-`ux-check` settles: hard-coded palette colours, raw `<button>`/`<input>`/
-`<select>`/`<textarea>`/`<table>`, pages under `/dashboard` that are in no menu,
-and every token pair's contrast in **both** modes. Each comes with a file and a
-line, so each goes straight into the report. Its **images with no `alt`** are
-check 8's — see there.
+`ux-check` settles: hard-coded palette colours, **a value written past a dial**
+(an arbitrary `font-[…]` or `shadow-[…]`, a bare `shadow-lg`, a hex inside an
+arbitrary value, the generated `font-heading` class — each hit names the dial it
+bypasses), raw `<button>`/`<input>`/`<select>`/`<textarea>`/`<table>`, pages
+under `/dashboard` that are in no menu, every token pair's contrast in **both**
+modes, and **every token being defined in both blocks** rather than one. Each
+comes with a file and a line, so each goes straight into the report. Its
+**images with no `alt`** are check 8's — see there.
+
+Both of the two token/dial findings are failures, not warnings: a value written
+past a dial is the boundary `docs/design-system.md` §8 declares closed, and a
+token in one block only breaks in whichever mode nobody was looking at. And each
+green line names what it counted, so *nothing found* never reads like *nothing
+looked at*.
 
 What you still have to look at yourself:
 
@@ -57,7 +75,7 @@ Measured by `ux-check`: contrast in both modes, the focus ring at 3:1, icon
 buttons with no name.
 
 **Where the app carries interactive elements** (`ACTIVITIES` in
-`lib/learning/activities.ts` — a game, a check, a graded exercise), this
+`modules/activity/activities.ts` — a game, a check, a graded exercise), this
 check gets a second half that no command measures: **play every element with
 the keyboard alone, to the final verdict.** A drag without a key path is the
 naive way to build a game and a BFSG defect in a consumer product; a time
@@ -66,7 +84,7 @@ reader (the panel announces through its live region — verify it does, and
 that the game announces its own state through `announce()`). ❌ HIGH where
 stuck: unlike a contrast ratio, there is no partial credit on "cannot finish
 the exam without a mouse". The build-side rules are the five in the panel
-header (`components/activity-panel.tsx`); the deeper audit is the skill
+header (`modules/activity/components/activity-panel.tsx`); the deeper audit is the skill
 `learning-activities`, item `check`.
 
 `ux-check` also measures **images with no `alt`** — but file that finding under

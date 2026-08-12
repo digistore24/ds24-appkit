@@ -7,6 +7,7 @@ import { PlugZap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
+import { Card, CardContent } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LanguageSwitcher } from "@/components/language-switcher";
 
@@ -51,11 +52,25 @@ export default async function Ds24ConnectedPage() {
           <h1 className="text-2xl font-semibold">{t("title")}</h1>
         </div>
 
-        <Callout variant="success">{t("body")}</Callout>
+        {/* The card is NEW here, and it is deliberate rather than a pattern
+            applied on the way past. This page and app/account/confirm-email
+            carry exactly the same content — a Callout saying what happened and
+            one button saying where to go next — and that page has shipped it
+            inside a <Card> since it was written. So the card is this tree's own
+            answer to this shape, not an invention; leaving it off is what would
+            give the app two faces on one frame, which is the defect the story
+            is about. What the page SAYS is untouched: the medallion and the
+            heading stay above the surface, exactly as the mark does on
+            /login. */}
+        <Card className="shadow-(--elevation-overlay)">
+          <CardContent className="flex flex-col gap-4">
+            <Callout variant="success">{t("body")}</Callout>
 
-        <Button asChild className="w-full">
-          <Link href="/">{t("cta")}</Link>
-        </Button>
+            <Button asChild className="w-full">
+              <Link href="/">{t("cta")}</Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </main>
   );

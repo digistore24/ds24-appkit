@@ -1,2 +1,0 @@
-ALTER TABLE "chat_messages" ADD COLUMN "conversation_id" text;--> statement-breakpoint
-CREATE INDEX "chat_messages_conversation" ON "chat_messages" USING btree ("member_id","conversation_id","created_at");

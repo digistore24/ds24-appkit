@@ -30,6 +30,9 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
 
+import { diagnose, rootCause } from "./migrate-report.mjs";
+import { loadModules } from "../modules/registry.mjs";
+
 const url = process.env.DATABASE_URL;
 if (!url) {
   console.error(
@@ -49,6 +52,31 @@ if (!url) {
 // version of the app.
 const sql = postgres(url, { max: 1, onnotice: () => {} });
 
+/**
+ * What the database looked like when the migration hit the wall.
+ *
+ * Two numbers, handed to `diagnose()` as evidence — that file carries the
+ * reasoning about what they may and may not be read to mean. Both queries
+ * swallow their own error on purpose: this runs on a connection that has just
+ * failed, and a survey that throws would replace the real error with its own.
+ */
+async function survey() {
+  const count = async (query) => {
+    try {
+      const [row] = await query;
+      return Number(row.n);
+    } catch {
+      return null;
+    }
+  };
+  return {
+    applied: await count(sql`select count(*)::int as n from drizzle.__drizzle_migrations`),
+    tables: await count(
+      sql`select count(*)::int as n from information_schema.tables where table_schema = 'public'`,
+    ),
+  };
+}
+
 try {
   const target = (() => {
     try {
@@ -59,13 +87,51 @@ try {
     }
   })();
   console.log(`>> Migrating ${target}`);
-  await migrate(drizzle(sql), { migrationsFolder: "drizzle" });
-  console.log("✓ Database is up to date.");
+  const db = drizzle(sql);
+
+  // The core chain first, always.
+  await migrate(db, { migrationsFolder: "drizzle" });
+
+  // ── Then one chain per installed module ───────────────────────────────────
+  //
+  // Each module carries its own migration folder AND its own journal table, so
+  // the chains are independent: a module can be installed into an app whose
+  // core chain is already far ahead, and its own `0000` still runs.
+  //
+  // 🚨 That independence is the whole reason for a second journal. drizzle's
+  // migrator applies a migration only when it is YOUNGER than the newest one
+  // already recorded (`pg-core/dialect.cjs`). Sharing one journal would mean a
+  // module installed later has its migrations silently skipped for ever —
+  // there is no error, the tables simply never appear.
+  //
+  // Core first is not cosmetic either: a module's tables carry foreign keys to
+  // `users` and `media`, and those must exist before the constraint is created.
+  const modules = loadModules();
+  for (const mod of modules) {
+    const folder = mod.manifest.migrations;
+    if (typeof folder !== "string") continue;
+    console.log(`>> Migrating module "${mod.id}"`);
+    await migrate(db, {
+      migrationsFolder: `${mod.dir}/${folder}`,
+      migrationsTable: mod.manifest.migrationsTable,
+    });
+  }
+
+  console.log(
+    modules.length > 0
+      ? `✓ Database is up to date (core + ${modules.length} module chain(s)).`
+      : "✓ Database is up to date.",
+  );
 } catch (error) {
   // The message matters more than the stack here: this runs in a deploy log
   // that somebody reads once, in a hurry, without the repository in front of
-  // them.
-  console.error(`✗ Migration failed: ${error.message}`);
+  // them. So: the REASON first, then the statement it happened on, then — where
+  // the state of the database says something the error cannot — why.
+  const { error: cause, query, code } = rootCause(error);
+  console.error(`✗ Migration failed: ${cause?.message ?? error.message}`);
+  if (query) console.error(`  While running: ${query.split("\n")[0].trim()}`);
+  const why = diagnose({ code, url, ...(await survey()) });
+  if (why) console.error(why);
   process.exit(1);
 } finally {
   await sql.end();

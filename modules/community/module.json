@@ -1,0 +1,103 @@
+{
+  "id": "community",
+  "version": "1.0.0",
+  "requiresTemplate": "0.19.0",
+  "title": {
+    "de": "Community",
+    "en": "Community"
+  },
+  "summary": "a place for members: rooms, discussions under the pages they belong to, private messages",
+  "docs": "docs/community.md",
+  "skill": "community",
+  "config": "config/community.json",
+  "app": [
+    "dashboard/community",
+    "dashboard/admin/community",
+    "api/community"
+  ],
+  "publicRoutes": {
+    "/api/community/live": "has no session of its own to check at the edge — it is the polling transport, and it opens with the same enablement check and participant scoping every other community surface does; app/api/community/live/route.test.ts reads the handler rather than trusting this line"
+  },
+  "schema": "schema.ts",
+  "tables": [
+    "community_conversations",
+    "community_discussions",
+    "community_follows",
+    "community_group_moderators",
+    "community_groups",
+    "community_member_blocks",
+    "community_messages",
+    "community_moderation_audit",
+    "community_post_media",
+    "community_posts",
+    "community_profiles",
+    "community_read_markers",
+    "community_spam_reports"
+  ],
+  "tablePrefix": "community_",
+  "content": "collected",
+  "migrations": "drizzle",
+  "migrationsTable": "__drizzle_migrations_community",
+  "messages": {
+    "namespaces": [
+      "community",
+      "communityAdmin"
+    ],
+    "dir": "messages"
+  },
+  "errorCodes": {
+    "source": "lib/rules.ts",
+    "export": "COMMUNITY_ERROR_CODES"
+  },
+  "nav": "nav.ts",
+  "features": [
+    "community",
+    "communityAdmin"
+  ],
+  "navAreas": [
+    "community"
+  ],
+  "gate": "gate.ts",
+  "slots": {
+    "account": "components/account-card.tsx"
+  },
+  "cron": "cron.ts",
+  "cronJobs": [
+    "community-prune"
+  ],
+  "commands": {
+    "community-prune": {
+      "script": "scripts/prune.mjs",
+      "help": "delete private messages past the retention window in config/community.json (dry run by default)"
+    }
+  },
+  "setup": "setup/tools.ts",
+  "presence": "presence/check.ts",
+  "smoke": "smoke.mjs",
+  "erase": true,
+  "privacy": {
+    "sections": [
+      "communityProfile",
+      "communityModeratorDuties",
+      "communityDiscussions",
+      "communityPosts",
+      "communityPostImages",
+      "communityReadMarkers",
+      "communityConversations",
+      "communityMessages",
+      "communityBlocks",
+      "communityFollows",
+      "communityModerationActs",
+      "communityModerationReceived",
+      "communitySpamReportsMade",
+      "communitySpamReportsReceived"
+    ],
+    "accountNotes": {
+      "export": "community.accountExportNote",
+      "deletion": "community.accountDeletionNote"
+    },
+    "ts": "privacy/sections.ts",
+    "mjs": "privacy/sections.mjs"
+  },
+  "entry": "module.ts"
+}

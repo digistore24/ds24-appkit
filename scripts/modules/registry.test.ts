@@ -1,0 +1,205 @@
+// Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA
+// SPDX-License-Identifier: MIT
+
+// Where `config/modules.json` and the manifests meet — and every way that can
+// go wrong.
+//
+// No module has moved into `modules/` yet, so this builds real ones in a
+// throwaway folder instead of walking the tree. That is the only way to
+// exercise the cross-module collisions, which are invisible inside a single
+// manifest and fatal across two.
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+
+import { availableModules, loadModules, readModule } from "./registry.mjs";
+
+let root: string;
+const roots: string[] = [];
+
+/** A throwaway app root with a `config/modules.json` and the given modules. */
+function app(installed: string[], modules: Record<string, unknown> = {}) {
+  root = mkdtempSync(join(tmpdir(), "ds24-modules-"));
+  roots.push(root);
+  mkdirSync(join(root, "config"), { recursive: true });
+  writeFileSync(join(root, "config", "modules.json"), JSON.stringify({ installed }));
+  for (const [id, manifest] of Object.entries(modules)) {
+    mkdirSync(join(root, "modules", id), { recursive: true });
+    if (manifest !== null) {
+      writeFileSync(join(root, "modules", id, "module.json"), JSON.stringify(manifest));
+    }
+  }
+  return root;
+}
+
+/** Every fixture needs one; what it says is never what the test is about. */
+const SUMMARY = "a fixture module, present only so this test has something to read";
+
+/** The smallest legal manifest. */
+const tiny = (id: string, extra: Record<string, unknown> = {}) => ({
+  id,
+  version: "1.0.0",
+  title: { de: id, en: id },
+  summary: SUMMARY,
+  docs: "docs/modules.md",
+  ...extra,
+});
+
+/** One that owns tables, so the GDPR wiring is present and can be collided. */
+const withTables = (id: string, tables: string[]) =>
+  tiny(id, {
+    schema: "schema.ts",
+    tables,
+    tablePrefix: `${id}_`,
+    migrations: "drizzle",
+    migrationsTable: `__drizzle_migrations_${id}`,
+    privacy: { sections: [`${id}Rows`], ts: "privacy/sections.ts", mjs: "privacy/sections.mjs" },
+    erase: true,
+  });
+
+afterEach(() => {
+  for (const dir of roots.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+
+describe("reading what is there", () => {
+  it("returns nothing for an app with no modules", () => {
+    expect(loadModules(app([]))).toEqual([]);
+    expect(availableModules(app([]))).toEqual([]);
+  });
+
+  it("loads an installed module", () => {
+    const dir = app(["chat"], { chat: tiny("chat") });
+    const [record] = loadModules(dir);
+    expect(record.id).toBe("chat");
+    expect(record.dir).toBe("modules/chat");
+    expect(record.manifest.version).toBe("1.0.0");
+  });
+
+  it("keeps the order config/modules.json gives", () => {
+    // Not cosmetic: the generated registry's import order is this order, and a
+    // list that reshuffles itself between runs makes the generated file churn.
+    const dir = app(["community", "chat"], { chat: tiny("chat"), community: tiny("community") });
+    expect(loadModules(dir).map((m) => m.id)).toEqual(["community", "chat"]);
+  });
+
+  it("lists what is present but not installed", () => {
+    // `module list` has to tell "here and switched off" from "not here at all".
+    const dir = app([], { chat: tiny("chat"), community: tiny("community") });
+    expect(availableModules(dir)).toEqual(["chat", "community"]);
+    expect(loadModules(dir)).toEqual([]);
+  });
+});
+
+describe("an app that claims what it does not carry", () => {
+  it("refuses an installed module with no folder", () => {
+    // The failure this exists for: a registry with a hole in it, and every gate
+    // green because the hole is simply absent.
+    expect(() => loadModules(app(["community"]))).toThrow(/There is no module "community"/);
+  });
+
+  it("refuses a folder with no manifest", () => {
+    expect(() => loadModules(app(["chat"], { chat: null }))).toThrow(/no module\.json/);
+  });
+
+  it("refuses a manifest that does not parse", () => {
+    const dir = app(["chat"], { chat: tiny("chat") });
+    writeFileSync(join(dir, "modules", "chat", "module.json"), "{ nope");
+    expect(() => loadModules(dir)).toThrow(/not valid JSON/);
+  });
+
+  it("refuses a manifest whose id disagrees with its folder", () => {
+    // The folder is the address every generated import uses.
+    const dir = app(["chat"], { chat: tiny("community") });
+    expect(() => loadModules(dir)).toThrow(/the folder name is the id/);
+  });
+
+  it("passes an incoherent manifest straight through with its reasons", () => {
+    const dir = app(["chat"], { chat: { id: "chat", version: "nope", title: {} } });
+    expect(() => loadModules(dir)).toThrow(/problem\(s\) in modules\/chat\/module\.json/);
+  });
+});
+
+describe("🚨 two modules cannot own the same thing", () => {
+  // Each of these is invisible inside a single manifest. They are the reason
+  // this check lives above the manifest rather than inside it.
+  it("refuses two modules claiming one table", () => {
+    const dir = app(["a", "b"], {
+      a: withTables("a", ["a_rows"]),
+      // b declares a's table — a prefix mismatch inside b, and a collision across.
+      b: { ...withTables("b", ["b_rows"]), tables: ["b_rows", "a_rows"], tablePrefix: "" },
+    });
+    expect(() => loadModules(dir)).toThrow();
+  });
+
+  it("refuses two modules claiming one route subtree", () => {
+    const dir = app(["a", "b"], {
+      a: tiny("a", { app: ["dashboard/shared"] }),
+      b: tiny("b", { app: ["dashboard/shared"] }),
+    });
+    expect(() => loadModules(dir)).toThrow(/route subtree "dashboard\/shared"/);
+  });
+
+  it("refuses two modules claiming one nav feature key", () => {
+    const dir = app(["a", "b"], {
+      a: tiny("a", { features: ["shared"] }),
+      b: tiny("b", { features: ["shared"] }),
+    });
+    expect(() => loadModules(dir)).toThrow(/nav feature key "shared"/);
+  });
+
+  // ⚠️ The two below need ids where one is a PREFIX of the other, and that is
+  // the whole point. The per-manifest rules ("a namespace starts with the
+  // module id", "a command starts with the module id") already stop the obvious
+  // collision — so the only way two legal manifests can still collide is when
+  // "abx" is a legal name for module `ab` and also for module `abx`. A first
+  // draft of these tests used ids that collided in neither direction and passed
+  // for the wrong reason.
+  it("refuses two modules claiming one message namespace", () => {
+    // A collision here would have one module's texts silently overwrite the
+    // other's at merge time.
+    const dir = app(["ab", "abx"], {
+      ab: tiny("ab", { messages: { namespaces: ["abx"], dir: "messages" } }),
+      abx: tiny("abx", { messages: { namespaces: ["abx"], dir: "messages" } }),
+    });
+    expect(() => loadModules(dir)).toThrow(/message namespace "abx"/);
+  });
+
+  it("refuses two modules claiming one command", () => {
+    const dir = app(["ab", "ab-x"], {
+      ab: tiny("ab", { commands: { "ab-x": { script: "s.mjs", help: "does a thing" } } }),
+      "ab-x": tiny("ab-x", { commands: { "ab-x": { script: "s.mjs", help: "does a thing" } } }),
+    });
+    expect(() => loadModules(dir)).toThrow(/command "ab-x"/);
+  });
+
+  it("names both modules in the message", () => {
+    // Whoever hits this has two folders open and needs to know which two.
+    const dir = app(["a", "b"], {
+      a: tiny("a", { app: ["dashboard/x"] }),
+      b: tiny("b", { app: ["dashboard/x"] }),
+    });
+    expect(() => loadModules(dir)).toThrow(/"a".*"b"|"b".*"a"/);
+  });
+});
+
+describe("a declared dependency must actually be installed", () => {
+  it("refuses a requirement that is not there", () => {
+    // Otherwise the module runs against a half of itself it cannot see.
+    const dir = app(["b"], { b: tiny("b", { requires: ["a"] }), a: tiny("a") });
+    expect(() => loadModules(dir)).toThrow(/requires "a", which is not installed/);
+  });
+
+  it("accepts one that is", () => {
+    const dir = app(["a", "b"], { a: tiny("a"), b: tiny("b", { requires: ["a"] }) });
+    expect(loadModules(dir).map((m) => m.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("readModule on its own", () => {
+  it("reads a module that is present but not installed", () => {
+    // `module add` needs this: it validates a module BEFORE putting it in the list.
+    const dir = app([], { chat: tiny("chat") });
+    expect(readModule("chat", dir).id).toBe("chat");
+  });
+});

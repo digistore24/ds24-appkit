@@ -34,7 +34,7 @@
 // is pruned after twelve months. A record of who accessed an account that the
 // account's owner cannot see is exactly the record a regulator asks about.
 import { pgTable, text, timestamp, index } from "drizzle-orm/pg-core";
-import { users } from "./schema";
+import { users } from "./schema-core";
 
 export const impersonations = pgTable(
   "impersonations",

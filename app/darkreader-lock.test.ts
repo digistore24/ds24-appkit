@@ -44,6 +44,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { describe, it, expect } from "vitest";
+import { blankComments as withoutComments } from "@/scripts/lib/source-text.mjs";
 
 const LAYOUT = fileURLToPath(new URL("./layout.tsx", import.meta.url));
 
@@ -55,13 +56,6 @@ const LAYOUT = fileURLToPath(new URL("./layout.tsx", import.meta.url));
  * declaration itself is deleted. Copied from `app/use-server-exports.test.ts`,
  * which has the same problem for the same reason.
  */
-function withoutComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^\s*\/\/.*$/gm, "")
-    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
-}
-
 describe("the root layout keeps browser extensions out of the markup", () => {
   const code = withoutComments(readFileSync(LAYOUT, "utf8"));
 
@@ -84,7 +78,7 @@ describe("the root layout keeps browser extensions out of the markup", () => {
       'app/layout.tsx no longer declares `other: { "darkreader-lock": "…" }`\n' +
         "with a non-empty value. Without it every visitor running the Dark\n" +
         "Reader extension meets a hydration mismatch on the first page view —\n" +
-        "see the note at the top of this file, and CLAUDE.md →\n" +
+        "see the note at the top of this file, and docs/troubleshooting.md →\n" +
         "A hydration mismatch is not always yours.",
     ).toMatch(/other:\s*\{\s*"darkreader-lock":\s*"[^"]+"\s*\}/);
   });

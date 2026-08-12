@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "ds24-setup": {
+      "command": "node",
+      "args": ["scripts/mcp/server.mjs"]
+    }
+  }
+}

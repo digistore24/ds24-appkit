@@ -22,6 +22,7 @@
 import { describe, expect, it } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 
+import { chatMessages } from "@/db/schema";
 import { conversationWhere } from "./conversation";
 
 const dialect = new PgDialect();
@@ -76,5 +77,26 @@ describe("the two scopes are different clauses", () => {
     expect(shape("member-1", null)).not.toBe(shape("member-1", "coach:day-7"));
     expect(shape("member-1", "coach:day-7")).not.toBe(shape("member-1", "coach:day-3"));
     expect(shape("member-1", "coach:day-7")).not.toBe(shape("member-2", "coach:day-7"));
+  });
+});
+
+describe("the links column", () => {
+  // A whitelist that dies with the request is the single most likely way to
+  // ship Epic 25 broken: the stored answer keeps its markers, the reload has
+  // no set for them, and yesterday's links are today's bracket text. These
+  // assertions are about the SHAPE that makes the stored set fail safe.
+  it("is nullable — every row written before it reads back as 'no links'", () => {
+    // `.notNull()` here would need a backfill and would make the absence of a
+    // whitelist unrepresentable; NULL is the one honest value for both "this
+    // is a question" and "this answer predates the feature".
+    expect(chatMessages.links.notNull).toBe(false);
+    expect(chatMessages.links.hasDefault).toBe(false);
+  });
+
+  it("is an array of text, not a joined string", () => {
+    // Whole-string membership is the control (AD-54's rule, per request). A
+    // delimiter-joined column would make a marker containing that delimiter
+    // unstorable and split one badly — and marker labels are free text.
+    expect(chatMessages.links.columnType).toContain("Array");
   });
 });

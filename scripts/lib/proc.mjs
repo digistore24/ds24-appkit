@@ -166,6 +166,17 @@ export function spawnCommand(command, args = [], options = {}) {
 /**
  * Run a command, its output going straight to the terminal.
  * Resolves with the exit code (it does not throw on a non-zero one).
+ *
+ * ⚠️ **This one does NOT carry `capture()`'s bound, and does not need it.**
+ * `stdio: "inherit"` means the child writes to our terminal directly, so this
+ * process holds no pipe anybody could keep open — measured: the same shell
+ * wrapper that made `capture()` overrun a 1000 ms bound by twelve seconds
+ * resolves here at 1008 ms. What it DOES leave behind is the grandchild itself,
+ * still running. Detaching to reach it is deliberately not done: `run()` is what
+ * starts `next dev` and every interactive command, and a detached child leaves
+ * the terminal's foreground process group — Ctrl-C would stop reaching it. If a
+ * caller ever needs both, it wants `capture()` or its own group, not a change
+ * here. Nothing passes a `timeout` to this function today.
  */
 export function run(command, args = [], options = {}) {
   return new Promise((resolve) => {
@@ -191,26 +202,181 @@ export function runNpm(args, options = {}) {
   return run("npm", args, options);
 }
 
+// ── bounding a command that will not stop ───────────────────────────────────
+//
+// 🚨 **`timeout` on `capture()` is OUR timer, not the one `child_process.spawn`
+// offers**, and the difference is the whole reason this block exists.
+//
+// **'close' is not 'exit'.** Node fires 'exit' when the child is gone, and
+// 'close' when the LAST HOLDER of its stdio pipes has let go — and a child's own
+// child inherits those pipes. So a shell wrapper around a background sleep,
+// killed at one second, fires 'exit' at 1.007 s and 'close' at 12.010 s:
+// measured on this tree, before this block existed, with `spawn`'s own
+// `timeout` doing exactly what it promises. A `capture()` that resolves on
+// 'close' therefore has no bound at all wherever the command starts something.
+// It had one only where the command happened to be a single static binary —
+// which is a property of `gitleaks` and the `docker` CLI, not of this function,
+// and both rungs say so in a comment because the alternative was to fix this.
+//
+// Three decisions, each with a cost that was measured rather than assumed:
+//
+//  1. **The normal path still resolves on 'close', unchanged.** Settling on
+//     'exit' can in principle cut output still sitting in a pipe. Measured
+//     against that: single writes of 10 B, 1 KiB, 64 KiB, 1 MiB and 8 MiB, and
+//     200 trials of a child that writes and dies while our loop is blocked —
+//     'exit' never carried fewer bytes than 'close' on this platform. "Never on
+//     Linux today" is not a contract, so the risk is simply never taken where
+//     nothing is wrong: only a call that ASKED for a bound and then blew it
+//     settles early, and even that one gives the pipes `DRAIN_MS` to hand over
+//     whatever they are still holding.
+//  2. **On Linux and macOS the kill goes to the process GROUP**, which is what
+//     `detached: true` below is for. A killed shell whose grandchild survives is
+//     not merely slow to report — it is a scanner still running over the
+//     repository after the rung gave up on it. The cost is real and is paid only
+//     by calls that pass a `timeout`: a detached child is not in the terminal's
+//     foreground process group, so **Ctrl-C no longer reaches it**; the deadline
+//     is what ends it instead.
+//  3. **Windows has no process groups**, so the tree is walked with
+//     `taskkill /T` — the same answer `scripts/dev/app.mjs` already gives for the
+//     dev server, and the reason `scripts/portability.test.ts` forbids reading
+//     the process table. It reaches a grandchild only while the direct child is
+//     still alive to be walked from; once that child is gone its orphan is not
+//     chased, because finding it means reading the process table. **So: the BOUND
+//     holds on all three systems, the CLEANUP is complete on two, and this
+//     sentence is the one that must not be quietly dropped.**
+
+/**
+ * How long a killed child may still hand over what its pipes are holding.
+ *
+ * The worst case a caller can see is therefore `timeout + DRAIN_MS`, and that is
+ * a bound rather than a hope. Short on purpose: the bytes are already in this
+ * process by the time 'exit' fires (see decision 1), so this window is for the
+ * ordinary case where 'close' arrives a tick later — not for waiting anything out.
+ */
+const DRAIN_MS = 250;
+
+/**
+ * End `child` and, as far as this system allows, whatever it started.
+ *
+ * `grouped` is true only where the child was spawned detached, so it really is
+ * its own group leader. The group OUTLIVES that leader, which is exactly the
+ * grandchild case: the pid is gone, the group still holds the survivor.
+ */
+function killTree(child, signal, grouped) {
+  const pid = child.pid;
+  if (!pid) return;
+
+  if (isWindows) {
+    // `/T` walks the tree DOWN FROM a living process, so it goes first — after
+    // the direct child is gone there is nothing left to walk from.
+    try {
+      spawnCommand("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore" }).on(
+        "error",
+        () => {},
+      );
+    } catch {
+      /* taskkill lives in System32 on every Windows; a miss here is not fatal */
+    }
+    try {
+      child.kill(signal);
+    } catch {
+      /* already gone */
+    }
+    return;
+  }
+
+  if (grouped) {
+    try {
+      process.kill(-pid, signal);
+      return;
+    } catch {
+      /* the group is already empty — fall through to the child itself */
+    }
+  }
+  try {
+    child.kill(signal);
+  } catch {
+    /* already gone */
+  }
+}
+
 /**
  * Run a command and capture its output instead of showing it.
- * Resolves with `{ code, stdout, stderr }`; a missing binary is code 127.
+ * Resolves with `{ code, stdout, stderr, timedOut }`; a missing binary is 127.
+ *
+ * `timeout` (ms) is honoured HERE and deliberately not handed to `spawn` — two
+ * timers for one bound would mean the weaker one silently wins. A run stopped by
+ * it resolves non-zero, with whatever output had arrived, and `timedOut: true`
+ * so a caller need not infer it from a wall clock.
  */
 export function capture(command, args = [], options = {}) {
+  const { timeout, killSignal = "SIGTERM", ...spawnOptions } = options;
+  const boundMs = Number(timeout) > 0 ? Number(timeout) : 0;
+  // Its own process group, so the kill can reach a grandchild — POSIX only, only
+  // where a bound was asked for, and never against a caller who said otherwise.
+  const grouped = boundMs > 0 && !isWindows && spawnOptions.detached !== false;
+
   return new Promise((resolve) => {
     const child = spawnCommand(command, args, {
       stdio: ["ignore", "pipe", "pipe"],
-      ...options,
+      ...(grouped ? { detached: true } : {}),
+      ...spawnOptions,
     });
+
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    let timedOut = false;
+    let exited = null;
+    let deadline = null;
+    let drain = null;
+
+    const settle = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      clearTimeout(drain);
+      if (timedOut) {
+        // A surviving grandchild still holds these pipes, and an open pipe keeps
+        // OUR event loop alive: without this the caller would be answered and
+        // the command would still not end, which is the same hang wearing a
+        // different hat.
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        child.unref();
+      }
+      resolve({ ...result, timedOut });
+    };
+
+    const finish = (code, signal) =>
+      settle({ code: code ?? (signal ? 1 : 0), stdout, stderr });
+
     child.stdout?.on("data", (chunk) => (stdout += chunk));
     child.stderr?.on("data", (chunk) => (stderr += chunk));
+    // Destroying a pipe above can surface as an 'error' on the stream, and an
+    // unheard stream 'error' takes the whole process down — the same shape of
+    // bug `openUrl()` below carries a paragraph about.
+    child.stdout?.on("error", () => {});
+    child.stderr?.on("error", () => {});
+
     child.on("error", (error) => {
-      resolve({ code: error.code === "ENOENT" ? 127 : 1, stdout, stderr: error.message });
+      settle({ code: error.code === "ENOENT" ? 127 : 1, stdout, stderr: error.message });
     });
-    child.on("close", (code, signal) => {
-      resolve({ code: code ?? (signal ? 1 : 0), stdout, stderr });
-    });
+    child.on("exit", (code, signal) => (exited = { code, signal }));
+    child.on("close", (code, signal) => finish(code, signal));
+
+    if (boundMs > 0) {
+      deadline = setTimeout(() => {
+        timedOut = true;
+        killTree(child, killSignal, grouped);
+        drain = setTimeout(() => {
+          // Whatever is still holding the pipes has now had its chance — and on a
+          // child that ignores the first signal this is the only one that lands.
+          if (grouped) killTree(child, "SIGKILL", true);
+          finish(exited?.code ?? null, exited?.signal ?? killSignal);
+        }, DRAIN_MS);
+      }, boundMs);
+    }
   });
 }
 
@@ -221,35 +387,75 @@ export async function hasCommand(command, versionArgs = ["--version"]) {
 }
 
 /**
- * Open a URL in whatever browser this machine calls its own. Best effort — the
- * caller has already printed the link, so a failure here is not one.
+ * Can a browser be opened on THIS machine at all?
+ *
+ * Not the same question as "is a browser installed". What it really asks is
+ * whether the person reading this is sitting at the screen a window would
+ * appear on — and a cloud session, a container and a server over SSH all answer
+ * no. Three things in this project are written as if the answer were always
+ * yes: the Digistore24 approval click, the hosting CLI logins, and every
+ * sentence that says "open http://localhost:3000". Where it is no, the printed
+ * link is the whole path, and the person has to be told so.
+ *
+ * Cheap on purpose — a PATH lookup and two environment variables, no process —
+ * because the greeting asks it on every session start.
+ *
+ * Deliberately generous on macOS and Windows: both ship the opener with the
+ * system and a desktop session is the overwhelmingly common case. Being wrong
+ * there costs nothing, because `openUrl()` below still reports what actually
+ * happened.
+ */
+export function canOpenBrowser() {
+  if (isWindows || process.platform === "darwin") return true;
+  const display = process.env.DISPLAY || process.env.WAYLAND_DISPLAY;
+  return Boolean(display && whichCommand("xdg-open"));
+}
+
+/**
+ * Open a URL in whatever browser this machine calls its own, and say whether it
+ * worked. Best effort — the caller has already printed the link, so a failure
+ * here is not one. A failure reported as success is.
  *
  * On Windows this is the single command in the project that genuinely cannot
  * avoid a shell: `start` is not a program, it is a word cmd.exe understands.
  * Which is precisely why it lives here and not at the call site — and why the
  * URL goes through `cmdQuote()` on the way (see `CMD_SYNTAX`).
+ *
+ * This used to return `true` unconditionally, and that is the failure the shape
+ * below exists to prevent. A missing `xdg-open` does NOT throw: spawn reports it
+ * asynchronously as an 'error' event, an unheard 'error' event takes the whole
+ * process down, so the event was swallowed — and `true` returned anyway. On a
+ * machine with no browser the setup then printed "The browser was opened" and
+ * waited eight minutes for a click nobody was in a position to make. Node emits
+ * 'spawn' once the child really started, so both answers are available: wait for
+ * whichever arrives, and for nothing else — not for the browser to be closed.
  */
 export function openUrl(url) {
-  try {
-    const child = isWindows
-      ? // `start ""` — the empty argument is the window title. Leave it out and
-        // cmd reads the quoted URL as the title and opens nothing at all.
-        runOneLine(cmdLine("start", ["", url]), { stdio: "ignore", detached: true })
-      : spawn(process.platform === "darwin" ? "open" : "xdg-open", [url], {
-          stdio: "ignore",
-          detached: true,
-        });
-    // A missing `xdg-open` — a headless Linux box, a container, a server over
-    // SSH — does NOT throw here: spawn reports it asynchronously as an 'error'
-    // event, and an 'error' event nobody listens for takes the whole process
-    // down. That would kill the setup on exactly the machines where the printed
-    // link is the only way through.
-    child.on("error", () => {});
-    child.unref();
-    return true;
-  } catch {
-    return false;
-  }
+  return new Promise((resolve) => {
+    if (!canOpenBrowser()) {
+      resolve(false);
+      return;
+    }
+    let child;
+    try {
+      child = isWindows
+        ? // `start ""` — the empty argument is the window title. Leave it out and
+          // cmd reads the quoted URL as the title and opens nothing at all.
+          runOneLine(cmdLine("start", ["", url]), { stdio: "ignore", detached: true })
+        : spawn(process.platform === "darwin" ? "open" : "xdg-open", [url], {
+            stdio: "ignore",
+            detached: true,
+          });
+    } catch {
+      resolve(false);
+      return;
+    }
+    child.on("error", () => resolve(false));
+    child.on("spawn", () => {
+      child.unref();
+      resolve(true);
+    });
+  });
 }
 
 /** Sleep, for the wait loops. */

@@ -99,7 +99,12 @@ export function ChatLauncher({
         <div
           role="dialog"
           aria-label={t("title", { name: assistantName })}
-          className="bg-card text-card-foreground w-[min(24rem,calc(100vw-2rem))] rounded-lg border shadow-lg"
+          // The elevation is named by its ROLE, not by a size out of Tailwind's
+          // vocabulary: this is a panel floating OVER the page, which is what
+          // `--elevation-overlay` means. `shadow-lg` maps to the same token
+          // after Story 43.1 and compiles to the identical declaration —
+          // measured — so this is the same picture said in the app's own words.
+          className="bg-card text-card-foreground w-[min(24rem,calc(100vw-2rem))] rounded-lg border shadow-(--elevation-overlay)"
         >
           <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
             <div className="flex min-w-0 items-center gap-2">
@@ -151,7 +156,11 @@ export function ChatLauncher({
       <Button
         type="button"
         size="icon-lg"
-        className="size-12 overflow-hidden rounded-full p-0 shadow-lg"
+        // Same reasoning as the panel above: a button that floats over whatever
+        // page somebody is working on wears the overlay step, named as such.
+        // The kit's default Button variant carries no shadow of its own, so
+        // this class is what gives it one — it is not a restatement.
+        className="size-12 overflow-hidden rounded-full p-0 shadow-(--elevation-overlay)"
         onClick={() => setOpen((current) => !current)}
         aria-expanded={open}
         aria-label={open ? t("close") : t("open", { name: assistantName })}

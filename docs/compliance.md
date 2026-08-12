@@ -92,9 +92,12 @@ later matter.
 expect.** An order is an accounting record that German law *requires* you to
 keep — six to ten years, § 147 AO and § 257 HGB — and Art. 17(3)(b) exempts
 exactly that from erasure. Deleting an order on request would be the violation.
-So account deletion in this app cascades to sessions, chat transcripts, MCP
+So account deletion in this app cascades to sessions, chat transcripts, API
 keys, grants and impersonation records, and deliberately leaves `orders` and
-`ai_usage` standing with their member link set to `null`.
+`ai_usage` standing with their member link set to `null`. It runs through
+`deleteOwnAccount()`, which **takes no id at all** — the account deleted is
+always the session's own, which is what makes deleting somebody else's by
+mistake impossible rather than merely unlikely.
 
 A running subscription does not stop the deletion either: the dialog **warns
 and does not block**. Refusing erasure because it is inconvenient is the
@@ -139,6 +142,35 @@ person's *ability* — inventoried field by field in
 deleted with the account. A privacy policy for an app with judged elements
 names it.
 
+---
+
+**A community changes what kind of data this app holds, in two ways that a
+policy written for a plain SAAS app does not cover.** Both are inventoried in
+`docs/data-protection.md` §14a–§14e; what belongs HERE is which rules they
+reach:
+
+- **Members write things about themselves and to each other.** A profile, a
+  post, a private message — the app becomes a processor of content its own
+  operator did not author, and it can no longer take a published sentence back
+  out of the heads of the people who read it. Art. 15 and Art. 17 both bite
+  harder: the exports carry that content, and account deletion has to reach it
+  (§14c, §14e).
+- **⚠️ Participation itself is personal data.** Presence in a plan-gated room
+  discloses a PURCHASE — a member list for "Diabetes-Coaching Premium" is a
+  list of who bought it, which is special-category-adjacent in exactly the
+  products this template is built for. The app is designed around that: there
+  is no roster, no member count, no "who is here" anywhere, and a member
+  becomes visible in a room only by posting in it, which is a thing they chose
+  to do. **Do not add a member list.** If you do, say so in your privacy
+  policy and read Art. 9 first.
+
+**Private messages are the sharpest line in the module** and worth a sentence
+in a policy rather than a gesture: readable by their two participants and by
+nobody else, enforced by scoped queries and a structural test rather than by
+convention, refused even to an operator's own support session. The exceptions
+— a subject access request, a participant's own report — are bounded and named
+in §14e.
+
 ## 2. TDDDG § 25 — reading or writing on the device
 
 The TTDSG was **renamed TDDDG on 14 May 2024**; the substance did not change.
@@ -151,11 +183,26 @@ fingerprints, all of it.
 asked for. There is **no legitimate-interest route here** — unlike Art. 6 GDPR,
 you cannot balance your way into it. Either the exception applies or you ask.
 
-**As it ships, this app needs no consent banner.** It sets three cookies: the
-session, the language choice and the theme. The first is strictly necessary; the
-other two are the direct result of the user operating a switch. There is no
-analytics, no pixel, no advertising SDK — `data-protection.md` §5 states it and
-means it.
+**As it ships, this app needs no consent banner.** It touches the device in
+**four** places, and every one of them is either strictly necessary or the direct
+result of somebody operating a switch:
+
+| What | Where | Why § 25(2) covers it |
+|---|---|---|
+| the session | cookie `authjs.session-token` | strictly necessary — without it there is no signed-in service to ask for |
+| the language | cookie `NEXT_LOCALE` | the user picked it in the sidebar |
+| the theme | `localStorage`, next-themes | the user picked it with the toggle |
+| the home-screen offer | `localStorage` key `ds24:pwa:v1` (plus a per-tab `sessionStorage` marker that counts a visit once) | it holds "not now" and how often this device has been here, so the notice appears once instead of on every page. Written only as a result of the user's own click, no identifier, never sent anywhere |
+
+That last one is deliberately on the DEVICE rather than on the account, and the
+reason is the feature itself: a home-screen icon exists on one device. Somebody
+who dismisses the notice on their laptop must still meet it on their phone, and
+a column on `users` would silence it exactly where it matters. It is asserted:
+`components/install-app.test.ts` fails when a second key appears, or when the
+key stops being named in this document.
+
+There is no analytics, no pixel, no advertising SDK — `data-protection.md` §5
+states it and means it.
 
 **A banner without tracking is itself a defect.** It trains people to click
 "accept" reflexively and it asks for permission you neither need nor use. Do not
@@ -166,6 +213,15 @@ The moment you add analytics: consent must be as easy to refuse as to give
 (Art. 7(3)), and the tag must not fire before it is given. `lib/consent/` in
 this app records which purpose and which version of which text was agreed to —
 a boolean "accepted: true" proves nothing a year later.
+
+Concretely: **declare the purpose in `config/consent.json`**, read it through
+`lib/consent/config.ts` and never by re-reading the JSON, and record the answer
+with `recordConsent()`. The table is **append-only** — a withdrawal is a NEW row,
+never an edit, because the question a supervisory authority asks is what somebody
+agreed to *at the time*. And `textVersion` is the load-bearing field: bump it
+whenever the wording changes, and every consent given to the old sentence
+correctly counts as unasked again. The retention and the table's own shape are in
+`data-protection.md` §13.
 
 **In negotiation, do not build on it:** the Digital Omnibus would move the
 cookie rules out of the ePrivacy Directive into a new Art. 88a GDPR and drop the
@@ -272,6 +328,18 @@ as a machine says so" — a rule about a *list* of surfaces, and the list is
 there: adding it to that registry is what makes the test and `legal-check`
 notice when its notice goes missing.
 
+🚨 **The list has TWO halves, and both are walked.** `DISCLOSURE_SURFACES` is the
+CORE's half — the assistant. **An installed module contributes its own**, through
+the `disclosure` field in its manifest; `modules/companion/disclosure.mjs` is the
+shipped example. A module declares its own surfaces because only the module knows
+it has any, and the core cannot enumerate a feature that is not installed. What
+neither half may do is leave one out: `lib/ai/disclosure.test.ts` and
+`node run.mjs legal-check` walk **both**, so a module that ships a transcript
+without a notice fails the build rather than a regulator's reading.
+
+Each surface mounts `<AiDisclosure surface="…" />` above its transcript,
+**unconditionally** — never behind a switch, a role or a "first visit" flag.
+
 **Both surfaces are the same conversation about roles.** §3.2's reasoning —
 assume provider until an advisor tells you otherwise — applies at least as
 strongly to a companion: it runs on the vendor's own instruction, for the
@@ -373,7 +441,7 @@ knowing about a year before it applies to you rather than a week after.
 
 The exemption is for *services*. It does not extend to products.
 
-**Interactive elements raise the stakes here** (`lib/learning/` — a game, a
+**Interactive elements raise the stakes here** (`modules/activity/` — a game, a
 check, a graded exercise). A page of text can fail WCAG gracefully; an exam
 a keyboard cannot finish is not degraded, it is closed. If the app carries
 elements, the keyboard-only playthrough in `ux-gateway` §7 and the skill
@@ -427,7 +495,10 @@ Not a substitute for the checks — a starting position, and better than most:
   never"* means the sentence you published is not describing your app.
 - **Passwords are never readable**, by anybody, including you.
 - **Operator access to a customer account is recorded** and the customer can be
-  told — `data-protection.md` §12.
+  told — `data-protection.md` §12. And where the app has a community, that
+  access stops at the private messages: the support session finds no
+  direct-message surface at all, which is a stronger statement than a log entry
+  (§14e).
 - **The AI assistant is sent nothing about the person** — no name, address,
   balance or purchase history. That is about **her**. A companion is the other
   case and is given exactly the fields its entry names, one at a time; the

@@ -38,7 +38,8 @@ Code:
 
 ## Which model this app uses (`billingMode`)
 
-Most apps sell one of the two, not both. That is a line in the registry:
+Most apps sell one of the two, not both. That is a line in the registry, and it
+is **the first thing to set** — every surface below reads it:
 
 ```json
 {
@@ -96,6 +97,16 @@ Deleting the products you do not sell is part of setting the mode — but note
 that removing one from the JSON does **not** unpublish it. A product
 `ds24-sync` has already created stays at Digistore24 until you deactivate it
 there.
+
+**And that is safe for the shipped test suite.** Every test here that needs a
+Product Key reads one out of THIS file through `lib/digistore/test-product-keys.ts`
+rather than naming `basis_monatlich` or `starter` — so deleting a sample product
+does not turn somebody's suite red about a product they deliberately do not sell.
+Where your registry no longer holds the *shape* a test needs at all — an app
+selling a single one-off product has neither a subscription nor a token package —
+that test **SKIPS with the reason printed**, rather than turning red or, worse,
+passing for a different reason than the one it was written for.
+*(Needs template 0.25.0.)*
 
 ## Products: registry + checkout via createBuyUrl
 

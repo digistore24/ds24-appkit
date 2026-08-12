@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
-import { Users, Receipt, Coins, ArrowRight } from "lucide-react";
+import { Users, Receipt, Coins, KeyRound, ArrowRight } from "lucide-react";
 
 import { requireOwner } from "@/lib/authz";
 import { PageHeader } from "@/components/page-header";
@@ -86,6 +86,31 @@ export default async function AdminPage() {
                 {t("aiCostsCta")}
                 <ArrowRight aria-hidden />
               </Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* The setup surface's two pages. They live here rather than in the
+            sidebar on purpose: an operator opens them twice — once to mint a
+            key, once when they want to know what touched an environment — and a
+            permanent menu entry for that is noise on every other page. */}
+        <Card>
+          <CardHeader>
+            <div className="bg-primary/10 text-primary mb-2 grid size-9 place-items-center rounded-lg">
+              <KeyRound aria-hidden className="size-4.5" />
+            </div>
+            <CardTitle>{t("setupKeysTitle")}</CardTitle>
+            <CardDescription>{t("setupKeysBody")}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            <Button asChild>
+              <Link href="/dashboard/admin/setup-keys">
+                {t("setupKeysCta")}
+                <ArrowRight aria-hidden />
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/admin/setup-audit">{t("setupAuditCta")}</Link>
             </Button>
           </CardContent>
         </Card>

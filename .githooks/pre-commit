@@ -1,0 +1,9 @@
+#!/bin/sh
+# Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA
+# SPDX-License-Identifier: MIT
+#
+# A shim, and it must stay one. Git needs a file it can execute; everything it
+# does is Node, because Node behaves the same on Linux, macOS and Windows and a
+# shell does not (CLAUDE.md → Three systems). Do not grow logic in here —
+# scripts/pre-commit.test.ts fails when it appears.
+exec node scripts/dev/pre-commit.mjs

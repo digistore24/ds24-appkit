@@ -28,7 +28,7 @@ import { loadKnowledge, type KnowledgeBase, type KnowledgeDoc } from "./knowledg
  * `cacheable` REQUIRED where the layer's contract has it optional, which made
  * the two assignable in one direction only: a block written to the shipped
  * contract was a type error in `buildSystemBlocks`, so the second task this
- * layer exists for could not reuse the helpers `template/CLAUDE.md` tells it to
+ * layer exists for could not reuse the helpers `CLAUDE.md` tells it to
  * use. Every other duplication down here is pinned by a test — `TASKS` against
  * `task-rules.mjs`, `KNOWLEDGE_SECTIONS` against `frontmatter.mjs` — and this
  * one was not. One declaration needs no test.

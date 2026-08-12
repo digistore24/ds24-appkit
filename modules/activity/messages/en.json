@@ -1,0 +1,22 @@
+{
+  "activity": {
+    "loading": "Loading …",
+    "attemptsOf": "{count} of {max} attempts used",
+    "checkpointSaved": "Progress saved.",
+    "passedYes": "Passed!",
+    "passedNo": "Not passed this time.",
+    "finished": "Finished.",
+    "accountExportNote": "Your results from the exercises: what you worked on, how often, how many points and whether it was enough.",
+    "accountDeletionNote": "Your results from the exercises, in full."
+  },
+  "errors": {
+    "activityUnavailable": "This element is not available right now.",
+    "activityNoAccess": "This element belongs to a product you do not have yet.",
+    "activityRateLimited": "Take a short breath — try again in a moment.",
+    "activityBadSubject": "That request was malformed.",
+    "activityMaxAttempts": "All attempts are used up.",
+    "activityInsufficientBalance": "Your balance is not enough for this.",
+    "activityNotRecorded": "Already done — this attempt was not counted twice.",
+    "activityFailed": "That did not work just now. Please try again."
+  }
+}

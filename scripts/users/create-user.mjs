@@ -13,7 +13,9 @@
 //   node scripts/users/create-user.mjs --email owner@example.com --role owner --apply
 //   node scripts/users/create-user.mjs --email customer@example.com            # default: member
 //
-// Roles: owner|member (aliases: admin→owner, user→member). Default: member.
+// Roles: the canonical list is CANONICAL_ROLES in _db.mjs (owner, moderator,
+// member) — the error message below derives from it rather than repeating it.
+// Aliases: admin→owner, user→member. Default: member.
 // Dry run is the default. To execute: --apply
 import { randomUUID } from "node:crypto";
 import { parseArgs, resolveRole, connect, CANONICAL_ROLES } from "./_db.mjs";

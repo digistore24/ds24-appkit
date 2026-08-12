@@ -32,7 +32,20 @@
 // deliberately v2 (PRD §6.2) — pointing at the session-gated delivery route
 // from Story 18.2. The label is rendered as ONE text node, never
 // inline-parsed.
+//
+// ── The Content Link ────────────────────────────────────────────────────────
+// `allowedLinks` is the same kind of whitelist for `[link:<path>|<label>]`,
+// and the difference is worth stating because it decides where the prop comes
+// from: the media set is STATIC (the handbook, read once on the server), the
+// link set is PER MESSAGE — every marker in it was composed during the request
+// that produced this particular answer, or stored with it. So it arrives on
+// the message, never as a mount prop, and a message with none renders plain
+// text. An accepted marker becomes an INLINE anchor, not a card: it belongs to
+// the sentence around it. The target is grammar-guaranteed app-relative
+// (`isLinkableAppPath`), so this is in-app navigation — `next/link`, no
+// `target="_blank"`, no `rel`, and nothing that could leave the site.
 import { Fragment, useMemo } from "react";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { FileText, Film, Image as ImageIcon, Music } from "lucide-react";
 
@@ -55,6 +68,7 @@ const KIND_ICONS: Record<string, typeof Film> = {
 export function AnswerText({
   text,
   allowedMedia,
+  allowedLinks,
 }: {
   text: string;
   /**
@@ -62,19 +76,34 @@ export function AnswerText({
    * absence denies — that is AD-54's fail-safe, not a default to "allow".
    */
   allowedMedia?: readonly string[];
+  /**
+   * The complete Content Link markers THIS answer may carry. Optional, and its
+   * absence denies for the same reason. It belongs to the message, not to the
+   * mount — see the header.
+   */
+  allowedLinks?: readonly string[];
 }) {
   const t = useTranslations("answerMedia");
 
-  // The parser wants whole-string membership; the array crossed the RSC
-  // boundary because a Set does not serialise. Its reference is stable across
-  // client re-renders (it comes from the server tree), so this builds once
-  // per conversation, not once per streamed chunk.
+  // The parser wants whole-string membership; the arrays crossed the RSC
+  // boundary (or the wire) because a Set does not serialise. The media set's
+  // reference is stable across client re-renders, so it builds once per
+  // conversation; the link set's grows while an answer streams, and rebuilding
+  // a Set of at most a few dozen strings per chunk is cheaper than any way of
+  // avoiding it.
   const allowed = useMemo(
     () => (allowedMedia ? new Set(allowedMedia) : undefined),
     [allowedMedia],
   );
+  const allowedLinkSet = useMemo(
+    () => (allowedLinks ? new Set(allowedLinks) : undefined),
+    [allowedLinks],
+  );
 
-  const blocks = parseAnswer(text, { allowedMedia: allowed });
+  const blocks = parseAnswer(text, {
+    allowedMedia: allowed,
+    allowedLinks: allowedLinkSet,
+  });
 
   function runs(parts: Inline[]) {
     return parts.map((part, index) => {
@@ -128,6 +157,38 @@ export function AnswerText({
                 <span className="text-muted-foreground block text-xs">{t(kind)}</span>
               </span>
             </a>
+          );
+        }
+        case "link": {
+          // Only whitelisted markers reach this branch, so `target` is a
+          // grammar-valid app-relative path — no scheme, no host, no query,
+          // no traversal (`lib/content-source/link-marker.ts`). That is what
+          // makes `next/link` the right element and `rel="noreferrer"`
+          // unnecessary: the navigation cannot leave this app. Inline, inside
+          // the sentence — a card here would break the one thing this marker
+          // exists for ("das Thema wird in Lektion 3 erklärt").
+          //
+          // The label is the hit's TITLE, composed on the server, rendered as
+          // one text node and never inline-parsed — the same rule as the media
+          // label, and the reason the whitelist can be a whole-string match.
+          //
+          // `prefetch={false}` is not a performance tweak. A transcript is a
+          // LIST of links the person has not asked for yet — Next prefetches
+          // them as they scroll into view, so a reloaded conversation with ten
+          // linked lessons would fire ten background requests at gated pages
+          // before anything was clicked. Where the source is more permissive
+          // than its page (the failure `docs/content-source.md` warns about),
+          // that turns every refusal into traffic the customer never caused
+          // and cannot see. A chat answer is read, not navigated.
+          return (
+            <Link
+              key={index}
+              href={part.target}
+              prefetch={false}
+              className="underline decoration-from-font underline-offset-2"
+            >
+              {part.label}
+            </Link>
           );
         }
         default:

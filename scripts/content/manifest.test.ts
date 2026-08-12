@@ -8,7 +8,7 @@
 // makes its refusals a contract rather than a habit.
 import { describe, expect, it } from "vitest";
 
-import { keyFor, validateManifest } from "./_manifest.mjs";
+import { declaredVsReported, keyFor, validateManifest } from "./_manifest.mjs";
 import {
   CONTENT_MEDIA_BUCKET_PREFIX,
   CONTENT_MEDIA_TYPES,
@@ -151,5 +151,52 @@ describe("validateManifest", () => {
         { path: "kurs/a.pdf", visibility: "public", sha256: "a".repeat(64), bytes: 12 },
       ]).problems,
     ).toEqual([]);
+  });
+});
+
+// ── The fourth state, and the only one no owner inside the app can see ──────
+// A manifest that IS in this repo and did NOT reach the environment being
+// asked. The two facts live in two processes — the app knows what it holds,
+// this machine has the repo the deploy came from — so the comparison is the
+// CLI's, and it is a pure function precisely so it can be measured without a
+// fetch. `check.mjs`'s wire half stays untested, as it is today.
+describe("declaredVsReported", () => {
+  const item = (expected: number | null, note?: string) => ({ expected, note });
+
+  it("says both numbers and both sides when the environment has no manifest", () => {
+    const said = declaredVsReported(7, item(null, "no content/media-manifest.json here"));
+
+    expect(said).toContain("7");
+    expect(said).toContain("this checkout");
+    expect(said).toContain("no content/media-manifest.json here");
+  });
+
+  it("says both numbers when the environment declares fewer", () => {
+    const said = declaredVsReported(7, item(5));
+
+    expect(said).toContain("7");
+    expect(said).toContain("5");
+  });
+
+  it("says so when the environment carried no product media item at all", () => {
+    // A build from before the item existed. Its answer and an app that really
+    // holds nothing look identical from here, so the sentence names the cause
+    // rather than claiming the count.
+    expect(declaredVsReported(7, null)).toContain("7");
+  });
+
+  it("is silent when the environment declares the same, or more", () => {
+    expect(declaredVsReported(7, item(7))).toBeNull();
+    // A checkout BEHIND the deployed commit is somebody else's push, not a
+    // broken production.
+    expect(declaredVsReported(7, item(9))).toBeNull();
+  });
+
+  it("🚨 is silent when this checkout declares nothing either", () => {
+    // Two absences agree. Inventing a problem out of them would be the mirror
+    // image of the defect the answered absence closes.
+    expect(declaredVsReported(0, null)).toBeNull();
+    expect(declaredVsReported(0, item(null, "no manifest"))).toBeNull();
+    expect(declaredVsReported(0, item(0))).toBeNull();
   });
 });

@@ -28,8 +28,23 @@ const PROVIDER_DIR = join("lib", "ai", "providers");
 /** Where storage credentials are allowed to live. Same rule, different secret. */
 const MEDIA_DIR = join("lib", "media");
 
-/** Trees worth scanning. Everything a customer's app is built from. */
-const SCANNED = ["app", "lib", "components", "hooks", "db", "scripts", "i18n"];
+/**
+ * Trees worth scanning. Everything a customer's app is built from.
+ *
+ * ⚠️ **`modules/` is in that list, and its absence was the sentence going stale
+ * rather than a decision.** This comment said "everything a customer's app is
+ * built from" while four features moved OUT of the trees beside it — so a
+ * module could name a provider, build a vendor client or read `MEDIA_S3_*` and
+ * this guard would not look. CLAUDE.md states the rule without an exception
+ * ("No call site ever names a provider…"), and a module is precisely the next
+ * AI feature it is written for: `modules/companion/` calls a model, and
+ * `modules/community/profile-actions.ts` is an upload path.
+ *
+ * Scanned whether or not the module is INSTALLED, deliberately. The rule is
+ * about what may exist in this tree, not about what this app happens to have
+ * switched on — a leak that ships dormant is still shipped.
+ */
+const SCANNED = ["app", "lib", "components", "hooks", "db", "scripts", "i18n", "modules"];
 
 const SKIP_DIRS = new Set(["node_modules", ".next", ".dev", "dist"]);
 
@@ -130,7 +145,11 @@ describe("the assistant is not an exception", () => {
   });
 
   it("goes through a task", () => {
-    expect(route).toContain('streamTask("chat"');
+    // `streamTaskWithTools("chat", …)` since the assistant gained her content
+    // tools — the intent is unchanged: the assistant names a TASK, and which
+    // company answers stays in config/ai-models.json. The loop variant calls
+    // streamTask() per round, so every round is still the layer's.
+    expect(route).toMatch(/streamTask(WithTools)?\(\s*"chat"/);
   });
 });
 

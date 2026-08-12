@@ -2,7 +2,7 @@
 //
 //   node run.mjs legal-check
 //
-// The counterpart to `ai-check`, `mcp-check` and `kb-check`, for the
+// The counterpart to `ai-check`, `api-check` and `kb-check`, for the
 // obligations in `docs/compliance.md`. Without a command like this the whole
 // subject is an intention: a placeholder Impressum, a consent purpose with no
 // wording behind it and a retention job that has never run all look exactly
@@ -182,15 +182,19 @@ for (const surface of DISCLOSURE_SURFACES) {
 
   if (found.length === 0) continue;
 
-  // The one accepted false positive, named in the message rather than left for
-  // somebody to work out: the switch says "on" and the registry may be empty.
-  // `lib/ai/companions.ts` is TypeScript and this command has no bundler, so it
-  // cannot be asked. A misconfigured app should read the right sentence.
+  // A surface may add one sentence of its own to the refusal — the accepted
+  // false positive it knows about and the core does not. The companion's is
+  // "the switch says on and the registry may be empty"; its file is TypeScript
+  // and this command has no bundler, so it cannot be asked.
+  //
+  // ⚠️ **Written by the surface, not by this file.** The clause used to live
+  // here behind `surface.id === "companion"` — the core naming a module — and it
+  // pointed at `lib/ai/companions.ts`, which stopped existing when the companion
+  // became a module. So the one place this command tries hardest to be helpful
+  // sent whoever hit it to a file that is not there. A surface that knows the
+  // caveat also knows the path.
   const emptyRegistryClause =
-    surface.id === "companion"
-      ? ` If you switched it on but have not declared a companion in ` +
-        `lib/ai/companions.ts yet, switch it back off until you do.`
-      : "";
+    typeof surface.switchedOnHint === "string" ? ` ${surface.switchedOnHint}` : "";
 
   for (const problem of found) {
     if (problem.code === "missingKey") {

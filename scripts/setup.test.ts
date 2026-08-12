@@ -14,10 +14,12 @@
 // All three are the kind of mistake that passes review, passes the tests that
 // exist, and then greets one Windows user with a dead end.
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { DEPLOY_HOSTS, FIXES, PLATFORMS, fixLine } from "./dev/doctor.mjs";
 import { DB_DRIVERS } from "./db/driver.mjs";
+import { PROFILE_FILE, readAgentProfile } from "./dev/agent-configs.mjs";
+import { notChecked } from "@/lib/test-not-checked";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const read = (file: string) => readFileSync(path.join(ROOT, file), "utf8");
@@ -150,8 +152,25 @@ describe("DEPLOY.md names variables that exist", () => {
 // one is a sentence somebody could tidy away as redundant while removing the only
 // warning a whole class of users ever gets.
 describe("a machine without Node cannot go unnoticed", () => {
-  it("has a shell guard in front of the Node greeting", () => {
-    const settings = JSON.parse(read(".claude/settings.json"));
+  it("has a shell guard in front of the Node greeting", (ctx) => {
+    // ⚠️ This one reads Claude Code's own file, and an app that ran
+    // `node run.mjs agent-setup --agent codex|antigravity|opencode --apply` does
+    // not have it — that command's documented purpose is to remove the wiring
+    // of the programs this app does not use. The claim itself is not lost: the
+    // probe-before-greeting order is asserted for ALL FOUR against
+    // agent-configs.mjs in `scripts/agent-setup.test.ts`, which is where the
+    // shipped files are generated from. What is skipped here is the disk copy.
+    const file = ".claude/settings.json";
+    if (!existsSync(path.join(ROOT, file))) {
+      const profile = readAgentProfile(ROOT);
+      return notChecked(
+        ctx,
+        `${file} is not in this app — it is set up for ${profile.label ?? "another program"} ` +
+          `(${PROFILE_FILE}). The same order is asserted against agent-configs.mjs ` +
+          `in scripts/agent-setup.test.ts`,
+      );
+    }
+    const settings = JSON.parse(read(file));
     const commands = settings.hooks.SessionStart.flatMap(
       (entry: { hooks: { command: string }[] }) => entry.hooks.map((hook) => hook.command),
     );

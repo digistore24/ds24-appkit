@@ -1,6 +1,6 @@
 ---
 name: setup-hosting
-description: Puts the app on a server — picks a host with the user (Railway, Render, Fly.io or DigitalOcean), says what they have to book and what it costs, installs the host's CLI, gets the agent authenticated, creates the app and the managed Postgres, sets every environment variable, wires the migration into the deploy and puts a domain on it. Use this when the user wants to deploy, go online, "put it on a server", asks which host to choose, what hosting costs, or when go-live reaches the hosting step.
+description: Puts the app on a server — picks a host with the user (Railway, Render, Fly.io or DigitalOcean), says what they have to book and what it costs, and sets the whole deploy up including a managed Postgres and a domain. Use this when the user wants to deploy, go online, "put it on a server", asks which host to choose, what hosting costs, mentions Railway/Render/Fly.io/DigitalOcean, an account, a CLI, an API token or the environment variables, or when go-live reaches the hosting step.
 requires: 0.14.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
@@ -128,6 +128,15 @@ they are agreeing to. Then re-run `node run.mjs doctor --deploy` and show that
 it says *logged in* — an assumed login is the thing that fails four steps later,
 by which time it looks like a different problem.
 
+**Where no browser can open, none of those three lines works** — the greeting
+says `[Machine: no browser here]`, and there the login waits for a window that
+never appears. Every one of these hosts has a token path for exactly that, and
+[`docs/DEPLOY.md`](../../../docs/DEPLOY.md) has each of them written out:
+`RAILWAY_TOKEN` (Account Settings → Tokens), `FLY_API_TOKEN`
+(`flyctl tokens create deploy`), DigitalOcean's access token. Render has no CLI
+at all and is a dashboard flow either way. The background is
+[`docs/machine.md`](../../../docs/machine.md).
+
 **DigitalOcean is the one where a human has to produce a token** (API → Tokens →
 Generate New Token, scope *write*). Three rules about it, and they hold for
 `RAILWAY_TOKEN` and `FLY_API_TOKEN` just as much:
@@ -140,7 +149,10 @@ Generate New Token, scope *write*). Three rules about it, and they hold for
   leaked one costs the account.
 
 Never ask a user to paste a token into the conversation when a browser login
-would do the same job.
+would do the same job — **and note the condition, because it is not always
+met.** Where no browser can open, the browser login does not do the same job; it
+does no job at all, and the token is then the honest way rather than the lazy
+one. Ask for it, use it for the deploy, and keep the three rules above.
 
 ## 6. Mail first — it is what breaks the first deploy
 
@@ -179,9 +191,22 @@ understanding rather than repeating:
 Because that failure is invisible until it is expensive, the app refuses rather
 than warns.
 
-**Book object storage with the database, not after it.** Any S3-compatible
-bucket works — the app signs its own requests, so there is no SDK and no
-provider lock:
+**Book object storage with the database, not after it.** The app signs its own
+requests, so there is no SDK and no provider lock — but "S3-compatible" is only
+true of the features it uses. **Seven providers are carried:** Amazon S3,
+DigitalOcean Spaces, Cloudflare R2, Backblaze B2, Hetzner Object Storage, MinIO
+and Wasabi.
+
+🚨 **Google Cloud Storage is NOT one of them — say so before the user books it.**
+It is the provider somebody is most likely to already have, and it has an
+S3-compatible API that does not fit this driver: a different presign algorithm
+value, `x-goog-*` rather than `x-amz-*` copy headers, and undocumented
+`response-content-*` overrides. That is a second signer rather than a setting,
+and the two headers are the course-video upload and the copy behind it. The three
+mismatches and the one measurement that would overturn the answer are in
+`docs/visuals.md` → *Google Cloud Storage is NOT carried*. If the user already
+has a GCS bucket, the honest answer is "book one of the seven"; do not spend the
+session trying to make it sign.
 
 | Host | Closest to hand |
 |---|---|
@@ -206,10 +231,19 @@ Ask for the credentials **scoped to that one bucket**, not an account-wide key.
 Every provider above can do it, and the difference matters the day the key
 leaks: one bucket, or everything the user has there.
 
-Two optional ones worth mentioning once: `MEDIA_S3_REGION` (some providers do
-not care, and `auto` is fine there), and `MEDIA_S3_PUBLIC_BASE_URL` — a CDN or a
-custom domain on the bucket, which makes product images reach visitors without
-touching the app at all.
+🚨 **And `MEDIA_S3_REGION` is a sixth variable on most of them, not an optional
+extra.** It defaults to `auto`, which is exactly what Cloudflare R2 documents and
+what MinIO ignores — and **Amazon S3, Backblaze B2 and Wasabi validate the string
+and answer 403 without it.** Left unset against one of those, everything looks
+fine: the app starts, the deploy succeeds, and the failure arrives on the first
+upload a real customer makes, after they picked the file and waited for it to
+travel. Set it whenever the provider documents one, and read it off the bucket's
+own panel rather than guessing (`fra1`, `eu-central-1`, `eu-central-003`).
+`docs/DEPLOY.md` lists it as required for everything except R2.
+
+One that really is optional: `MEDIA_S3_PUBLIC_BASE_URL` — a CDN or a custom
+domain on the bucket, which makes product images reach visitors without touching
+the app at all.
 
 **Prove it before the deploy, not after:** `node run.mjs media-check` writes a
 throwaway object, reads it back, compares the bytes and deletes it. Credentials
@@ -259,7 +293,9 @@ transport works.
 
 ```
 https://YOUR-DOMAIN/api/healthz     → {"status":"ok"}
-https://YOUR-DOMAIN/api/readyz      → ready      (this one asks the database)
+https://YOUR-DOMAIN/api/readyz      → {"status":"ready"}   (this one asks the
+                                      database, and answers 503
+                                      {"status":"not-ready"} when it cannot)
 DATABASE_URL="postgres://…" node run.mjs smoke-account --apply    # once
 node run.mjs smoke --url https://YOUR-DOMAIN
 ```

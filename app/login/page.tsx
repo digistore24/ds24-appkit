@@ -17,6 +17,7 @@ import { SignInForm } from "./ui";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { BrandMark } from "@/components/brand-mark";
 import { LanguageSwitcher } from "@/components/language-switcher";
 
 /**
@@ -83,12 +84,7 @@ export default async function LoginPage({
 
       <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-6 p-6 pb-24">
         <div className="text-center">
-          <span
-            aria-hidden
-            className="bg-primary text-primary-foreground mx-auto mb-4 grid size-10 place-items-center rounded-xl font-bold"
-          >
-            {APP_NAME.slice(0, 1).toUpperCase()}
-          </span>
+          <BrandMark appName={APP_NAME} size="lg" className="mx-auto mb-5" />
           <h1 className="text-2xl font-semibold">{t("title")}</h1>
           <p className="text-muted-foreground mt-1 text-sm text-balance">
             {t("subtitle")}

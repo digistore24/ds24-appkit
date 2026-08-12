@@ -13,8 +13,9 @@ Wired up and ready to use:
 - 🔐 **Sign-in** (email token/magic link via Postmark or SMTP; Google optional)
   — plus an **optional password** each customer may set on themselves, and
   locally you get straight in **without a mail account** (development login)
-- 👥 **User management** with two roles (admin/user) — admins manage accounts
-  under `/dashboard/admin/users`
+- 👥 **User management** with three roles (admin / moderator / user) — admins
+  manage accounts under `/dashboard/admin/users`; a moderator is a customer who
+  keeps the community's rooms clean and has no admin rights
 - 🏷️ **Plan page** (`/plans`) with monthly/yearly subscription and token
   packages — hard-coded in `config/digistore-products.json`, to reshape or delete
 - 🎚️ **One switch for what you sell** — `"billingMode": "subscriptions"` |
@@ -32,29 +33,65 @@ Start your AI program in the project and simply say what you want — the matchi
 **skills** (in the `.claude/skills/` folder) guide you step by step. Every step
 hands over to the next:
 
-| # | Step | Skill | What happens |
-|---|---------|-------|--------------|
-| — | **Set up the machine** | `setup-machine` | only if something is missing: installs Node/git after asking, prepares `.env`, database and migrations |
-| 0 | **Find an idea** | `market-research` | interview about your expertise/reach → research the target audience → concrete product proposal |
-| 1 | **Build the app** | `build-app` | pick an archetype, create the data model + pages |
-| 2 | **Payment** | `setup-digistore` | connect Digistore24: `node run.mjs ds24-connect`, IPN, checkout links |
-| 2b | **Subscriptions & tokens** *(optional)* | `billing-modes` | fixed subscriptions (monthly/yearly) and/or prepaid tokens with auto top-up + subscription self-service |
-| 2c | **AI assistant** *(optional)* | `ai-chat-knowledge` | switch the in-app chat on, give her a name, and write the handbook she answers your customers from |
-| 2d | **Which AI company** *(optional)* | `ai-providers` | pick OpenAI, Anthropic, Gemini, Mistral or OpenRouter, get the key in, bind each job to a model and set the prices the cost page reports |
-| 2e | **AI interface (MCP)** *(optional)* | `mcp-server` | let your customers connect Claude to your app: decide which capabilities become tools, then switch it on |
-| 2f | **Your customer's first session** *(optional)* | `user-onboarding` | pin the activation event and replace the blueprint checklist with steps that mean your app — so the person who just paid knows what to do first |
-| 2g | **The salespage** | `salespage` | turn the placeholder home page into the page that sells your product: an outcome headline with a real visual, benefits, honest proof, ONE offer block on the real checkout, FAQ |
-| 3 | **The experience** | `ux-gateway` | the app as your customer meets it: the first five minutes after a purchase, dead ends, actions that report nothing back, wording, keyboard and phone — measured with `node run.mjs ux-check` where it can be, looked at where it cannot |
-| 4 | **Security** | `security-gateway` | nine checks — access control, money, secrets, packages, endpoints, hosting — findings by severity, the serious ones fixed, report in `docs/reports/` |
-| 5 | **Scaling** | `performance-gateway` | measure instead of guess: response times, database and indexes, ~100 concurrent users, memory, CPU, front end — fixed and measured again |
-| 6 | **Legal** | `compliance-check` | which EU rules reach your app: imprint, privacy policy, terms — plus the **AI Act**, consent, your customers' rights and the records you have to be able to show |
-| 6b | **The server** | `setup-hosting` | pick a host (Railway/Render/Fly.io/DigitalOcean), say what it costs, install its CLI, authenticate, app + managed Postgres, secrets, migration in the deploy, domain |
-| 7 | **Live** | `go-live` | put the app online and verify it live — a real test purchase included |
-| 8 | **Marketing** | `go-to-market` | positioning, channels, launch plan + ready-made content (landing page, emails, **video scripts**) |
+<!-- journey:table start -->
+**Prerequisite:** `setup-machine` — Installs what is missing — Node, git — and prepares the project.
 
-While building (step 1), **tests are written and run automatically**
+### 1. Plan — What is being sold, to whom, and what it looks like.
+
+| # | Skill | What happens |
+|---|---|---|
+| 1.1 | `market-research` *(optional)* | Interviews the operator and researches the market, then writes the product brief. |
+| 1.2 | `design` *(optional)* | Turns the four dials once — accent, radius, type, elevation — and writes the choice into docs/design.md. |
+| 1.3 | `knowledge-intake` *(optional)* | Distills existing videos, ebooks and recordings into the corpus the handbook is written from. |
+| 1.4 | `build-app` | what this app is going to be, written down — each line something the customer will be able to DO |
+
+### 2. Build — The app itself, the checkout, and the four gates in front of it.
+
+| # | Skill | What happens |
+|---|---|---|
+| 2.1 | `build-app` | The entry point: archetype, data model, the pages the customer will use. |
+| 2.2 | `setup-digistore` | Fetches the API key, creates the products and registers the IPN connection. |
+| 2.2b | `billing-modes` *(optional)* | Sets up subscriptions, prepaid tokens with auto top-up, and subscription self-service. |
+| 2.3a | `visuals` *(optional)* | Decides and builds what the customer actually receives: images, video, files behind a purchase. |
+| 2.3b | `content-production` *(optional)* | Produces the media a course still lacks: lesson scripts, video tooling, voiceover, subtitles. |
+| 2.3c | `courses` *(optional)* | The course itself: blocks, lessons, progress and the purchase gate. |
+| 2.3d | `learning-activities` *(optional)* | What a course's customer DOES — exercises and checks, judged on the server. |
+| 2.3e | `community` *(optional)* | A place for members: rooms, discussions under the pages they belong to, private messages. |
+| 2.3f | `ai-companion` *(optional)* | The app working alongside its customer while they work, not only delivering to them. |
+| 2.3g | `mobile-companion` *(optional)* | Asks first whether a native app is wanted at all, then switches the HTTP API on and ships the companion. |
+| 2.3h | `ai-providers` *(optional)* | Picks the AI company, gets the key in, binds tasks to models and sets the prices. |
+| 2.3i | `ai-chat-knowledge` *(optional)* | Switches the in-app assistant on, gives her a name and writes her handbook. |
+| 2.3j | `user-onboarding` *(optional)* | Designs the END USER's first session on purpose instead of inheriting the blueprint's. |
+| 2.4 | `salespage` | Turns the placeholder home page into a page that sells THIS product. |
+| 2.5 | `ux-gateway` | Looks at the app the way a paying customer does, fixes what has to be fixed, writes a dated report. |
+| 2.6 | `security-gateway` | Scans the app for holes, fixes what has to be fixed and writes a dated report. |
+| 2.7 | `performance-gateway` | Measures where the app is slow, fixes it, measures again and writes a dated report. |
+| 2.8 | `compliance-check` | Works out which EU rules reach this app, writes the legal pages and the evidence pack. |
+
+### 3. Go live — A server, a domain, one real test purchase.
+
+| # | Skill | What happens |
+|---|---|---|
+| 3.1 | `setup-hosting` | Picks a host, installs its CLI, creates the app and its managed Postgres, sets every secret. |
+| 3.2 | `go-live` | Puts the app online and proves that a real purchase really unlocks access. |
+| 3.3 | `setup-environments` *(optional)* | Sets an environment up over the app's own surface — accounts, plans, media, rooms — with no production password in a shell. |
+| 3.4 | `setup-monitoring` *(optional)* | Decides what tells the operator it broke, instead of a customer — then wires it up. |
+
+### 4. Run it — The phase that begins the day it is live and does not end.
+
+| # | Skill | What happens |
+|---|---|---|
+| 4.1 | `operate` | The recurring round: safety, hidden errors, jobs, content, reach — read off the app, written into a dated report. |
+| 4.2 | `go-to-market` *(optional)* | Positioning, channels, launch plan, content. |
+
+**Alongside:** `guardrails` — The rules that hold around money, secrets and customer data, whatever else is being built. · `coach` — Works out where the project stands, names the one next step, and routes a symptom to the skill that fixes it.
+<!-- journey:table end -->
+
+`node run.mjs journey` prints this same path with your project's own state next
+to each step — what is done, what is next, and what it is waiting for.
+
+While the app is being built, **tests are written and run automatically**
 (`npm run test`) — locally, on your machine, before anything moves on.
-Throughout, **`guardrails`** watches over money, secrets and customer data.
 
 **Lost the thread? Ask the coach.** `coach` is the skill for the two questions
 that come up between the steps — *"what is the next step?"* and *"how do I solve
@@ -71,7 +108,7 @@ folder and say:
 > **"Build my app"**
 
 That is the only door. Claude then asks you whether you already have an idea —
-and if not, the two of you find one together (step 0). Everything else follows
+and if not, the two of you find one together (step 1.1). Everything else follows
 step by step.
 
 ## What you need installed
@@ -82,7 +119,7 @@ have both:
 
 | | What for |
 |---|---|
-| **an AI coding program** | the one you build the app with. This template ships wired for four: [Claude Code](https://claude.com/claude-code), [OpenAI Codex CLI](https://developers.openai.com/codex), [Gemini CLI](https://geminicli.com) and [OpenCode](https://opencode.ai). Take whichever you already use — if you have none, Claude Code is the one the walkthroughs are written against |
+| **an AI coding program** | the one you build the app with. This template ships wired for four: [Claude Code](https://claude.com/claude-code), [OpenAI Codex CLI](https://developers.openai.com/codex), [Antigravity CLI](https://antigravity.google) and [OpenCode](https://opencode.ai). Take whichever you already use — if you have none, Claude Code is the one the walkthroughs are written against |
 | **git** | to fetch this repo — [git-scm.com](https://git-scm.com/downloads); on macOS `xcode-select --install` brings it, on Windows it brings Git Bash |
 
 **Everything else, the agent installs for you.** That includes **Node.js ≥ 20**,
@@ -123,7 +160,7 @@ start one morning. `node run.mjs doctor` tells you which of the two is in use.
 
 ## Quick start
 
-Start your AI program **in this folder** — `claude`, `codex`, `gemini` or
+Start your AI program **in this folder** — `claude`, `codex`, `agy` or
 `opencode`. Point it at the folder above this one and it finds neither the
 guidance nor the skills, and "Build my app" goes nowhere.
 
@@ -255,6 +292,6 @@ Code **and** skills in this template are under the **MIT license** —
   arising from its use — the app you build, operate and sell is yours to test,
   secure and answer for.
 
-That last point is why steps 4 and 6 above are part of the path:
+That last point is why steps 2.6 and 2.8 above are part of the path:
 `security-gateway` before real money flows, and `compliance-check` before real
 customers do.

@@ -49,8 +49,9 @@ export type ActiveUser =
  *
  * Route handlers need this at all because **`proxy.ts` does not guard them**:
  * its matcher covers `/dashboard/:path*` and nothing else, so everything under
- * `app/api/` is public until it protects itself. See CLAUDE.md, "Sign-in is not
- * optional for app pages — but it is not automatic either".
+ * `app/api/` is public until it protects itself. See `docs/auth-setup.md` for
+ * the three things a new protected area needs, and CLAUDE.md → Rules, first
+ * bullet, for the refusal itself.
  *
  * The distinction between anonymous and blocked is kept because the page path
  * needs it (two different messages). A route handler is free to answer both

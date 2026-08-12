@@ -20,11 +20,33 @@
 // explaining why it is not used. A line that really has to carry one — a hint
 // printed for the user, say — is exempted with the marker `portability-ok`.
 import { describe, expect, it } from "vitest";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { blankComments as stripComments } from "@/scripts/lib/source-text.mjs";
+import {
+  PROFILE_FILE,
+  allConfigFiles,
+  isPrunedPath,
+  readAgentProfile,
+} from "@/scripts/dev/agent-configs.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const EXEMPT = "portability-ok";
+
+/**
+ * 🚨 **Not every folder below is on disk in every app.**
+ * `node run.mjs agent-setup --apply` — a shipped command whose documented
+ * purpose is exactly this — removes the wiring of the programs this app does
+ * not use, and `.opencode/plugins/` is one of them. Measured in the field test
+ * of 2026-08-11: the walk below threw `ENOENT: scandir '.opencode/plugins'`,
+ * and the whole file then failed to COLLECT — so the portability question
+ * stopped being asked at all, which is worse than any answer it could have
+ * given.
+ *
+ * What agent-setup removed it records in `.agent-profile.json`, and that record
+ * is what the missing folder is held against below — never a shrug.
+ */
+const PROFILE = readAgentProfile(ROOT);
 
 const FORBIDDEN: { pattern: RegExp; tool: string; instead: string }[] = [
   { pattern: /\blsof\b/, tool: "lsof", instead: "portInUse() from scripts/dev/ports.mjs" },
@@ -44,8 +66,21 @@ const FORBIDDEN: { pattern: RegExp; tool: string; instead: string }[] = [
   { pattern: /\bdate\s\+%s/, tool: "date +%s", instead: "Date.now()" },
 ];
 
-/** The folders that hold tooling — everything a developer's machine executes. */
-const TOOLING_DIRS = ["scripts"];
+/**
+ * The folders that hold tooling — everything a developer's machine executes.
+ *
+ * ⚠️ **`modules/` is in that list because a module ships COMMANDS.** `run.mjs`
+ * merges `moduleCommands()`, so `node run.mjs api-check` and
+ * `node run.mjs community-prune` run `modules/api/check.mjs` and
+ * `modules/community/scripts/prune.mjs` — on somebody's Windows machine, in a
+ * Git Bash, exactly like anything under `scripts/`. A `curl`, an `lsof` or a
+ * `split("\n")` in one of them is the same defect in the same product, and it
+ * was unguarded for as long as this list named one folder.
+ *
+ * The whole module tree, not only the files a manifest happens to name today: a
+ * helper a command imports runs on that machine too.
+ */
+const TOOLING_DIRS = ["scripts", "modules"];
 
 /**
  * The session greeting for OpenCode. It lives apart from the rest because
@@ -58,6 +93,10 @@ const PLUGIN_DIRS = [".opencode/plugins"];
 
 /** Every .mjs we ship as tooling, plus run.mjs and the OpenCode plugins. */
 function toolingFiles(dir: string, extensions: string[], found: string[] = []): string[] {
+  // A folder that is not there yields nothing — and the test right below is
+  // what decides whether it is allowed to be missing. Swallowing the ENOENT
+  // here and nowhere else would be exactly the shrug this file must not make.
+  if (!existsSync(dir)) return found;
   for (const entry of readdirSync(dir)) {
     const full = path.join(dir, entry);
     if (statSync(full).isDirectory()) toolingFiles(full, extensions, found);
@@ -76,13 +115,49 @@ const TOOLING = [
 const PROC = path.join(ROOT, "scripts", "lib", "proc.mjs");
 
 /** Replace comments with spaces, so line numbers survive and prose does not count. */
-function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
-    .replace(/(^|[^:])\/\/.*$/gm, (m, before: string) => before + " ".repeat(m.length - before.length));
-}
-
 describe("the tooling runs on Linux, macOS and Windows", () => {
+  it("found the files it is supposed to scan", () => {
+    // Non-vacuity. Every check in this file is `it.each(TOOLING)`, so an empty
+    // list is a green run that read nothing — and the list is now allowed to
+    // shrink (see PROFILE above), which is precisely when that becomes
+    // possible.
+    expect(TOOLING).toContain(path.join(ROOT, "run.mjs"));
+    expect(TOOLING.length).toBeGreaterThan(20);
+  });
+
+  it.each(PLUGIN_DIRS)("%s is on disk, or agent-setup recorded taking it away", (dir) => {
+    // 🚨 The other half of the tolerance above. Absent is fine ONLY because
+    // this app was reduced to a program that does not read it; absent for any
+    // other reason is a plugin that stopped shipping, and nothing else in the
+    // tree would notice.
+    if (existsSync(path.join(ROOT, dir))) return;
+
+    expect(PROFILE.problem, `${PROFILE.problem}`).toBeNull();
+    expect(
+      PROFILE.found,
+      `${dir} is missing and no ${PROFILE_FILE} says why — the OpenCode plugin ` +
+        `is not being scanned for Linux-only tools by anything`,
+    ).toBe(true);
+
+    // The folder itself is never a prune entry — agent-setup removes FILES and
+    // then drops the directory it emptied. So the question is whether every
+    // file this template ships in there is one the record accounts for.
+    const shipped = allConfigFiles()
+      .map(({ file }) => file)
+      .filter((file) => file.startsWith(`${dir}/`));
+    expect(
+      shipped.length,
+      `${dir} is missing and this template ships nothing into it — then the walk ` +
+        `above is silently empty and this test guards nothing`,
+    ).toBeGreaterThan(0);
+    for (const file of shipped) {
+      expect(
+        isPrunedPath(PROFILE, file),
+        `${dir} is gone but ${PROFILE_FILE} does not list ${file} as pruned`,
+      ).toBe(true);
+    }
+  });
+
   it("keeps the commands in run.mjs, not in a Makefile of its own", () => {
     const makefile = readFileSync(path.join(ROOT, "Makefile"), "utf8");
     // The Makefile is an alias and nothing else — every real target is in run.mjs,

@@ -218,6 +218,33 @@ per month Starter tier (≈30 minutes) is the minimum with a commercial licence 
 the free tier is NOT licensed for monetized content**, and a course behind a
 paywall is exactly that. `ELEVENLABS_API_KEY`, same key pattern as above.
 
+**Pacing — the mistake that sounds like quality.** Whichever tool speaks, the
+narration runs at normal speed: `--rate=+0%`, and it stays there. Slowing the
+voice down "so people can follow" is the mistake that sounds right on a single
+test line and turns a whole course sluggish — whoever wants slower delivery
+writes shorter sentences, never a negative rate. Padding is a budget, not a
+feeling: about 0.2 s before the voice and 0.3 s after it per scene — and the
+TTS output brings head- and tail-silence of its own, which is trimmed (ffmpeg
+`silenceremove`, around −40 dB) *before* any padding is added, otherwise the
+two stack. A minimum scene duration (~5 s) keeps short panels readable without
+stretching all the others. The check is arithmetic, not taste: gross words per
+minute over the finished runtime, and the share of the runtime that is silence.
+**≥ ~130 wpm gross and ≤ ~15 % silence is narration.** Measured on 2026-08-04
+in a real production: −25 % rate plus ~1 s of padding per panel came out at
+114 wpm gross with 24 % silence and felt sluggish in every video; the re-render
+at normal rate with 0.2 s/0.3 s padding cut the runtime by 26 % and brought the
+silence to ~15 % — with the voice, the pictures and the levels unchanged.
+
+**Production is code.** The render script and the parameters it ran with —
+voice, rate, padding, resolution — are committed like every other tool, in the
+same commit as the media they produced. A production that exists only as
+finished MP4s is a reconstruction job at the first correction: the sluggish
+videos above had to have their slides recovered frame by frame from the shipped
+files, because the source panels lived in a lost volume and the parameters
+lived nowhere but in somebody's session. Source assets belong in the repo, or
+must be reproducible from committed ones — never only in a Docker volume or a
+local folder.
+
 **Rendering the voice INTO the video.** With Remotion the audio track is part
 of the composition, not an editing step afterwards: put the per-scene files
 into `content-studio/public/`, mount each with `<Audio>` from
@@ -320,7 +347,7 @@ A produced file follows the same road as any other media
    its video. Then `node run.mjs content-apply` (row + shipped bytes) and, for
    staged files, `node run.mjs content-media-sync --apply`. **This fills the
    environment you are in — PROD gets the same content at go-live via
-   `--env prod`, and `content-check --env prod` is what proves it arrived.**
+   `--env prod`. ⚠️ Nothing proves it arrived — open the page and look.**
 3. **Wire the unit** — by the file's PATH, resolved per environment, never by
    a copied row id (an id exists in one database only): in an applier,
    `videoMediaId` comes from `mediaIdFor("<topic>/<file>.mp4")` (worksheets:
@@ -337,9 +364,10 @@ A produced file follows the same road as any other media
 
 A **marketing** video (the `go-to-market` script) ends elsewhere — on the
 sales page or a social channel, not behind `hasPlan()`. Same production road,
-different destination; hosting it on the app's own pages is
-`docs/visuals.md` → the media store with `visibility: "public"`, and an
-embed from a video host needs the consent gate described there.
+different destination; hosting it on the app's own pages is the media store
+with `visibility: "public"` (`docs/visuals.md` → *How a file reaches a
+visitor*), and an embed from a video host needs the consent gate described
+there.
 
 ## What this cannot do
 
@@ -351,9 +379,14 @@ Named here so nobody discovers it at the last step:
 - **Quality is the vendor's judgement.** A render that plays is not a lesson
   that teaches; the vendor watches every video before `status: produced`, and
   that review is a step, not a courtesy.
-- **Long recordings do not fit through the upload path** — the per-kind
-  ceiling in `config/media.json` is real, and the way past it is described in
-  `docs/visuals.md`, deliberately not built.
+- **A long recording does not travel through the app, and does not have to.**
+  The browser writes it straight to the bucket and the app reads back what
+  landed; the ceiling is then the per-kind one in `config/media.json` (2 GB for
+  video as shipped) rather than what a request body carries. It needs a CORS
+  rule on the bucket before the first upload works —
+  [`docs/visuals.md`](visuals.md) → *The ceiling, and the second way in* has it
+  as copyable JSON, and `node run.mjs media-check` says whether the bucket
+  answers your app's address.
 - **An avatar of a real person needs that person's yes.** Cloning the vendor
   is their own decision to make at the service, under that service's terms;
   cloning anybody else is off the table.

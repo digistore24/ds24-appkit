@@ -120,6 +120,12 @@ export async function generateImage(input: GenerateImageInput): Promise<MediaRow
     rows.push(
       await createMedia({
         ownerId: input.ownerId ?? null,
+        // Nobody uploaded this — a model made it, and the bucket should say so.
+        // `source: "generated"` on the row says it too; the key is what says it
+        // to whoever is looking at the bucket rather than at the database, which
+        // is the whole reason the namespace exists.
+        namespace: "core",
+        category: "generated",
         kind: "image",
         mime: image.mime,
         bytes: image.bytes,

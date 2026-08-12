@@ -60,6 +60,11 @@ having to repeat, a warning about your own domain — they stay. `update` will
 report that file as `keep` for ever, and if you want the new version you read it
 in the template repo and merge the part you want by hand.
 
+🚨 **Do not "fix" that by overwriting them anyway.** A `keep` is not a failure the
+update is asking to be helped past — it is the mechanism doing its job, and a
+house rule silently replaced by the template's wording is the one loss this
+channel was built to make impossible.
+
 ## Where the files come from
 
 From the public repo this app was cloned out of:
@@ -90,7 +95,8 @@ git checkout .    # throw it all away again
 
 ## The line in the greeting
 
-The session greeting checks **once a day** whether there is anything newer, and
+The session greeting (`scripts/dev/update-check.mjs`) checks **once a day**
+whether there is anything newer, and
 says one line when there is. That check is the only part of this app that talks
 to anybody, so, plainly:
 

@@ -3,8 +3,13 @@
 # Interactive elements — games, checks, and work that gets judged
 
 > Needs template 0.9.0 or newer — `node run.mjs update` brings the text, not
-> the code. `lib/learning/` and `<ActivityPanel>` are what this file builds
+> the code. `modules/activity/` and `<ActivityPanel>` are what this file builds
 > on; an older clone reads a description of code it does not carry.
+>
+> **And it is a MODULE.** A fresh app does not have it — `node run.mjs module
+> add activity`, then `node run.mjs db-migrate`. Until then its code is in the
+> tree and does nothing: no texts, no error messages, nothing wired up.
+> [`docs/modules.md`](modules.md) says what that means.
 
 An online course that is videos plus PDFs asks nothing of the learner. What
 sells now is the element the learner *does* — a game, a check, an exercise
@@ -13,9 +18,9 @@ that already exist:
 
 | Piece | Where |
 |---|---|
-| the entry — id, gate, cost, attempts, `load()`, `grade()` | `lib/learning/activities.ts` (ships empty; its header carries the three rules and a worked example) |
-| the surface — resume, submit, announcements, feedback | `<ActivityPanel activityId subject>` + `useActivity()` (`components/activity-panel.tsx`; its header carries the five game-UI rules) |
-| the result — attempts, score, passed, resume point | `activity_results`, written only by the server (`lib/learning/results.ts`) |
+| the entry — id, gate, cost, attempts, `load()`, `grade()` | `modules/activity/activities.ts` (ships empty; its header carries the three rules and a worked example) |
+| the surface — resume, submit, announcements, feedback | `<ActivityPanel activityId subject>` + `useActivity()`, both imported from `@/lib/modules/component-registry` (the code is `modules/activity/components/activity-panel.tsx`; its header carries the five game-UI rules) |
+| the result — attempts, score, passed, resume point | `activity_results`, written only by the server (`modules/activity/results.ts`) |
 
 **The seam is for every element — the free, unlimited, unjudged one first
 of all.** "Attempt-limited" is what `maxAttempts` makes of an element, not
@@ -75,10 +80,19 @@ game at full length):
 **The surface** — the page renders the panel, the game UI is yours:
 
 ```tsx
+import { ActivityPanel } from "@/lib/modules/component-registry";
+
 <ActivityPanel activityId="silben-spiel" subject={unit.slug}>
   <SilbenSpiel />
 </ActivityPanel>
 ```
+
+🚨 **Import from the registry, never from `@/modules/activity/…`.** Your page
+lives under `app/`, and `modules/boundary.test.ts` refuses any file there that
+names a module directly — the generated barrel is what that refusal points at.
+This used to say the module path, and following it turned your own
+`npm run test` red about a page you wrote correctly. `useActivity()` comes from
+the same place.
 
 `SilbenSpiel` is a client component built on `useActivity()`: `data` (what
 `load()` returned), `resume` (JSON-plain — store positions, never
@@ -129,6 +143,17 @@ judges — the answer picks the storage:**
   `grade()` does the judging — deterministically, or through a model via
   `runTask` (then the disclosure duty applies, and
   [`docs/ai-in-product.md`](ai-in-product.md) §2.2 is the reading pattern).
+  🚨 **A submission on its way to a model goes through
+  `buildFencedRequest()` from `@/lib/ai/customer-text` first** — never straight
+  into a `system` block or a bare user message you assembled yourself. It
+  returns the `{ system, messages }` you hand to `runTask`, with what the
+  customer wrote inside `<customer-text …>` and the standing rule beside it that
+  names that text content rather than instruction. It is **core** code and needs
+  no module installed; the companion is merely its first caller, and reading a
+  submission is the surface prompt injection actually pays on. The field the
+  submission goes in is `work` — `ask` and `about` travel outside the fence and
+  are yours to word. Mechanics:
+  [`docs/ai-providers.md`](ai-providers.md) → *Working alongside your customer*.
   Metering is the registry's `costsTokens`; the charge happens only for a
   recorded, final outcome — a lost race never costs the customer a token.
 - **Both** exist in one app without touching: the workshop's submission in
@@ -138,7 +163,7 @@ judges — the answer picks the storage:**
 ## Recipe D — progress over a course
 
 Derived, never stored: `activityProgress(results, expected)` in
-`lib/learning/progress.ts` counts completions against what the page
+`modules/activity/progress.ts` counts completions against what the page
 currently expects and names the next open element. There is no progress
 column and none is missing — a reset drops the count by itself, a removed
 unit stops counting the moment the page stops expecting it. Render the

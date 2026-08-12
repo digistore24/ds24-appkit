@@ -17,14 +17,12 @@ import { join } from "node:path";
 
 import de from "@/messages/de.json";
 import en from "@/messages/en.json";
+import { blankComments } from "@/scripts/lib/source-text.mjs";
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 
 /** The file with its comments removed — this one discusses its own subject. */
-const SHELL = readFileSync(join(ROOT, "components", "app-shell.tsx"), "utf8")
-  .replace(/\/\*[\s\S]*?\*\//g, "")
-  .replace(/^\s*\/\/.*$/gm, "")
-  .replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
+const SHELL = blankComments(readFileSync(join(ROOT, "components", "app-shell.tsx"), "utf8"));
 
 /** Just the UserMenu component, so the sidebar's own entry cannot satisfy this. */
 const USER_MENU = (() => {

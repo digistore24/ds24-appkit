@@ -1,6 +1,6 @@
 ---
 name: learning-activities
-description: Gives an app the elements its customer DOES — a learning game, a check with a pass mark, an exercise that answers back — decides whether a course needs one and where, builds one on the shipped seam (registry entry + panel + server-side grading), gates and meters it, and checks one that already exists for the failure no other gate finds. Use this when the user says "my people never finish the course", "I want a quiz in lesson three", "can the course have a game", "how do I test whether they understood it", or when a course hands out videos and asks nothing back. For the course's overall shape use docs/courses.md; for a companion that talks, ai-companion.
+description: Gives an app the elements its customer DOES — a learning game, a check with a pass mark, an exercise that answers back, graded on the server; also whether a course needs one at all, and an audit. Use this when the user says "my people never finish the course", "they watch the videos and drift away", "I want a quiz in lesson three", "can the course have a game", "how do I test whether they understood it", "I need somewhere people really PRACTISE", "free practice by topic and mock exams", "I want to see who passes and where they are weak", or when a course hands out videos and asks nothing back. For the course's overall shape use `courses`; for a companion that talks, `ai-companion`.
 requires: 0.9.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
@@ -15,6 +15,23 @@ The reference is [`docs/learning.md`](../../../docs/learning.md) — the five
 recipes, the shape→element map, and what the catalogue refuses to promise.
 **This skill does not repeat it.** Where a fact is needed, that file is named
 and the conversation moves on.
+
+## Step 0 — is the module part of this app?
+
+The seam is a **module**: it lives in `modules/activity/` and a fresh app does
+not have it, the same way a fresh app has no community. Nothing below works
+until it does.
+
+```bash
+node run.mjs module list        # is "activity" installed?
+node run.mjs module add activity
+node run.mjs db-migrate         # its table
+```
+
+If `module list` shows it under *"present but not installed"*, its code is in
+the tree and does nothing: no texts, no error messages, nothing wired up. One
+command fixes that, and it belongs at the start of this skill rather than in the
+middle of the first recipe — see [`docs/modules.md`](../../../docs/modules.md).
 
 ## How to use this skill
 
@@ -39,9 +56,9 @@ Four items. You do not have to know which one you want.
 
 ## First, always
 
-Look before you ask (`CLAUDE.md` → *How a skill works*):
+Look before you ask (`docs/guidance.md` → *How a skill works*):
 
-- `lib/learning/activities.ts` — which entries exist. Empty is the shipped
+- `modules/activity/activities.ts` — which entries exist. Empty is the shipped
   state, not a defect.
 - `docs/app.md` — was a decision **against** elements recorded? Then say so
   and stop; a recorded "no" is an answer, not an opening position.
@@ -79,12 +96,21 @@ or the `0` with its reason.
 Recipes A–C in [`docs/learning.md`](../../../docs/learning.md) are the spec;
 the seam is three pieces and the order is fixed:
 
-1. **The entry** in `lib/learning/activities.ts` — id (`[a-z0-9-]`, ≤ 40),
+1. **The entry** in `modules/activity/activities.ts` — id (`[a-z0-9-]`, ≤ 40),
    `requiresPlan`, `costsTokens`, `maxAttempts`, `passMark`, `load()`,
    `grade()`. The file header's three rules are the contract; the third is
    the whole point: **the solution never leaves the server.** `load()` sends
    the questions, never the expected answers; `grade()` compares on the
    server; a checkpoint carries no score.
+   🚨 **A `grade()` that sends the submission to a model builds its request
+   with `buildFencedRequest()` from `@/lib/ai/customer-text`, never by hand.**
+   That is CORE code — no module to install — and it hands you the
+   `{ system, messages }` `runTask` takes, with the submission inside
+   `<customer-text …>` and the rule beside it that names it content rather than
+   instruction. The submission goes in `work`; `ask` and `about` are appended
+   outside the fence and must be your own words, never the customer's. Judging
+   what somebody wrote is the surface prompt injection actually pays on, so
+   assembling the prompt yourself is the one shortcut here that costs something.
 2. **The tables** the entry reads — per app, `build-app` Step 2 shape
    (`db-generate` → read → `db-migrate`).
 3. **The surface** — `<ActivityPanel activityId subject>` around your game
@@ -128,7 +154,12 @@ For each entry in `ACTIVITIES`, in order:
    panel's live region or a Callout), and does the game announce its own
    state changes through `announce()`?
 4. **The gates.** `requiresPlan` set? `maxAttempts` where the element
-   judges? A model in `grade()` → disclosure mounted (`legal-check` knows)?
+   judges? A model in `grade()` → disclosure mounted (`legal-check` knows),
+   and the submission fenced — `buildFencedRequest()` from
+   `@/lib/ai/customer-text`, with the text in `work` and nothing the customer
+   typed in `ask` or `about`? ❌ HIGH for a hand-built prompt: nothing goes
+   red, and the one string an attacker fully controls reaches the model as
+   instruction.
 
 Findings in the house shape (🚨/❌/⚠️/ℹ️ · Where · Why · Fix · Evidence),
 and the verdict goes dated into `docs/reports/` **every time** — a solo
@@ -142,6 +173,14 @@ already done that?" needs an answer next month.
 - **A `0` is recorded and not argued with.**
 - **Shape 3's submission is not an element.** A person reads it; the line is
   recipe C.
+- **Put the page's access check in ONE function and call it from everywhere** —
+  the page, and later the content source that makes the page findable. On
+  template 0.18.0 and newer the assistant can LINK to a page she looked up, and
+  then a source more permissive than its page hands a non-buyer a link that
+  bounces them back — an existence oracle no gate here can catch. Two
+  `hasPlan()` calls that agree today are two that can drift. The checklist is
+  [`docs/content-source.md`](../../../docs/content-source.md) → *The five
+  things that make a link work*.
 
 ## What comes next
 

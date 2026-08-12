@@ -139,6 +139,11 @@ http://localhost:3000/optin/[ORDER_ID]
   → https://ds24-appkit.com/redir/?port=3000&path=/optin/[ORDER_ID]
 ```
 
+The `return_url` of the key flow travels the same way, to
+`http://localhost:<port>/ds24-connected` — a page of the app itself
+(`app/ds24-connected/page.tsx`). Neither that page nor the redirect ever sees the
+API key; the script fetches it from Digistore24 directly.
+
 That happens by itself — in the scripts (`scripts/ds24/_public-url.mjs`) and in
 the checkout at runtime (`lib/digistore/public-url.ts`). The two are twins;
 change one, change the other. Never hand a raw localhost URL to the Digistore24
@@ -470,9 +475,13 @@ These are load-bearing decisions, not accidents:
   delete-then-create against the same `domain_id`, so a changed URL updates the
   connection instead of multiplying it. Stable and unique are two requirements,
   not one — the second is why a derived id carries a random tail (above).
-- **`tracking[custom]` names the buyer**, as `m:<memberId>;t:<token>;…`
+- **`tracking[custom]` names the buyer**, as
+  `m:<memberId>;t:<checkoutToken>;p:<productKey>;k:<kind>`
   (`lib/digistore/custom.ts`). That is how a payment finds its owner even when
-  the buyer paid under a different address. An unattributed payment is recorded
+  the buyer paid under a different address. The identity in that field is tried
+  first and the buyer's e-mail address only afterwards, as an *unauthenticated*
+  fallback — and an address matching more than one account is refused rather than
+  guessed. An unattributed payment is recorded
   but never credited — it is claimed at the buyer's first sign-in, or attached by
   hand under `/dashboard/admin/purchases`.
 
@@ -746,7 +755,7 @@ Which key each function needs. "The vendor's key" is `ds24ApiKey()` from the
 | `ipnInfo` / `ipnDelete` | the vendor's key | read / remove by `domain_id` |
 | `getPurchase` | the vendor's key | one order as Digistore24 sees it — status, product, links (`node run.mjs ds24-purchase`) |
 | `listPurchases` | the vendor's key | the same for many, filtered (e.g. by buyer address) |
-| `listProducts`, `createProduct`, … | the vendor's key (`writable`) | products |
+| `listProducts`, `getProduct`, `createProduct`, `updateProduct`, … | the vendor's key (`writable`) | products — `updateProduct` is also what writes an approval request |
 | `createBuyUrl` | the vendor's key (`writable`) | checkout URL + payment plan |
 | `createBillingOnDemand` | the vendor's key (`writable`) | charge a stored mandate (token top-up) |
 | `getTestpayKey` | the vendor's key | the GET parameter that unlocks **test payments** on a checkout URL (undocumented, but real — DigiMember uses it). Returns `testpay_key`, `get_param_name`, `expires_at`; `do_recreate` rotates the key. DEV checkout links append it by themselves (`lib/digistore/testpay.ts`); inspect/rotate with `node run.mjs ds24-testpay` |

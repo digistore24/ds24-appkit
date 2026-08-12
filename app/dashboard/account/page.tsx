@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 import Link from "next/link";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getFormatter, getTranslations } from "next-intl/server";
 import { Coins, CreditCard, KeyRound } from "lucide-react";
@@ -17,16 +16,10 @@ import { signInState } from "@/lib/credentials/manage";
 import { MIN_PASSWORD_LENGTH } from "@/lib/credentials/rules";
 import { pendingChangeFor } from "@/lib/email-change/manage";
 import { isEmailLoginEnabled } from "@/lib/email";
-import { countLiveKeys, listKeys } from "@/lib/api-keys/keys";
-import { MAX_LIVE_KEYS } from "@/lib/api-keys/rules";
-import { apiOffReason } from "@/lib/api/config";
-import { mcpConfig, mcpOffReason } from "@/lib/mcp/config";
 import { consentStatusFor } from "@/lib/consent/manage";
 import { countOwners } from "@/lib/users/manage";
 import { SignInCard } from "./ui";
-import { KeysCard } from "./keys-ui";
-import { createKeyAction, revokeKeyAction } from "./mcp-actions";
-import { createApiKeyAction, revokeApiKeyAction } from "./api-key-actions";
+import { ModuleSlots } from "@/components/module-slots";
 import { ConsentCard, DeleteAccountCard, MyDataCard } from "./privacy-ui";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -96,30 +89,6 @@ function planName(productKey: string): string {
   }
 }
 
-/**
- * The absolute URL a client is told to connect to.
- *
- * `APP_URL` first because it is the deliberate answer — it is what the operator
- * configured and what every other outbound URL in this app uses. The request's
- * own origin is the fallback for a local machine where the app moved to another
- * port before `.env` caught up. Same shape as `appOrigin()` in actions.ts.
- *
- * This string is copied into a config file on somebody's laptop, so getting it
- * wrong costs them a debugging session rather than a page refresh.
- */
-async function endpointUrl(path: string): Promise<string> {
-  const configured = process.env.APP_URL?.trim();
-  if (configured) return `${configured.replace(/\/+$/, "")}${path}`;
-
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
-  const proto = h.get("x-forwarded-proto") ?? "http";
-  return `${proto}://${host}${path}`;
-}
-
-const mcpEndpoint = () => endpointUrl("/api/mcp");
-const apiEndpoint = () => endpointUrl("/api/v1");
-
 // The Member's own account page: what they may use, until when, and what
 // balance they hold. The counterpart of the Operator's
 // /dashboard/admin/users/[id] — and deliberately NOT built from its readers.
@@ -168,18 +137,10 @@ export default async function AccountPage() {
     pendingChangeFor(memberId),
   ]);
 
-  // The MCP and API keys. Read unconditionally — a Member who holds keys from
-  // before the Operator switched an interface off still has to be able to see
-  // and revoke them, which is the same rule the balance card follows: a
-  // display switch may hide an EMPTY thing, never a non-empty one.
-  const mcpOff = mcpOffReason();
-  const apiOff = apiOffReason();
-  const [mcpKeyRows, liveKeyCount, apiKeyRows, apiLiveKeyCount] = await Promise.all([
-    listKeys(memberId, "mcp"),
-    countLiveKeys(memberId, "mcp"),
-    listKeys(memberId, "api"),
-    countLiveKeys(memberId, "api"),
-  ]);
+  // The API keys. Read unconditionally — a Member who holds keys from before
+  // the Operator switched the interface off still has to be able to see and
+  // revoke them, which is the same rule the balance card follows: a display
+  // switch may hide an EMPTY thing, never a non-empty one.
 
   // Suspended AND not covered by something else the Member can still use. A key
   // held through a failed subscription plus an Operator's comp is not paused,
@@ -210,6 +171,15 @@ export default async function AccountPage() {
     countOwners(),
   ]);
   const isLastOwner = session.user.role === "owner" && ownerCount <= 1;
+
+  // The community profile — read ONLY when the community is actually running.
+  // Both off-states hide this card completely, and that is the difference from
+  // the balance and API-key cards above: those may hold something a member
+  // paid for, so hiding a non-empty one would strand them. A profile is
+  // meaningless without the community it appears in — there is nothing to
+  // strand and nothing to revoke. `brokenConfig` hides it too: members see
+  // nothing at all while the config does not hold, and the operator's
+  // diagnosis lives on exactly one surface, which is not this page (AD-67).
 
   const t = await getTranslations("account");
   const tConsent = await getTranslations("consent");
@@ -350,59 +320,10 @@ export default async function AccountPage() {
         </section>
         )}
 
-        {/* Connecting an AI client to this app. Hidden entirely when the
-            interface is off AND this Member holds no keys — there is no point
-            showing somebody a feature their app does not offer. But a Member
-            who DOES hold keys sees the section either way, so they can still
-            revoke them: a switch may hide an empty thing, never a non-empty
-            one (the same rule the balance card above follows). */}
-        {(!mcpOff || mcpKeyRows.length > 0) && (
-          <KeysCard
-            namespace="mcp"
-            keys={mcpKeyRows.map((key) => ({
-              id: key.id,
-              name: key.name,
-              prefix: key.prefix,
-              scope: key.scope,
-              state: key.state,
-              createdAt: key.createdAt,
-              lastUsedAt: key.lastUsedAt,
-              expiresAt: key.expiresAt,
-            }))}
-            endpoint={await mcpEndpoint()}
-            descriptionValues={{ serverName: mcpConfig().serverName }}
-            maxLiveKeys={MAX_LIVE_KEYS}
-            liveKeys={liveKeyCount}
-            offReason={mcpOff}
-            createAction={createKeyAction}
-            revokeAction={revokeKeyAction}
-          />
-        )}
 
-        {/* The keys for the member's OWN programs — typically a mobile app
-            talking to /api/v1. Same card, same visibility rule as the MCP
-            section above. */}
-        {(!apiOff || apiKeyRows.length > 0) && (
-          <KeysCard
-            namespace="apiKeys"
-            keys={apiKeyRows.map((key) => ({
-              id: key.id,
-              name: key.name,
-              prefix: key.prefix,
-              scope: key.scope,
-              state: key.state,
-              createdAt: key.createdAt,
-              lastUsedAt: key.lastUsedAt,
-              expiresAt: key.expiresAt,
-            }))}
-            endpoint={await apiEndpoint()}
-            maxLiveKeys={MAX_LIVE_KEYS}
-            liveKeys={apiLiveKeyCount}
-            offReason={apiOff}
-            createAction={createApiKeyAction}
-            revokeAction={revokeApiKeyAction}
-          />
-        )}
+        {/* Who this person is inside the community. Above the sign-in card and
+            below what they bought: it is something they present, not something
+            they administer. Absent entirely when the community is off. */}
 
         {/* How this person gets in. Last on the page on purpose: a Member opens
             their account to see what they have, not to administer a login — and
@@ -446,6 +367,31 @@ export default async function AccountPage() {
               ? format.dateTime(row.answeredAt, { dateStyle: "long" })
               : null,
           }))}
+        />
+
+        {/*
+          Where an installed module puts its own card — see
+          `lib/modules/slots.ts`. Renders NOTHING when no module fills it, which
+          is the shipped state, so this line costs an app without modules
+          exactly one import.
+
+          Placed here on purpose: above the two cards that end the page. "My
+          data" and "delete my account" are what a member scrolls to the bottom
+          FOR, and a module appearing after them would push the app's own
+          answers about erasure below a feature's settings.
+        */}
+        <ModuleSlots
+          name="account"
+          // The same `as string` the shell's `shellState()` call uses in
+          // `app/dashboard/layout.tsx` — one idiom for building a viewer, so a
+          // day that tightens the session type has one place to fix rather than
+          // two that drifted. Not `?? "member"`: inventing a role for an owner
+          // is worse than admitting the type is loose.
+          viewer={{
+            memberId,
+            role: session.user.role as string,
+            impersonating: Boolean(session.user.impersonation),
+          }}
         />
 
         <MyDataCard />

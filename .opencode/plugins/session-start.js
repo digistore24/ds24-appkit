@@ -4,7 +4,7 @@
 // The session greeting, for OpenCode. Generated from
 // scripts/dev/agent-configs.mjs — edit it there, not here.
 //
-// It runs the same scripts/dev/session-start.mjs as the other three. Spawned
+// It runs the same scripts/dev/session-start.mjs as the other hooks. Spawned
 // rather than imported: a child process cannot take OpenCode down with it, and
 // the greeting must never be the reason somebody cannot start work.
 //

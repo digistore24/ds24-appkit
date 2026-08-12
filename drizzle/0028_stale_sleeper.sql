@@ -1,1 +1,0 @@
-ALTER TABLE "orders" DROP COLUMN "gdpr_consent_at";

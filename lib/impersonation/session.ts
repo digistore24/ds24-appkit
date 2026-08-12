@@ -141,13 +141,22 @@ async function startImpersonating(token: JWT, recordId: string): Promise<JWT> {
   const member = rows.find((u) => u.id === row.memberId);
   if (!operator || !member) return token;
 
-  // Defence in depth: the rule already refused all three of these before the
-  // row was written. They are re-asked here because the row and this callback
-  // are two separate requests, and an account can change between them — a
-  // target promoted to owner in the seconds after the dialog was confirmed
-  // would otherwise hand over admin rights.
+  // Defence in depth: the rule already refused all of these before the row was
+  // written. They are re-asked here because the row and this callback are two
+  // separate requests, and an account can change between them — a target
+  // promoted in the seconds after the dialog was confirmed would otherwise
+  // hand over rights the rule refused.
+  //
+  // The target check is an ALLOWLIST (`!== "member"`), not a list of the roles
+  // we happen to refuse, and that is the whole lesson of the review that wrote
+  // this line: `canImpersonate()` gained `moderatorImpersonate` for Story 19.2
+  // while this layer still asked only about `"owner"`, so the second refusal
+  // silently stopped mirroring the first. `users.role` is `text` with no enum
+  // by decision, so the set of values is open — a denylist here goes stale
+  // every time somebody adds a role, and goes stale SILENTLY, which is the one
+  // failure mode a defence-in-depth layer cannot afford.
   if (operator.role !== "owner") return token;
-  if (member.role === "owner") return token;
+  if (member.role !== "member") return token;
   if (member.blockedAt) return token;
 
   token.sub = member.id;

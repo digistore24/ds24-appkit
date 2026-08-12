@@ -29,6 +29,7 @@ import {
   type Adapter,
   type NormalizedRequest,
   type ProviderId,
+  type ToolCall,
   type Usage,
 } from "./types";
 import { assertCacheableOrder, flattenBlocks } from "./blocks";
@@ -104,10 +105,35 @@ export function buildBody(
   assertCacheableOrder(req.system);
 
   const system = flattenBlocks(req.system);
-  const messages: { role: string; content: string }[] = [];
+  const messages: Record<string, unknown>[] = [];
   if (system !== "") messages.push({ role: "system", content: system });
   for (const message of req.messages) {
-    messages.push({ role: message.role, content: message.content });
+    if (message.role === "tool") {
+      // The wire format has no batched tool message — one message per result,
+      // matched by `tool_call_id`. Our `ToolResultMessage` batches a round so
+      // Anthropic can keep parallel calls in one turn; here it expands.
+      for (const result of message.results) {
+        messages.push({
+          role: "tool",
+          tool_call_id: result.toolCallId,
+          content: result.content,
+        });
+      }
+    } else if ("toolCalls" in message) {
+      messages.push({
+        role: "assistant",
+        // `null`, not "" — the shape the API itself answers with when a turn
+        // is calls-only, and the one it reliably accepts back.
+        content: message.content !== "" ? message.content : null,
+        tool_calls: message.toolCalls.map((call) => ({
+          id: call.id,
+          type: "function",
+          function: { name: call.name, arguments: JSON.stringify(call.input) },
+        })),
+      });
+    } else {
+      messages.push({ role: message.role, content: message.content });
+    }
   }
 
   const body: Record<string, unknown> = {
@@ -135,6 +161,26 @@ export function buildBody(
     delete body.stream_options;
   }
   if (profile.usageAccounting) body.usage = { include: true };
+
+  // Beside the transport flags and AFTER the spread, for the same anti-clobber
+  // reason: tool wiring comes from calling code, never from a binding — both
+  // keys are stripped first, so a stale binding value can neither disarm the
+  // loop nor arm a tool-less request. No tools ⇒ neither field on the wire —
+  // OpenAI 400s on `tools: []`, and a tool-less request must stay
+  // byte-identical to the pre-tools shape.
+  delete body.tools;
+  delete body.tool_choice;
+  if (req.tools && req.tools.length > 0) {
+    body.tools = req.tools.map((tool) => ({
+      type: "function",
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.inputSchema,
+      },
+    }));
+    if (req.toolChoice === "none") body.tool_choice = "none";
+  }
 
   return body;
 }
@@ -204,6 +250,90 @@ export function deltaFrom(chunk: unknown): string {
   return typeof delta?.content === "string" ? delta.content : "";
 }
 
+/** Arguments arrive as a JSON STRING; a parse failure is a code, not a throw. */
+function parseArguments(raw: string): Pick<ToolCall, "input" | "inputError"> {
+  if (raw.trim() === "") return { input: {} };
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      return { input: parsed as Record<string, unknown> };
+    }
+    return { input: {}, inputError: "parseFailed" };
+  } catch {
+    return { input: {}, inputError: "parseFailed" };
+  }
+}
+
+/** The tool calls of a non-streamed answer. */
+export function toolCallsFrom(json: unknown): ToolCall[] {
+  const choices = (json as { choices?: unknown })?.choices;
+  if (!Array.isArray(choices) || choices.length === 0) return [];
+  const calls = (choices[0] as { message?: { tool_calls?: unknown } })?.message?.tool_calls;
+  if (!Array.isArray(calls)) return [];
+
+  const result: ToolCall[] = [];
+  for (const raw of calls) {
+    const call = raw as { id?: unknown; function?: { name?: unknown; arguments?: unknown } };
+    if (typeof call?.id !== "string" || typeof call.function?.name !== "string") continue;
+    result.push({
+      id: call.id,
+      name: call.function.name,
+      ...parseArguments(
+        typeof call.function.arguments === "string" ? call.function.arguments : "",
+      ),
+    });
+  }
+  return result;
+}
+
+/**
+ * Streamed tool calls arrive as indexed FRAGMENTS: the first fragment of a
+ * call carries `id` and `function.name`, and `function.arguments` drips in as
+ * string pieces across chunks — keyed by `index`, because two parallel calls
+ * interleave. This accumulates them; `finish()` parses.
+ */
+export class ToolCallAccumulator {
+  private readonly parts = new Map<number, { id: string; name: string; args: string }>();
+
+  add(chunk: unknown): void {
+    const choices = (chunk as { choices?: unknown })?.choices;
+    if (!Array.isArray(choices) || choices.length === 0) return;
+    const calls = (choices[0] as { delta?: { tool_calls?: unknown } })?.delta?.tool_calls;
+    if (!Array.isArray(calls)) return;
+
+    for (const raw of calls) {
+      const fragment = raw as {
+        index?: unknown;
+        id?: unknown;
+        function?: { name?: unknown; arguments?: unknown };
+      };
+      const index = typeof fragment?.index === "number" ? fragment.index : 0;
+      const entry = this.parts.get(index) ?? { id: "", name: "", args: "" };
+      if (typeof fragment?.id === "string") entry.id = fragment.id;
+      if (typeof fragment?.function?.name === "string") entry.name = fragment.function.name;
+      if (typeof fragment?.function?.arguments === "string") {
+        entry.args += fragment.function.arguments;
+      }
+      this.parts.set(index, entry);
+    }
+  }
+
+  /** The complete calls, in index order. Nameless fragments are dropped. */
+  finish(): ToolCall[] {
+    return [...this.parts.entries()]
+      .sort(([a], [b]) => a - b)
+      .filter(([, entry]) => entry.name !== "")
+      .map(([index, entry]) => ({
+        // OpenAI always sends an id; some compat upstreams do not. A synthetic
+        // one keeps the loop's result matching intact — it never travels back
+        // as anything the provider verifies.
+        id: entry.id !== "" ? entry.id : `call_${index}`,
+        name: entry.name,
+        ...parseArguments(entry.args),
+      }));
+  }
+}
+
 // ── The I/O shell ───────────────────────────────────────────────────────────
 
 async function send(
@@ -261,6 +391,7 @@ export function compatAdapter(profile: CompatProfile): Adapter {
         text: textFrom(json),
         usage: usageFrom((json as { usage?: unknown })?.usage, profile),
         stopReason: stopReasonFrom(json),
+        toolCalls: toolCallsFrom(json),
       };
     },
 
@@ -275,6 +406,7 @@ export function compatAdapter(profile: CompatProfile): Adapter {
 
       let usage: Usage | null = null;
       let stopReason: string | null = null;
+      const toolCalls = new ToolCallAccumulator();
 
       try {
         const response = await send(req, profile, key, true, idle.signal);
@@ -289,6 +421,11 @@ export function compatAdapter(profile: CompatProfile): Adapter {
           const text = deltaFrom(chunk);
           if (text !== "") yield { type: "delta", text };
 
+          // Tool-call fragments accumulate silently; the complete calls are
+          // yielded after the stream ends, when their argument strings are
+          // whole. `finish_reason: "tool_calls"` flows through as stopReason.
+          toolCalls.add(chunk);
+
           const reason = stopReasonFrom(chunk);
           if (reason !== null) stopReason = reason;
 
@@ -302,6 +439,9 @@ export function compatAdapter(profile: CompatProfile): Adapter {
         idle.clear();
       }
 
+      for (const call of toolCalls.finish()) {
+        yield { type: "tool_call", call };
+      }
       yield { type: "done", usage, stopReason };
     },
   };

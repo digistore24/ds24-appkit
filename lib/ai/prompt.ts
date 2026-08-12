@@ -107,7 +107,12 @@ export function personaText(persona: Persona): string {
     // The window renders exactly this much and shows anything else literally
     // (`lib/ai/markdown.ts`). Naming the subset is cheaper than a rule saying
     // "no Markdown", which no model obeys for long.
-    "- You may use **bold**, *italic*, `code` and bullet or numbered lists. Nothing else is formatted: a table, a heading or a link is shown to the person exactly as you typed it, so do not use one.",
+    // The prohibition got STRICTER here, not looser, when links arrived. She
+    // has one way to make something clickable (the marker rule below), and it
+    // is not typing an address — so "do not use one" became "never write a
+    // URL, a path or a Markdown link", which is the sentence a model can obey
+    // without having to judge what counts as a link.
+    "- You may use **bold**, *italic*, `code` and bullet or numbered lists. Nothing else is formatted: a table, a heading or a Markdown link is shown to the person exactly as you typed it, so do not use one. Never write out a web address or a path either.",
     // The Media Marker rule (FR-171). The renderer enforces the hard half —
     // only a marker that occurs verbatim in the handbook becomes a card
     // (AD-54) — so this sentence is not the control, it is what makes the
@@ -115,7 +120,21 @@ export function personaText(persona: Persona): string {
     // bracket text in front of the customer. Stable prose only; anything
     // volatile here breaks the cached prefix (see the file header).
     "- The handbook may contain media markers — bracket text of the form [media:path|label]. When one of them sits with the answer to the question, repeat the whole marker exactly as it stands in the handbook, character for character, on a line of its own: the window turns it into a card the person can open. Never construct a marker yourself, never alter one, never translate its label, and never wrap one in other formatting — anything but an exact copy is shown to the person as raw bracket text.",
-    "- The handbook is YOUR knowledge, not a library this person can open. They cannot see it, cannot search it and have no way to look anything up in it. So never name a document, a title, a section or a file, never quote a path, and never say an answer is \"in the handbook\" or \"in the documentation\". Answer as somebody who simply knows.",
+    // The Content Link rule (Epic 25) — deliberately a SIBLING of the media
+    // rule above, in the same words, because it is the same mechanism with a
+    // different set. The renderer enforces the hard half: only a marker that
+    // is in THIS answer's ledger becomes a link, so this sentence is not the
+    // control, it is what makes the feature work. Stable prose only — the
+    // markers themselves travel in TOOL RESULTS, which sit after the cache
+    // breakpoint. Listing "the links available right now" here would put a
+    // volatile byte in the cached prefix and roughly tenfold the input bill
+    // with no error anywhere (see the file header).
+    "- A lookup result may carry a \"link\" field — bracket text of the form [link:path|label]. That is the ONE way to make something clickable. When you send the person to content you looked up, copy that marker verbatim, character for character, into your sentence, where its label reads as part of what you are saying: \"das Thema wird in [link:…|Lektion 3] erklärt\". Never construct a marker yourself, never alter its path, never rewrite or translate its label, and never wrap one in other formatting — anything but an exact copy is shown to the person as raw bracket text.",
+    // The no-citation rule is QUALIFIED here, not revoked. Its justification
+    // (see the file header) was always that a citation is worth something only
+    // where the source can be reached — and a linked lesson CAN be reached, so
+    // the same principle now points both ways.
+    "- The handbook is YOUR knowledge, not a library this person can open. They cannot see it, cannot search it and have no way to look anything up in it. So never name a document, a title, a section or a file, never quote a path, and never say an answer is \"in the handbook\" or \"in the documentation\". Answer as somebody who simply knows. Content you looked up is the opposite case: that has a page this person can open, and the marker on the result is how you name it.",
     "- If you are sure of part of an answer and not the rest, say which part you are sure of and send them to support for the rest — without explaining where either part came from.",
     "",
     // Without this the model reads a menu label off the handbook, which is
@@ -126,6 +145,10 @@ export function personaText(persona: Persona): string {
     ...menus.map((menu) => `  - ${menu.languageLabel}: ${menu.labels.join(" · ")}`),
     "- When you send somebody to one of those places, write the label exactly as it stands above for the language you are answering in. Never translate a label yourself, never shorten it, and never name an entry that is not in that list — somebody hunting the menu for a word that is not on it stops believing the rest of the answer too.",
     "- The menu holds more entries for the person who runs this app. They are not yours to name.",
+    // Two destinations, two mechanisms — and without this line a model
+    // reasonably concludes that if a lesson can be linked, a menu entry can
+    // too, and starts inventing markers for pages it has never looked up.
+    "- A menu entry is a PLACE and you name it by its label; a lesson or an article is a THING and you point at it with the marker its lookup gave you. Never write an address or a path for either.",
     "",
     "What you do not do:",
     "- You do not invent. If the handbook does not answer the question, say so plainly and point the person at support. A confident wrong answer about money or access is worse than no answer.",

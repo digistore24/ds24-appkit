@@ -19,9 +19,19 @@
 // exists for a line that only LOOKS impure, never for one that is. The honest
 // fixes are: cut the import, extract the pure part, or drop the file from the
 // manifest.
+//
+// ⚠️ The `@/` resolution below lives in `scripts/lib/import-graph.mjs` as
+// `resolveImport()` and is imported, not re-typed. This file had the only
+// correct copy of it — the two other transitive walkers stopped at the first
+// alias while claiming to be transitive — so the rule moved out rather than
+// being copied a fourth time; `scripts/lib/import-graph.test.ts` refuses one.
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+
+import { availableModules, readModule } from "../modules/registry.mjs";
+import { isOwnSpecifier, resolveImport } from "@/scripts/lib/import-graph.mjs";
+import { blankComments as stripComments } from "@/scripts/lib/source-text.mjs";
 
 const ROOT = path.resolve(__dirname, "..", "..");
 
@@ -30,22 +40,43 @@ const EXEMPT = "core-pure-ok";
 
 const MANIFEST_PATH = path.join(ROOT, "config", "core-export.json");
 
-const manifest = JSON.parse(readFileSync(MANIFEST_PATH, "utf8")) as {
+const coreManifest = JSON.parse(readFileSync(MANIFEST_PATH, "utf8")) as {
   files: string[];
 };
 
+/**
+ * The core's list PLUS what every module in the tree contributes.
+ *
+ * 🚨 **`availableModules`, not `installedModules` — the purity rule is about
+ * the TREE, not about this app.** A module's `coreExport` file is copied into a
+ * companion repo the moment somebody installs the module, so it has to pass
+ * every check here before that, not after. Reading the installed list would
+ * make this suite green in the shipped state (nothing installed) and only start
+ * asking once it was too late to answer cheaply.
+ *
+ * ⚠️ `modules/api/keys/rules.ts` was hand-typed into `config/core-export.json`
+ * until the `coreExport` seam existed, which had two consequences: an app
+ * without the api module exported a file for a feature it does not have, and
+ * this test's "names only files that exist" passed only because `modules/` is
+ * on disk whether or not anything is installed.
+ */
+const manifest = {
+  files: [...coreManifest.files, ...moduleCoreExportsOf(availableModules(ROOT))].sort(),
+};
+
+/** Every module's declared `coreExport`, app-root-relative. */
+function moduleCoreExportsOf(ids: string[]): string[] {
+  return ids.flatMap((id) => {
+    const record = readModule(id, ROOT) as {
+      dir: string;
+      manifest: { coreExport?: string[] };
+    };
+    return (record.manifest.coreExport ?? []).map((file) => `${record.dir}/${file}`);
+  });
+}
+
 /** The manifest's code files (JSON entries carry no imports to scan). */
 const codeFiles = manifest.files.filter((f) => !f.endsWith(".json"));
-
-function stripComments(source: string): string {
-  // Line comments FIRST — the reverse order (portability.test.ts's) breaks
-  // here: a `//` comment containing `/*` (e.g. the literal path
-  // `messages/*.json`) opens a phantom block that swallows every line down to
-  // the next `*/`, imports included. Measured on purchase-notice.ts.
-  return source
-    .replace(/(^|[^:])\/\/.*$/gm, (m, before: string) => before + " ".repeat(m.length - before.length))
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "));
-}
 
 /** Every static import/export-from specifier in one file. */
 function specifiersOf(file: string): string[] {
@@ -61,26 +92,24 @@ function specifiersOf(file: string): string[] {
   return found;
 }
 
-/** A template-relative path for a specifier, or null for a bare one. */
+/**
+ * A template-relative path for a specifier, or null for a bare one.
+ *
+ * The call-site adapter over `resolveImport()`: the shared helper answers with
+ * an ABSOLUTE path, and what this file compares against is `manifest.files` —
+ * template-relative and forward-slashed. ⚠️ `path.relative()` returns backslashes
+ * on Windows, which is what the final `split`/`join` is for; it is not tidiness.
+ *
+ * 🚨 An unresolvable path of OURS still comes back by name, because
+ * `resolveImport` answers `{ exists: false }` there rather than the `null` it
+ * gives a bare specifier. Dropping it to null would make `imports only manifest
+ * files` pass silently on an import that resolves to nothing — which is the
+ * whole reason the helper has three answers instead of two.
+ */
 function resolveSpecifier(fromFile: string, specifier: string): string | null {
-  let base: string;
-  if (specifier.startsWith("@/")) {
-    base = specifier.slice(2);
-  } else if (specifier.startsWith("./") || specifier.startsWith("../")) {
-    base = path
-      .join(path.dirname(fromFile), specifier)
-      .split(path.sep)
-      .join("/");
-  } else {
-    return null;
-  }
-
-  if (existsSync(path.join(ROOT, base))) return base;
-  for (const suffix of [".ts", ".tsx", ".mjs", ".json", "/index.ts"]) {
-    if (existsSync(path.join(ROOT, base + suffix))) return base + suffix;
-  }
-  // Unresolvable — report the bare attempt so the failure names it.
-  return base;
+  const target = resolveImport(path.join(ROOT, fromFile), specifier, { root: ROOT });
+  if (target === null) return null;
+  return path.relative(ROOT, target.path).split(path.sep).join("/");
 }
 
 describe("the manifest itself", () => {
@@ -133,8 +162,13 @@ describe("no forbidden dependency anywhere in the core", () => {
 
   for (const file of codeFiles) {
     it(`${file} imports no framework, no database, no Node builtin, no package`, () => {
+      // `isOwnSpecifier()` rather than a three-way `startsWith` chain: the same
+      // question `resolveSpecifier()` above asks, answered in one place. Written
+      // out here it was a second spelling of the rule, free to drift from the
+      // resolver that has to agree with it — and `@scope/pkg` is the case where
+      // a careless spelling gets it wrong in both directions at once.
       const bare = specifiersOf(file)
-        .filter((spec) => !spec.startsWith("@/") && !spec.startsWith("./") && !spec.startsWith("../"))
+        .filter((spec) => !isOwnSpecifier(spec))
         .filter((spec) => !ALLOWED_BARE.includes(spec));
       expect(
         bare,

@@ -5,15 +5,16 @@
 //
 // One switch, a property of the PRODUCT — the same answer in DEV, STAGING and
 // PROD, and it travels with the repo. The same shape as `isChatEnabled()`
-// (lib/ai/chat-config.ts) and `isMcpEnabled()` (lib/mcp/config.ts): read it
+// (lib/ai/chat-config.ts) and `isApiEnabled()` (lib/api/config.ts): read it
 // through the function, never by re-reading the JSON at a call site.
 //
 // ── It ships ON ────────────────────────────────────────────────────────────
-// The opposite of `config/mcp.json`, and for a reason worth stating. An
-// unconfigured MCP server exposes example tools, so off is the safe shipped
-// state. This feature exposes nothing until an Operator clicks it, the Operator
-// is a single trusted person on their own app, and the alternative to having it
-// is the email-swap workaround — which is worse in every way. A capability
+// The opposite of `config/api.json`, and for a reason worth stating. An
+// enabled API is attack surface an Operator never decided on, so off is its
+// safe shipped state. This feature exposes nothing until an Operator clicks
+// it, the Operator is a single trusted person on their own app, and the
+// alternative to having it is the email-swap workaround — which is worse in
+// every way. A capability
 // nobody discovers protects nobody.
 //
 // An installation that must not have it sets `"enabled": false` and the

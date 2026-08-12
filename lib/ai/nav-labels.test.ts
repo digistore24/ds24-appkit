@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { LOCALES } from "@/i18n/config";
 import de from "@/messages/de.json";
 
-import { MEMBER_NAV_KEYS, navMenus } from "./nav-labels";
+import { MEMBER_NAV_KEYS, navMenus, visibleMemberNavKeys } from "./nav-labels";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -75,10 +75,47 @@ describe("the labels handed to the model", () => {
   });
 
   it("carries a real label for every entry in every language", () => {
+    // Against the VISIBLE list, not the pinned one: a feature-keyed entry
+    // whose feature is off is deliberately withheld from the model, and this
+    // assertion must stay true after the customer legitimately flips the
+    // switch — so it compares against the same filter, never a literal count.
     for (const menu of navMenus()) {
-      expect(menu.labels).toHaveLength(MEMBER_NAV_KEYS.length);
+      expect(menu.labels).toHaveLength(visibleMemberNavKeys().length);
       for (const label of menu.labels) expect(label.trim()).not.toBe("");
     }
+  });
+
+  it("withholds exactly the feature-gated entries, and nothing else", () => {
+    // ⚠️ The assertion above is nearly vacuous on its own, and that is the
+    // finding this test answers: `navMenus()` BUILDS its labels from
+    // `visibleMemberNavKeys()`, so comparing the two lengths compares a value
+    // with itself. Before the community filter landed, the same line compared
+    // against the pinned `MEMBER_NAV_KEYS` and was a real guard; the comment
+    // above correctly explains why it could not stay that way, but nothing
+    // replaced what it used to catch.
+    //
+    // What went uncaught: a WRONG FILTER PREDICATE. A filter that also dropped
+    // "billing" — one mistyped condition — leaves every test in this file green
+    // while Lia silently stops naming the billing page, and she has no other
+    // way of finding out. So the filter is pinned to its one documented job:
+    // it may withhold feature-gated entries and nothing else.
+    const visible = visibleMemberNavKeys();
+    const withheld = MEMBER_NAV_KEYS.filter((key) => !visible.includes(key));
+
+    // Every withheld key is one the shell itself marks with a featureKey.
+    const shell = readFileSync(join(ROOT, "components", "app-shell.tsx"), "utf8");
+    for (const key of withheld) {
+      const entry = [...shell.matchAll(/\{[^{}]*\}/g)]
+        .map((match) => match[0])
+        .find((text) => text.includes(`labelKey: "${key}"`));
+      expect(entry, `"${key}" is withheld but has no NAVIGATION entry`).toBeDefined();
+      expect(entry, `"${key}" is withheld from Lia but carries no featureKey`).toMatch(
+        /featureKey:/,
+      );
+    }
+
+    // And the order of what survives is the sidebar's order, unchanged.
+    expect(visible).toEqual(MEMBER_NAV_KEYS.filter((key) => !withheld.includes(key)));
   });
 
   it("is byte-identical across two calls", () => {

@@ -20,16 +20,104 @@
 // It also sets the ceiling. Several hundred megabytes through a route handler
 // is not an upload, it is an outage — the hosts cap the request body and the
 // process buffers what it is checking. The way past that ceiling is the
-// browser writing straight to the bucket, which is deliberately not built
-// yet; the refusal below names the limit and `docs/visuals.md` says what the
-// other path involves.
+// browser writing straight to the bucket, and since Story 8.1 that path
+// exists: `createUploadTicket()` / `confirmUpload()` in `lib/media/manage.ts`,
+// entered through `app/api/media/upload-url` and `app/api/media/confirm`.
+//
+// **It is a second way in, not a replacement**, and the two divide the work
+// rather than competing: the direct path takes what is too big to travel
+// through a process, this one keeps everything whose checking needs the bytes
+// in hand. An image is the case that makes the split concrete — location data
+// comes off here, so pictures go this way and the direct path refuses them
+// (`docs/data-protection.md` §14, `kindNotDirect`).
 import { isMediaEnabled, mediaConfig } from "@/lib/media/config";
 import { acceptUpload } from "@/lib/media/manage";
-import { MediaError, formatBytes, kindForMime, type MediaErrorCode } from "@/lib/media/rules";
+import {
+  MediaError,
+  formatBytes,
+  kindForMime,
+  routeCeilingBytes,
+  type MediaErrorCode,
+} from "@/lib/media/rules";
 import { mediaStoreProblems } from "@/lib/media/store";
 import { forgetOne, isLimited, record } from "@/lib/rate-limit";
 
-const BUCKET = "media-upload";
+/**
+ * The hourly ceiling's bucket, and the ONE place it is named.
+ *
+ * Every door that stores an upload draws on this same bucket keyed by the
+ * member, so a member cannot get a fresh allowance by choosing a different
+ * entrance. Exported for that reason rather than for reuse.
+ */
+export const UPLOAD_BUCKET = "media-upload";
+const BUCKET = UPLOAD_BUCKET;
+
+/**
+ * The preconditions EVERY upload door shares — the outer half of the pipeline.
+ *
+ * `acceptUpload()` is the inner half: what the bytes are, whether the role may
+ * put that in, the metadata strip. Around it sit three questions that have
+ * nothing to do with the bytes and everything to do with whether this request
+ * should be doing any work at all:
+ *
+ *   1. is the feature switched on,
+ *   2. is there a working place to put things,
+ *   3. has this member had their share of the hour.
+ *
+ * ⚠️ **It exists because a door was built that skipped all three.** Story 19.4
+ * stored avatars by calling `acceptUpload()` from a server action, which is
+ * genuinely the shipped pipeline — and genuinely only half of it. The result
+ * was an upload path with no rate limit at all, on which the operator's media
+ * kill switch silently did nothing. Any new door calls THIS first; a door that
+ * calls `acceptUpload()` alone is the same bug again.
+ *
+ * Throws `MediaError` so a server action can translate it like any other
+ * refusal; `handleUpload()` maps the same codes to HTTP statuses.
+ */
+export function guardUploadEntry(memberId: string): void {
+  if (!isMediaEnabled()) throw new MediaError("storeUnavailable");
+
+  const storeProblems = mediaStoreProblems();
+  if (storeProblems.length > 0) {
+    console.error("[media] the store is not usable:", storeProblems);
+    throw new MediaError("storeUnavailable");
+  }
+
+  const limit = { max: mediaConfig().maxUploadsPerHour, windowMs: 60 * 60 * 1000 };
+  if (isLimited(BUCKET, memberId, limit)) throw new MediaError("rateLimited");
+  // Counted BEFORE the work, not after: a refused request still consumed the
+  // thing this limit protects.
+  record(BUCKET, memberId, limit);
+}
+
+/**
+ * The same preconditions, for the SECOND half of a direct-to-bucket upload —
+ * without the meter.
+ *
+ * 🚨 **The one door that may skip the counting, and why it is not a loophole.**
+ * A direct upload is two requests: one that mints an address and one that
+ * confirms what landed. `guardUploadEntry()` runs on the first, which is where
+ * the hourly slot is genuinely spent — an address handed out is the thing the
+ * ceiling protects, whether or not anybody writes to it. Calling the counting
+ * guard again on the confirm step would charge every upload twice, halving an
+ * operator's configured allowance without a word anywhere saying so.
+ *
+ * What does NOT get skipped is the rest: media switched off and a broken store
+ * both refuse here exactly as they refuse there, so the kill switch reaches
+ * both halves. `lib/media/manage.test.ts` records which guard each door uses,
+ * so a second caller cannot quietly adopt this one.
+ *
+ * The only legitimate caller is `app/api/media/confirm/route.ts`.
+ */
+export function guardUploadConfirm(): void {
+  if (!isMediaEnabled()) throw new MediaError("storeUnavailable");
+
+  const storeProblems = mediaStoreProblems();
+  if (storeProblems.length > 0) {
+    console.error("[media] the store is not usable:", storeProblems);
+    throw new MediaError("storeUnavailable");
+  }
+}
 
 function refuse(code: MediaErrorCode, status: number, detail?: string): Response {
   return Response.json({ error: code, detail }, { status });
@@ -50,30 +138,21 @@ export async function handleUpload(args: {
 }): Promise<Response> {
   const { memberId, role, request } = args;
 
-  // 1. Is the feature on, and is there anywhere to put things? The second half
-  //    matters: a store that is not configured fails at the PUT, which is after
-  //    the request body has already been read.
-  if (!isMediaEnabled()) return refuse("storeUnavailable", 503);
-  const storeProblems = mediaStoreProblems();
-  if (storeProblems.length > 0) {
-    console.error("[media] the store is not usable:", storeProblems);
-    return refuse("storeUnavailable", 503);
+  // 1+2. Is the feature on, is there anywhere to put things, and has this
+  //      member had their share of the hour — all three in `guardUploadEntry`,
+  //      which every door shares so that none of them can be built without it.
+  //      Before the body is read, because reading it is the expensive part and
+  //      a limit that fires afterwards has already paid for what it refuses.
+  try {
+    guardUploadEntry(memberId);
+  } catch (error) {
+    if (error instanceof MediaError) {
+      return refuse(error.code, error.code === "rateLimited" ? 429 : 503);
+    }
+    throw error;
   }
 
   const config = mediaConfig();
-
-  // 2. The brake, metered per member. Before the body is read, because reading
-  //    it is the expensive part and a limit that fires afterwards has already
-  //    paid for what it is refusing.
-  const limit = { max: config.maxUploadsPerHour, windowMs: 60 * 60 * 1000 };
-  if (isLimited(BUCKET, memberId, limit)) return refuse("rateLimited", 429);
-
-  // Counted HERE, before the body is read — not after the checks below.
-  // It used to sit past the size refusal, so the requests that cost the most
-  // were the only ones the brake never saw: a member could loop 49 MB parts and
-  // every one was fully buffered, refused, and not counted. A refused request
-  // still consumed the thing this limit protects.
-  record(BUCKET, memberId, limit);
 
   // 3. Get the file out of the request.
   //
@@ -103,10 +182,22 @@ export async function handleUpload(args: {
   //    ceiling this endpoint has and the reason the direct-to-bucket path
   //    exists (docs/visuals.md). It is here to give an oversized upload a
   //    message that names the limit rather than a generic refusal.
+  // 🚨 `routeCeilingBytes()` — and which of the three ceilings this is took two
+  //    goes to get right. The kind's raw `maxBytes` is what may be STORED, and
+  //    stopped being usable here when `video` went to 2 GB for the direct path:
+  //    `request.formData()` above has already buffered the body, so quoting a
+  //    gigabyte at this door promises an outage. `slotCeilingBytes()` is not it
+  //    either — that is `next.config.ts` → `bodySizeLimit`, which applies to a
+  //    Server Action and never to a route handler, and using it here refused a
+  //    30 MB recording the HTTP API had accepted since the day it existed.
+  //    This is the third question: what THIS app puts through the process on
+  //    one request (`rules.ts` → `ROUTE_HANDLER_BODY_LIMIT_BYTES`).
   const declaredKind = kindForMime(config, file.type || "");
-  const ceiling = declaredKind
-    ? config.kinds[declaredKind].maxBytes
-    : Math.max(...Object.values(config.kinds).map((k) => k.maxBytes));
+  const ceiling = routeCeilingBytes(
+    declaredKind
+      ? config.kinds[declaredKind].maxBytes
+      : Math.max(...Object.values(config.kinds).map((k) => k.maxBytes)),
+  );
   if (file.size > ceiling) {
     return refuse("tooLarge", 413, `max ${formatBytes(ceiling)}`);
   }
@@ -117,6 +208,16 @@ export async function handleUpload(args: {
     const row = await acceptUpload({
       ownerId: memberId,
       role,
+      // ── The slot, and it is the CORE's ────────────────────────────────────
+      // This is the generic door: whatever the app's own pages, and the `api`
+      // module's `POST /api/v1/media`, hand in. The module reuses this pipeline
+      // rather than building a second one, so the objects belong to the core and
+      // not to it — a namespace names a subsystem that OWNS objects, never a
+      // transport that carries them. Hard-coded here on purpose: a namespace
+      // read off a request would let a caller file their own upload into a
+      // module's key space.
+      namespace: "core",
+      category: "upload",
       bytes: new Uint8Array(await file.arrayBuffer()),
       claimedMime: file.type || null,
       filename: file.name || null,
@@ -139,7 +240,7 @@ export async function handleUpload(args: {
         error.code === "tooLarge" ? 413 : error.code === "notAllowedForRole" ? 403 : 400;
       const detail =
         error.code === "tooLarge" && declaredKind
-          ? `max ${formatBytes(config.kinds[declaredKind].maxBytes)}`
+          ? `max ${formatBytes(routeCeilingBytes(config.kinds[declaredKind].maxBytes))}`
           : undefined;
       return refuse(error.code, status, detail);
     }

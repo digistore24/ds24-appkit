@@ -4,7 +4,7 @@
 // The stub that makes a skill findable outside .claude/skills/.
 //
 // Two programs read the real tree (Claude Code, OpenCode) and two look under
-// .agents/skills/ instead (Codex, Gemini). Rather than keep the skills twice,
+// .agents/skills/ instead (Codex, Antigravity). Rather than keep the skills twice,
 // the second path gets a stub per skill: the frontmatter copied verbatim, so
 // discovery and matching behave exactly as for the real file, and a body that
 // says where the real file is.

@@ -76,15 +76,15 @@ file in a media store. The repo is the only thing all environments share.
 | Code, pages, migrations, `content/` and `config/` files | by itself, with every deploy (git) |
 | The schema | `npm run db:migrate` in the deploy hook — structure, never rows |
 | Digistore products | `node run.mjs ds24-sync --env prod` (one set per environment) |
-| **Rows** — courses, catalog entries, media rows | `node run.mjs content-apply --env prod` |
+| **Rows** — catalog entries, media rows | `node run.mjs content-apply --env prod` |
+| **Rows** — accounts, grants, community rooms, courses | your agent, over the setup surface ([`setup-mcp.md`](setup-mcp.md)). ⚠️ Two routes now, and a row class belongs to exactly one of them — never both, or they drift |
 | Media files (bytes) | shipped ≤ 10 MB: with the repo, via `content-apply` · staged: `node run.mjs content-media-sync --env prod --apply` |
 | Knowledge media (the assistant's) | `node run.mjs kb-media-sync --env prod --apply` |
 | Customer data | **never.** It is born in its environment and stays there |
 
 The failure this table exists to prevent: an app built and tested locally —
 course rows in the local Postgres, videos in the local store — deployed, and
-live **empty**, with every local gate green. `node run.mjs content-check
---env prod` is the command that catches it, and [`content.md`](content.md) is
+live **empty**, with every local gate green. `node run.mjs content-check --env prod` is the command that catches it, and  [`content.md`](content.md) is
 the full story.
 
 ## Receiving IPNs locally (DEV) — Cloudflare Quick Tunnel
@@ -122,6 +122,8 @@ named tunnel and your own domain. That is why the connection hangs off a stable
 Two things deliberately do **not** open a tunnel:
 
 - `node run.mjs ds24-sync --dry-run` — a preview must not publish your machine.
+  ⚠️ Note which way round that is: **`ds24-sync` APPLIES**, and `--dry-run` is the
+  preview. It is the one command here whose bare form writes.
 - `node run.mjs ds24-sync --no-tunnel` — to get the old behaviour back.
 
 If you want to do the registration yourself:

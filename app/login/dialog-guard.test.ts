@@ -16,9 +16,9 @@
 //      back rather than being caught in review.
 //
 //   2. THE DIALOG STAYS OUT OF THE SERVER. ui.tsx is a client component and
-//      ends up in the browser bundle. CLAUDE.md records mail delivery being
-//      dragged into one by exactly this route, which is why the imports are
-//      pinned here rather than trusted to stay tidy.
+//      ends up in the browser bundle. `docs/auth-setup.md` records mail
+//      delivery being dragged into one by exactly this route, which is why the
+//      imports are pinned here rather than trusted to stay tidy.
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -26,6 +26,7 @@ import { join } from "node:path";
 
 import de from "@/messages/de.json";
 import en from "@/messages/en.json";
+import { blankComments as stripComments } from "@/scripts/lib/source-text.mjs";
 
 /** The app root (this file sits in app/login/). */
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -41,13 +42,6 @@ function source(...parts: string[]): string {
  * including the shapes these tests forbid. A check that saw the prose would be
  * answering from the argument rather than from the code.
  */
-function stripComments(code: string): string {
-  return code
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^\s*\/\/.*$/gm, "")
-    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
-}
-
 /** Opening `<form` tags. */
 function formCount(code: string): number {
   return [...stripComments(code).matchAll(/<form[\s>]/g)].length;

@@ -1,0 +1,7 @@
+{
+  "_comment": "The course this app sells. `shape` decides WHEN a block opens and WHETHER a learner hands anything in — the tables are the same for all three (docs/courses.md). It ships OFF, and the commonest reason is not an incident: it is the window between `node run.mjs module add courses` and the content being written. Switch it on AFTER `node run.mjs content-apply`, or the course answers with empty pages. ⚠ Two directions on purpose: an unreadable `enabled` means OFF, an unusable `shape` means BROKEN and never a default — `self-study` is the most permissive shape, so a drip course whose config went unreadable would open week ten on day one. Check it with: node run.mjs courses-check",
+  "enabled": false,
+  "shape": "self-study",
+  "productKey": null,
+  "operatorPreviewsUnlocked": true
+}

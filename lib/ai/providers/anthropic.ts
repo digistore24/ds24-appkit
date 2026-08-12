@@ -22,7 +22,9 @@ import {
   emptyUsage,
   passthroughOptions,
   type Adapter,
+  type ModelMessage,
   type NormalizedRequest,
+  type ToolCall,
   type Usage,
 } from "./types";
 import { assertCacheableOrder, lastCacheableIndex } from "./blocks";
@@ -84,6 +86,46 @@ export function buildSystem(
 }
 
 /**
+ * The message array, tool turns included — pure for the tests.
+ *
+ * A plain `ChatMessage` goes through as a string body. The two tool shapes
+ * become content-block arrays: the assistant turn replays its `tool_use`
+ * blocks (narration first, when there was any), and a round's results ride
+ * ONE user turn as `tool_result` blocks — Anthropic matches by `tool_use_id`,
+ * and splitting results across turns trains the model out of parallel calls.
+ */
+export function buildMessages(messages: readonly ModelMessage[]): Record<string, unknown>[] {
+  return messages.map((message) => {
+    if (message.role === "tool") {
+      return {
+        role: "user",
+        content: message.results.map((result) => ({
+          type: "tool_result",
+          tool_use_id: result.toolCallId,
+          content: result.content,
+          ...(result.isError ? { is_error: true } : {}),
+        })),
+      };
+    }
+    if ("toolCalls" in message) {
+      return {
+        role: "assistant",
+        content: [
+          ...(message.content !== "" ? [{ type: "text", text: message.content }] : []),
+          ...message.toolCalls.map((call) => ({
+            type: "tool_use",
+            id: call.id,
+            name: call.name,
+            input: call.input,
+          })),
+        ],
+      };
+    }
+    return { role: message.role, content: message.content };
+  });
+}
+
+/**
  * The full request parameters.
  *
  * `providerOptions` is spread last so a binding can set `thinking`,
@@ -95,16 +137,40 @@ export function buildParams(req: NormalizedRequest): Record<string, unknown> {
   // other key is the binding's business and goes through untouched (AD-13).
   const passthrough = passthroughOptions(req.providerOptions);
 
-  return {
+  const params: Record<string, unknown> = {
     model: req.model,
     max_tokens: req.maxTokens,
     system: buildSystem(req),
-    messages: req.messages.map((message) => ({
-      role: message.role,
-      content: message.content,
-    })),
+    messages: buildMessages(req.messages),
     ...passthrough,
   };
+
+  // AFTER the spread, deliberately: tool wiring comes from calling code, never
+  // from a binding — the same anti-clobber rule the compat adapter applies to
+  // its transport flags. Both keys are stripped first, so a stale `tools` or
+  // `tool_choice` in a binding can neither disarm the loop nor arm a tool-less
+  // request. When there are no tools, NEITHER field is sent: `tool_choice`
+  // without `tools` is a 400, and a tool-less request must stay byte-identical
+  // to what this adapter sent before tools existed.
+  //
+  // Caching: Anthropic renders tools → system → messages, so the existing
+  // single breakpoint on the last cacheable system block caches tools and
+  // system together. Nothing to add here — but the tools array must be
+  // byte-stable across requests (see ToolDefinition).
+  delete params.tools;
+  delete params.tool_choice;
+  if (req.tools && req.tools.length > 0) {
+    params.tools = req.tools.map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      input_schema: tool.inputSchema,
+    }));
+    if (req.toolChoice === "none") {
+      params.tool_choice = { type: "none" };
+    }
+  }
+
+  return params;
 }
 
 // ── Pure: reading the answer ────────────────────────────────────────────────
@@ -156,6 +222,29 @@ export function textFrom(content: unknown): string {
     .join("");
 }
 
+/**
+ * The `tool_use` blocks of an answer, as our shape. The SDK hands `input`
+ * back already parsed, so there is no `parseFailed` path on this provider.
+ */
+export function toolCallsFrom(content: unknown): ToolCall[] {
+  if (!Array.isArray(content)) return [];
+  const calls: ToolCall[] = [];
+  for (const block of content) {
+    const b = block as { type?: unknown; id?: unknown; name?: unknown; input?: unknown };
+    if (b?.type !== "tool_use") continue;
+    if (typeof b.id !== "string" || typeof b.name !== "string") continue;
+    calls.push({
+      id: b.id,
+      name: b.name,
+      input:
+        typeof b.input === "object" && b.input !== null && !Array.isArray(b.input)
+          ? (b.input as Record<string, unknown>)
+          : {},
+    });
+  }
+  return calls;
+}
+
 // ── The I/O shell ───────────────────────────────────────────────────────────
 
 function client(key: string, timeoutMs: number): Anthropic {
@@ -192,6 +281,7 @@ export const anthropicAdapter: Adapter = {
         text: textFrom(message?.content),
         usage: usageFrom(message?.usage),
         stopReason: typeof message?.stop_reason === "string" ? message.stop_reason : null,
+        toolCalls: toolCallsFrom(message?.content),
       };
     } catch (error) {
       throw translate(error);
@@ -211,6 +301,9 @@ export const anthropicAdapter: Adapter = {
 
     try {
       for await (const event of iterator) {
+        // `input_json_delta` events (partial tool arguments) flow past this
+        // filter on purpose — the SDK's stream helper accumulates them, and
+        // the complete, parsed calls are read off the final message below.
         if (
           event.type === "content_block_delta" &&
           event.delta.type === "text_delta"
@@ -221,6 +314,9 @@ export const anthropicAdapter: Adapter = {
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const final: any = await iterator.finalMessage();
+      for (const call of toolCallsFrom(final?.content)) {
+        yield { type: "tool_call", call };
+      }
       yield {
         type: "done",
         usage: usageFrom(final?.usage),

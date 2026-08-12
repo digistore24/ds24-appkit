@@ -58,6 +58,7 @@ const blockedCustomer = {
   email: "blocked@example.com",
   blockedAt: new Date("2026-01-01"),
 };
+const moderator = { id: "u5", role: "moderator", email: "mod@example.com" };
 
 describe("canDeleteOwnAccount", () => {
   // The Art. 17 self-service path. The neighbouring `canDeleteUser` refuses
@@ -283,6 +284,140 @@ describe("canImpersonate", () => {
     // A member poking at the action gets "notOwner" whatever else is true —
     // never "that account is blocked", which would be an oracle.
     expect(canImpersonate(customer, blockedCustomer, on)).toBe("notOwner");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The third role (Story 19.2, FR-204). One describe per decided answer, so a
+// change to any of them has to look a test in the eye.
+// ---------------------------------------------------------------------------
+
+describe("a moderator actor is refused by every admin rule", () => {
+  // A moderator manages neither users nor roles nor anything billing: every
+  // rule that asks `actor.role !== "owner"` answers notOwner. requireOwner()
+  // gives the same answer server-side (isOwner("moderator") is false).
+  it("cannot delete users", () => {
+    expect(canDeleteUser(moderator, customer, 2)).toBe("notOwner");
+  });
+
+  it("cannot change roles — including granting moderator", () => {
+    expect(canChangeRole(moderator, customer, "moderator", 2)).toBe("notOwner");
+    expect(canChangeRole(moderator, customer, "owner", 2)).toBe("notOwner");
+  });
+
+  it("cannot create users", () => {
+    expect(canCreateUser(moderator)).toBe("notOwner");
+  });
+
+  it("cannot block or unblock", () => {
+    expect(canBlockUser(moderator, customer, 2, true)).toBe("notOwner");
+    expect(canBlockUser(moderator, blockedCustomer, 2, false)).toBe("notOwner");
+  });
+
+  it("cannot change email addresses", () => {
+    expect(canChangeEmail(moderator)).toBe("notOwner");
+  });
+
+  it("cannot send sign-in links", () => {
+    expect(
+      canSendLoginLink(moderator, { ...customer, email: "c@example.com" }),
+    ).toBe("notOwner");
+  });
+
+  it("cannot impersonate anybody", () => {
+    expect(
+      canImpersonate(moderator, customer, {
+        enabled: true,
+        alreadyImpersonating: false,
+      }),
+    ).toBe("notOwner");
+  });
+});
+
+describe("the owner alone grants and revokes the moderator role", () => {
+  it("owner makes a member a moderator", () => {
+    expect(canChangeRole(admin, customer, "moderator", 1)).toBeNull();
+  });
+
+  it("owner makes a moderator a member again", () => {
+    expect(canChangeRole(admin, moderator, "member", 1)).toBeNull();
+  });
+
+  it("owner promotes a moderator to owner", () => {
+    expect(canChangeRole(admin, moderator, "owner", 1)).toBeNull();
+  });
+
+  it("owner demoting THEMSELVES to moderator is selfDemote", () => {
+    // A moderator is not an admin — owner→moderator loses admin access
+    // exactly like owner→member would.
+    expect(canChangeRole(admin, admin, "moderator", 2)).toBe("selfDemote");
+  });
+});
+
+describe("last-owner rules are untouched by moderators", () => {
+  // ownerCount counts OWNERS and nothing else (countOwners() in manage.ts is
+  // scoped to role = 'owner'). These tests pass ownerCount explicitly: a
+  // moderator existing changes no count and opens no way back into a
+  // locked-out app.
+  it("the last owner stays undeletable however many moderators exist", () => {
+    expect(canDeleteUser(admin, secondAdmin, 1)).toBe("lastOwnerDelete");
+  });
+
+  it("the last owner cannot be demoted to moderator", () => {
+    expect(canChangeRole(admin, secondAdmin, "moderator", 1)).toBe(
+      "lastOwnerRole",
+    );
+  });
+
+  it("the last owner stays unblockable however many moderators exist", () => {
+    expect(canBlockUser(admin, secondAdmin, 1, true)).toBe("lastOwnerBlock");
+  });
+
+  it("a moderator never trips a last-owner refusal", () => {
+    // Even with only one owner in the app, acting on a MODERATOR is free:
+    // they are not the way back in.
+    expect(canDeleteUser(admin, moderator, 1)).toBeNull();
+    expect(canChangeRole(admin, moderator, "member", 1)).toBeNull();
+    expect(canBlockUser(admin, moderator, 1, true)).toBeNull();
+  });
+});
+
+describe("a moderator is blocked like any member", () => {
+  // "The block strips nothing extra" means: no moderator branch exists in
+  // canBlockUser at all. Blocking ends the session (lib/users/blocked.ts),
+  // and duties are inert without a usable account (FR-204).
+  it("blocking a moderator is allowed, no special case", () => {
+    expect(canBlockUser(admin, moderator, 1, true)).toBeNull();
+  });
+
+  it("unblocking a moderator is allowed", () => {
+    expect(canBlockUser(admin, moderator, 1, false)).toBeNull();
+  });
+});
+
+describe("canImpersonate stays operator→member — the full matrix", () => {
+  const on = { enabled: true, alreadyImpersonating: false };
+
+  it("owner → member is the one allowed pair", () => {
+    expect(canImpersonate(admin, customer, on)).toBeNull();
+  });
+
+  it("owner → moderator is refused with its own code", () => {
+    // Not escalation (an impersonated session's role is `member` either way):
+    // a moderator's badge in a room must never be an operator in disguise.
+    expect(canImpersonate(admin, moderator, on)).toBe("moderatorImpersonate");
+  });
+
+  it("owner → owner stays refused", () => {
+    expect(canImpersonate(admin, secondAdmin, on)).toBe("ownerImpersonate");
+  });
+
+  it("a moderator actor is refused", () => {
+    expect(canImpersonate(moderator, customer, on)).toBe("notOwner");
+  });
+
+  it("a blocked target stays refused", () => {
+    expect(canImpersonate(admin, blockedCustomer, on)).toBe("userBlocked");
   });
 });
 

@@ -32,7 +32,7 @@ import {
   timestamp,
   index,
 } from "drizzle-orm/pg-core";
-import { users } from "./schema";
+import { users } from "./schema-core";
 
 export const aiUsage = pgTable(
   "ai_usage",

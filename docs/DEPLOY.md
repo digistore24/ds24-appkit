@@ -28,6 +28,16 @@ special production build**. `npm run build` and `npm run start` are the whole
 contract. `output: "standalone"` is available in `next.config.ts` and switched
 off deliberately — it only pays for itself when you build your own image.
 
+If you do switch it on, the content machinery travels with it: `next.config.ts`
+traces `config/modules.json`, the module manifests, `scripts/content/` and the
+whole `content/` tree for `/api/setup`, so `node run.mjs content-check` keeps
+answering from inside the image instead of reporting *"I could not look"*. An
+installed module's own applier directory comes from its manifest, so a module
+you add later needs nothing here. The handbook has the same protection
+([`ai-chat.md`](ai-chat.md)). What is **not** copied is what a standalone build
+never copies — `.next/static` and `public/` go into the image beside
+`server.js` by hand, as the Next docs describe.
+
 **`npm run db:migrate` runs in production.** It uses the migrator from
 `drizzle-orm`, a runtime dependency, so it still works in an image that dropped
 its devDependencies — which every one of these hosts does. (It used to be
@@ -117,6 +127,7 @@ sign in to):
 | `MEDIA_S3_ENDPOINT` | your bucket provider's endpoint |
 | `MEDIA_S3_BUCKET` | the bucket's name |
 | `MEDIA_S3_ACCESS_KEY_ID`, `MEDIA_S3_SECRET_ACCESS_KEY` | its credentials |
+| `MEDIA_S3_REGION` | **required on everything except Cloudflare R2** — see the note below |
 
 > **Mail is not optional in production, and this is the mistake that costs the
 > first deploy.** In DEV you can sign in without it (the development login); in
@@ -134,13 +145,27 @@ sign in to):
 > about half the time. Because none of that shows up while you are testing on
 > one machine, the app **refuses to start** rather than warning.
 >
-> Any S3-compatible bucket does — Amazon S3, DigitalOcean Spaces, Cloudflare R2,
-> Backblaze B2, Hetzner Object Storage. The per-host instructions below say
-> which one is closest to hand. `node run.mjs media-check` writes, reads and
-> deletes a test object to prove it. Full reference: `docs/visuals.md`.
+> **Seven providers are carried and one big one is not.** Amazon S3,
+> DigitalOcean Spaces, Cloudflare R2, Backblaze B2, Hetzner Object Storage,
+> MinIO and Wasabi. **Google Cloud Storage does not work** — the app signs its
+> own requests and GCS wants a different algorithm value and `x-goog-*` copy
+> headers, which is a second signer rather than a setting. The reasoning, the
+> three exact mismatches and the one measurement that would overturn the answer
+> are in `docs/visuals.md` → *Seven providers*. The per-host instructions below
+> say which of the seven is closest to hand.
+> `node run.mjs media-check` writes, reads, copies and deletes a test object to
+> prove whichever you picked.
 >
-> `MEDIA_S3_REGION` is optional (`auto` where the provider does not care), and
-> `MEDIA_S3_PUBLIC_BASE_URL` is optional too — set it to a CDN or a custom
+> 🚨 **`MEDIA_S3_REGION` is required on everything except R2.** It defaults to
+> `auto`, which is what Cloudflare R2 documents and what MinIO ignores — and
+> **AWS S3, Backblaze B2 and Wasabi validate it and answer 403 without it.** Left
+> unset against one of those, the app starts, every check passes, and the first
+> upload fails after your customer has waited for their file to travel. The app
+> deliberately does not refuse to start over it: it cannot tell which provider an
+> endpoint belongs to, so the guard would have to guess and a wrong guess would
+> refuse a working R2 setup. `node run.mjs media-check` says it in words instead.
+>
+> `MEDIA_S3_PUBLIC_BASE_URL` is genuinely optional — set it to a CDN or a custom
 > domain on the bucket and public images reach visitors without touching your
 > app at all.
 
@@ -157,11 +182,12 @@ as `…_PROD` reference copies), and copied from there to the host under the
 |---|---|
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | sign-in with Google (`docs/auth-setup.md`) |
 | one of `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `MISTRAL_API_KEY`, `OPENROUTER_API_KEY` | the assistant or any other AI task (`docs/ai-providers.md`) |
-| `CRON_SECRET` | only if the host does the timing instead of the app (below) |
+| `CRON_SECRET` | to check from your machine whether the scheduled jobs are running (`node run.mjs cron --list --url …`, below), and if the host does the timing instead of the app. Without it that endpoint refuses to run at all |
+| `DIAGNOSTICS_SECRET` | to read this app's own error window from your machine with `node run.mjs errors --url …` (below). Without it that endpoint answers 404 like a route that was never built |
 | `APP_TIME_ZONE` | the zone dates are rendered in (default `Europe/Berlin`) |
 | `DB_POOL_MAX` | lower than 10 on a small database — see the note under Railway |
 | `NEXT_PUBLIC_APP_NAME` | the app's name in the interface |
-| `MEDIA_S3_REGION`, `MEDIA_S3_PUBLIC_BASE_URL` | the bucket's region, and where a browser reads public files (`docs/visuals.md`) |
+| `MEDIA_S3_PUBLIC_BASE_URL` | where a browser reads public files — a CDN or a custom domain on the bucket (`docs/visuals.md`) |
 
 > **`NEXT_PUBLIC_…` is baked in at build time, not read at run time.** Setting it
 > after the build changes nothing and looks like the host ignoring your variable.
@@ -519,14 +545,31 @@ and skipping it left buyer data in the log for ever with nothing to say so.
 **Two things to check after the first deploy**, because "it runs by itself" is
 worth verifying once rather than assuming for a year:
 
-```
-GET https://YOUR-DOMAIN/api/cron?list
-Authorization: Bearer <CRON_SECRET>
+```bash
+node run.mjs cron --list --url https://YOUR-DOMAIN
 ```
 
-and the `[cron]` lines in the app's log. `last run: never` a week in means the
-scheduler is not running — most likely the app is being restarted more often
-than the interval, or `config/cron.json` has `"enabled": false`.
+and the `[cron]` lines in the app's log. There is nothing to install on the
+host: this reads the same `GET /api/cron?list` from your machine, prints every
+job with when it last ran and what it said, and marks the two states that mean
+something — an **enabled** job that has never run, and any job with a failed run
+behind it — ending on one line saying how many there are.
+
+It needs two values in your local `.env`, and neither is generated for you:
+
+```
+APP_URL_PROD=https://YOUR-DOMAIN
+CRON_SECRET_PROD=…            # the SAME value you set in the host's secrets
+```
+
+The secret is picked by matching the address against `APP_URL_PROD` /
+`APP_URL_STAGING`, so it is never sent to a host it was not provisioned for —
+a mistyped domain gets a refusal rather than your token. Unreachable, "the host
+has a different secret" and "the host has no `CRON_SECRET` at all" are three
+different messages; `last run: never` a week in means the scheduler is not
+running — most likely the app is being restarted more often than the interval,
+or `config/cron.json` has `"enabled": false`. Full reference:
+[`cron.md`](cron.md).
 
 ### If you would rather your platform did the timing
 
@@ -560,11 +603,40 @@ secret — it is not making a request.
 A deploy that finished is not a deploy that works. In order:
 
 ```
-https://YOUR-DOMAIN/api/healthz      → {"status":"ok"}
-https://YOUR-DOMAIN/api/readyz       → ready   (this one talks to the database)
+node run.mjs health --url https://YOUR-DOMAIN                    # one verdict — see below
 DATABASE_URL="postgres://…" node run.mjs smoke-account --apply   # once — see below
 node run.mjs smoke --url https://YOUR-DOMAIN
 ```
+
+`health` is the one command to run first, and the one to run again a week later.
+It asks six things and gives you **one verdict**: is the app answering
+(`/api/healthz`), does its database answer (`/api/readyz`), is anything
+scheduled failing or stalled, what are its pages hiding behind a 200, does the
+media store answer, and when did the last payment notification arrive. Each
+answers `✓`, a finding, or `⏭ NOT ASKED` **with a reason** — a probe that could
+not look never counts as a pass. Three exit codes: **0** nothing found, **1**
+something at HIGH or CRITICAL is open, **2** there was no address to ask, which
+is *"I could not look"* and never *"it passed"*. `--json` gives an agent the
+same facts, and every run leaves `.dev/health-check.json` behind. It needs the
+two secrets below (`CRON_SECRET`, `DIAGNOSTICS_SECRET`) for four of its six
+probes — without them those four say so by name instead of passing quietly.
+
+The two public URLs it asks are still yours to point an **uptime checker** at,
+and that is what they are for — they need no credential:
+
+```
+https://YOUR-DOMAIN/api/healthz      → {"status":"ok"}
+https://YOUR-DOMAIN/api/readyz       → {"status":"ready"}   (this one talks to
+                                       the database, and answers 503
+                                       {"status":"not-ready"} when it cannot)
+```
+
+🚨 **Point the checker at the STATUS CODE, and match the body only with the
+quotes**: `"status":"ready"`, never the bare word `ready` — it is a substring of
+`not-ready`, so a keyword check written on it reports green while the database
+is unreachable. And "any response counts as up" is the same bug in another
+place, because readiness answers 503 deliberately. The skill that sets this up
+is `setup-monitoring` (step 4).
 
 `smoke-account` gives smoke a way IN on the deployed app: the development
 login does not exist there, so it provisions a member account with a random
@@ -577,10 +649,66 @@ password.
 member-visible pages with a real session — that is most of the app, and it is
 the pass that catches the query that only breaks with production data. It does
 NOT render owner-only pages (a member's redirect there is the correct answer),
-it does NOT read the server log (a 200 with an error behind it passes — that
-check exists only locally), and dynamic `[id]` pages are skipped as always.
-The output says all of this; read those lines rather than the green alone, and
-keep running smoke locally too.
+and dynamic `[id]` pages are skipped as always. The log check DOES run remotely
+once `DIAGNOSTICS_SECRET` is set (next section) — and where it is not, the
+output says the check did not run and names the command, rather than passing in
+silence. The output says all of this; read those lines rather than the green
+alone, and keep running smoke locally too.
+
+### The errors a 200 hides, from the deployed app
+
+A page that answers 200 can still be broken: next-intl catches a bad date,
+writes the error to stderr and renders the raw value. Locally
+`node run.mjs errors` reads `.dev/dev.log` — a host has no such file, because
+nobody runs `node run.mjs start` there. So every deployed app keeps a **bounded,
+redacted window of its own stderr in memory** (500 lines / 64 KB) and answers
+one endpoint with what the *same parser* finds in it.
+
+1. Generate a secret:
+   `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+2. Set it as `DIAGNOSTICS_SECRET` **in the host's secret storage**, and put the
+   same value in your local `.env` (as `DIAGNOSTICS_SECRET_PROD` for the
+   production host — the plain name is this machine's own environment).
+3. Redeploy, then ask:
+
+```
+node run.mjs errors --url https://YOUR-DOMAIN
+```
+
+**What an empty answer does and does not mean.** It prints the window it looked
+at — `✓ No errors in the last 34 line(s), oldest 09:02 … (instance ab12cd, up
+since 09:00)` — and never a bare tick, because three things bound it:
+
+- **It empties on every restart.** Every deploy, crash-restart and
+  host-initiated recycle resets the ring. An empty window five seconds after a
+  redeploy is not health, which is why the boot time is in every answer.
+- **It is ONE instance's.** Behind a load balancer the answer comes from
+  whichever instance took the request, and calling again may sample another.
+  Aggregating across instances is what an APM does.
+- **Browser-side errors are not in it.** `[browser] Uncaught …` blocks in a dev
+  log are the dev server forwarding what the BROWSER said; a production build
+  has no such channel, so the remote answer covers server-side output only.
+
+The exit codes are the point: **1** means it found something, **2** means it
+could not look (unreachable, 404, rate-limited, an answer that was not this
+app's). A 404 has exactly two causes and they are indistinguishable from
+outside on purpose — either that host has no `DIAGNOSTICS_SECRET`, or yours
+does not match it. Nothing on the *could not look* path ever prints a `✓`.
+
+**No payload ever leaves the app.** Redaction runs at capture time
+(`lib/diagnostics/redact.mjs`), so the process never retains an address, a
+token or a connection string — see `docs/data-protection.md` §4a. The host's own
+log still has the full text for whoever has shell access there, which is the
+right way round. `DIAGNOSTICS_CAPTURE=off` removes the collector entirely.
+
+**The same secret opens one more read, and only reads.**
+`GET /api/diagnostics/health` answers the two questions nothing outside the app
+can: does the media store answer, and when did the last payment notification
+arrive. It is what `node run.mjs health` asks for its `media` and `ipn` probes,
+it is behind the same guard and the same bodiless 404, and it holds and stores
+nothing. 🚨 This credential never gains a surface that WRITES — anything that
+changes a row is `/api/setup`, with its own database-backed key, its two-act
+confirmation and its audit row.
 
 Then by hand, because no script can: sign in, buy something (test purchase), and
 check that the order arrived and the access was unlocked. `docs/environments.md`

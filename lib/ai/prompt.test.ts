@@ -318,3 +318,50 @@ describe("the assistant's blocks, as the Anthropic adapter sees them", () => {
     ).not.toThrow();
   });
 });
+
+describe("what she may and may not put in front of a customer", () => {
+  const persona = personaText(PERSONA);
+
+  it("forbids writing out a URL, a path or a Markdown link", () => {
+    // She has exactly one way to make something clickable, and typing an
+    // address is not it. The prohibition got STRICTER when links arrived.
+    expect(persona).toContain("Never write out a web address or a path either");
+    expect(persona).toContain("a Markdown link is shown to the person exactly as you typed it");
+  });
+
+  it("names the link marker as the ONE way to make something clickable", () => {
+    expect(persona).toContain("[link:path|label]");
+    expect(persona).toContain("copy that marker verbatim");
+    expect(persona).toContain("Never construct a marker yourself");
+  });
+
+  it("qualifies the no-citation rule rather than revoking it", () => {
+    // The handbook stays her knowledge — a citation is worth something only
+    // where the source can be reached, and looked-up content CAN be reached.
+    expect(persona).toContain("The handbook is YOUR knowledge, not a library");
+    expect(persona).toContain("Content you looked up is the opposite case");
+  });
+
+  it("keeps a menu entry a PLACE and a lesson a THING", () => {
+    // Without this a model reasonably concludes that if a lesson can be
+    // linked, a menu entry can too, and invents markers for pages it never
+    // looked up.
+    expect(persona).toContain("A menu entry is a PLACE");
+  });
+
+  // ⚠️ The cache trap. It is tempting to list "the links available right now"
+  // in the persona; that would be a volatile byte in the CACHED prefix and
+  // would roughly tenfold the input bill with no error anywhere. The markers
+  // travel in TOOL RESULTS, which sit after the breakpoint.
+  it("carries no concrete link marker — those belong in tool results", () => {
+    expect(persona).not.toMatch(/\[link:\//);
+  });
+
+  it("is byte-identical across two different requests", () => {
+    // The persona is the cacheable half; only `requestContextText` may vary.
+    expect(personaText(PERSONA)).toBe(persona);
+    expect(requestContextText({ languageLabel: "English", today: "2026-12-31" })).not.toBe(
+      requestContextText({ languageLabel: "Deutsch", today: "2026-07-24" }),
+    );
+  });
+});

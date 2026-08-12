@@ -39,15 +39,17 @@ import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
 import { db } from "@/db";
+import { OWNED_MEDIA_VISIBILITIES } from "@/lib/media/rules";
+import { MODULES } from "@/lib/modules/registry";
 import {
   accounts,
-  activityResults,
   aiUsage,
   chatMessages,
   consentRecords,
   emailChanges,
   grants,
   impersonations,
+  setupAudit,
   invoices,
   media,
   orders,
@@ -75,10 +77,18 @@ export const MEMBER_EXPORT_SECTIONS = [
   "tokenLedger",
   "grants",
   "chatMessages",
-  "activityResults",
   "aiUsage",
   "impersonations",
   "media",
+  "setupActs",
+  // ⚠️ **A module's sections are NOT in this list, and they are not optional
+  // either.** The community's thirteen used to be spelled out here; they now
+  // live in `modules/community/privacy/sections.ts` beside the queries that
+  // answer them, and reach this file through `...moduleSections` at the bottom.
+  // What moved with them is the ruling they were the occasion for: an export
+  // says what the app HOLDS, so no section here or in a module may be a
+  // function of a feature switch. `lib/modules/privacy.ts` carries the full
+  // account, and `lib/privacy/export.test.ts` enforces it on this file.
 ] as const;
 
 /**
@@ -109,7 +119,17 @@ export interface MemberExport {
  * handed an id that came out of a request body; see
  * `app/api/account/export/route.ts`.
  */
-export async function buildMemberExport(memberId: string): Promise<MemberExport> {
+export async function buildMemberExport(
+  memberId: string,
+): Promise<MemberExport> {
+  // Asked first, so a module that throws does so before half a file has been
+  // assembled — an Art. 15 answer is whole or it is an error, never partial.
+  const moduleSections: Record<string, unknown> = {};
+  for (const mod of MODULES) {
+    if (!mod.privacy) continue;
+    Object.assign(moduleSections, await mod.privacy.build(memberId));
+  }
+
   const [account] = await db
     .select({
       id: users.id,
@@ -151,7 +171,10 @@ export async function buildMemberExport(memberId: string): Promise<MemberExport>
 
   // `AnyPgColumn` because the two callers pass columns of different tables, and
   // a signature pinned to `orders` would reject the `subscriptions` pair.
-  const byMemberOrEmail = (memberColumn: AnyPgColumn, emailColumn: AnyPgColumn) =>
+  const byMemberOrEmail = (
+    memberColumn: AnyPgColumn,
+    emailColumn: AnyPgColumn,
+  ) =>
     claimableEmail
       ? or(
           eq(memberColumn, memberId),
@@ -234,7 +257,6 @@ export async function buildMemberExport(memberId: string): Promise<MemberExport>
     ledgerRows,
     grantRows,
     chatRows,
-    activityRows,
     usageRows,
     impersonationRows,
     mediaRows,
@@ -275,31 +297,19 @@ export async function buildMemberExport(memberId: string): Promise<MemberExport>
         conversationId: chatMessages.conversationId,
         role: chatMessages.role,
         content: chatMessages.content,
+        // The pages an answer pointed at. Not personal data in itself, but it
+        // is part of the turn — and `docs/data-protection.md` lists it as
+        // travelling with the row, which is a promise this projection has to
+        // keep. Explicit column lists are how a new column goes missing from
+        // an access request without anything failing.
+        links: chatMessages.links,
         createdAt: chatMessages.createdAt,
       })
       .from(chatMessages)
       .where(eq(chatMessages.memberId, memberId))
       .orderBy(asc(chatMessages.createdAt)),
 
-    // Learning performance — data about a person's ability, which is why it
-    // is in this file at all (docs/data-protection.md §8b). The resume
-    // `state` is included: it is the server's record of THEIR work.
-    db
-      .select({
-        activityId: activityResults.activityId,
-        subject: activityResults.subject,
-        state: activityResults.state,
-        score: activityResults.score,
-        maxScore: activityResults.maxScore,
-        passed: activityResults.passed,
-        attempts: activityResults.attempts,
-        startedAt: activityResults.startedAt,
-        updatedAt: activityResults.updatedAt,
-        completedAt: activityResults.completedAt,
-      })
-      .from(activityResults)
-      .where(eq(activityResults.memberId, memberId))
-      .orderBy(asc(activityResults.startedAt)),
+
 
     // Numbers only. `ai_usage` holds no prompt and no answer — there is no
     // column that could carry one (`db/schema-ai-usage.ts`). It belongs here
@@ -338,6 +348,32 @@ export async function buildMemberExport(memberId: string): Promise<MemberExport>
       .where(eq(impersonations.memberId, memberId))
       .orderBy(asc(impersonations.startedAt)),
 
+    // Every setup act ABOUT this person: the operator's coding agent creating
+    // their account, granting them a plan, ending one.
+    //
+    // It is here because it is personal data, and it is sliceable at all only
+    // because `setup_audit` carries `subjectMemberId` beside the human-readable
+    // `target` — a polymorphic text column cannot be queried per person, and
+    // without the id this section could exist in the operator's export and not
+    // in this one, which `export.test.ts` compares section by section and
+    // refuses.
+    //
+    // What is NOT in it is the payload: the trail records identifiers and
+    // numbers, never what was written. `role` and `reason` are the two named
+    // exceptions, and both belong to the person the act was about.
+    db
+      .select({
+        at: setupAudit.createdAt,
+        environment: setupAudit.appEnv,
+        tool: setupAudit.tool,
+        outcome: setupAudit.outcome,
+        role: setupAudit.role,
+        reason: setupAudit.reason,
+      })
+      .from(setupAudit)
+      .where(eq(setupAudit.subjectMemberId, memberId))
+      .orderBy(asc(setupAudit.createdAt)),
+
     // What this person uploaded. `owner`-visible rows only: those are theirs.
     // Product imagery an operator uploaded carries their id too, and it belongs
     // to the app rather than to them — which is why the foreign key is
@@ -358,7 +394,16 @@ export async function buildMemberExport(memberId: string): Promise<MemberExport>
         createdAt: media.createdAt,
       })
       .from(media)
-      .where(and(eq(media.ownerId, memberId), eq(media.visibility, "owner")))
+      // The same set `listOwnedMedia()` sweeps on deletion, from the same
+      // constant — deliberately, because the two must never disagree. An export
+      // wider than the sweep promises to delete something it keeps; a sweep
+      // wider than the export deletes something it never disclosed.
+      .where(
+        and(
+          eq(media.ownerId, memberId),
+          inArray(media.visibility, [...OWNED_MEDIA_VISIBILITIES]),
+        ),
+      )
       .orderBy(asc(media.createdAt)),
   ]);
 
@@ -403,9 +448,25 @@ export async function buildMemberExport(memberId: string): Promise<MemberExport>
     tokenLedger: ledgerRows,
     grants: grantRows,
     chatMessages: chatRows,
-    activityResults: activityRows,
     aiUsage: usageRows,
     impersonations: impersonationRows,
     media: mediaRows,
+
+    // 🚨 And whatever the installed modules hold about this person — the
+    // community's thirteen sections among them, since Epic 24 moved them into
+    // `modules/community/privacy/`.
+    //
+    // NOT gated on anything, for the reason those sections were the occasion
+    // for: an export says what the app HOLDS. A section that
+    // appears and vanishes with a config flag describes the PRODUCT instead of
+    // the data. The only thing that may make a module's sections absent is the
+    // module being ABSENT — and `module remove` refuses while its tables hold
+    // rows, precisely so that absent code and absent data are the same
+    // statement.
+    //
+    // `scripts/privacy/export-data.mjs` does the same merge with the same
+    // sections, from the same manifests, and `lib/privacy/export.test.ts`
+    // compares the two.
+    ...moduleSections,
   };
 }

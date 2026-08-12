@@ -36,6 +36,7 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { blankComments as stripComments } from "@/scripts/lib/source-text.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const EXEMPT = "sql-cast-ok";
@@ -67,12 +68,6 @@ function sourceFiles(dir: string, found: string[] = []): string[] {
 }
 
 /** Replace comments with spaces, so line numbers survive and prose does not count. */
-function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
-    .replace(/(^|[^:])\/\/.*$/gm, (m, before: string) => before + " ".repeat(m.length - before.length));
-}
-
 describe("raw SQL does not get to claim it returns a Date", () => {
   it("has no sql<…Date…> anywhere in the app", () => {
     const findings: string[] = [];
@@ -90,7 +85,7 @@ describe("raw SQL does not get to claim it returns a Date", () => {
               "Drizzle converts columns, not raw SQL: this arrives as the Postgres " +
               "string and breaks format.dateTime(). Select the column, use " +
               ".mapWith(<the column>), or aggregate to text and convert on purpose. " +
-              "See CLAUDE.md → Dates and raw SQL.",
+              "See docs/troubleshooting.md → Dates and raw SQL.",
           );
         });
       }

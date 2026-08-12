@@ -25,6 +25,34 @@ CRITICAL when it is silent: they paid, and the app is telling them they did not.
 
 For each dead end, name the screen and the sentence that is missing.
 
+**If the community is switched on** (`config/community.json`), it adds paths
+that are nobody's happy path and are where members actually meet the app:
+
+| Path | The screen that usually has nothing on it |
+|---|---|
+| The first visit to `/dashboard/community` | a room list before anybody has posted — and a member with no display name, who may READ but not write |
+| Posting for the first time | the refusal when the display name is missing: does it say *what* to do, and is the way there one click? |
+| A room the member may not enter | the refusal, and whether anything on the way there suggested a room they cannot open |
+| Reporting a post or a message | the confirmation — did anything come back, and does the member learn what happens next? |
+| An archived room | it keeps its words; does the page say it is closed, or does it look broken? |
+| Private messages, first time | an empty conversation list, and the neutral refusal when a message cannot be delivered |
+
+**The display-name refusal is the one to walk by hand.** Writing needs a chosen
+name and reading does not, which is right — but a member who types a first post
+and is told no has hit the app's most avoidable dead end. ❌ HIGH when the
+refusal does not name the setting and link to it.
+
+**The report flow is the second.** It is the surface a member reaches when
+something has already gone wrong for them, so a silent submit or a confirmation
+that says nothing about what happens next is ❌ HIGH here, not ⚠️ — and check
+that the operator's side (`/dashboard/community/reports`) actually renders,
+because the queue is this module's only notification channel.
+
+The community pages join checks 5–7 like every other page: `<EmptyState>` on
+every room list and thread list, 380 px, keyboard, screen reader. A discussion
+is a long list of somebody else's text — read one with the keyboard alone, and
+once with a screen reader, before calling it done.
+
 ## 4 · `feedback` — does the app answer when spoken to
 
 Three mechanisms, and between them they cover every case

@@ -7,7 +7,7 @@ import { consentPurposes, consentPurpose, hasConsentPurposes, consentConfigProbl
 
 describe("the shipped config", () => {
   it("is coherent", () => {
-    // Same shape as `lib/mcp/config.test.ts`: a config that cannot be read is
+    // Same shape as `lib/ai/chat-config.test.ts`: a config that cannot be read is
     // caught at build time, not by a dialog rendering the literal string
     // "consent.marketing_email.title" at a customer.
     expect(consentConfigProblems()).toEqual([]);

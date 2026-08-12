@@ -15,7 +15,7 @@
 // column would make one word mean two things in the one place where confusing
 // them hands somebody else your account.
 import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
-import { users } from "./schema";
+import { users } from "./schema-core";
 
 export const emailChanges = pgTable("email_changes", {
   id: text("id")

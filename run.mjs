@@ -17,7 +17,7 @@
 //   node run.mjs start --port 3005
 //
 // ── Why a Node script and not a Makefile ────────────────────────────────────
-// This app is built with an AI program — Claude Code, Codex, Gemini or OpenCode
+// This app is built with an AI program — Claude Code, Codex, Antigravity or OpenCode
 // — and all of them run on Linux, macOS and Windows. `make` does not: it is
 // absent on Windows and needs the Xcode Command Line Tools on macOS. Node is present anyway — it is a Next.js app. See
 // CLAUDE.md → Three systems. (A Makefile is still in the project, but only as
@@ -36,8 +36,12 @@ import { dbUp } from "./scripts/db/up.mjs";
 import { doctor } from "./scripts/dev/doctor.mjs";
 import { depsFresh, markDepsFresh } from "./scripts/dev/deps.mjs";
 import { ensureEnv } from "./scripts/dev/ensure-env.mjs";
+import { journeyCommand } from "./scripts/dev/journey-cli.mjs";
+import { wireCommitHook } from "./scripts/dev/hooks.mjs";
 import { writeStamp } from "./scripts/dev/setup-stamp.mjs";
 import { usesLocalPostgres } from "./scripts/db/driver.mjs";
+import { composeProjectFlag } from "./scripts/db/compose.mjs";
+import { moduleCommands } from "./scripts/modules/tasks.mjs";
 import { localDown, localNuke } from "./scripts/db/local.mjs";
 import { run, runNpm, runScript } from "./scripts/lib/proc.mjs";
 
@@ -70,7 +74,7 @@ const TASKS = {
   start: {
     group: "Start / Stop",
     help: "Start everything: DB + migrations + app (http://localhost:3000)",
-    needs: ["env", "node_modules", "db-up", "db-migrate"],
+    needs: ["env", "node_modules", "hooks", "db-up", "db-migrate"],
     run: (_args, { port }) => app.start(port),
   },
   stop: {
@@ -130,9 +134,12 @@ const TASKS = {
   },
   errors: {
     group: "Tests & quality",
-    help: "What went wrong in the running app's log — the errors a 200 hides",
-    // No `needs`: it only reads .dev/dev.log, and it has to work precisely when
-    // the app has fallen over and nothing else can run.
+    help:
+      "What went wrong in the running app's log — the errors a 200 hides; " +
+      "--url https://… asks a DEPLOYED app instead",
+    // No `needs`: locally it only reads .dev/dev.log, and it has to work
+    // precisely when the app has fallen over and nothing else can run. The
+    // --url path loads the .env itself (scripts/dev/errors-remote.mjs).
     run: (args) => script("scripts/dev/log-errors.mjs", args),
   },
   "ai-check": {
@@ -147,17 +154,12 @@ const TASKS = {
     needs: ["env", "node_modules"],
     run: (args) => script("scripts/media/check.mjs", args),
   },
-  "mcp-check": {
+  module: {
     group: "Tests & quality",
-    help: "Check the MCP server (settings) — and with --live really call it once",
-    needs: ["env", "node_modules"],
-    run: (args) => script("scripts/mcp/check.mjs", args),
-  },
-  "api-check": {
-    group: "Tests & quality",
-    help: "Check the HTTP API (settings) — and with --live really call it once",
-    needs: ["env", "node_modules"],
-    run: (args) => script("scripts/api/check.mjs", args),
+    help: "What this app is made of — `module list`, `module check`",
+    // No `needs`: it only reads files, and has to work in a half-set-up project
+    // — the same reason `export-core` has none.
+    run: (args) => script("scripts/modules/cli.mjs", args),
   },
   "legal-check": {
     group: "Tests & quality",
@@ -174,6 +176,57 @@ const TASKS = {
     // a half-set-up project, because "does this look right?" is asked long
     // before there is a database. The judgement half is the skill: ux-gateway.
     run: (args) => script("scripts/ux/check.mjs", args),
+  },
+  "security-check": {
+    group: "Tests & quality",
+    help: "What is known to be wrong with what this app runs — a ladder of checks, and a rung that could not look says so (--json)",
+    // No `needs`: it reads the lockfile and asks npm. "Is this safe?" gets asked
+    // in a half-set-up project — the same argument `legal-check` and `ux-check`
+    // carry above — and the ladder is built for it: a rung that cannot look
+    // reports a skip with its reason, never a clean bill.
+    //
+    // ⚠️ Deliberately NOT in the `test` task and in no Makefile. It asks the
+    // network, and its answer moves without anything in this project changing;
+    // a check like that inside a gate is a brake, and a brake is what somebody
+    // eventually removes — taking the intent with it.
+    run: (args) => script("scripts/security/check.mjs", args),
+  },
+  health: {
+    group: "Tests & quality",
+    help: "Is the DEPLOYED app healthy — six probes, one verdict, one exit code (--url https://…, --json)",
+    // No `needs`: the same argument `errors` carries. It has to work precisely
+    // when the app has fallen over, and it loads the .env itself
+    // (scripts/health/check.mjs → import "../lib/env.mjs").
+    //
+    // ⚠️ Deliberately NOT in the `test` task and in no Makefile. It asks a
+    // deployed app over the network, and its answer moves without anything in
+    // this project changing; a check like that inside a gate is a brake, and a
+    // brake is what somebody eventually removes — taking the intent with it.
+    run: (args) => script("scripts/health/check.mjs", args),
+  },
+  "security-scope": {
+    group: "Tests & quality",
+    help: "What a RECURRING security pass would look at since the last report — and what it would NOT (--json)",
+    // No `needs`: it reads git and docs/reports/ and prints a scope. It has to
+    // answer in a half-set-up project — "is my app still safe?" is asked three
+    // weeks after a launch, on a machine that may never have run an install.
+    //
+    // ⚠️ Deliberately NOT in the `test` task and in no Makefile, for the same
+    // reason `security-check` above is not: it is the countable half of a
+    // judgement, and a judgement wired into a gate is a brake somebody removes.
+    // This one adds a second reason — it reports a SCOPE and judges nothing, so
+    // it exits 0 whatever it finds. There is nothing here for a gate to read.
+    run: (args) => script("scripts/security/scope.mjs", args),
+  },
+  brand: {
+    group: "Tests & quality",
+    help: "Take the look from your own brand: accent colours out of a CSS file, your website or a hex, and the five app icons out of one logo (dry run; --apply writes)",
+    // `node_modules` and nothing else — sharp is a native module and there is
+    // no icon without it. Deliberately NOT `env`: no key, no database, no
+    // media store. "What would my colour look like here?" is asked long before
+    // any of that exists, exactly as with `ux-check` above.
+    needs: ["node_modules"],
+    run: (args) => script("scripts/brand/cli.mjs", args),
   },
   "kb-check": {
     group: "Tests & quality",
@@ -195,8 +248,10 @@ const TASKS = {
   // The three content commands: how what this app SELLS reaches an
   // environment. Rows and files written locally stay local — content-apply
   // asserts the manifest's media rows + the appliers' tables, content-media-sync
-  // moves the staged bytes, content-check proves an environment holds it all.
-  // The story: docs/content.md.
+  // moves the staged bytes, and content-check asks the environment whether it
+  // HOLDS it all. ⚠️ That third one counts nothing itself: it asks whoever owns
+  // the rows — the core for product media and the appliers, every module for its
+  // own through `presence`. The story: docs/content.md.
   "content-apply": {
     group: "Tests & quality",
     help: "Apply the repo's content: media rows, repo-leg bytes, appliers (--env prod; preview: --dry-run)",
@@ -215,11 +270,21 @@ const TASKS = {
     needs: ["env"],
     run: (args) => script("scripts/content/content-media-sync.mjs", args),
   },
-  "content-check": {
+  "content-publish": {
     group: "Tests & quality",
-    help: "Does an environment hold this app's content? Files, store, media rows, appliers (--env prod)",
-    needs: ["env", "node_modules"],
-    run: (args) => script("scripts/content/check.mjs", args),
+    // The fourth content command, and the one that needs no password: it talks
+    // to the running app over the setup surface and writes the staged media
+    // straight into that environment's bucket. `content-apply` is its sibling
+    // and not its replacement — that one needs DATABASE_URL and MEDIA_S3_* in
+    // the shell, this one needs APP_URL_* and SETUP_KEY_* in the .env.
+    help: "Publish content into an environment over the setup surface, staged media and all (dry run; --apply writes)",
+    // Only `env`: it talks HTTP and reads files. No `node_modules` — it is plain
+    // Node, and a publish must work in a project that never ran an install.
+    needs: ["env"],
+    // Deliberately NOT the `content-apply` convention of injecting --apply: that
+    // one writes into whatever DATABASE_URL is in the shell, this one is aimed
+    // at production by name. A dry run is the safe default here.
+    run: (args) => script("scripts/content/publish.mjs", args),
   },
   lint: {
     group: "Tests & quality",
@@ -247,7 +312,10 @@ const TASKS = {
   "db-down": {
     group: "Database",
     help: "Stop Postgres (data is kept)",
-    run: async () => ((await usesLocalPostgres()) ? localDown() : docker("compose", "down")),
+    run: async () =>
+      (await usesLocalPostgres())
+        ? localDown()
+        : docker("compose", ...composeProjectFlag(), "down"),
   },
   "db-migrate": {
     group: "Database",
@@ -257,9 +325,16 @@ const TASKS = {
   },
   "db-generate": {
     group: "Database",
-    help: "Create a migration from a schema change (db/schema.ts)",
+    help: "Create a migration from a schema change (db/schema.ts, or --module <id>)",
     needs: ["node_modules"],
-    run: async () => {
+    run: async (args) => {
+      // A module owns its own chain and its own journal, so its migration is
+      // generated against its own schema — the golden path ("change the schema,
+      // run db-generate") stays one sentence for a module too.
+      if (args.includes("--module")) {
+        await script("scripts/db/generate-module.mjs", args);
+        return;
+      }
       await npm("db:generate");
       console.log(
         "→ Review the new file in drizzle/, commit it and apply it with 'node run.mjs db-migrate'.",
@@ -292,7 +367,7 @@ const TASKS = {
     needs: ["stop"],
     run: async () => {
       if (await usesLocalPostgres()) await localNuke();
-      else await docker("compose", "down", "-v");
+      else await docker("compose", ...composeProjectFlag(), "down", "-v");
       console.log("✓ Database deleted — all data gone.");
     },
   },
@@ -300,7 +375,9 @@ const TASKS = {
   // This is for looking at them and for running one now.
   cron: {
     group: "Database",
-    help: "Scheduled jobs: run what is due, --list them, or --job <id> to force one",
+    help:
+      "Scheduled jobs: run what is due, --list them, or --job <id> to force one; " +
+      "--list --url https://… asks a DEPLOYED app instead",
     needs: ["env", "node_modules"],
     run: (args) => script("scripts/cron/run.mjs", args),
   },
@@ -331,6 +408,30 @@ const TASKS = {
     group: "Users & roles",
     help: "Create a user / set a role (--email … --role owner --apply)",
     run: (args) => script("scripts/users/create-user.mjs", args),
+  },
+  "content-check": {
+    group: "Tests & quality",
+    help: "Does an environment hold this app's content? Every owner answers for its own rows",
+    // `env` only: it asks the environment over HTTP and touches no database.
+    needs: ["env"],
+    run: (args) => script("scripts/content/check.mjs", args),
+  },
+  "setup-check": {
+    group: "Tests & quality",
+    help: "Where the setup surface stands: the switch, the keys, and (--live) a real call",
+    // `env` only: it reads config and .env and talks over HTTP. It has to work
+    // in a half-set-up project, because "is this on?" is asked exactly then.
+    needs: ["env"],
+    run: (args) => script("scripts/setup/check.mjs", args),
+  },
+  "setup-bootstrap": {
+    group: "Users & roles",
+    help: "First owner + first setup key for an environment that has neither (--email … --apply)",
+    // `env` and `node_modules` only: it talks to the database directly and
+    // deliberately does NOT need the app to be running — the whole point is an
+    // environment where nobody can sign in yet.
+    needs: ["env", "node_modules"],
+    run: (args) => script("scripts/setup/bootstrap.mjs", args),
   },
   "user-list": {
     group: "Users & roles",
@@ -402,6 +503,14 @@ const TASKS = {
   },
 
   // ── Setup helpers ─────────────────────────────────────────────────────────
+  journey: {
+    group: "Setup",
+    help: "Where am I, and what comes next (--json, --next)",
+    // No `needs`: it reads files and nothing else, and "where am I" is a
+    // question worth answering in a project that is not set up yet — which is
+    // exactly where somebody asks it.
+    run: (args) => journeyCommand(args),
+  },
   doctor: {
     group: "Setup",
     help: "What has to be installed — and what is missing on this machine (--json, --deploy)",
@@ -413,7 +522,7 @@ const TASKS = {
     // The same prerequisites as `start`, without starting the app. One command
     // for the whole preparation, so the setup-machine skill calls one and not
     // five — and so a person has a single thing to type after a fresh clone.
-    needs: ["env", "node_modules", "db-up", "db-migrate"],
+    needs: ["env", "node_modules", "hooks", "db-up", "db-migrate"],
     // The stamp is written HERE, after the needs above have all run: this is the
     // moment the expensive half of the setup is genuinely through. From then on
     // the greeting says `[Setup: ok — verified …]` and nobody has to walk the
@@ -458,17 +567,22 @@ const TASKS = {
   greet: {
     group: "Setup",
     help: "The session greeting — where this project stands and what to do next",
-    // The same thing every program prints when a session starts, available as a
-    // command. Two reasons it has to be:
+    // The same thing three of the four programs print when a session starts,
+    // available as a command. Three reasons it has to be:
     //
-    //   1. Each of the four wires it up differently (.claude/settings.json,
-    //      .codex/hooks.json, .gemini/settings.json, .opencode/plugins/), and
-    //      three of those are young enough to break. When the hook does not
-    //      fire, the greeting is not a nicety that goes missing — it carries
-    //      the `[Setup: blocked]` line, and CLAUDE.md makes a node answer this
-    //      session a precondition for writing any file at all. Silence would
-    //      read as "all fine" on a machine with nothing installed.
-    //   2. An agent that starts in a project with no greeting has a command it
+    //   1. Each of the three wires it up differently (.claude/settings.json,
+    //      .codex/hooks.json, .opencode/plugins/), and they are young enough to
+    //      break. When the hook does not fire, the greeting is not a nicety
+    //      that goes missing — it carries the `[Setup: blocked]` line, and
+    //      CLAUDE.md makes a node answer this session a precondition for
+    //      writing any file at all. Silence would read as "all fine" on a
+    //      machine with nothing installed.
+    //   2. 🚨 In Antigravity CLI this command is not the fallback but the ONLY
+    //      way. That program has no session-start event to hang a hook on, so
+    //      the app ships it none; the guidance tells its agent to run this
+    //      first instead. Deleting this command would take the greeting away
+    //      from a whole program rather than merely from a broken hook.
+    //   3. An agent that starts in a project with no greeting has a command it
     //      can run instead of guessing.
     //
     // No `needs`: it has to work in a project where nothing is set up yet —
@@ -491,7 +605,45 @@ const TASKS = {
       markDepsFresh();
     },
   },
+
+  // Point this clone's git at .githooks, so typecheck + tests run before a
+  // commit. Hidden and never a command of its own: it is a property of a
+  // prepared clone, not something anybody should have to remember to do. Says
+  // nothing when it is already wired, and never fails what it precedes —
+  // scripts/dev/hooks.mjs.
+  hooks: {
+    hidden: true,
+    run: () => wireCommitHook(),
+  },
 };
+
+// ── the commands installed modules bring ────────────────────────────────────
+//
+// Merged in AFTER the literal above, and that placement is the point:
+// `scripts/docs-coverage.test.ts` reads `const TASKS = {` as TEXT and insists
+// every command it finds is documented in the core's own guidance. A module
+// command is documented by its module, so it must not appear to that parser —
+// and a module that ships without a help line is refused at its manifest, so
+// it cannot arrive here undocumented either.
+//
+// A module command never shadows a core one: the manifest requires the module's
+// id as a prefix, and the guard below is the second lock on that door — a
+// silent overwrite here would replace, say, `db-migrate` with a module's script.
+for (const command of moduleCommands()) {
+  if (Object.hasOwn(TASKS, command.name)) {
+    throw new Error(
+      `Module "${command.module}" declares the command "${command.name}", which already ` +
+        `exists. A module may not replace a core command — rename it in ` +
+        `modules/${command.module}/module.json.`,
+    );
+  }
+  TASKS[command.name] = {
+    group: "Modules",
+    help: command.help,
+    needs: ["env", "node_modules"],
+    run: (args) => script(command.file, args),
+  };
+}
 
 // ── help ────────────────────────────────────────────────────────────────────
 

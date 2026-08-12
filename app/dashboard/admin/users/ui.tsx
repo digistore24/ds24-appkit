@@ -21,6 +21,7 @@ import { useTranslations, useFormatter } from "next-intl";
 import {
   MoreHorizontal,
   Trash2,
+  Shield,
   ShieldCheck,
   UserIcon,
   Plus,
@@ -30,11 +31,12 @@ import {
   Ban,
   CircleCheck,
   LogIn,
+  type LucideIcon,
 } from "lucide-react";
 
 // Deliberately from lib/roles (not lib/authz): authz depends on auth.ts and
 // therefore on mail sending — that does not belong in the browser bundle.
-import { type Role } from "@/lib/roles";
+import { ROLES, type Role } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { useActionToast } from "@/hooks/use-action-toast";
 import { RoleBadge } from "@/components/role-badge";
@@ -99,6 +101,15 @@ import {
 
 const EMPTY: ActionState = { error: null, ok: null };
 
+// One icon per role, for the row menu's "make …" entries. Same order of ideas
+// as the badge variants: the owner filled, the moderator marked but not the
+// operator, the member plain.
+const ROLE_ICONS: Record<Role, LucideIcon> = {
+  owner: ShieldCheck,
+  moderator: Shield,
+  member: UserIcon,
+};
+
 export function CreateUserDialog() {
   const t = useTranslations("users");
   const tRoles = useTranslations("roles");
@@ -156,8 +167,13 @@ export function CreateUserDialog() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="member">{tRoles("member")}</SelectItem>
-                  <SelectItem value="owner">{tRoles("owner")}</SelectItem>
+                  {/* Derived from ROLES, so a new role appears here by itself
+                      the moment lib/roles.ts and the message files know it. */}
+                  {ROLES.map((role) => (
+                    <SelectItem key={role} value={role}>
+                      {tRoles(role)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -207,6 +223,7 @@ export function UserTable({
   impersonationEnabled: boolean;
 }) {
   const t = useTranslations("users");
+  const tRoles = useTranslations("roles");
   const tCommon = useTranslations("common");
   const format = useFormatter();
 
@@ -283,7 +300,6 @@ export function UserTable({
           <TableBody>
             {users.map((user) => {
               const isSelf = user.id === currentUserId;
-              const nextRole: Role = user.role === "owner" ? "member" : "owner";
               const isBlocked = user.blockedAt !== null;
               return (
                 <TableRow key={user.id}>
@@ -357,21 +373,26 @@ export function UserTable({
                             {user.email ?? tCommon("none")}
                           </DropdownMenuLabel>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onSelect={() =>
-                              run(roleAction, {
-                                id: user.id,
-                                role: nextRole,
-                              })
-                            }
-                          >
-                            {nextRole === "owner" ? (
-                              <ShieldCheck aria-hidden />
-                            ) : (
-                              <UserIcon aria-hidden />
-                            )}
-                            {nextRole === "owner" ? t("promote") : t("demote")}
-                          </DropdownMenuItem>
+                          {/* One entry per role the user does not hold —
+                              derived from ROLES like the create dialog, so
+                              the menu and the rule layer can never disagree
+                              about which roles exist. */}
+                          {ROLES.filter((role) => role !== user.role).map(
+                            (role) => {
+                              const Icon = ROLE_ICONS[role];
+                              return (
+                                <DropdownMenuItem
+                                  key={role}
+                                  onSelect={() =>
+                                    run(roleAction, { id: user.id, role })
+                                  }
+                                >
+                                  <Icon aria-hidden />
+                                  {t("setRole", { role: tRoles(role) })}
+                                </DropdownMenuItem>
+                              );
+                            },
+                          )}
                           <DropdownMenuItem onSelect={() => setToEdit(user)}>
                             <AtSign aria-hidden />
                             {t("changeEmail")}
@@ -391,15 +412,17 @@ export function UserTable({
                             {t("sendLoginLink")}
                           </DropdownMenuItem>
                           {/* Sign in as this user.
-                              Absent for an admin and for a blocked account
-                              rather than offered and then refused — the same
-                              treatment the sign-in link above gets. Both
-                              refusals also live in canImpersonate(), because a
-                              request that never passed through this menu has to
-                              be refused identically: an owner target would
-                              otherwise hand over every right that owner holds. */}
+                              Offered for MEMBERS only — absent for an admin, a
+                              moderator and a blocked account rather than
+                              offered and then refused, the same treatment the
+                              sign-in link above gets. All three refusals also
+                              live in canImpersonate(), because a request that
+                              never passed through this menu has to be refused
+                              identically: an owner target would hand over
+                              every right that owner holds, and a moderator's
+                              badge must never be an operator in disguise. */}
                           {impersonationEnabled &&
-                            user.role !== "owner" &&
+                            user.role === "member" &&
                             !isBlocked && (
                               <DropdownMenuItem
                                 onSelect={() => setToImpersonate(user)}

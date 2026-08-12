@@ -32,7 +32,7 @@ import {
   index,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import { users } from "./schema";
+import { users } from "./schema-core";
 
 // Status of a subscription, driven by DS24 IPN events.
 export const subscriptionStatusEnum = pgEnum("subscription_status", [

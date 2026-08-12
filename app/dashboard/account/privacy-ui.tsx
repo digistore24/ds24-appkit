@@ -35,6 +35,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { MODULE_ACCOUNT_NOTES } from "@/lib/modules/account-notes-registry";
 import { useActionToast } from "@/hooks/use-action-toast";
 import { answerConsentAction } from "@/app/consent-actions";
 import { deleteOwnAccountAction } from "./actions";
@@ -156,9 +157,42 @@ export function MyDataCard() {
           </a>
         </Button>
 
-        <p className="text-muted-foreground text-xs">{t("exportHint")}</p>
+        <div className="text-muted-foreground flex flex-col gap-1 text-xs">
+          <p>{t("exportHint")}</p>
+          <ModuleNotes which="export" />
+          <p>{t("exportExcluded")}</p>
+        </div>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * The sentences an installed module adds to one of these two cards.
+ *
+ * 🚨 **Read with a ROOT translator, and the key is fully qualified.** A module
+ * owns its own namespace (`community.…`, `apiKeys.…`), so a namespaced
+ * `useTranslations("privacy")` cannot reach it — and giving the core a
+ * `privacy.community…` key is the coupling this whole seam removes.
+ *
+ * One paragraph per module, never a merged sentence: the texts are written
+ * independently, in two languages, by whoever built the module, and a comma
+ * splice across two of them reads as a translation bug in whichever language
+ * somebody was not looking at.
+ *
+ * With no module installed this renders nothing at all — the shipped state, and
+ * the reason the core's own sentences had to stop enumerating other people's
+ * data first.
+ */
+function ModuleNotes({ which }: { which: "export" | "deletion" }) {
+  const t = useTranslations();
+  if (MODULE_ACCOUNT_NOTES.length === 0) return null;
+  return (
+    <>
+      {MODULE_ACCOUNT_NOTES.map((note) => (
+        <p key={note.module}>{t(note[which])}</p>
+      ))}
+    </>
   );
 }
 
@@ -227,7 +261,10 @@ export function DeleteAccountCard({
               <div className="flex flex-col gap-3 text-sm">
                 <div>
                   <p className="font-medium">{t("deleteGoesTitle")}</p>
-                  <p className="text-muted-foreground">{t("deleteGoesBody")}</p>
+                  <div className="text-muted-foreground flex flex-col gap-1">
+                    <p>{t("deleteGoesBody")}</p>
+                    <ModuleNotes which="deletion" />
+                  </div>
                 </div>
                 <div>
                   <p className="font-medium">{t("deleteStaysTitle")}</p>

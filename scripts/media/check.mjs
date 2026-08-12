@@ -30,7 +30,7 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 
-import { s3SettingsFromEnv, sendS3 } from "../../lib/media/s3-request.mjs";
+import { copySource, objectPath, s3SettingsFromEnv, sendS3 } from "../../lib/media/s3-request.mjs";
 import { refusedTypes } from "../../lib/media/strip-rules.mjs";
 import "../lib/env.mjs";
 
@@ -93,6 +93,15 @@ async function checkLocal() {
   } catch (error) {
     bad(`cannot write to ${dir}: ${error.message}`);
   }
+
+  // 🚨 Spoken, never silent. The CORS question belongs to a bucket and there is
+  // none here, so it cannot be answered — and a check that simply does not run
+  // reads exactly like a check that passed. This driver has no direct path at
+  // all (`createUploadUrl()` answers null), which is the honest thing to say.
+  warn(
+    "no bucket, so the direct-to-bucket path and its CORS rule are NOT checked — " +
+      "on this driver there is no address a browser could write to",
+  );
 }
 
 async function checkS3() {
@@ -124,12 +133,47 @@ async function checkS3() {
     return null;
   }
 
-  ok(`bucket "${settings.bucket}" at ${settings.endpoint} (region ${settings.region})`);
+  ok(`bucket "${settings.bucket}" at ${settings.endpoint}`);
+
+  // ── The region, and why it is a sentence rather than a value in brackets ───
+  // This line used to read `(region auto)` and count as information.
+  // `MEDIA_S3_REGION` defaults to `auto` (`lib/media/s3-request.mjs`) because
+  // that is what Cloudflare R2 documents — and for a provider that VALIDATES
+  // the string, which AWS, Wasabi and Backblaze B2 all do, an unset region is a
+  // 403 on the first upload: after the customer chose the file, after it
+  // travelled, with `SignatureDoesNotMatch` as the only clue and the credentials
+  // as the obvious suspect.
+  //
+  // 🚨 **It is said HERE and not in `lib/env-guard.ts`, deliberately.** The app
+  // cannot tell which provider it is talking to — `objectPath()` infers the
+  // ADDRESSING STYLE from the host and nothing infers the vendor — so a start-up
+  // refusal would have to guess, and a wrong guess refuses a working R2 setup.
+  // This command writes, reads, copies and deletes a real object, so a wrong
+  // region already surfaces here as a failure; what was missing was the
+  // sentence that tells somebody where to look. Same argument `mediaProblem()`
+  // makes for an app that takes no media at all.
+  //
+  // ⚠️ It is a `!` and not a `✗` on purpose: `auto` is CORRECT on two of the
+  // providers this app carries, so failing the command on it would refuse a
+  // working R2 setup — the same wrong direction the start-up guard would take,
+  // one command further out.
+  if (process.env.MEDIA_S3_REGION?.trim()) {
+    ok(`region "${settings.region}", as set in MEDIA_S3_REGION`);
+  } else {
+    warn(
+      `MEDIA_S3_REGION is not set, so the signature says "auto". That is correct for ` +
+        `Cloudflare R2 and for MinIO; AWS S3, Wasabi and Backblaze B2 VALIDATE it and answer ` +
+        `403 without it. The round trip below is what settles it for your provider — if it is ` +
+        `green, "auto" is fine here; set the region anyway before go-live if your provider ` +
+        `documents one (docs/DEPLOY.md lists it as required for everything except R2).`,
+    );
+  }
 
   const key = `.media-check/${randomUUID()}.txt`;
   const payload = Buffer.from(`media-check ${new Date().toISOString()}\n`);
 
   let written = false;
+  let copied = null;
   try {
     const put = await sendS3(settings, "PUT", key, payload, "text/plain");
     if (!put.ok) {
@@ -151,21 +195,107 @@ async function checkS3() {
       if (back.equals(payload)) ok("read it back, byte for byte");
       else bad("read it back and the bytes differ");
     }
+
+    // ── The server-side copy ──────────────────────────────────────────────
+    // Not a nicety on this list: it is the step that makes the direct-to-bucket
+    // path's checks a promise instead of a snapshot. The browser writes to a
+    // staging key, the app measures and sniffs THAT object and then copies it
+    // onto the delivery key, so a presigned address that is replayed later
+    // reaches a key nothing serves. A provider that refuses `CopyObject` breaks
+    // that path and nothing else here would notice.
+    copied = `${key}.copy`;
+    const copy = await sendS3(settings, "PUT", copied, undefined, "text/plain", {
+      "x-amz-copy-source": copySource(settings, key),
+      "x-amz-metadata-directive": "REPLACE",
+    });
+    // A CopyObject can fail with a 200 and the outcome in the body — the app
+    // checks for that too, and a check that did not would report a working
+    // path on a provider where it is broken.
+    const copyBody = copy.ok ? await copy.text() : "";
+    if (!copy.ok) {
+      copied = null;
+      bad(
+        `the bucket refused a server-side copy (HTTP ${copy.status}). The direct-to-bucket ` +
+          `upload path needs it — the confirm step copies the object it checked onto the ` +
+          `key it serves.`,
+      );
+    } else if (/<Error[\s>]/.test(copyBody)) {
+      bad(`the bucket answered 200 to a copy and failed in the body: ${copyBody.slice(0, 200)}`);
+    } else {
+      ok("copied it server-side, which is what the direct upload path confirms with");
+    }
   } catch (error) {
     bad(`the bucket is not reachable: ${error.message}`);
   } finally {
-    if (written) {
+    for (const doomed of [written ? key : null, copied]) {
+      if (!doomed) continue;
       try {
-        const del = await sendS3(settings, "DELETE", key);
-        if (del.ok || del.status === 404) ok("deleted it again");
-        else bad(`could not delete the test object (HTTP ${del.status}) — key ${key}`);
+        const del = await sendS3(settings, "DELETE", doomed);
+        if (del.ok || del.status === 404) ok(`deleted ${doomed === key ? "it" : "the copy"} again`);
+        else bad(`could not delete the test object (HTTP ${del.status}) — key ${doomed}`);
       } catch (error) {
-        bad(`could not delete the test object: ${error.message} — key ${key}`);
+        bad(`could not delete the test object: ${error.message} — key ${doomed}`);
       }
     }
   }
 
+  await checkCors(settings);
   return settings;
+}
+
+/**
+ * Does the bucket let a BROWSER write to it from this app's address?
+ *
+ * The direct-to-bucket path is three steps and the first two happen in the
+ * browser, so a missing CORS rule is refused by the browser before the request
+ * is sent — no log line here, no request at the bucket, and an error in the
+ * console that names neither. It is the one failure of that path nothing else
+ * in this repo can see.
+ *
+ * 🚨 **A warning, never a failure, and the exit code does not move.** The rule
+ * belongs to the bucket, not to this repo: it is set in a provider's dashboard
+ * or with their CLI, and plenty of apps never use the direct path at all. A
+ * gate here would be a gate on somebody else's configuration, and a gate in the
+ * way is one that eventually gets removed — taking the intent with it.
+ */
+async function checkCors(settings) {
+  const origin = (process.env.APP_URL || "").trim().replace(/\/+$/, "");
+  if (!origin || !/^https?:\/\//.test(origin)) {
+    warn("APP_URL is not set, so the bucket's CORS rule cannot be checked");
+    return;
+  }
+
+  try {
+    // A preflight, exactly as a browser would send it before a presigned PUT.
+    // Unsigned on purpose: CORS is answered before authorisation, and signing
+    // it would test a different question.
+    const response = await fetch(`${settings.endpoint}${objectPath(settings, ".media-check/cors")}`, {
+      method: "OPTIONS",
+      headers: {
+        origin,
+        "access-control-request-method": "PUT",
+        "access-control-request-headers": "content-type",
+      },
+      redirect: "manual",
+    });
+    const allowed = response.headers.get("access-control-allow-origin");
+    if (allowed === origin || allowed === "*") {
+      if (allowed === "*") {
+        warn(`the bucket allows uploads from ANY origin ("*") — narrow it to ${origin}`);
+      } else {
+        ok(`the bucket accepts browser uploads from ${origin}`);
+      }
+      return;
+    }
+    warn(
+      `the bucket does not answer a browser upload from ${origin}` +
+        (allowed ? ` (it allows "${allowed}")` : "") +
+        " — the direct-to-bucket path will fail in the browser with no useful error. " +
+        "docs/visuals.md has the rule to paste.",
+    );
+  } catch (error) {
+    warn(`could not ask the bucket about CORS: ${error.message}`);
+  }
 }
 
 async function main() {
@@ -295,10 +425,14 @@ async function main() {
   // The honest limit, stated every time rather than left in a document.
   console.log("");
   warn(
-    "uploads travel through the app, so the ceilings above are what fits " +
-      "through a request. A recording of several hundred megabytes needs the " +
-      "browser to write straight to the bucket, which is not built yet — " +
-      "docs/visuals.md says what that involves.",
+    "through the app an upload stops well below the ceilings above — at 10 MB " +
+      "from a form on one of your pages (a Server Action body) and at 50 MB " +
+      "through /api/media and /api/v1/media (what a route handler of this app " +
+      "buffers). Past that the browser writes straight to the bucket " +
+      "(/api/media/upload-url → PUT → /api/media/confirm), and the ceilings " +
+      "above are that path's. Pictures always take the first route: location " +
+      "data comes off them, and that needs the bytes in the app. " +
+      "docs/visuals.md walks all three.",
   );
   warn(
     "location and camera data are stripped from uploaded IMAGES. Video keeps " +

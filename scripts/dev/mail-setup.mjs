@@ -26,6 +26,21 @@ import { commentEnvValue, setEnvValue } from "../lib/env-write.mjs";
 import "../lib/env.mjs";
 
 const ENV_FILE = ".env";
+
+// This whole script is a conversation, so it needs somebody to have it with.
+// Without a terminal — an agent running it through a tool, a pipe, a CI step —
+// `rl.question` never returns, and `askRequired` below then loops on an empty
+// answer forever: the command does not fail, it hangs until something outside
+// kills it. Refused here, at the top, before a single value is asked for, and
+// with the way through named. Same contract as `node run.mjs update`.
+if (!process.stdin.isTTY) {
+  console.error("✗ mail-setup asks questions and needs a terminal to ask them in.");
+  console.error("  Nothing changed. Either the user runs it themselves:");
+  console.error("      node run.mjs mail-setup");
+  console.error("  or the values go into .env directly — docs/auth-setup.md lists them.");
+  process.exit(2);
+}
+
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 
 /** Question with an optional default value. */

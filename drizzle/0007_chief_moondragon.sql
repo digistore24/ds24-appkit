@@ -1,0 +1,18 @@
+-- The narrower widths a picture also exists at in the bucket
+-- (`db/schema-media.ts` → `media.variants`, `lib/media/rules.ts` → `variantKey()`).
+--
+-- Generated, and taken as generated — unlike 0006 next door, which had to be
+-- rewritten by hand. The difference is the whole reason to say so here: this
+-- column is NULLABLE with no default, so `ADD COLUMN` is a catalogue change
+-- Postgres makes without touching a row, whatever `media` already holds. A
+-- `NOT NULL` or a `DEFAULT '{}'` would have been the rewrite again — and worse,
+-- it would have erased the distinction the column exists for: NULL means nobody
+-- ever asked this row, `{}` means somebody asked and the answer was none.
+--
+-- Every picture that predates this therefore reads NULL and keeps serving its
+-- original, which is exactly what it did yesterday. Nothing backfills: deriving
+-- variants for old rows means fetching every object back through the process,
+-- and the delivery side reads the widths off the ROW rather than off
+-- `MEDIA_VARIANT_WIDTHS`, so an un-backfilled row is correct rather than
+-- half-migrated.
+ALTER TABLE "media" ADD COLUMN "variants" integer[];

@@ -1,1 +1,0 @@
-ALTER TABLE "token_ledger" ADD COLUMN "origin" text;

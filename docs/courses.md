@@ -29,6 +29,158 @@ scheduled work is [`docs/cron.md`](cron.md), migrations are
 produced via [`docs/content-production.md`](content-production.md) (skill
 `content-production`).
 
+## The module, and the one file you set
+
+The course is a MODULE — `node run.mjs module add courses`, then `db-migrate`.
+A fresh app does not have it, and `node run.mjs module list` is what says so.
+
+Its switch is **`config/course.json`**, and it ships OFF. That is not caution:
+the commonest reason it is off is the window between installing the module and
+writing the content, and a course whose pages answer before it has lessons is an
+empty product behind a clean 200. Switch it on AFTER `content-apply`.
+
+Two directions, on purpose:
+
+| | |
+|---|---|
+| `enabled` unreadable | **OFF** — every course route answers the document a route that never existed answers |
+| `shape` unusable | **BROKEN, and never a default.** `self-study` is the most permissive shape, so a drip course whose config went unreadable would open week ten on day one. The operator gets a diagnosis page naming the bad value; a member gets the 404 |
+
+`node run.mjs courses-check` reads the switch, the product key, the slugs and
+the media your content names. Whether an ENVIRONMENT holds the course is a
+different question and a different command — `content-check`
+([`content.md`](content.md)).
+
+🚨 **Two origins, one column.** Every block and lesson row says where it came
+from — `courses_blocks.origin` / `courses_units.origin`, `content` or
+`operator` — and that column is what makes two lawful writers possible instead
+of two writers fighting over one row (spine AD-82).
+
+| `origin` | Whose row it is |
+|---|---|
+| `content` | the applier's. It came from `content/course/*.json` through `node run.mjs content-apply`, keyed by slug, and every run re-asserts it |
+| `operator` | the admin surface's. It was made in ONE environment, travels with no deploy, and no applier ever touches it |
+
+The applier writes `content` and nothing else: each `on conflict` carries
+`where courses_*.origin = 'content'`, so it cannot reach the other half. And
+when a content file claims a slug an `operator` row holds, the run **refuses**
+and names slug and file — it does not write around it. Skipping quietly would
+apply the file's lessons onto a block the operator owns, which is a half-applied
+course rather than a skipped row. `lib/content/writers.test.ts` holds both
+halves: the applier's SQL is read, and the module ships no mutating setup tool.
+
+The module's setup tools (`courses_outline`) **read** — an agent can ask a
+remote environment what it holds without a production connection string, and
+that is all.
+
+What it answers carries, per block, its `unitCount`, and per lesson a
+`fingerprint`: 64 hex characters over that lesson's own content — slug, title,
+body, task prompt and which of the four media slots are filled — so an agent
+preparing a publish can see **which** lesson differs from its files without
+downloading the course. Same content in two environments, same string; a changed
+body moves exactly that lesson's. It is a comparison key and never a secret, and
+no lesson text goes over this surface either way. ⚠️ One thing it deliberately
+does not catch: swapping one video for **another** video in the same slot reads
+as unchanged, because what is hashed is the slot's occupancy and not the media
+id — an id exists once, in one database, so hashing it would make DEV and PROD
+disagree about a lesson that is identical in both.
+
+### Before you publish: what would actually change
+
+`node run.mjs courses-diff --env prod` reads that environment **first** and then
+compares it against this repo's content files — with the same fingerprint, so
+there is one definition of "changed" rather than two that agree today. It writes
+nothing, anywhere, in either place, and it exits 0 whatever it finds: it is a
+preview, not a gate. Four lists come out, blocks and lessons each:
+
+| | |
+|---|---|
+| **new** | here and not there — a publish would create it |
+| **would change** | in both, and the content differs. A block also says which of its four applied fields moved |
+| **untouched** | in both, and it does not |
+| **present in the target only** | there and not here. 🚨 **Publishing will not delete it** — no applier deletes anything. The list separates the rows the applier owns (`origin` `content` — the repo used to carry them) from the operator's own, which no applier ever touches |
+
+A fifth list is the one worth knowing about: **would be refused**. A content file
+whose slug is held by a row this applier does not own does not "change" that row
+— `content-apply` refuses the **whole run** and writes nothing at all. The two
+ways out are the applier's own: change the slug in the content file, or delete
+the operator-authored row on the admin surface.
+
+Two refusals are worth recognising, and neither is an empty course. *The setup
+surface is off there, or that app predates it* — switching it on is a deploy
+([`setup-mcp.md`](setup-mcp.md)). And 🚨 *that environment has no `courses` module
+installed*: an app without the module and an app with it and no lessons both hold
+zero lessons, and reading the second as "all your lessons are new" would propose
+a publish into a database with no `courses_units` table.
+
+Needs template 0.24.0.
+
+### There is already one under a different slug
+
+A sixth section appears only when there is something in it: **same subject,
+different slug**. The two rows have never met — `courses-diff` matches by slug in
+both directions, because slug is what the applier upserts on — so a block the
+operator published as `kurs-grundlagen` and a block this repo calls `grundlagen`
+are simply one *new* row and one *only there* row, and a publish would create the
+second course beside the first without anybody being asked.
+
+That section is **not a difference. It is a question**, and the command does not
+ask it: it prints the pair and both consequences, and the asking belongs to the
+agent, in the conversation, where a person is present. It is also where the two
+answers stop being symmetrical:
+
+| The operator chooses | What actually happens |
+|---|---|
+| **update the existing one** | the agent sets the LOCAL slug to the TARGET's slug in `content/course/*.json`, and the applier's upsert-by-slug does the rest. The lessons customers currently see are replaced by the ones in the files — and **their progress survives**, because `courses_completions` and `courses_submissions` key on `unit_slug`, never on a content row's id ([`content-authority.md`](content-authority.md)). Somebody who finished lesson three has still finished lesson three |
+| **a second one** | the local slug stays distinct. The existing rows are untouched, their buyers stay where they are, and the new block's `position` decides where it appears among them |
+
+🚨 **The answer is expressed in the repo's slugs and never as a parameter.**
+There is no `--update`, no flag and no tool argument saying "this one" — the
+applier is the only writer of those rows, keyed by slug, from files in the repo
+(spine AD-82). A flag would be a second writer with a second opinion about which
+row is meant, and it would live outside the repo where nothing records it.
+
+⚠️ **The rename goes one way only.** The LOCAL file's slug is changed to match the
+TARGET; never the reverse. Giving an existing lesson a **new** slug orphans every
+completion that pointed at the old one — the state tables key on the slug, which
+is exactly what makes the update direction safe.
+
+⚠️ **And "a second one" does not mean "sold separately" in this app.** Measured
+against the tree rather than assumed: `config/course.json` holds **one** `shape`,
+**one** `productKey` and **one** `enabled`, and `courses_blocks` is flat — so a
+second set of blocks is served by the same pages and gated by the same product
+key, and it is visible to exactly the **same** buyers as the first. Selling a
+second course separately would need that config to carry more than one product
+key and the module's gate to pick one per block; no part of this is that, and the
+agent says so rather than letting it be implied. A capability that is absent must
+not read like one that is present.
+
+When the target row's `origin` is not `content`, the update choice is not
+available at all, and the report says so instead of offering it: renaming onto
+that slug does not update the row — `content-apply` refuses the **whole** publish
+before applying anything, with the same two ways out as the *would be refused*
+list. And when that app is old enough not to send `origin`, the report says the
+question was **not compared** rather than answering it — "I could not look" and
+"the applier owns it" are different sentences.
+
+**The matcher is deliberately dumb, and that is a decision to keep rather than an
+approximation to improve.** Two titles are the same subject when they are the
+same string modulo case and whitespace — no edit distance, no stemming, no
+`includes()`. The failure modes are not symmetric: a **missed** pair costs a
+question that was not asked, and the operator publishes a second block whose
+deletion is one act; a **wrong** pair gets an operator to answer "update", renames
+a slug onto the wrong row, and replaces the lessons customers were working
+through. `includes()` alone would pair *"Grundlagen"* with *"Grundlagen für
+Fortgeschrittene"* — a beginners' course and an advanced one — which is precisely
+that case. Everything past the dumb rule is the agent's judgement, in the
+conversation.
+
+Whichever way it goes, **one line in `docs/app.md`** under the decisions: both
+slugs, which way it went, and why. Three sessions later that line is the only
+thing that says the alternative was considered.
+
+Needs template 0.24.0.
+
 ## Which shape is this vendor's course?
 
 Read the vendor's own words, top to bottom — the first row that matches wins:
@@ -73,9 +225,15 @@ Two questions come before the first table below, and each has its own page:
    database — the app goes live with empty pages while every local gate stays
    green. Content that does live in tables is written as content files plus
    an idempotent applier (`scripts/content/appliers/` — upsert by slug, which
-   is what "a slug survives a re-seed" is for), the media are declared in
-   `content/media-manifest.json`, and `node run.mjs content-check --env prod`
-   proves at go-live that production actually holds it all.
+   is what "a slug survives a re-seed" is for), and the media are declared in
+   `content/media-manifest.json`. **Two commands carry them**, and which one
+   you reach for is decided by whether the database is on this machine:
+   `node run.mjs content-apply` where it is, and
+   `node run.mjs content-publish --env prod` where it is not — that one asks
+   the running app over its setup surface, so it needs neither a production
+   connection string nor a production bucket key. `node run.mjs content-check
+   --env prod` is then what proves it arrived: every owner answers for its own
+   rows ([`content.md`](content.md)).
 
 Media are referenced **by path, never by row id** — `videoMediaId` is wired
 per environment (an applier's `mediaIdFor("topic/file.mp4")`, or a lookup on
@@ -208,11 +366,23 @@ element back to its shape. The element's `subject` is the **unit's slug**
 (`"wehen-atmung"`), the same string a `<CompanionPanel subject=…>` on that
 unit would use.
 
-**What this shape cannot do.** Video files above the per-kind ceiling in
-`config/media.json` — the browser-to-bucket path is deliberately not built,
-and `docs/visuals.md` says what it would involve. A certificate with
+**A lesson video is not limited by what a form can carry.** The browser writes
+it straight to the bucket and the app checks what landed afterwards — the video
+slot's ceiling is the per-kind one in `config/media.json` (2 GB as shipped),
+not the 10 MB the other three slots have.
+[`docs/visuals.md`](visuals.md) → *The ceiling, and the second way in* is the
+whole mechanism, including the CORS rule the bucket needs before the first
+upload works.
+
+**What this shape cannot do.** A certificate with
 evidentiary weight — a look back over the course is fine, a document that
 claims to prove competence is a promise the vendor has to keep.
+
+**Expose it to AI.** *Needs template 0.16.0 or newer.* This exact schema is
+the worked example in [`docs/content-source.md`](content-source.md) — one
+registry entry and the AI chat can search the lessons and deep-link
+`/dashboard/course/<slug>#<anchor>`. Render the anchors from day one
+(`lib/content-source/anchors.ts`); that doc walks through it.
 
 ---
 
@@ -240,27 +410,48 @@ export const programWeeks = pgTable("program_weeks", {
 ```
 
 The start date is the learner's grant — never a second table that could
-disagree with it. **The entitlement layer does not expose that date yet, so
-widening it is step one of this shape** (it is your app's code): add the
-grant's `createdAt` to `ENTITLEMENT_COLUMNS` and a `grantedAt: Date` field to
-`Entitlement` in `lib/entitlements/manage.ts` — the interface's own comment
-marks additions as safe — and extend the column list its leak-guard test
-pins. Do **not** reach for `listGrantsFor()` instead: that is the Operator's
-read, it carries the operator's `note`, and the same file forbids it on
-member surfaces.
+disagree with it, and the entitlement layer answers it in one call:
 
-**Which grant, when there are two:** the earliest `grantedAt` among the
-grants `entitlementsFor()` returns — that is, among the *currently active*
-ones. A re-buy after a refund therefore restarts the clock, deliberately; and
-for a purchase made without signing in and claimed at first sign-in, the
-clock starts at the claim, not at the payment — say both to the vendor once,
-in `docs/app.md`. A late joiner starts at week one *by construction*, because
-their grant is younger.
+```ts
+import { planStartedAt } from "@/lib/entitlements/manage";
+
+const startedAt = await planStartedAt(memberId, "kurs_komplett");
+// null = no ACTIVE grant for that key. Not "no such product" — an unknown
+// key throws, exactly as hasPlan() does.
+```
+
+Do **not** reach for `listGrantsFor()` instead: that is the Operator's read,
+it carries the operator's `note`, and the same file forbids it on member
+surfaces.
+
+> 🚨 **This used to say something else, and the something else was wrong.**
+> The instruction here was to widen `ENTITLEMENT_COLUMNS` with the grant's
+> `createdAt` and then take *"the earliest `grantedAt` among the grants
+> `entitlementsFor()` returns"*. That reader is a `DISTINCT ON (product_key)`
+> — it returns exactly **one** row per key, chosen by purchase-beats-comp and
+> then furthest `accessUntil`, never by age. "The earliest among them" is
+> vacuous over a single row, and the date it carries belongs to whichever
+> grant won a contest about something else. A learner who bought, refunded and
+> bought again had their clock started on the wrong grant, silently, and the
+> only symptom was a week that opened on the wrong day. `planStartedAt()`
+> aggregates `min(created_at)` over the active grants for that key instead.
+
+**Which grant, when there are two:** the earliest of the *currently active*
+ones, which is what the call above returns. A re-buy after a refund therefore
+restarts the clock, deliberately; and for a purchase made without signing in
+and claimed at first sign-in, the clock starts at the claim, not at the
+payment — say both to the vendor once, in `docs/app.md`. A late joiner starts
+at week one *by construction*, because their grant is younger.
+
+**A paused grant reads `null`, and that is not week one.** A missed payment
+suspends the grant, so it is not active and the clock has no start — say
+"your access is paused" (`suspendedKeysFor()`, `pausedKeys()`), never
+silently render the first week again.
 
 **The unlocking rule — this IS the shape.** A week is visible when
 
 ```
-now >= grantedAt + releaseAfterDays
+now >= startedAt + releaseAfterDays
 ```
 
 computed **on every read**, relative to the **purchase**, never to the
@@ -384,9 +575,77 @@ action itself, not merely un-linked from the page.
 form, and — load-bearing — the **arrived** state: a participant who handed in
 their first text ever must see that it reached a person
 (`<Callout variant="success">`, and the reply rendered when it comes). The
-vendor's reading surface is one page listing what came in, with the reply
-form — **the model is `app/dashboard/admin/users/`**: list, detail, actions,
-toasts and translation in one piece, `requireOwner()` first line.
+vendor's reading surface is **shipped by the module** — see *The answering
+surface* below rather than building a second one.
+
+### The answering surface — the module ships it
+
+**Do not build the list-and-reply pages by hand.** The `courses` module carries
+them, and they are two routes under the operator's course area:
+
+| Route | What it is |
+|---|---|
+| `/dashboard/admin/course/submissions` | the queue: what is waiting, oldest first, plus the twenty most recently answered |
+| `/dashboard/admin/course/submissions/<id>` | one hand-in: the task, what the member wrote, and the box to write back in |
+
+Reached from the course's setup page, and from nowhere else — it has no
+navigation entry of its own, because it is the operator's work queue rather than
+a section of the app. `requireOwner()` guards both pages **and** the reply
+action independently; a `member` and a `moderator` are redirected to
+`/dashboard` by each of them, and with the course switched off every one of the
+three answers what a route that never existed answers.
+
+**Rewriting a reply is allowed. Moving `replied_at` is not.** The freeze belongs
+to the MEMBER: their text is what an answer refers to, and a text that changes
+under its answer makes the answer a lie. Nothing refers to the reply, so
+correcting a typo in front of a paying customer breaks nothing — and the surface
+asks first, because there is no version history and there is not to be one (a
+history of what a coach wrote ABOUT a member is a second body of member-adjacent
+prose with its own retention question). `replied_at` and `replied_by` stay where
+they landed, written through `coalesce` inside the one UPDATE, so two operators
+answering at the same moment cannot overtake each other. An **empty** reply is
+refused rather than treated as an undo — `replied_at` is the condition the
+member's freeze hangs on, and nothing in this module can set it back to null.
+
+🚨 **What it deliberately does NOT have, and adding any of it is not an
+oversight to fix:**
+
+- **no search over all hand-ins** — no search field, no filter argument;
+- **no export of "all the replies"** — what a member wrote is in THEIR subject
+  access request, and an operator-wide export would be a second body with its
+  own retention and deletion question, and no occasion;
+- **no member list for the course.** The queue lists HAND-INS, never people:
+  somebody who has handed nothing in appears nowhere, and there is no route from
+  a member to their course progress. **Who is working through which lesson is
+  purchase information** — the same reasoning with which the community has no
+  roster ([`compliance.md`](compliance.md) §1,
+  [`data-protection.md`](data-protection.md) §14b);
+- **no archive.** The answered list is capped at twenty rather than paged: a
+  browsable body of somebody else's prose is the export above, wearing a
+  different name.
+
+`modules/courses/lib/no-roster.test.ts` reads the data layer as text and fails
+on a reader that grows a `memberId` parameter — the writer's is exempt, because
+storing the session's own account in the statement is a security control rather
+than a lookup.
+
+⚠️ **Two queries, not one, and the index is the reason.**
+`courses_submissions_waiting` is an ordinary btree on
+`(replied_at, submitted_at)`, and Postgres orders an ASC btree NULLS LAST. The
+one query this surface suggests — `ORDER BY replied_at ASC NULLS FIRST,
+submitted_at ASC` — asks for the opposite null order, which that index cannot
+serve: the plan becomes a sort over the whole table and the index built for this
+list goes unused. Waiting and answered are therefore two statements, joined in
+JS, each an ordered index scan. Whoever "simplifies" them into one has removed
+the index, not a query.
+
+**Text a member typed is never rendered as markup.** One renderer,
+`modules/courses/components/member-text.tsx` — paragraphs and line breaks, and
+deliberately not the community's post renderer, which also turns `http(s)` runs
+into anchors: a clickable foreign link written by a member on the screen of the
+one account that may do everything is a phishing surface.
+`modules/courses/lib/render-safety.test.ts` fails the build on the raw-HTML
+escape hatch anywhere in this module's rendering tree.
 
 **The responding path is a person, first-class.** Build the human path at
 full length: submissions listed, read, replied to, the reply reaching the
@@ -405,17 +664,49 @@ unchanged.
 
 | Model | For |
 |---|---|
-| `app/dashboard/admin/users/` | the reading surface — list + detail + actions + translation |
+| `modules/courses/pages/submissions/` | the reading surface — **already built**; edit it, do not rebuild it |
 | `lib/digistore/ipn.test.ts`, `buyUrl.test.ts` | the shape of the tests |
-| `docs/cron.md` | IF a "new submission" mail to the vendor is wanted — mind rule 1, safe to run twice |
+| `modules/courses/cron.ts` | the daily digest — **the module brings it**; it ships OFF, and the section below says how to switch it on |
 
 **Interactive elements.** *Needs template 0.9.0 or newer.* At most an
 optional self-check per week — recipe B in [`docs/learning.md`](learning.md),
 whose recipe C draws the line this shape lives on: the check judges its own
 questions, **never the submitted text**.
 
+### The daily digest — and it ships off
+
+The dot in the sidebar has one property: it is only there while the operator is
+already in the app. So the module also brings a scheduled job,
+`courses-digest` (`modules/courses/cron.ts`), which once a day counts what is
+waiting and mails the operator the number. The full entry is in
+[`docs/cron.md`](cron.md) → *`courses-digest`*.
+
+**What the mail contains: a count and a link to the queue.** It names **nobody**
+— no name, no address, no member id, no lesson title, not a word anybody handed
+in, and not the date of any single hand-in. A mail is delivered to an inbox this
+app does not control and read on whichever device holds it, and who is working
+through which lesson is purchase information: a waiting list in a mail would be
+the roster this module deliberately does not have, in the one channel no code
+here can guard. `modules/courses/lib/cron-boundary.test.ts` holds that
+mechanically.
+
+**How to switch it on.** One entry in `config/cron.json` —
+`"courses-digest": { "enabled": true, "everyMinutes": 720 }`. It ships disabled
+because a job that mails must not start on its own, and leaving it out of that
+file is *not* off (a job with no entry inherits enabled-and-daily). Twelve hours
+for a once-a-day mail is deliberate: the send marker is keyed to the UTC day, so
+a shorter interval means every day is attempted twice and none is skipped when
+the run drifts across midnight — the second attempt reports `already notified
+today` and mails nothing ([`docs/cron.md`](cron.md) → *`courses-digest`*). Two further
+conditions are not this module's: mail delivery has to be configured
+(`node run.mjs mail-setup`) and `config/notifications.json` has to allow operator
+mail. Without either, the job still runs, still counts, and reports why it sent
+nothing — a state you can read in `node run.mjs cron --list`.
+
 **What this shape cannot do.** Notify the vendor of a new submission without
-mail delivery configured (`node run.mjs mail-setup`). Grade automatically —
+mail delivery configured (`node run.mjs mail-setup`) — and the notice is a daily
+digest, never one mail per hand-in: a mail per hand-in is a timestamp per
+hand-in, which is one step nearer to naming its author. Grade automatically —
 by design, in this shape.
 
 ---
@@ -461,6 +752,18 @@ one. An app selling a second course prefixes per product
 (`kurs-a-wehen-atmung`) — and extends shape 1's schema with a scoping column
 and a second gate key, which is a deliberate step, not a copy of the first
 course's tables.
+
+**A lesson page can carry its own discussion, on the same idea.** The question
+about the breathing exercises belongs under the breathing exercises, not in a
+general room where nobody finds it again — so a unit's slug becomes a Subject
+Key, and the page gets one declaration and one component. It is deliberately
+cheap: nothing else is asked of the page, the discussion enforces its own access
+level server-side on top of whatever gate the page already has, and it updates
+itself while somebody is reading. The recipe, the two rules that keep a Subject
+Key from becoming a door, and the transport are in
+[`docs/community.md`](community.md) → ***3. Access is derived at read time, and
+stored nowhere***. (It needs the community switched on; that is one line in
+`config/community.json` and a deploy.)
 
 ---
 

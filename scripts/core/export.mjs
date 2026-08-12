@@ -49,7 +49,17 @@ const targetAbs = target ? path.resolve(target) : "";
 const refusal = refuseTarget(targetAbs, ROOT);
 if (refusal) fail(refusal);
 
+const { moduleCoreExports } = await import("../modules/inventory.mjs");
+
 const manifest = JSON.parse(readFileSync(path.join(ROOT, "config", "core-export.json"), "utf8"));
+// Plus whatever an INSTALLED module contributes through `coreExport`.
+//
+// ⚠️ `modules/api/keys/rules.ts` was typed into the core's own list until this
+// existed, so an app that never ran `module add api` copied it into its
+// companion repo regardless — a shared "core" file for a feature that app does
+// not have. Merged rather than listed, for the same reason every other module
+// contribution is: the core names no module.
+manifest.files = [...manifest.files, ...moduleCoreExports()].sort();
 const version = JSON.parse(readFileSync(path.join(ROOT, "package.json"), "utf8")).version;
 
 // The template side: what WOULD be exported, hashed.

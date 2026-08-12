@@ -19,7 +19,7 @@
 // `node run.mjs data-export` — a subject access request covers what somebody
 // typed into a chat window as much as anything else.
 import { pgTable, text, timestamp, pgEnum, index } from "drizzle-orm/pg-core";
-import { users } from "./schema";
+import { users } from "./schema-core";
 
 /** Who said it. Mirrors the two roles the Messages API accepts. */
 export const chatRoleEnum = pgEnum("chat_role", ["user", "assistant"]);
@@ -63,6 +63,28 @@ export const chatMessages = pgTable(
     // answer. `text` rather than `varchar(n)` because the model's answer length
     // is bounded in tokens, and tokens are not characters.
     content: text("content").notNull(),
+    // The `[link:…]` markers this answer actually used — the whitelist that
+    // makes them render, kept with the words they belong to.
+    //
+    // ── Why this column exists at all ─────────────────────────────────────
+    // The set is composed per REQUEST, from the content hits a source returned
+    // while the answer was being written (lib/ai/content-links.ts). Without
+    // this column that set dies with the request: the stored answer still
+    // contains the markers, the page that reloads it has no whitelist for
+    // them, and every link the customer had yesterday is raw bracket text
+    // today. That reads as a rendering bug, and the tempting "fix" — render
+    // any marker that parses — throws the whole control away.
+    //
+    // NULL is "no links", and every row written before this column reads back
+    // that way: no backfill, no default, and the fail-safe direction is the
+    // one that costs a link rather than the one that invents one. Only markers
+    // the finished answer really carries are stored (`ledger.used()`), never
+    // everything she was offered.
+    //
+    // Contents are paths and titles of this app's own pages — nothing personal
+    // beyond what the row already holds, and it cascades with the account like
+    // the rest of it (docs/data-protection.md).
+    links: text("links").array(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [

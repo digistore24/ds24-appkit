@@ -16,7 +16,7 @@
 // local gate is green is exactly this, and docs/content.md is the story. This
 // command is the step that closes the gap, and it is a DELIBERATE step: it
 // runs when you run it, in DEV after editing content, and against production
-// as a named go-live step (go-live §5 — `content-check --env prod` green is
+// as a named go-live step (go-live §5 — ⚠️ the automatic proof that it ARRIVED
 // the exit condition, so forgetting this command cannot stay quiet).
 //
 // Three things happen, in an order that matters:
@@ -29,12 +29,14 @@
 //   B. **Bytes.** Every entry whose file is on this machine (committed under
 //      `content/media/`, or staged in `.data/content-media/`) is copied into
 //      the store — HEAD first, so what is already there is skipped.
-//   C. **Appliers.** Every module under `scripts/content/appliers/` gets its
-//      `apply(sql, { mediaIdFor })` run inside a transaction — that is where
+//   C. **Appliers.** Every file under `scripts/content/appliers/` — and every
+//      one an installed MODULE declares (`appliers` in its manifest) — gets its
+//      `apply(sql, { mediaIdFor })` run inside a transaction. That is where
 //      THIS app's own tables (course blocks, units, catalog rows) are
 //      upserted from the content files, keyed by slug, so a re-run asserts
-//      instead of duplicating. The convention, with a worked example:
-//      docs/content.md.
+//      instead of duplicating. The core's run first, then the modules' in
+//      install order; `scripts/content/_appliers.mjs` says why. The convention,
+//      with a worked example: docs/content.md.
 //
 // Which DATABASE the rows go into is the DATABASE_URL this process sees —
 // against production, set it in the shell for one command, exactly the
@@ -46,16 +48,11 @@
 // No manifest and no appliers is a fast, honest no-op — an app that ships no
 // content has nothing to apply.
 import { randomUUID, createHash } from "node:crypto";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { join } from "node:path";
 
-import {
-  CONTENT_MEDIA_MANIFEST,
-  CONTENT_MEDIA_SHIPPED_DIR,
-  CONTENT_MEDIA_STAGED_DIR,
-} from "../../lib/content-media/rules.mjs";
-import { loadManifest, keyFor } from "./_manifest.mjs";
+import { CONTENT_MEDIA_MANIFEST } from "../../lib/content-media/rules.mjs";
+import { loadManifest, keyFor, localFileFor } from "./_manifest.mjs";
 import {
   describeStore,
   isLocalDatabaseUrl,
@@ -64,10 +61,10 @@ import {
   storeForEnv,
 } from "../lib/media-env.mjs";
 import { reportSync, syncItems } from "../lib/store-sync.mjs";
+import { applierSources } from "./_appliers.mjs";
 import "../lib/env.mjs";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
-const APPLIERS_DIR = join(ROOT, "scripts", "content", "appliers");
 
 const argv = process.argv.slice(2);
 // run.mjs passes --apply by itself (the ds24-sync convention: the command is
@@ -86,33 +83,6 @@ function bad(line) {
   failed = true;
 }
 
-/** The applier modules, sorted so the run order is stable and predictable. */
-function applierFiles() {
-  let entries;
-  try {
-    entries = readdirSync(APPLIERS_DIR);
-  } catch {
-    return [];
-  }
-  return entries.filter((name) => name.endsWith(".mjs") && !name.startsWith("_")).sort();
-}
-
-/** Where an entry's file is on THIS machine: shipped leg first, then staged. */
-function localFileFor(path) {
-  for (const [leg, dir] of [
-    ["shipped", CONTENT_MEDIA_SHIPPED_DIR],
-    ["staged", CONTENT_MEDIA_STAGED_DIR],
-  ]) {
-    const full = join(ROOT, ...dir.split("/"), ...path.split("/"));
-    try {
-      if (statSync(full).isFile()) return { leg, full };
-    } catch {
-      // keep looking
-    }
-  }
-  return null;
-}
-
 async function main() {
   const resolvedEnv = resolveTargetEnv(argv);
   if (resolvedEnv.error) {
@@ -123,14 +93,15 @@ async function main() {
   const crossEnv = env !== machineEnv();
 
   const manifest = loadManifest(ROOT);
-  const appliers = applierFiles();
+  const appliers = applierSources(ROOT);
 
   // The no-op branch — fast and one line, because an app that ships no
   // content runs this in every go-live checklist anyway.
   if (manifest.missing && appliers.length === 0) {
     console.log(
-      `Nothing to apply — no ${CONTENT_MEDIA_MANIFEST} and no scripts/content/appliers/. ` +
-        "An app that ships content declares it there (docs/content.md).",
+      `Nothing to apply — no ${CONTENT_MEDIA_MANIFEST} and no applier, in the core's ` +
+        "scripts/content/appliers/ or in any installed module. An app that ships " +
+        "content declares it there (docs/content.md).",
     );
     return;
   }
@@ -168,11 +139,18 @@ async function main() {
 
   // ── A. Media rows ──────────────────────────────────────────────────────────
   // An entry with no local file and no recorded hash cannot become an honest
-  // row (bytes and sha256 are NOT NULL for a reason) — that is a named warning
-  // here and content-check's red line, never a row with invented numbers.
+  // row — that is a named warning here and a red line, never a row with
+  // invented numbers.
+  //
+  // ⚠️ Not because the columns forbid it: `media.sha256` became nullable with
+  // the direct-to-bucket path, where the app genuinely never holds the bytes
+  // and null means "no answer". This writer is the opposite case — it HAS the
+  // file or it has nothing — so an absent hash here would be a gap it could
+  // have filled, and a made-up one would be a lie in a column whose whole use
+  // is "is this the same file again".
   const rows = [];
   for (const entry of entries) {
-    const file = localFileFor(entry.path);
+    const file = localFileFor(ROOT, entry.path);
     if (file) {
       const body = readFileSync(file.full);
       rows.push({
@@ -251,20 +229,20 @@ async function main() {
 
     // ── C. Appliers ──────────────────────────────────────────────────────────
     if (appliers.length > 0) console.log("");
-    for (const name of appliers) {
+    for (const { label, file } of appliers) {
       if (!apply) {
-        warn(`applier ${name} — would run`);
+        warn(`applier ${label} — would run`);
         continue;
       }
       let module;
       try {
-        module = await import(pathToFileURL(join(APPLIERS_DIR, name)).href);
+        module = await import(pathToFileURL(file).href);
       } catch (error) {
-        bad(`applier ${name} — cannot be loaded: ${error.message}`);
+        bad(`applier ${label} — cannot be loaded: ${error.message}`);
         continue;
       }
       if (typeof module.apply !== "function") {
-        bad(`applier ${name} — exports no apply(sql, helpers) function (docs/content.md has the convention)`);
+        bad(`applier ${label} — exports no apply(sql, helpers) function (docs/content.md has the convention)`);
         continue;
       }
       try {
@@ -283,9 +261,9 @@ async function main() {
           };
           return module.apply(tx, { mediaIdFor });
         });
-        ok(`applier ${name} — ${Number.isFinite(count) ? `${count} row(s) asserted` : "ran"}`);
+        ok(`applier ${label} — ${Number.isFinite(count) ? `${count} row(s) asserted` : "ran"}`);
       } catch (error) {
-        bad(`applier ${name} — failed and was rolled back: ${error.message}`);
+        bad(`applier ${label} — failed and was rolled back: ${error.message}`);
       }
     }
 

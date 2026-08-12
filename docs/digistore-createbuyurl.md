@@ -19,6 +19,22 @@ the thank-you URL, the cache *and* the DEV test-payment parameter — and they
 return `{ url: null, blocker }` instead of throwing, so a page never renders a
 dead button. Reach for them first.
 
+`/plans` uses **both**, and which one depends on whether anybody is signed in
+(`app/plans/page.tsx`):
+
+- **Signed in → built on click.** A button posts to a server action
+  (`app/plans/actions.ts`), which calls `ensureCheckoutToken(memberId)` and then
+  `checkoutLinkFor(def, { buyer, customTracking: buildIdentity({ … }) })`. The
+  identity travels to Digistore24 in `tracking[custom]` and comes back on every
+  later event, which is how the payment finds its owner even when the buyer paid
+  under a different address. Nothing is asked of Digistore24 while the page
+  renders.
+- **Signed out → the shared cached link.** `checkoutLinksFor` maps registry
+  entries onto offers, sets the thank-you URL (`/optin/[ORDER_ID]`) and returns
+  `{ url }` or `{ url: null, blocker }`.
+
+Both need a **`writable`** key.
+
 The layer underneath, for a checkout you genuinely build yourself:
 
 ```ts

@@ -16,6 +16,7 @@ import { users } from "@/db/schema";
 import { eq, count, asc } from "drizzle-orm";
 import { requireActiveUser } from "@/lib/authz";
 import type { Role } from "@/lib/roles";
+import { MODULES } from "@/lib/modules/registry";
 import {
   canCreateUser,
   canChangeRole,
@@ -234,7 +235,45 @@ export async function deleteUser(actor: Actor, targetId: string): Promise<void> 
   const { deleteOwnedMedia } = await import("@/lib/media/manage");
   await deleteOwnedMedia(targetId);
 
-  await db.delete(users).where(eq(users.id, targetId));
+  await deleteAccountRow(targetId);
+}
+
+/**
+ * The row itself, with everything that has to happen in the SAME transaction.
+ *
+ * Both deletion paths — the operator's button above and the member's own
+ * self-service below — go through here, because "what leaves with a person" is
+ * one answer and two copies of it would drift the first time a table is added.
+ *
+ * What is here rather than in a cascade: anything a member WROTE whose row has
+ * to outlive the account. A cascade removes rows keyed by the member; it cannot
+ * help where the row must survive and only the words must go — a post that is
+ * one turn in a conversation other people are still having, a message that is
+ * one half of a correspondence whose other participant keeps their own side
+ * (FR-203). For those the foreign keys are `set null` and the text is taken out
+ * explicitly, in the same transaction as the delete, so there is no window
+ * where the account is gone and the words are not.
+ *
+ * Each installed module answers that for its own tables — see the loop below.
+ * This function names none of them, and that is the point: adding a module must
+ * not mean remembering to edit this file.
+ */
+async function deleteAccountRow(memberId: string): Promise<void> {
+  await db.transaction(async (tx) => {
+    // Every installed module scrubs what this member wrote, in the SAME
+    // transaction and before the row goes — so there is no window where the
+    // account is gone and the words are not.
+    //
+    // 🚨 Not gated on anything. A module that is installed but switched off
+    // still holds every row written while it was on; the manifest refuses a
+    // module that declares tables without `erase: true`, so a module holding
+    // rows about a person cannot reach this loop without a way to erase them.
+    // With no module installed `MODULES` is empty and this is a bare
+    // `DELETE FROM users` — which is the right answer for an app that holds
+    // nothing but the core's own tables.
+    for (const mod of MODULES) await mod.eraseFor?.(tx, memberId);
+    await tx.delete(users).where(eq(users.id, memberId));
+  });
 }
 
 /**
@@ -252,9 +291,11 @@ export async function deleteUser(actor: Actor, targetId: string): Promise<void> 
  *
  * ── What survives, and why the caller has to say so ───────────────────────
  * `db/schema*.ts` decides this, not this function. Going with the account
- * (`cascade`): sessions, OAuth links, chat transcripts, MCP keys, grants,
- * pending address changes, consent records, and the impersonation rows that
- * name this member. Staying with the member link set to `null`: `orders`,
+ * (`cascade`): sessions, OAuth links, chat transcripts, API keys, grants,
+ * pending address changes, consent records, the impersonation rows that name
+ * this member, and their community profile — the name they chose and what they
+ * wrote about themselves is their own description of themselves, with nothing
+ * behind it that outlives them. Staying with the member link set to `null`: `orders`,
  * `subscriptions`, `token_ledger`, `ai_usage` — accounting records that
  * § 147 AO and § 257 HGB require to be kept and that Art. 17(3)(b) exempts from
  * erasure while that obligation runs.
@@ -288,7 +329,7 @@ export async function deleteOwnAccount(): Promise<void> {
   const { deleteOwnedMedia } = await import("@/lib/media/manage");
   await deleteOwnedMedia(actor.id);
 
-  await db.delete(users).where(eq(users.id, actor.id));
+  await deleteAccountRow(actor.id);
 }
 
 /**

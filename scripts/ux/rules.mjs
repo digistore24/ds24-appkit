@@ -11,6 +11,11 @@
 
 // ── The rules, as data ───────────────────────────────────────────────────────
 
+// One implementation, in scripts/lib/source-text.mjs — sixteen local copies had
+// drifted into four behaviours, and three of them let a `//` comment containing
+// `/*` swallow every line down to the next `*/`. This file was one of the three,
+// and it is the one that ships: `node run.mjs ux-check` in the customer's app.
+import { blankComments } from "../lib/source-text.mjs";
 /**
  * Text on a surface, measured against WCAG 2.1 AA (4.5:1 for normal text).
  *
@@ -89,10 +94,20 @@ const RAW_ELEMENTS = ["button", "select", "textarea", "table"];
 export function parseHsl(value) {
   const m = /^hsl\(\s*([\d.]+)\s+([\d.]+)%\s+([\d.]+)%\s*\)$/.exec(value.trim());
   if (!m) return null;
-  const h = Number(m[1]) / 360;
-  const s = Number(m[2]) / 100;
-  const l = Number(m[3]) / 100;
+  return hslToRgb(Number(m[1]), Number(m[2]) / 100, Number(m[3]) / 100);
+}
 
+/**
+ * `h` in 0–360, `s` and `l` in 0–1 → `[r, g, b]`, 0–255.
+ *
+ * Split out of `parseHsl` for `node run.mjs brand`, which has to try HUNDREDS
+ * of candidate lightnesses per mode before it writes a token. It is the same
+ * arithmetic either way; the point of sharing it is that the colour the command
+ * proposes and the colour `ux-check` later judges can never be computed two
+ * different ways.
+ */
+export function hslToRgb(h, s, l) {
+  const hue = ((h % 360) + 360) % 360 / 360;
   if (s === 0) {
     const v = Math.round(l * 255);
     return [v, v, v];
@@ -108,10 +123,15 @@ export function parseHsl(value) {
     return p;
   };
   return [
-    Math.round(channel(h + 1 / 3) * 255),
-    Math.round(channel(h) * 255),
-    Math.round(channel(h - 1 / 3) * 255),
+    Math.round(channel(hue + 1 / 3) * 255),
+    Math.round(channel(hue) * 255),
+    Math.round(channel(hue - 1 / 3) * 255),
   ];
+}
+
+/** `[r, g, b]` → `#rrggbb`. The form a manifest, a mail or an OG card wants. */
+export function rgbToHex([r, g, b]) {
+  return `#${[r, g, b].map((c) => c.toString(16).padStart(2, "0")).join("")}`;
 }
 
 /** WCAG 2.1 relative luminance. */
@@ -145,11 +165,9 @@ export function contrastRatio(rgbA, rgbB) {
 export function parseTokens(css) {
   /** @type {(selector: string) => Record<string, string>} */
   const block = (selector) => {
-    const start = css.indexOf(`${selector} {`);
-    if (start === -1) return {};
-    const end = css.indexOf("\n}", start);
-    if (end === -1) return {};
-    const body = css.slice(start, end);
+    const range = blockRange(css, selector);
+    if (!range) return {};
+    const body = css.slice(range.start, range.end);
     const out = {};
     for (const m of body.matchAll(/^\s*--([a-z0-9-]+):\s*([^;]+);/gim)) {
       out[m[1]] = m[2].trim();
@@ -159,12 +177,69 @@ export function parseTokens(css) {
   return { light: block(":root"), dark: block(".dark") };
 }
 
+/**
+ * Where a token block starts and ends in `app/globals.css`.
+ *
+ * 🚨 Exported so that the READER above and the WRITER (`node run.mjs brand`,
+ * which rewrites three token lines in place) can never hold different opinions
+ * about where `:root` ends. Without that, a writer with its own idea of the
+ * boundary could land a token inside `@theme inline`, where it would be
+ * syntactically fine, invisible to `parseTokens`, and wrong.
+ *
+ * @returns {{ start: number, end: number } | null}
+ */
+export function blockRange(css, selector) {
+  const start = css.indexOf(`${selector} {`);
+  if (start === -1) return null;
+  const end = css.indexOf("\n}", start);
+  if (end === -1) return null;
+  return { start, end };
+}
+
+/**
+ * Every pair above that mentions `token`, with the minimum it has to clear.
+ *
+ * 🚨 The anti-drift move for `node run.mjs brand`. That command has to know
+ * which ratios an accent must satisfy before it writes one — and the day
+ * somebody adds `["primary", "popover"]` to TEXT_PAIRS, it starts enforcing
+ * that too, in the same commit, instead of proposing a colour `ux-check` then
+ * rejects. A retyped list would have to be remembered; this cannot be.
+ *
+ * @returns {{ fg: string, bg: string, min: number }[]}
+ */
+export function pairsTouching(token) {
+  return [
+    ...TEXT_PAIRS.map(([fg, bg]) => ({ fg, bg, min: 4.5 })),
+    ...RING_PAIRS.map(([fg, bg]) => ({ fg, bg, min: 3 })),
+  ].filter((pair) => pair.fg === token || pair.bg === token);
+}
+
 // ── The source scans ─────────────────────────────────────────────────────────
 
 const lineAt = (source, index) => source.slice(0, index).split(/\r?\n/).length;
 
 /** Every hard-coded colour — the ones that do not follow into dark mode. */
+/**
+ * Comments, blanked to spaces — same length, same line numbers.
+ *
+ * 🚨 **Every finder below scans JSX as TEXT, so a file that EXPLAINS an element
+ * was reported for using it.** Measured on `modules/community/components/pager.tsx`:
+ * its header says, at length, that a disabled step "renders as a plain disabled
+ * `<button>`" instead of a link — and the file itself uses `<Button>` throughout.
+ * `ux-check` reported two raw `<button>` elements at the two comment lines and
+ * exited non-zero. A confident false finding in the one check whose whole job is
+ * telling somebody their page is wrong.
+ *
+ * Blanked rather than removed, because the findings carry LINE NUMBERS: dropping
+ * the characters would shift every position after the first comment, and a
+ * finding at the wrong line is barely better than no finding.
+ *
+ * `//` preceded by a colon is not a comment — `href="https://…"` is the case,
+ * and blanking it would hide whatever followed on that line.
+ */
+
 export function findPaletteClasses(source) {
+  source = blankComments(source);
   const patterns = [
     new RegExp(
       `\\b(?:${COLOR_UTILITIES})-(?:${PALETTE})-(?:50|[1-9]00|950)\\b`,
@@ -181,6 +256,211 @@ export function findPaletteClasses(source) {
     }
   });
   return hits;
+}
+
+// ── The dials, and anything written past one ─────────────────────────────────
+
+/**
+ * The five ways a page can write a VALUE where the design system has a dial.
+ *
+ * docs/design-system.md §8 says the app has a short, closed list of things that
+ * are configurable — the accent, the type, the radius, the elevation — and that
+ * everything else is composition. That sentence is prose, and prose is not a
+ * boundary: this list is what makes it one.
+ *
+ * The seam is `sourceFiles()` in check.mjs, which already excludes
+ * `components/ui/`, so the kit's own `shadow-lg` on a <Dialog> is out of reach
+ * by construction and no rule here needs a path. It walks `modules/` too, so a
+ * module's component is measured before anybody installs it.
+ *
+ * `{ id, dial, pattern, why }` — exported as DATA rather than hidden inside the
+ * finder, because rules.test.ts drives an `it.each` over it and pins its LENGTH.
+ * A table-driven test over a table an edit quietly emptied passes; the pin is
+ * what turns that silence into a red run.
+ *
+ * Three shapes are deliberately NOT in here, each for a reason that is a
+ * decision rather than an oversight:
+ *
+ *   · `style={{ … }}` — app/opengraph-image.tsx renders through satori with
+ *     inline styles and knows nothing of classes. Every pattern below is
+ *     anchored on a Tailwind CLASS (`utility-[…]`, a size word, a theme key),
+ *     so an inline `color: "#0b1220"` cannot match one. That is by construction
+ *     and not by exclusion — a confident false finding in the one check whose
+ *     job is telling somebody their page is wrong is how the check stops being
+ *     read.
+ *   · `font-sans` / `font-mono` — both name a ROLE, and `font-mono` is a
+ *     legitimate thing to write on a page (a code span). A role is what the
+ *     dial turns; naming one is not writing past it.
+ *   · `shadow-none` — it sets no value, so it turns no dial. A page taking an
+ *     elevation back off something the kit raised is a composition decision,
+ *     and §8 does not name it.
+ */
+export const DIAL_BYPASSES = [
+  {
+    id: "fontArbitrary",
+    dial: "type",
+    // `font-['Playfair']`, `font-[--my-var]`. The face is one variable, filled
+    // once in app/layout.tsx — a page naming its own is a second type system.
+    pattern: /(?<![\w-])font-\[[^\]\s]*\]/g,
+    why: "The type dial is --font-app-sans / --font-app-heading, wired in app/layout.tsx.",
+  },
+  {
+    id: "shadowArbitrary",
+    dial: "elevation",
+    // `shadow-[0_2px_8px_rgba(0,0,0,.3)]` — a depth nobody chose, and one that
+    // is near-invisible in dark mode for the reason app/globals.css spells out.
+    pattern: /(?<![\w-])shadow-\[[^\]\s]*\]/g,
+    why: "The elevation dial is --elevation-raised / --elevation-overlay in app/globals.css.",
+  },
+  {
+    id: "shadowSize",
+    dial: "elevation",
+    // A bare size word. `@theme inline` maps all seven onto the two elevation
+    // tokens, so `shadow-lg` RESOLVES correctly — the objection is that it
+    // picks a step out of Tailwind's vocabulary instead of naming the app's
+    // role, and there are only two roles. `shadow-(--elevation-overlay)`
+    // compiles to the identical declaration and says which one.
+    //
+    // ⚠️ The lookbehind is what keeps `inset-shadow-sm` out: Tailwind v4's
+    // inset shadows are a different property and app/globals.css deliberately
+    // maps none of them, so they are not this dial either.
+    pattern: /(?<![\w-])shadow-(?:2xs|2xl|xs|sm|md|lg|xl)(?![\w-])/g,
+    why: "The elevation dial has two steps, named after the role they play.",
+  },
+  {
+    id: "hexArbitrary",
+    dial: "accent",
+    // 🚨 Anchored on the arbitrary-value BRACKET, never on a bare `#rrggbb`
+    // anywhere in the text. Every hex in app/opengraph-image.tsx and in
+    // lib/email.ts is legal — those two cannot use classes at all — and a rule
+    // that read them would be red on a fresh clone for ever.
+    pattern: /(?<![\w-])[a-z][a-z0-9-]*-\[#[0-9a-fA-F]{3,8}\]/g,
+    why: "A colour written here does not follow into dark mode and survives no recolour.",
+  },
+  {
+    id: "fontHeading",
+    dial: "type",
+    // 🚨 The utility Story 43.2's `@theme inline` entry generates, and there is
+    // no naming that avoids it: a `--font-*` key ALWAYS produces the matching
+    // class (`--font-sans` produces `font-sans` today). The heading face's
+    // reach is the `h1` rule in `@layer base`, not a class somebody writes — so
+    // the class is reported rather than prevented. A sanctioned-looking escape
+    // hatch is exactly the loophole this list exists to close.
+    pattern: /(?<![\w-])font-heading(?![\w-])/g,
+    why: "The heading face reaches h1 through app/globals.css, never through a class.",
+  },
+];
+
+/**
+ * Every value written past a dial, with the dial it bypasses.
+ *
+ * One hit per match, per line — the same shape `findPaletteClasses` uses, so
+ * two bypasses on one line are two hits and the count in check.mjs's header
+ * line is a count of BYPASSES rather than of files.
+ *
+ * @param {string} source
+ * @returns {{ line: number, found: string, dial: string }[]}
+ */
+export function findDialBypasses(source) {
+  source = blankComments(source);
+  const hits = [];
+  source.split(/\r?\n/).forEach((line, i) => {
+    for (const bypass of DIAL_BYPASSES) {
+      for (const m of line.matchAll(bypass.pattern)) {
+        hits.push({ line: i + 1, found: m[0], dial: bypass.dial });
+      }
+    }
+  });
+  return hits;
+}
+
+/**
+ * Tokens that legitimately live in ONE mode block, with the reason each does.
+ *
+ * A set with reasons, never a count — the argument `scripts/security/accepted.mjs`
+ * and `scripts/deps.test.ts` both make about their own sets: a test that
+ * asserted "there is one exception" would go green on the day a second, wrong
+ * one was added, and an entry that stops matching anything is good news rather
+ * than a regression. So nothing anywhere asserts how many entries are here.
+ *
+ * An id with no reason reads as an arbitrary exemption to whoever finds it
+ * next, which is why the value is prose and not `true`.
+ */
+export const MODE_SINGLE_TOKENS = {
+  radius:
+    "A corner does not change with the mode. --radius is a length, not a " +
+    "colour, and the dark block has nothing to say about it — repeating it " +
+    "there would be a second place to edit the same decision.",
+};
+
+/** The line a token's declaration sits on inside one of the two blocks. */
+function tokenLine(css, selector, token) {
+  const range = blockRange(css, selector);
+  if (!range) return 1;
+  const body = css.slice(range.start, range.end);
+  // Token names come out of parseTokens' own `[a-z0-9-]+`, so there is nothing
+  // in one to escape.
+  const found = new RegExp(`^\\s*--${token}:`, "m").exec(body);
+  return lineAt(css, range.start + (found ? found.index : 0));
+}
+
+/**
+ * Tokens present in `:root` and absent from `.dark`, or the reverse.
+ *
+ * The classic mistake is writing one block and forgetting the other, and it
+ * fails in the mode nobody was looking at — silently, because a missing token
+ * inherits rather than erroring. NFR-69: both blocks, always.
+ *
+ * 🚨 Read through `parseTokens()` and never a second parser, for the reason
+ * `blockRange()`'s own comment gives: a second opinion about where `:root` ends
+ * is a second opinion about what a token IS.
+ *
+ * An EMPTY block is one finding of its own rather than N unpaired tokens — the
+ * fact is that the block is gone, and listing thirty-three tokens would bury
+ * it. Both empty (an unparseable file) is therefore two findings and never an
+ * empty result: "nothing found" and "nothing looked at" must not be the same
+ * answer.
+ *
+ * @param {string} css
+ * @returns {{ kind: "unpaired" | "emptyBlock", token: string | null,
+ *             presentIn: string | null, missingFrom: string, line: number }[]}
+ */
+export function findUnpairedTokens(css) {
+  const { light, dark } = parseTokens(css);
+
+  const empty = [];
+  for (const [selector, set] of [
+    [":root", light],
+    [".dark", dark],
+  ]) {
+    if (Object.keys(set).length === 0) {
+      empty.push({
+        kind: "emptyBlock",
+        token: null,
+        presentIn: null,
+        missingFrom: selector,
+        line: blockRange(css, selector) ? lineAt(css, blockRange(css, selector).start) : 1,
+      });
+    }
+  }
+  if (empty.length > 0) return empty;
+
+  const findings = [];
+  for (const token of [...new Set([...Object.keys(light), ...Object.keys(dark)])].sort()) {
+    if (Object.prototype.hasOwnProperty.call(MODE_SINGLE_TOKENS, token)) continue;
+    const inLight = Object.prototype.hasOwnProperty.call(light, token);
+    const inDark = Object.prototype.hasOwnProperty.call(dark, token);
+    if (inLight && inDark) continue;
+    const presentIn = inLight ? ":root" : ".dark";
+    findings.push({
+      kind: "unpaired",
+      token,
+      presentIn,
+      missingFrom: inLight ? ".dark" : ":root",
+      line: tokenLine(css, presentIn, token),
+    });
+  }
+  return findings;
 }
 
 /**
@@ -200,6 +480,7 @@ export function findPaletteClasses(source) {
  *            Reported so they stay visible, never failed.
  */
 export function findRawElements(source) {
+  source = blankComments(source);
   const hits = [];
 
   // Radix composition: `<DropdownMenuItem asChild><button …>` MERGES the two —
@@ -254,6 +535,7 @@ export function findRawElements(source) {
  * and its children, and is why this does not try to match nested JSX.
  */
 export function findUnnamedIconButtons(source) {
+  source = blankComments(source);
   const hits = [];
   const lines = source.split(/\r?\n/);
   for (const m of source.matchAll(/<Button\b/g)) {
@@ -270,6 +552,7 @@ export function findUnnamedIconButtons(source) {
 
 /** `<img>` / `<Image>` with no `alt`. An empty `alt=""` is a decision and passes. */
 export function findImagesWithoutAlt(source) {
+  source = blankComments(source);
   const hits = [];
   for (const m of source.matchAll(/<(img|Image)\b[^>]*>/g)) {
     if (/\salt=/.test(m[0])) continue;
@@ -292,6 +575,7 @@ export function findImagesWithoutAlt(source) {
  * page that replaces it is the skill `salespage` (docs/salespage.md).
  */
 export function findPlaceholderHome(source) {
+  source = blankComments(source);
   const hits = [];
 
   for (const m of source.matchAll(/["']features\.authTitle["']/g)) {
@@ -316,8 +600,24 @@ export function findPlaceholderHome(source) {
 
 /** The `href`s declared in NAVIGATION, or null if the list cannot be found. */
 export function navHrefs(appShellSource) {
-  const start = appShellSource.indexOf("export const NAVIGATION");
-  if (start === -1) return null;
-  const body = appShellSource.slice(start);
+  // TWO shapes, because a menu is declared in two places and only one of them
+  // can be a top-level const. The core writes `export const NAVIGATION = [...]`
+  // in `components/app-shell.tsx`; a MODULE writes `NAVIGATION: [...]` as a
+  // property of the `ModuleNav` object it default-exports, because that is what
+  // the interface asks for.
+  //
+  // ⚠️ `lib/modules/nav.ts` has always claimed this worked — *"Named
+  // `NAVIGATION`, exactly like the core's, and that is load-bearing: navHrefs()
+  // finds a menu by that name"* — and until this reader learned the second shape
+  // it did not. Nothing went red, because `ux-check` was also missing the
+  // module's PAGES; the two errors cancelled into a green result, and fixing
+  // either alone produces a confident false finding.
+  //
+  // The declaration is matched rather than the bare word, so a comment that
+  // mentions NAVIGATION does not become the start of the menu.
+  const declaration = /export\s+const\s+NAVIGATION\b|^\s*NAVIGATION\s*:/m;
+  const found = declaration.exec(appShellSource);
+  if (!found) return null;
+  const body = appShellSource.slice(found.index);
   return [...body.matchAll(/href:\s*["']([^"']+)["']/g)].map((m) => m[1]);
 }

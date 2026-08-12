@@ -42,7 +42,28 @@ const SCANNED_DIRS = ["app", "lib", "scripts"];
  * reason as a comment beside it. Empty at introduction, and meant to stay
  * close to it: an entry here is a reviewed decision, never a quick fix.
  */
-const ALLOWLIST: string[] = [];
+const ALLOWLIST: string[] = [
+  // `scripts/dev/journey.mjs` — the project's path as DATA. One of its thirty-one
+  // rows is the step `knowledge-intake`, and what proves that step done is that
+  // the corpus folder EXISTS: the intake creates it, a fresh app has none. So the
+  // path appears there as a `{ kind: "dir", path }` trace and in the comment
+  // explaining it.
+  //
+  // 🚨 **Why this is a decision and not a hole.** AD-51 forbids the corpus being
+  // a runtime KNOWLEDGE path — the chat answering out of raw material nobody
+  // curated. This file never opens anything in the folder: it asks `readdirSync`
+  // whether there is one, exactly as it asks whether `docs/design.md` is there. It
+  // is not runtime code either — nothing under `app/` or `lib/` imports it; it is
+  // read by `node run.mjs journey` and by the session greeting, which are the
+  // agent's own orientation and were always allowed to know the corpus exists
+  // (`docs/knowledge.md` and the intake skill say so at length, and those trees
+  // are deliberately not scanned).
+  //
+  // What is still forbidden here, and what this entry must never be stretched to
+  // cover: reading a file out of that folder, passing any of it to a model, or
+  // putting the path into anything `app/` or `lib/` can import.
+  "scripts/dev/journey.mjs",
+];
 
 /** All file types are scanned — a JSON fixture naming the corpus path is the
  * same boundary breach as an import. Only genuinely binary files are skipped,

@@ -1,0 +1,4 @@
+{
+  "_comment": "Which optional modules is this app made of? A module is a whole feature — its pages, its tables, its texts, its guidance — that lives under modules/<id>/ and is either part of this app or is not. The list ships EMPTY: a fresh app is the core, and nothing else. Add one with `node run.mjs module add <id>`; that command edits this file, and the next build carries it. ⚠ This is NOT a feature switch. `config/community.json` answers 'should the community run', this file answers 'does this app HAVE a community at all' — and the two fail in opposite directions on purpose: an unreadable feature switch means OFF, an unreadable module list is refused outright. Guessing 'no modules' would make an app forget tables it still holds, which is how a subject access request gets answered with silence about real data. See docs/modules.md.",
+  "installed": []
+}

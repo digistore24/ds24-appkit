@@ -25,6 +25,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { blankComments } from "@/scripts/lib/source-text.mjs";
 
 /** The app root (this file sits in lib/entitlements/). */
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -76,9 +77,7 @@ function read(relPath: string): string {
  * line and hide a real call behind it.
  */
 function code(relPath: string): string {
-  return read(relPath)
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+  return blankComments(read(relPath));
 }
 
 describe("the Member never sees the Operator's reason", () => {

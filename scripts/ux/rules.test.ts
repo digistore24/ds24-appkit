@@ -19,6 +19,10 @@ import {
   parseHsl,
   contrastRatio,
   parseTokens,
+  DIAL_BYPASSES,
+  MODE_SINGLE_TOKENS,
+  findDialBypasses,
+  findUnpairedTokens,
   findPaletteClasses,
   findRawElements,
   findUnnamedIconButtons,
@@ -134,6 +138,259 @@ describe("findPaletteClasses", () => {
 
   it("reports the line it is on", () => {
     expect(findPaletteClasses("a\nb\n<p className='text-red-700'>")[0]?.line).toBe(3);
+  });
+});
+
+describe("findDialBypasses", () => {
+  it("finds an arbitrary font", () => {
+    const hits = findDialBypasses(`<h1 className="font-['Playfair_Display']">`);
+    expect(hits).toEqual([
+      { line: 1, found: "font-['Playfair_Display']", dial: "type" },
+    ]);
+  });
+
+  it("finds an arbitrary shadow", () => {
+    const hits = findDialBypasses(
+      `<div className="shadow-[0_2px_8px_rgba(0,0,0,.3)]">`,
+    );
+    expect(hits[0]).toMatchObject({ dial: "elevation" });
+  });
+
+  it("finds every bare shadow size, 2xs to 2xl", () => {
+    for (const size of ["2xs", "xs", "sm", "md", "lg", "xl", "2xl"]) {
+      const hits = findDialBypasses(`<div className="rounded-lg shadow-${size}">`);
+      expect(hits, size).toHaveLength(1);
+      expect(hits[0]).toMatchObject({ found: `shadow-${size}`, dial: "elevation" });
+    }
+  });
+
+  it("finds a hex inside an arbitrary value", () => {
+    expect(findDialBypasses('className="bg-[#abc]"')[0]).toMatchObject({
+      found: "bg-[#abc]",
+      dial: "accent",
+    });
+    expect(findDialBypasses('className="text-[#0f172a]"')).toHaveLength(1);
+    expect(findDialBypasses('className="border-[#fff8]"')).toHaveLength(1);
+  });
+
+  it("finds one behind a variant", () => {
+    // `dark:` and `md:` sit in front of the utility; the lookbehind has to let
+    // a `:` through or every responsive class would be invisible to this.
+    expect(findDialBypasses('className="dark:shadow-lg md:bg-[#abc]"')).toHaveLength(2);
+  });
+
+  it("🚨 finds font-heading, which the theme key generates and nobody may write", () => {
+    // A `--font-*` entry in `@theme inline` ALWAYS produces the matching
+    // utility, so Story 43.2's variable produces this class. There is no naming
+    // that avoids it — the answer is to report it, not to sanction it.
+    expect(findDialBypasses('<h2 className="font-heading">')[0]).toMatchObject({
+      found: "font-heading",
+      dial: "type",
+    });
+  });
+
+  it("does not flag font-sans or font-mono — both name a role", () => {
+    // `font-mono` is a perfectly normal thing to write on a page (a code span),
+    // and neither is the value of a dial.
+    expect(findDialBypasses('<code className="font-mono text-sm">')).toEqual([]);
+    expect(findDialBypasses('<body className="font-sans">')).toEqual([]);
+  });
+
+  it("does not flag shadow-none — it sets no value, so it turns no dial", () => {
+    expect(findDialBypasses('<Card className="shadow-none border-0">')).toEqual([]);
+  });
+
+  it("does not flag an inset shadow, which app/globals.css maps nowhere", () => {
+    // A different property and not this dial. The lookbehind is what keeps it
+    // out — without it, `inset-shadow-sm` reads as `shadow-sm`.
+    expect(findDialBypasses('className="inset-shadow-sm"')).toEqual([]);
+  });
+
+  it("does not flag a token class or an arbitrary value with no hex in it", () => {
+    // Real lines out of this template: the launcher's width, and the tokens
+    // every page is told to use.
+    expect(
+      findDialBypasses(
+        '<div className="bg-card text-card-foreground w-[min(24rem,calc(100vw-2rem))] rounded-lg border">',
+      ),
+    ).toEqual([]);
+  });
+
+  it("🚨 does not flag a hex inside style={{ … }}", () => {
+    // app/opengraph-image.tsx renders through satori with inline styles and
+    // knows nothing of classes. The patterns are anchored on the arbitrary-value
+    // BRACKET, never on a bare `#rrggbb` anywhere in the text, so this cannot
+    // match by construction rather than by exclusion.
+    const source = `
+      <div style={{ background: "#0b1220", color: "#f8fafc", padding: 80 }}>
+        <div style={{ fontSize: 76, boxShadow: "0 2px 8px rgba(0,0,0,.3)" }} />
+      </div>`;
+    expect(findDialBypasses(source)).toEqual([]);
+  });
+
+  it("finds no bypass inside a comment, and still finds the real one", () => {
+    // The rule every source-reading checker here obeys: blank the comments, or
+    // report the file that DOCUMENTS a rule as breaking it. Blanked rather than
+    // removed, so the line number of the real hit survives.
+    const source = [
+      "// Never write shadow-lg on a page — turn the elevation dial instead.",
+      "/* font-['Playfair'] is what this rule exists to catch. */",
+      'export const Panel = () => <div className="shadow-lg" />;',
+    ].join("\n");
+    const hits = findDialBypasses(source);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({ line: 3, found: "shadow-lg" });
+  });
+
+  it("counts one hit per match per line", () => {
+    // Two bypasses on one line are two hits — the count in the header line is
+    // a count of BYPASSES, not of files or of lines.
+    expect(
+      findDialBypasses(`<div className="shadow-lg font-['Playfair'] bg-[#abc]">`),
+    ).toHaveLength(3);
+  });
+
+  it("🚨 finds the extra value written past a legal one", () => {
+    // The command's title claim: a class string that already contains a legal
+    // token class gains one more that turns nothing, and that extra one is what
+    // gets counted.
+    const hits = findDialBypasses('cn("rounded-lg border", "shadow-lg")');
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({ found: "shadow-lg", dial: "elevation" });
+  });
+});
+
+describe("🚨 DIAL_BYPASSES — the needle", () => {
+  // `scripts/lib/source-text.test.ts` says why this block exists, in one
+  // sentence: "a guard whose probe cannot fire is worse than no guard: it
+  // reports success". A table-driven test over a table an edit quietly emptied
+  // passes over nothing at all and is green.
+  const SAMPLES: Record<string, string> = {
+    fontArbitrary: `<h1 className="font-[--brand-face]">`,
+    shadowArbitrary: `<div className="shadow-[0_2px_8px_#000]">`,
+    shadowSize: `<div className="rounded-lg border shadow-lg">`,
+    hexArbitrary: `<span className="text-[#0f172a]">`,
+    fontHeading: `<h2 className="font-heading tracking-tight">`,
+  };
+
+  it.each(DIAL_BYPASSES)("$id fires and names the $dial dial", (bypass) => {
+    const sample = SAMPLES[bypass.id];
+    expect(sample, `no sample for ${bypass.id}`).toBeDefined();
+    const hits = findDialBypasses(sample);
+    expect(hits.length, `${bypass.id} found nothing in ${sample}`).toBeGreaterThan(0);
+    expect(hits.map((h) => h.dial)).toContain(bypass.dial);
+  });
+
+  it("🚨 has an entry for every form, and that is what this pin catches", () => {
+    // A form silently dropped from the list is precisely the failure this
+    // number exists for: the `it.each` above would then run over four entries,
+    // pass, and say nothing about the fifth. The pin is not a style rule about
+    // list length — it is the only assertion that notices a shrinking table.
+    //
+    // Adding a SIXTH form is a deliberate act: raise this number, add its
+    // sample above, and say in docs/design-system.md §7 what it settles.
+    expect(DIAL_BYPASSES).toHaveLength(5);
+    expect(Object.keys(SAMPLES)).toHaveLength(5);
+    expect(DIAL_BYPASSES.map((b) => b.id).sort()).toEqual(Object.keys(SAMPLES).sort());
+  });
+
+  it("every entry carries a dial and a reason", () => {
+    for (const bypass of DIAL_BYPASSES) {
+      expect(["accent", "type", "radius", "elevation"]).toContain(bypass.dial);
+      expect(bypass.why.length).toBeGreaterThan(20);
+    }
+  });
+});
+
+describe("findUnpairedTokens", () => {
+  const paired = `
+:root {
+  --background: hsl(0 0% 100%);
+  --radius: 0.5rem;
+  --elevation-raised: 0 1px 2px 0 hsl(30 15% 12% / 0.06);
+}
+
+.dark {
+  --background: hsl(240 10% 5%);
+  --elevation-raised: 0 1px 2px 0 hsl(0 0% 0% / 0.55);
+}
+`;
+
+  it("passes the shipped truth: --radius in :root only is on the list", () => {
+    // Measured on the real app/globals.css after Story 43.1: 34 keys in :root,
+    // 33 in .dark, and the single difference is `radius`.
+    expect(findUnpairedTokens(paired)).toEqual([]);
+  });
+
+  it("finds a token that landed in :root and not in .dark", () => {
+    // The classic mistake Story 43.1's two tokens are exposed to, and it fails
+    // in the mode nobody was looking at.
+    const css = paired.replace(
+      "  --elevation-raised: 0 1px 2px 0 hsl(0 0% 0% / 0.55);\n",
+      "",
+    );
+    const hits = findUnpairedTokens(css);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({
+      kind: "unpaired",
+      token: "elevation-raised",
+      presentIn: ":root",
+      missingFrom: ".dark",
+    });
+  });
+
+  it("finds the reverse too — a token only in .dark", () => {
+    const css = paired.replace("  --background: hsl(0 0% 100%);\n", "");
+    expect(findUnpairedTokens(css)).toEqual([
+      expect.objectContaining({
+        token: "background",
+        presentIn: ".dark",
+        missingFrom: ":root",
+      }),
+    ]);
+  });
+
+  it("reports the line the token is actually on", () => {
+    const css = paired.replace(
+      "  --elevation-raised: 0 1px 2px 0 hsl(0 0% 0% / 0.55);\n",
+      "",
+    );
+    const line = css.split("\n").findIndex((l) => l.includes("--elevation-raised")) + 1;
+    expect(findUnpairedTokens(css)[0].line).toBe(line);
+  });
+
+  it("🚨 an empty block is a finding of its own, never an empty result", () => {
+    // `parseTokens` returns {} for a block it cannot find, so without this the
+    // most broken file in the world would come back with no findings — "nothing
+    // found" and "nothing looked at" wearing the same colour.
+    const noDark = ":root {\n  --background: hsl(0 0% 100%);\n}\n";
+    expect(findUnpairedTokens(noDark)).toEqual([
+      expect.objectContaining({ kind: "emptyBlock", missingFrom: ".dark" }),
+    ]);
+
+    const nothing = "body { color: red; }";
+    const hits = findUnpairedTokens(nothing);
+    expect(hits).toHaveLength(2);
+    expect(hits.every((h) => h.kind === "emptyBlock")).toBe(true);
+  });
+
+  it("names an empty block once rather than listing every token of the other", () => {
+    // The fact is that the block is gone. Thirty-three "unpaired" rows would
+    // bury it under its own consequences.
+    const noRoot = ".dark {\n  --a: 1;\n  --b: 2;\n  --c: 3;\n}\n";
+    expect(findUnpairedTokens(noRoot)).toHaveLength(1);
+  });
+
+  it("MODE_SINGLE_TOKENS is a set with reasons, never a count", () => {
+    // Nothing here asserts how many entries there are: a shrinking exception
+    // list is good news, and an entry that stops matching anything is fine.
+    // What IS asserted is that every entry carries prose — an id with no reason
+    // reads as an arbitrary exemption to whoever finds it next.
+    for (const [token, reason] of Object.entries(MODE_SINGLE_TOKENS)) {
+      expect(token).toMatch(/^[a-z0-9-]+$/);
+      expect(reason.length).toBeGreaterThan(30);
+    }
+    expect(MODE_SINGLE_TOKENS.radius).toBeDefined();
   });
 });
 
@@ -289,6 +546,43 @@ import { ArrowRight, Check } from "lucide-react";
   });
 });
 
+describe("🚨 a file that EXPLAINS an element is not using it", () => {
+  // Measured on `modules/community/components/pager.tsx`: its header argues at
+  // length that a disabled step "renders as a plain disabled `<button>`" rather
+  // than a link — and the file uses `<Button>` from the kit throughout.
+  // `ux-check` reported two raw `<button>` elements, at the two COMMENT lines,
+  // and exited non-zero. A confident false finding in the one check whose whole
+  // job is telling somebody their page is wrong; the fix somebody would then
+  // make is to delete the explanation.
+  const explained = `
+// One rendered a real <button disabled>, one an <a aria-disabled>.
+/* It renders as a plain disabled <button>, which no input method follows. */
+export function Pager() {
+  return <Button variant="outline">Next</Button>;
+}`;
+
+  it("finds no raw element inside a comment", () => {
+    expect(findRawElements(explained)).toEqual([]);
+  });
+
+  it("still finds the real one on the right line", () => {
+    // Blanked rather than removed, because a finding carries a LINE NUMBER —
+    // dropping the characters would shift every position after the comment.
+    const mixed = `${explained}\nexport const Bad = () => <button>go</button>;`;
+    const hits = findRawElements(mixed);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].found).toBe("<button>");
+    expect(hits[0].line).toBe(mixed.split("\n").findIndex((l) => l.includes("Bad")) + 1);
+  });
+
+  it("does not take a URL for a comment", () => {
+    // `//` after a colon is `https://`, and blanking it would hide whatever
+    // followed on that line.
+    const source = `const a = <a href="https://x.test"><button>go</button></a>;`;
+    expect(findRawElements(source).map((h) => h.found)).toContain("<button>");
+  });
+});
+
 describe("navHrefs", () => {
   it("reads the hrefs out of NAVIGATION", () => {
     const source = `
@@ -306,5 +600,37 @@ export const NAVIGATION: NavItem[] = [
     // null means "cannot tell", which the caller reports as a warning. An
     // empty array would mean "no page is in the menu" and fail every page.
     expect(navHrefs("export const FOO = [];")).toBeNull();
+  });
+
+  it("🚨 reads a MODULE's menu too, which is a property and not a const", () => {
+    // A module default-exports a `ModuleNav` object, so its menu can only be
+    // `NAVIGATION:` — it cannot be a top-level const. `lib/modules/nav.ts` has
+    // claimed since the first module that this reader finds it "by that name",
+    // and until the community moved nothing kept the claim: `ux-check` read
+    // `components/app-shell.tsx` and nothing else, and its page walk missed the
+    // module's pages in the same breath. Two errors cancelling into green.
+    const source = `
+import { MessagesSquare } from "lucide-react";
+const nav: ModuleNav = {
+  id: "community",
+  NAVIGATION: [
+    { href: "/dashboard/community", labelKey: "community", icon: MessagesSquare },
+    { href: "/dashboard/admin/community", labelKey: "communityAdmin", icon: MessagesSquare },
+  ],
+  features: ["community", "communityAdmin"],
+};
+export default nav;`;
+    expect(navHrefs(source)).toEqual(["/dashboard/community", "/dashboard/admin/community"]);
+  });
+
+  it("does not take a COMMENT mentioning NAVIGATION for the menu", () => {
+    // The declaration is matched, not the bare word — otherwise the header of
+    // `components/app-shell.tsx`, which explains NAVIGATION at length, would
+    // become the start of the list and drag in every href written above it.
+    const source = `
+// Everything about NAVIGATION: read this first.
+const OTHER = [{ href: "/nope" }];
+export const NAVIGATION = [{ href: "/dashboard" }];`;
+    expect(navHrefs(source)).toEqual(["/dashboard"]);
   });
 });

@@ -51,6 +51,8 @@ export const USER_ERROR_CODES = [
   "emailNotConfigured",
   "selfImpersonate",
   "ownerImpersonate",
+  "moderatorImpersonate",
+  "nonMemberImpersonate",
   "alreadyImpersonating",
   "impersonationDisabled",
   "notImpersonating",
@@ -128,9 +130,13 @@ export function canDeleteOwnAccount(actor: Actor, ownerCount: number): Denial {
  * May `actor` set `target`'s role to `newRole`?
  *
  * Forbidden:
- *  - not being an admin,
- *  - demoting yourself (you would lose access immediately),
- *  - turning the last admin into a plain user.
+ *  - not being an admin — the owner ALONE touches roles, and that includes
+ *    granting and revoking "moderator" (FR-204): a moderator who could mint
+ *    moderators would be an admin with extra steps,
+ *  - demoting yourself (you would lose access immediately — and
+ *    owner→moderator IS a demotion; a moderator is not an admin),
+ *  - turning the last admin into anything else. Only owners count here:
+ *    a moderator is never a way back into a locked-out app.
  *
  * Setting the role that already applies is allowed — and deliberately a no-op.
  */
@@ -163,6 +169,13 @@ export function canCreateUser(actor: Actor): Denial {
  *  - not being an admin,
  *  - blocking yourself (you could not get back in to lift it),
  *  - blocking the last remaining admin.
+ *
+ * A moderator is deliberately NOT a special case: they are blocked like any
+ * member, and the block strips nothing extra (FR-204). Blocking already ends
+ * the session via lib/users/blocked.ts, and duties are inert without a usable
+ * account — when the Group-Moderator duty table arrives (19.5), a blocked
+ * moderator's duty rows stay, harmless, because every session of theirs is
+ * refused. No cleanup is needed then, and none may be invented.
  *
  * UNBLOCKING is always allowed: it grants nobody rights they did not already
  * have, and a state you cannot get out of would be a trap.
@@ -237,6 +250,20 @@ export interface ImpersonationContext {
  *    `session.user.role`, so impersonating an owner hands the impersonator
  *    every right that owner holds — including this feature. A request that
  *    never passed through the menu has to be refused identically.
+ *  - **a moderator**, and anybody else who is not a plain member. The rule is
+ *    operator→member (FR-204): a moderator's badge in a room must never be an
+ *    operator in disguise — whoever answers under that badge is the person it
+ *    names, always. ⚠️ An earlier version of this comment said "not escalation
+ *    — an impersonated session's role is `member` either way", and that was
+ *    simply false: `lib/impersonation/session.ts` sets `token.role =
+ *    member.role`, so the session carries the TARGET's role verbatim. Once
+ *    Epic 23 hangs duties off that value, impersonating a moderator IS an
+ *    escalation. The false premise is what let the second refusal layer in
+ *    `session.ts` keep asking only about owners.
+ *  - the refusal below is written as an ALLOWLIST for that reason. `users.role`
+ *    is `text` with no enum, so the set of values is open; refusing everything
+ *    that is not `"member"` cannot go stale when a role is added, where a list
+ *    of the roles we currently dislike goes stale in silence.
  *  - a BLOCKED account. Not because it is uninteresting, but because
  *    `requireActiveUser()` (lib/authz.ts) sends a blocked session to
  *    `/login?error=AccessDenied`, and the banner carrying the way out lives
@@ -253,6 +280,12 @@ export function canImpersonate(
   if (context.alreadyImpersonating) return "alreadyImpersonating";
   if (actor.id === target.id) return "selfImpersonate";
   if (target.role === "owner") return "ownerImpersonate";
+  if (target.role === "moderator") return "moderatorImpersonate";
+  // Everything that is not a plain member, named generically. The two lines
+  // above stay because their codes say something useful to the operator; this
+  // one is the floor, and it is what keeps the rule true for a role nobody has
+  // added yet — or for a value written straight into the column.
+  if (target.role !== "member") return "nonMemberImpersonate";
   if (target.blockedAt) return "userBlocked";
   return null;
 }

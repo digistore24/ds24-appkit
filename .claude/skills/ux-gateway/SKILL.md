@@ -1,6 +1,6 @@
 ---
 name: ux-gateway
-description: The experience check for this app. Looks at it the way a paying customer does — the first five minutes after a purchase, dead ends in the flows, actions that report nothing back, hand-built elements, unreadable text, wording nobody understands, keyboard and screen reader, small screens, work the customer hands over that nothing comes back from — judges each finding by severity, fixes what has to be fixed and writes a report. Use it after the app has pages and billing, before the security gateway, and whenever somebody says "my customers do not find their way around", "nobody uses it after they buy", "this looks unfinished", "is this understandable?".
+description: The experience check for this app. Looks at it the way a paying customer does — the first five minutes after a purchase, dead ends in the flows, actions that report nothing back, hand-built elements, unreadable text in dark mode, wording nobody understands, keyboard and screen reader, small screens, work the customer hands over that nothing comes back from — then fixes and reports. Use it after the app has pages and billing, before the security gateway, and whenever somebody says "my customers do not find their way around", "nobody uses it after they buy", "this looks unfinished", "is this understandable?".
 requires: 0.4.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
@@ -104,7 +104,9 @@ their measurable half, and that half needs no browser at all.
 
 ## What counts as a finding
 
-**Severity — what it costs if it stays:**
+The ladder and the four-line `Where:` / `Why:` / `Fix:` / `Evidence:` format are
+the shipped ones — [`docs/guidance.md`](../../../docs/guidance.md) → *One report
+shape*. What each rung means here:
 
 | | Severity | Meaning |
 |---|---|---|
@@ -113,12 +115,12 @@ their measurable half, and that half needs no browser at all.
 | ⚠️ | **MEDIUM** | Real friction, or an inconsistency people will notice. Fix soon. |
 | ℹ️ | **LOW** | Polish. When you get around to it. |
 
-**Confidence — only report what you can show.** A finding needs a file and a
-line, a page you opened, or a number from `ux-check`. "This could be confusing"
-with nothing under it goes into **Worth a look** at the end, not into the count.
-This matters more here than anywhere else in the template: taste arguments are
-cheap to produce and expensive to read, and a report full of them is a report
-nobody opens twice.
+**What counts as shown, here:** a file and a line, a page you opened, or a number
+from `ux-check`. "This could be confusing" with nothing under it goes into **Worth
+a look**, not into the count — and that matters more here than anywhere else in
+the template, because taste arguments are cheap to produce and expensive to read,
+and a report full of them is a report nobody opens twice. **Why** says what it
+costs the person, in plain words — not "poor affordance".
 
 **Never report a deliberate decision as a defect.** Four that come up every
 time, all documented, none of them findings:
@@ -137,23 +139,6 @@ time, all documented, none of them findings:
   is the `0` from `build-app` step 1e, recorded in `docs/app.md` — an answer,
   not an unfinished job. The way to a look of its own is the skill `design`,
   and only the user opens that door.
-
-**The format of a finding — the same as in `security-gateway`:**
-
-```
-❌ HIGH — Nothing on the dashboard says the purchase worked
-   Where:    app/dashboard/page.tsx:118
-   Why:      The confirmation is a toast that clears its own parameter, so a
-             customer who reloads — which is what people do when they are not
-             sure it worked — sees an overview identical to the one before
-             they paid.
-   Fix:      An onboarding step whose `done` is read from entitlementsFor(),
-             so the state itself says it. docs/ux.md §1.
-   Evidence: Bought as member@test, reloaded /dashboard, nothing named the plan.
-```
-
-Four lines, always in that order. **Why** says what it costs the person, in
-plain words — not "poor affordance". **Fix** is a change someone can make.
 
 ## 1 · `all` — the full pass
 
@@ -267,44 +252,31 @@ goes back to the user as one clear question.
 Every run writes one, whether it found anything or not. That is what makes "did
 we already look at this?" answerable in three months.
 
-Write it to **`docs/reports/ux-YYYY-MM-DD.md`** (add `-2`, `-3` if the day
-already has one). Create the folder if it is not there.
+It goes to **`docs/reports/ux-YYYY-MM-DD.md`**, and its shape — the header above
+the tally, the five sections in their order — is
+[`docs/guidance.md`](../../../docs/guidance.md) → *One report shape*. One header
+line is this skill's own, and it is the one that keeps an unopened page honest:
 
 ```markdown
-# UX report — 2026-07-27
-
 Checks: first-run, flows, feedback, kit, words, access, visuals, alongside
 Seen:   opened in a browser, signed in as a member        (or: judged from code)
 App:    local, commit a1b2c3d
-
-🚨 CRITICAL 0   ❌ HIGH 3   ⚠️ MEDIUM 4   ℹ️ LOW 2   ✅ accepted 1
-
-## Findings
-(each in the four-line format, most severe first)
-
-## Fixed in this run
-(what changed, with the file)
-
-## Open
-(what stays, and the reason — a decision, a cost, a dependency)
-
-## Worth a look
-(what was not opened, and the low-confidence observations — no severity, no count)
-
-## Accepted deviations
-(from docs/reports/ux-accepted.md, with the reason and who accepted it)
 ```
 
-Then say it out loud, in three or four sentences: what a new customer meets
-today, what is in their way, what was fixed, and whether you would put this in
-front of a paying stranger. That last one is a straight answer — "yes", or "no,
-because X".
+So `## Worth a look` here holds two kinds of thing: what was **not opened**, and
+the low-confidence observations.
+
+The spoken summary says what a new customer meets today, what is in their way and
+what was fixed; its straight yes or no is whether you would put this in front of a
+paying stranger.
 
 ## Accepted deviations
 
 Some of it is deliberate — a house style, a control the kit does not ship, a
-deliberately sparse page. Rather than rediscovering it every run, it goes into
-**`docs/reports/ux-accepted.md`**:
+deliberately sparse page. This skill's register is
+**`docs/reports/ux-accepted.md`**, and the rules that go with it are
+[`docs/guidance.md`](../../../docs/guidance.md) → *Accepted is not the same as
+fixed*:
 
 ```markdown
 | Finding | Where | Why accepted | By | Date | Review |
@@ -318,15 +290,13 @@ opposite things and must not be merged:
 - **`docs/app.md`** holds the decision *against building* something — "no
   companion, deliberately, because …". That is what makes a check **silent**, and
   it is written there by `build-app`, not by this gateway.
-- **`docs/reports/ux-accepted.md`**, below, holds a finding a check **did** raise
+- **`docs/reports/ux-accepted.md`**, above, holds a finding a check **did** raise
   that the user then accepted. The realistic one for check 9 is a companion left
   deliberately free in a free tier — the ❌ HIGH gating row, accepted with a
   reason.
 
-An accepted deviation is **not counted** in the totals and appears in its own
-section. Only the user accepts one — never you, and never silently. A CRITICAL
-is not accepted: a customer who cannot reach what they paid for is not a matter
-of taste.
+And the shared rule that a CRITICAL is not accepted reads plainly here: a customer
+who cannot reach what they paid for is not a matter of taste.
 
 ## STOP — ask a person
 

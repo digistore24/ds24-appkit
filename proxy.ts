@@ -30,6 +30,7 @@ import {
 } from "next/server";
 import authConfig from "@/auth.config";
 import { staleAuthCookieNames } from "@/lib/auth/cookie-names";
+import { MODULE_GATES } from "@/lib/modules/gate-registry";
 
 // Deliberately in two steps: Next.js reads this export statically, and a
 // destructured `export const { auth: proxy } = …` is not recognized as a
@@ -119,9 +120,109 @@ export default async function proxy(request: NextRequest, event: NextFetchEvent)
   // matched paths are public: for them the answer is always "carry on", and
   // asking Auth.js first would re-issue session cookies on every hit (see the
   // warning at the top of the file).
-  const response = request.nextUrl.pathname.startsWith("/dashboard")
+  const { pathname } = request.nextUrl;
+  let response = pathname.startsWith("/dashboard")
     ? await protect(request, event)
     : NextResponse.next();
+
+  // A module's off-state, enforced where the DOCUMENT is still whole.
+  //
+  // A `notFound()` thrown inside a module's own page renders the not-found
+  // boundary wrapped in the dashboard layout — sidebar and all — while a route
+  // that never existed renders the bare root not-found. Those two documents
+  // differing is exactly what FR-180 forbids: a probing member could tell
+  // "switched off" from "never built". So a switched-off module's paths are
+  // rewritten HERE to a path no route matches, and the framework answers with
+  // the same document a pre-module app would send; `node run.mjs smoke`
+  // compares the member-visible document byte for byte (everything outside
+  // <script> — its header says why). Auth ran first (a redirect must win —
+  // anonymous visitors get the same 307 either way), each page's own
+  // `notFound()` stays as defense in depth, and every gate reads its config per
+  // request, never cached (AD-67).
+  //
+  // ⚠️ **This used to be a hand-written block for the community, and the
+  // hand-written list is what went wrong.** It covered `/dashboard/community`
+  // while missing `/dashboard/admin/community`, so the operator's tree fell
+  // through to its own in-page `notFound()` — and that page's `notFound()` runs
+  // BEFORE its `requireOwner()`, so any signed-in member could ask for it and
+  // read the difference. Claiming the property in `CLAUDE.md` while enforcing
+  // it on one of two routes is how it stayed for as long as it did: nothing
+  // compared the admin path. A module's `covers()` is built from the `app` list
+  // in its manifest (`coversSubtrees()`), so the set that is BUILT and the set
+  // that is GUARDED now have one source.
+  //
+  // The broken-but-wanted state (`enabled: true` with problems) is deliberately
+  // NOT rewritten — an operator's diagnosis page must stay reachable, and each
+  // module's page makes that fork. 🚨 That is why the test below is
+  // `state() === "off"` and not a negated boolean: this paragraph was true as
+  // intent and false as code for as long as a gate answered one `enabled()`,
+  // which cannot distinguish "switched off" from "on but malformed" — so the
+  // diagnosis page this sentence promises was rewritten away with the rest.
+  // `ModuleState` in `lib/modules/gate.ts` carries the three-row table.
+  // The compare runs on the DECODED path, because the router matches routes
+  // that way: `/dashboard/%63ommunity` reaches the community page, and a
+  // literal compare would let it slip past the rewrite into the page's
+  // defense-in-depth `notFound()` — the layout-wrapped, distinguishable
+  // document again, one percent-escape away. A malformed escape cannot be
+  // decoded; then the literal path is the only claim there is, and no route
+  // matches it either.
+  let decodedPathname = pathname;
+  try {
+    decodedPathname = decodeURIComponent(pathname);
+  } catch {
+    // %-garbage — keep the literal path.
+  }
+  /**
+   * Answer as a route that never existed.
+   *
+   * One helper for every module gate below, so two copies of it cannot
+   * drift: the Set-Cookie carry-over is the part that would go missing
+   * in a second copy, and its absence is invisible until somebody compares
+   * headers — which the smoke check deliberately does not.
+   */
+  const answerAsNeverBuilt = (id: string): NextResponse => {
+    const url = request.nextUrl.clone();
+    url.pathname = `/dashboard/__${id}-is-not-built__`;
+    const rewritten = NextResponse.rewrite(url);
+    // The rewrite replaces the auth response, but its Set-Cookie is not ours
+    // to drop: Auth.js re-issues the session cookie on each /dashboard read
+    // (see the header), so a 404 WITHOUT that header would differ from the
+    // never-existed baseline's 404 in exactly the place a probing client can
+    // look — and the smoke comparison reads status and body, never headers.
+    // It also keeps the session's sliding window alive on this route.
+    for (const cookie of response.headers.getSetCookie()) {
+      rewritten.headers.append("set-cookie", cookie);
+    }
+    return rewritten;
+  };
+
+  // The same refusal for every installed module that is switched OFF.
+  //
+  // Only for the installed-but-off state: a module that is NOT installed has no
+  // route files Next would build (`scripts/modules/page-extensions.mjs`), so its
+  // paths are already 404s the framework never routed. This is what closes the
+  // remaining gap — the one where the module IS built and the operator turned
+  // it off.
+  //
+  // A gate's `covers` is built from the route subtrees its manifest declares
+  // (`coversSubtrees`), so the set that is BUILT and the set that is GUARDED
+  // have one source. The community's hand-written version of this comparison
+  // missed the operator's tree, and nothing noticed.
+  //
+  // `!response.headers.get("location")` for the same reason as above: a
+  // redirect must win, so an anonymous visitor gets the same 307 either way and
+  // the refusal never leaks that the path exists.
+  for (const gate of MODULE_GATES) {
+    if (
+      gate.state() === "off" &&
+      gate.covers(decodedPathname) &&
+      !response.headers.get("location")
+    ) {
+      response = answerAsNeverBuilt(gate.id);
+      break;
+    }
+  }
+
   return pruneStaleCookies(request, response);
 }
 

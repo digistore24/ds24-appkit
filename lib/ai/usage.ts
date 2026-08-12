@@ -8,8 +8,7 @@
 // delivered by the time this runs; a database hiccup here would turn a
 // successful request into an error the Member sees, over bookkeeping they do
 // not care about. So it runs after the response and swallows everything into a
-// log line — the same shape `lib/tokens/spend.ts` uses for the auto top-up and
-// `app/api/mcp/route.ts` for its usage line.
+// log line — the same shape `lib/tokens/spend.ts` uses for the auto top-up.
 //
 // The cost of that choice is stated plainly: a failed write loses a row, and a
 // lost row is money the report will never show. That is the right trade in this

@@ -1,0 +1,6 @@
+{
+  "_comment": "The setup surface — what your coding agent may do to THIS environment's database over MCP. Ships OFF, and off means every /api/setup path answers 404, exactly like a route that was never built. Switching it on is a deploy, deliberately: there is no runtime toggle, because a switch in the database is one that whoever reached the database can turn. Read it only through isSetupEnabled() (lib/setup/config.ts), never by re-reading this file. ⚠️ Any unknown key, wrong type or out-of-range value switches the whole surface OFF — the failure mode here is an open write endpoint, so every doubt falls towards closed. Keys beginning with an underscore are comments and are ignored. The full story is docs/setup-mcp.md.",
+  "enabled": false,
+  "_comment_allowDestructive": "Tools that declare themselves destructive are refused outside DEV unless named here, by tool name. Empty is the shipped state and the right one for almost every app.",
+  "allowDestructive": []
+}

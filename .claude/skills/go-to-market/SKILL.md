@@ -1,6 +1,6 @@
 ---
 name: go-to-market
-description: Advises the user on bringing their finished SAAS product to market. Works out positioning and price, picks channels that fit the reach they already have (including Digistore affiliates), creates a simple launch plan and delivers ready-made content — landing page copy, an e-mail sequence, social posts and video scripts (hook → problem → solution → CTA). Use this when the app is done and is meant to be sold.
+description: Brings a finished SAAS product to market — positioning, price, channels that fit the reach they already have (including Digistore affiliates), a launch plan and ready-made copy — landing page, e-mail sequence, social posts, video scripts. Use this when the app is done and is meant to be sold, and when the user asks "what should it cost", "which channel", "how do I get people to the page", or says "nobody is buying" — no traffic is this skill, a page that does not convert is `salespage`.
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -71,10 +71,34 @@ written here is not a file yet: **producing** it (tool choice, rendering, a
 talking head) is **`content-production`**, and giving the finished file
 somewhere to live and a player is **`visuals`** (check `upload`).
 
-## Phase 5 — measure & iterate
+## Phase 5 — measure, iterate, write it down
 
 Name 2–3 simple metrics (visitors → checkout clicks → purchases) and how to see
 them (Digistore statistics). Recommend one small improvement per week.
+
+**Then write the decisions into `docs/go-to-market.md` — this is the last step of
+the run, not optional bookkeeping.** Everything above happened in a conversation,
+and a conversation is gone when the session is: the price and the reasoning
+behind it, the channel that was chosen, the two that were turned down and why.
+Without the file, the next session re-asks all of it — or, worse, quietly picks
+a different price and a channel somebody already ruled out. A launch plan is a
+plan, so it belongs in `docs/`, beside `docs/plan.md`, and not in
+`docs/reports/`, which is where a dated verdict goes.
+
+The shape is
+[`references/go-to-market-md-template.md`](references/go-to-market-md-template.md).
+It holds the positioning, the price **with** the reasoning, the channels chosen,
+the channels rejected with the reason and the date each, the launch plan, the
+metrics with today's number, and what was tried and what came of it. The
+ready-made content of phase 4 stays under `docs/marketing/` — that is the copy,
+this is what was decided about it.
+
+⚠️ **Marketing comes round again, and so does this file.** A second push rewrites
+it rather than starting a second one beside it: a decision that changed is dated
+in place, and a channel that produced nothing moves into *What was tried* so the
+next round does not spend another month on it. And the price in this file is a
+record of a decision — what the app charges is
+`config/digistore-products.json`, rendered from there and never retyped.
 
 ## Principles
 

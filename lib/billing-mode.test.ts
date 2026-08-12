@@ -4,6 +4,7 @@
 import { readFileSync } from "node:fs";
 
 import { describe, it, expect } from "vitest";
+import { blankComments } from "@/scripts/lib/source-text.mjs";
 
 import {
   BILLING_MODES,
@@ -101,9 +102,7 @@ describe("the mode never blocks spending", () => {
     );
     // Comments discuss `sellsTokens()` at length on purpose; strip them before
     // looking, or this test fails on its own explanation.
-    const code = source
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/^\s*\/\/.*$/gm, "");
+    const code = blankComments(source);
     expect(code).not.toMatch(/sellsTokens|billingMode/);
   });
 });

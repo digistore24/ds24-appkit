@@ -1,0 +1,24 @@
+{
+  "companion": {
+    "disclaimer": "Was du hier schreibst, liest und beantwortet eine KI. Sie kann sich irren — bei Geld und Zugang lieber den Support fragen.",
+    "emptyBody": "Schreib auf, woran du gerade sitzt — du bekommst eine Rückmeldung dazu.",
+    "emptyTitle": "Noch nichts besprochen",
+    "loading": "Wird geladen …",
+    "offBrokenConfig": "Die Einstellungen sind unvollständig oder widersprüchlich. Im Terminal: node run.mjs ai-check",
+    "offDisabledInConfig": "Sie ist ausgeschaltet. Setze \"enabled\" in config/ai-companion.json auf true.",
+    "offNoApiKey": "Für die Aufgabe \"companion\" (config/ai-models.json) ist kein Anbieter-Schlüssel in der .env hinterlegt. Im Terminal: node run.mjs ai-check",
+    "offTitle": "Diese Begleitung ist nicht verfügbar",
+    "placeholder": "Schreib hier, woran du arbeitest …",
+    "send": "Abschicken",
+    "sending": "Wird gelesen …"
+  },
+  "errors": {
+    "companionBadSubject": "Dazu lässt sich nichts finden.",
+    "companionEmptyMessage": "Bitte schreib etwas, worauf geantwortet werden kann.",
+    "companionFailed": "Das hat gerade nicht geklappt. Bitte versuch es noch einmal.",
+    "companionInsufficientBalance": "Dafür reicht dein Guthaben nicht. Es wurde nichts abgebucht.",
+    "companionMessageTooLong": "Das ist zu lang. Bitte kürze es etwas.",
+    "companionRateLimited": "Zu viele Anfragen in kurzer Zeit. Bitte warte einen Moment.",
+    "companionUnavailable": "Diese Begleitung steht gerade nicht zur Verfügung."
+  }
+}

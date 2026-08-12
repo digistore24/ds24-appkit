@@ -21,6 +21,10 @@
 // `components/app-shell.tsx`, so a sidebar entry added, renamed or reordered
 // fails the build rather than quietly teaching her yesterday's menu.
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/i18n/config";
+import { MODULE_NAV } from "@/lib/modules/nav-registry";
+import { MODULE_GATES } from "@/lib/modules/gate-registry";
+import { MODULE_MESSAGES } from "@/lib/modules/messages";
+import { mergeModuleMessages } from "@/lib/modules/messages-merge";
 import de from "@/messages/de.json";
 import en from "@/messages/en.json";
 
@@ -42,8 +46,64 @@ export const MEMBER_NAV_KEYS = [
 
 export type MemberNavKey = (typeof MEMBER_NAV_KEYS)[number];
 
+/**
+ * The member-facing labels the installed modules add, in menu order.
+ *
+ * ⚠️ **A module's entry is named only while its module is switched ON**, and
+ * the reasoning is the community's, generalised: the "chat" argument does NOT
+ * transfer. Switching the assistant off removes HER; switching a module off
+ * leaves her running — and she must not name a menu entry the sidebar hides and
+ * whose route answers not-found. She would be sending a customer to a door that
+ * does not exist.
+ *
+ * `ownerOnly` entries are skipped for the same reason the core's are: she
+ * answers customers, and sending one to an admin page is a dead end for them
+ * and a support ticket for the operator.
+ *
+ * Static config only — no request, no database — because this lands in the
+ * CACHED half of the system prompt.
+ */
+function moduleMemberNavKeys(): string[] {
+  // 🚨 `"on"` exactly — not "anything but off". A module whose config is
+  // switched on but malformed still hides its menu entries and still answers
+  // not-found on its routes; only the operator's diagnosis page stays
+  // reachable, and she is not talking to the operator. `ModuleState` in
+  // `lib/modules/gate.ts` is where the three states are argued.
+  const on = new Set(
+    MODULE_GATES.filter((gate) => gate.state() === "on").map((gate) => gate.id),
+  );
+  return MODULE_NAV.filter((mod) => on.has(mod.id))
+    .flatMap((mod) => mod.NAVIGATION)
+    .filter((item) => !item.ownerOnly)
+    .map((item) => item.labelKey);
+}
+
+/**
+ * The entries THIS build actually shows a member.
+ *
+ * A feature-keyed entry whose feature is off answers not-found on its route —
+ * naming it would send a customer to a door that does not exist. The filter
+ * reads static config only, so the result is byte-identical on every request
+ * of one build — the cacheability rule `navMenus()` lives under.
+ */
+export function visibleMemberNavKeys(): readonly string[] {
+  return [...MEMBER_NAV_KEYS, ...moduleMemberNavKeys()];
+}
+
 /** The message files, by locale. A new language is added here as well. */
-const MESSAGES: Record<Locale, { nav: Record<MemberNavKey, string> }> = { de, en };
+// ⚠️ MERGED, not `{ de, en }`. A module's nav label lives in ITS message file
+// and reaches the app through `mergeModuleMessages` — reading the core files
+// alone would resolve every module entry to `undefined` and put a hole in the
+// cached prompt.
+const MESSAGES = Object.fromEntries(
+  LOCALES.map((locale) => [
+    locale,
+    mergeModuleMessages(
+      { de, en }[locale] as unknown as Record<string, unknown>,
+      MODULE_MESSAGES[locale] ?? {},
+    ),
+  ]),
+) as Record<Locale, { nav: Record<string, string> }>;
 
 export interface NavMenu {
   locale: Locale;
@@ -65,6 +125,6 @@ export function navMenus(): NavMenu[] {
   return LOCALES.map((locale) => ({
     locale,
     languageLabel: LOCALE_LABELS[locale],
-    labels: MEMBER_NAV_KEYS.map((key) => MESSAGES[locale].nav[key]),
+    labels: visibleMemberNavKeys().map((key) => MESSAGES[locale].nav[key]),
   }));
 }

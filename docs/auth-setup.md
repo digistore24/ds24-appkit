@@ -226,6 +226,48 @@ appears (and, if configured, "Continue with Google"). Enter the email → the
 link arrives → clicking it signs you in. Verification tokens live in the DB
 table `verificationTokens` (Drizzle adapter).
 
+## Which routes are protected — and why the matcher is not the answer
+
+**Protection is opt-in, not opt-out.** The refusal is `authorized()` in
+`auth.config.ts`, and it returns true for every path outside `/dashboard` — so
+**any new route outside `/dashboard` is public until you protect it there.**
+
+⚠️ **The `matcher` in `proxy.ts` says where the proxy RUNS, not what is
+protected.** The two stopped being the same list when that file took on a second
+job: it prunes the session cookies of other local copies of this template, which
+has to happen on a page a signed-out person opens (see
+[`troubleshooting.md`](troubleshooting.md) → *Several copies on one machine*). So
+`/login`, `/`, `/plans` and `/optin/*` are in the matcher **and fully public** —
+being listed protects nothing, and for them the proxy deliberately never calls the
+Auth.js middleware at all, because that would re-issue session cookies on every
+hit to the busiest public pages.
+
+A new protected area therefore needs **three** things: the path in the matcher,
+the `/dashboard` prefix decision in `proxy()`, *and* `authorized()` taught about
+it.
+
+Public by design: the home page, `/login`, `/plans`, `/optin/*`,
+`/account/confirm-email`, the IPN endpoint `/api/ipn` (secured via the SHA512
+signature) and the HTTP API `/api/v1/*` (secured by per-member bearer keys — it
+has no session and cannot have one; every v1 handler starts with `guardApi()`,
+see [`api.md`](api.md)).
+
+**`/account/confirm-email` is public deliberately and MUST stay that way** — it is
+authenticated by its single-use token, and the mail carrying it is read on
+whichever device holds the inbox, routinely not the one signed in; adding it to
+the matcher breaks the feature for exactly the person it exists for. `/plans` is
+public on purpose too: a visitor can buy without signing in, and the purchase
+attaches to their account the first time they do.
+
+**The rule has a backstop, and it finds you before a customer does:**
+`app/route-protection.test.ts` walks every `page.tsx` and `route.ts` outside
+`app/api/v1/` and fails on any route that is neither under `/dashboard` nor named
+in its `PUBLIC` list together with the sentence saying what guards it instead. A
+new page therefore has two ways forward — protect it, or write down why it is
+public — and no way to be forgotten. Answering it is one line. (`api/v1` has its
+own, stricter test: `guard-presence.test.ts` reads the handler rather than
+trusting a list.)
+
 ## Creating the operator/admin account
 
 **Locally you do not have to do anything.** The very first account in a fresh
@@ -252,8 +294,107 @@ node scripts/users/create-user.mjs --email owner@example.com --role owner --appl
 # or: node run.mjs user-create --email owner@example.com --role owner --apply
 ```
 
-Roles: `owner` = operator/admin, `member` = customer. Protect admin areas with
-`requireOwner()` (`lib/authz.ts`). Details: `scripts/users/README.md`.
+Roles: `owner` = operator/admin, `moderator` = a member who keeps the
+community's rooms clean and is **not** an admin, `member` = customer. Protect
+admin areas with `requireOwner()` (`lib/authz.ts`) — it refuses a moderator
+exactly as it refuses a member. The canonical list is `lib/roles.ts`; details:
+`scripts/users/README.md`.
+
+> Role helpers (`roleLabel`, `isRole`, `ROLES`) live in `lib/roles.ts`, not in
+> `lib/authz.ts`. Client components must import from `lib/roles.ts` —
+> `lib/authz.ts` hangs off `auth.ts` and would drag mail delivery into the browser
+> bundle.
+
+`node run.mjs user-list` (or `… --role owner`) lists what exists. Both commands
+are an idempotent upsert by email, and the dry run is the default: only `--apply`
+writes.
+
+## The admin surface, and the support page for one Member
+
+**User admin** is `/dashboard/admin/users` (logic `lib/users/manage.ts`, safety
+rules as pure functions in `lib/users/rules.ts`). An Operator may change an address
+there **without a confirmation link** — support acts on a call — but
+`setUserEmail()` MUST NOT be exposed to the Member as self-service. There is no
+"set a password for this user", and there will not be: a password the Operator
+chose is a password the Operator knows.
+
+`users.checkoutToken` (`ensureCheckoutToken()`) corroborates the member id in
+`tracking[custom]`; it is **not** a credential — never remove it as unused. The
+record of who bought what is written at payment time and never reconstructed later.
+
+**One Member, whole:** `/dashboard/admin/users/<id>` is the support page — token
+ledger via `listLedgerFor()`, every grant ever held via `listGrantsFor()` labelled
+by `grantState()`. Three actions, all demanding a written reason (read the skill
+`guardrails` before changing them):
+
+| Action | Rule |
+|---|---|
+| **Correct the balance** | `adjustTokens()` (`lib/tokens/account.ts`) → `decideAdjustment()` |
+| **Grant a plan by hand** | `grantByHand()` (`lib/entitlements/manage.ts`) → `canGrantByHand()` |
+| **Revoke a manual grant** | `revokeGrantByHand()` → `canRevokeGrant()`. **Irreversible** |
+
+Two refusals, both written as pure functions and never left to the form: a **token
+package MUST NOT be handed out as a grant** (a balance is not an entitlement, and
+`hasPlan(memberId, key)` would answer `false` for such a row for ever), and **only
+`source: "manual"` rows can be revoked** — that refusal lives in the `UPDATE`
+itself, because purchased access ends by Digistore24 event only. A bounded manual
+grant ends at the **end** of the chosen day (`accessUntilFromDay()`, UTC), so
+always render such dates with `timeZone: "UTC"`. Why two identical manual grants
+are legal: [`entitlements.md`](entitlements.md) → *The Operator's support page*.
+
+## Impersonation — signing in as one of your customers
+
+An Operator can sign in as a customer from the row menu on
+`/dashboard/admin/users`. It exists because the alternative is worse: without it,
+seeing what a customer sees means `setUserEmail()` to an address you control and
+back — a foreign address on the account, and mail about a change they never made.
+While it runs **the session IS the member**: every `requireOwner()` refuses, and
+`session.user.impersonation` is set only during one.
+
+| | |
+|---|---|
+| **Narrow** | owner → member only. Never another owner, never a blocked account, never yourself, never chained. `canImpersonate()` in `lib/users/rules.ts` |
+| **Visible** | an undismissable banner on **every** page, from the root layout — not from `AppShell`, which stops at `/dashboard` |
+| **Bounded** | 30 minutes, then it ends by itself |
+| **Recorded** | one row in `impersonations`, written **before** the session changes |
+
+- **The record is the authorisation, not a log line.** The `jwt` callback rewrites
+  the session only if the record row already names the caller as its operator —
+  never write the row after the swap, never take a member id from the payload
+  (`lib/impersonation/session.ts`; `lib/impersonation/guard.test.ts` fails the
+  build on it).
+- **The exit action deliberately does NOT call `requireOwner()`**
+  (`app/impersonation-actions.ts`) — by then the session says `member`, and the
+  check would lock the Operator inside. Guard: `canStopImpersonating()`; the action
+  takes no id at all.
+- **Automatic top-up is suppressed** (`lib/tokens/spend.ts`) — spending the balance
+  is allowed, charging a stored card with nobody there to agree is not.
+- **The private-message surfaces are absent entirely**
+  (`modules/community/lib/dm-actor.ts`) — no read, no send, no report, answering
+  exactly what a switched-off feature answers. "Recorded" is what makes
+  impersonation defensible, and the record says an operator was in an account, not
+  what they read; reading somebody's mail leaves no second trace, so the capability
+  was removed rather than logged. The rooms are unaffected and act as the member.
+
+Kill switch: `"enabled": false` in `config/impersonation.json`
+(`isImpersonationEnabled()`; a malformed file counts as off). Audit:
+`/dashboard/admin/impersonations`, in `node run.mjs data-export`, kept 12 months
+([`data-protection.md`](data-protection.md) §12); what was *done* while inside is
+deliberately not recorded anywhere.
+
+**Blocking** (`users.blockedAt`) takes effect in two places, and both are needed
+(`lib/users/blocked.ts`): the `signIn` callback in `auth.ts` stops a new sign-in,
+and `requireActiveUser()` in `app/dashboard/layout.tsx` ends the running session —
+sessions are JWTs and carry sign-in-time state, so without the second half a
+blocked user stays in until the JWT expires. Blocked users land on
+`/login?error=AccessDenied`, and the password sign-in refuses them **twice**, in
+`verifyPasswordLogin()` and again in the `signIn` callback. That redundancy is
+deliberate; do not tidy it away.
+
+🚨 **A role is re-read from the DATABASE at the moment of each act, never taken
+from the session.** A JWT carries what somebody was when they signed in, so
+`session.user.role === "moderator"` would keep working for hours after the role was
+taken away.
 
 ## Changing the email address
 
@@ -395,4 +536,5 @@ One limit is honest to name: a jar that filled up past ~16 KB while this app
 was closed kills even the GET — the app never runs, nothing can prune, and only
 the manual clearing above helps. The full reasoning — why every installation
 has its own cookie names in the first place, and why the sweep has a threshold —
-is in `CLAUDE.md` → **Several copies on one machine**.
+is in [`troubleshooting.md`](troubleshooting.md) → *Several copies on one
+machine*.

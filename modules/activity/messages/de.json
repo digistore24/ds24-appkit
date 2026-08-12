@@ -1,0 +1,22 @@
+{
+  "activity": {
+    "loading": "Wird geladen …",
+    "attemptsOf": "{count} von {max} Versuchen verbraucht",
+    "checkpointSaved": "Zwischenstand gespeichert.",
+    "passedYes": "Bestanden!",
+    "passedNo": "Diesmal nicht bestanden.",
+    "finished": "Abgeschlossen.",
+    "accountExportNote": "Deine Ergebnisse aus den Übungen: was du bearbeitet hast, wie oft, wie viele Punkte und ob es gereicht hat.",
+    "accountDeletionNote": "Deine Ergebnisse aus den Übungen, vollständig."
+  },
+  "errors": {
+    "activityUnavailable": "Dieses Element ist gerade nicht verfügbar.",
+    "activityNoAccess": "Dieses Element gehört zu einem Produkt, das du noch nicht hast.",
+    "activityRateLimited": "Kurz durchatmen — gleich geht es weiter.",
+    "activityBadSubject": "Diese Anfrage war fehlerhaft.",
+    "activityMaxAttempts": "Alle Versuche sind aufgebraucht.",
+    "activityInsufficientBalance": "Dein Guthaben reicht dafür nicht aus.",
+    "activityNotRecorded": "Schon erledigt — dieser Versuch wurde nicht doppelt gezählt.",
+    "activityFailed": "Das hat gerade nicht geklappt. Versuch es noch einmal."
+  }
+}

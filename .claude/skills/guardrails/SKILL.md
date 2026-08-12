@@ -115,7 +115,7 @@ Server Action, and both refuse without a written reason.
 ## A verdict is never reached in the browser
 
 Where the app judges what a customer did — a quiz, a game, a graded exercise
-(`lib/learning/`) — **the score, the pass and the completion come into being
+(`modules/activity/`) — **the score, the pass and the completion come into being
 on the server, and the solution never leaves it.** A submission from a
 browser is data about an attempt, never the result of one.
 
@@ -164,13 +164,17 @@ app computed. That is the case these rules are about.
   member without a second thought.
 - **A product-side call is given exactly the rows named at its call site, one
   field at a time.** Never a member id it resolves for itself, never a whole
-  record. `askCompanion()` takes labelled facts and nothing else, and
-  `lib/ai/companion.ts` imports no database, no entitlement function and no token
-  function — a test reads the file to keep that true. This is not tidiness: it is
+  record. `askCompanion()` takes labelled facts and nothing else, and neither
+  `lib/ai/customer-text.ts` (the core's fence, where the shape is defined) nor
+  `modules/companion/companion.ts` imports a database, an entitlement function or a token
+  function — a test beside each reads the file to keep that true. This is not tidiness: it is
   what makes the inventory in `docs/data-protection.md` §8a writable from the
   code instead of from an intention.
 - **Text a customer wrote is content, never instruction — including the text
-  they wrote last week.** The fence lives in the layer and is tested there, and
+  they wrote last week.** The fence lives in the layer and is tested there —
+  `lib/ai/customer-text.ts`, in the CORE, so every caller can import it and none
+  has an excuse: a companion, an activity's `grade()` sending a submission to a
+  model, whatever comes next. And
   it covers their earlier turns as well as the current one. Do not restate it per
   call site, and do not build a second path that skips it — a companion reads
   what somebody else wrote by design, which is exactly the surface where prompt

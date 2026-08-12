@@ -21,7 +21,7 @@ import {
   index,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import { users } from "./schema";
+import { users } from "./schema-core";
 
 // Where a grant came from. Never changes for the life of a row — which is what
 // makes it safe for the provenance CHECK to constrain on it (see the migration).

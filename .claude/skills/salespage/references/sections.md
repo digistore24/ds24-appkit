@@ -165,7 +165,7 @@ const link =
     : null;
 
 <section id="offer" className="mx-auto mt-24 max-w-md scroll-mt-24">
-  <Card className="border-primary shadow-sm">
+  <Card className="border-primary">
     <CardContent className="flex flex-col gap-4 pt-6">
       <h2 className="text-2xl font-semibold">{def.name}</h2>
       <p className="flex items-baseline gap-2">

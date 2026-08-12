@@ -26,7 +26,7 @@
 // local and the cloud driver are exercised through different delivery paths,
 // which `docs/visuals.md` says plainly rather than letting a developer conclude
 // from a working DEV setup that production will behave the same.
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 
 import type { MediaStore } from "./store";
@@ -95,7 +95,48 @@ export function createLocalStore(root: string): MediaStore {
       }
     },
 
+    async firstBytes(key, n) {
+      // `pathFor` outside the try, for the reason `head()` states above.
+      const target = pathFor(key);
+      let handle;
+      try {
+        handle = await open(target, "r");
+      } catch {
+        return null;
+      }
+      try {
+        const buffer = Buffer.alloc(Math.max(0, n));
+        const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+        return new Uint8Array(buffer.subarray(0, bytesRead));
+      } finally {
+        await handle.close();
+      }
+    },
+
+    async copy(fromKey, toKey) {
+      // Read and write, because there is no provider to ask. The size question
+      // the S3 driver's comment raises does not arise here: this driver is DEV
+      // only (`lib/env-guard.ts`) and cannot mint an upload address at all, so
+      // the only bytes it ever copies are a test's.
+      //
+      // `contentType` is unused — a file on disk carries no metadata to set.
+      // Delivery reads the type from the `media` row either way, on every
+      // driver.
+      const source = pathFor(fromKey);
+      const target = pathFor(toKey);
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(target, await readFile(source));
+    },
+
     publicUrl() {
+      return null;
+    },
+
+    createUploadUrl() {
+      // Nothing to write to but the app itself. A caller that gets null here is
+      // not looking at a broken store — it is looking at DEV, and the honest
+      // answer is that the direct path needs an S3 driver. The layer above says
+      // exactly that rather than reporting the store unusable.
       return null;
     },
 

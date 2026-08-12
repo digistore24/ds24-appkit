@@ -106,6 +106,63 @@ state a jar can reach while this app was closed. From there, and as the
 immediate remedy in every case, clear the cookies for `localhost` in the
 browser (DevTools → Application → Cookies).
 
+## The database that belonged to another app
+
+The symptom is a brand new app that will not start, and the sentence it fails
+with is one that cannot be true:
+
+```
+>> Migrating localhost/app
+✗ Migration failed: type "ipn_result" already exists
+  While running: CREATE TYPE "public"."ipn_result" AS ENUM('accepted', …);
+```
+
+That is the **first statement of the first migration**. On an empty database it
+cannot fail. So the database is not empty — and since nothing was recorded as
+applied, whatever is in there was put there by something that is not this app.
+`node run.mjs db-migrate` says so itself now, with the table count, rather than
+printing the statement and leaving you to guess.
+
+There are exactly two ways in, and both are worth knowing because the first one
+also reaches production:
+
+**1. `DATABASE_URL` points at somebody else's database.** Check the line in
+`.env`. Locally the usual cause is a port: every project from this template uses
+the credentials `app/app/app`, so they fit each other perfectly — see
+[`database.md`](database.md) → *Local Postgres*. `scripts/db/up.mjs` refuses to
+start rather than let that happen, but it can only defend the port it is given.
+
+**2. The local Docker volume came from an older project of the same name.**
+This is the one that produced this section, measured on a real first start.
+Docker Compose names its project — and therefore its container **and its data
+volume** — after the FOLDER the compose file sits in. A folder called `test`,
+`app`, `demo` or `saas` is a folder somebody has had before. The new app comes
+up, Compose hands it `test_pgdata` from an app that has been deleted for months,
+and it finds a schema it never wrote:
+
+```
+$ docker volume ls | grep pgdata
+local     test_pgdata          ← the old app's data, adopted by the new one
+```
+
+The template now derives the project name from the folder's **path** instead and
+records it in `.env` as `COMPOSE_PROJECT_NAME` (`scripts/db/compose.mjs`), so two
+same-named folders are two databases. An app generated before that carries the
+old behaviour — a released app's code is never changed behind its back, and
+`node run.mjs update` brings this text forward, not the fix. Whether yours has
+it is one look: is there a `COMPOSE_PROJECT_NAME` line in your `.env`?
+
+For an app that has already adopted a stranger's volume the way out is one
+command, **as long as the database holds nothing you want to keep**:
+
+```bash
+node run.mjs db-nuke && node run.mjs start
+```
+
+`db-nuke` deletes the volume this project is attached to and nothing else. Look
+at `DATABASE_URL` first: on anything that is not `localhost` this is the wrong
+command, and the migration error says so rather than offering it.
+
 ## Dates and raw SQL
 
 The single sharpest trap in this project, because every part of it looks right.
@@ -142,8 +199,8 @@ Two more ways a `Date` stops being one, both of which keep their type:
 
 - **Through JSON.** `Response.json({ rows })` turns every `Date` into an ISO
   string while the TypeScript type still says `Date`. Anything fetched from
-  `app/api/…` needs converting back on arrival — `lib/mcp/tools.ts` calls
-  `.toISOString()` on purpose, which is the honest version of the same thing.
+  `app/api/…` needs converting back on arrival — calling `.toISOString()`
+  yourself at the boundary is the honest version of the same thing.
 - **A nullable column.** `format.dateTime(null)` and `format.dateTime(undefined)`
   do **not** throw and log **nothing**: they render *1 January 1970* and *today*
   respectively. No log check can catch those. Every nullable date needs its
@@ -157,34 +214,73 @@ Two more ways a `Date` stops being one, both of which keep their type:
 
 ## What the first install prints — and which of it is real
 
-`node run.mjs start` installs the dependencies on its first run, and npm says
-three things while it does. Somebody who has just deployed cannot tell them
-apart, and neither can you without this page. **Read it before you "fix"
+`node run.mjs start` installs the dependencies on its first run, and npm talks
+while it does. Somebody who has just deployed cannot tell an expected line from
+a real one, and neither can you without this page. **Read it before you "fix"
 anything npm complains about here** — one of the two obvious fixes ships a crash
 to the customers of this app.
 
-| What npm prints | What it is |
+**This page does not tell you how much npm will print** — not how many lines,
+not how many findings, not how many paths one of them is counted on. All three
+move with every upstream release, so a number here would be a measurement with
+yesterday's date on it, and prose carries no date. What does not move is the
+KIND of line and what to do with it, and that is what follows.
+
+| What npm prints | What it is, and what to do |
 |---|---|
-| `npm WARN deprecated @esbuild-kit/esm-loader` (and `core-utils`) | transitive dependencies of `drizzle-kit`, which is on its latest stable release. **Nothing to do.** Not ours, no newer stable to move to |
-| `9 high severity vulnerabilities` | **real findings, none of them shipped.** All of them are in `devDependencies`, through the eslint chain. See below |
-| an `ERESOLVE` block | **a regression.** There is none as of this version, and `scripts/deps.test.ts` fails if one comes back |
+| `npm WARN deprecated @esbuild-kit/esm-loader` (and `core-utils`) | transitive dependencies of `drizzle-kit`, which is on its latest stable release. **Nothing to do.** Not ours, no newer stable to move to. The pair is named in `scripts/deps.test.ts`; a *third* deprecated package fails that test rather than quietly joining the wallpaper |
+| a security advisory summary — `… vulnerabilities`, at any severity | **judge it against what ships.** `npm audit --omit=dev --audit-level=high` — what the skill `security-gateway` §5 runs — is the question that decides whether anything reaches a customer. A dev-only finding is real but does not ship. A finding you accept is accepted **by its GHSA id with a reason written next to it**, never as a number. See below |
+| an `ERESOLVE` block | **a regression.** Report it, do not silence it. See below for what catches it and what does not |
 
-**The nine findings are dev-only, and that is the whole answer.**
-`npm audit --omit=dev --audit-level=high` — which is what the skill
-`security-gateway` §5 runs — is `found 0 vulnerabilities`. They are all one
-advisory (`brace-expansion`, GHSA-mh99-v99m-4gvg) reached through
-`eslint-config-next`, and they persist because the advisory range is written
-`<=5.0.7` across every major, so the 1.x version that *does* carry the fix sits
-inside it. This project's lockfile pins that fixed version. Nothing in the
-bundle a customer loads is affected.
+**On `ERESOLVE`, precisely.** `scripts/deps.test.ts` fails when the *known
+cause* comes back: the `esbuild` override written as a caret or a pin instead of
+a floor (the test is called *"is a floor, not a pin — a caret range is what
+printed ERESOLVE at every install"*). That test reads `package.json` and
+`package-lock.json` as JSON and never installs anything, so it does not see a
+single line of npm's output. An `ERESOLVE` that arrives by some other route is
+therefore something a **person** has to notice — nothing in this app can raise
+it for you. When one appears: report it rather than silencing it, and expect the
+fix to live upstream of this app, in whichever package changed its peer range,
+rather than in a new `overrides` entry here.
 
-**Two fixes look obvious and are both refused**, with the numbers behind the
-refusal in `scripts/deps.test.ts`:
+### The advisory that was reported nine times — a post-mortem
 
-- **`eslint@10`** — what `npm audit fix --force` proposes. It takes the count
-  from 9 to 6, not to 0 (the findings come through eslint's *plugins*, not
-  through eslint), and it introduces three fresh `ERESOLVE` conflicts. Worse on
-  both counts.
+For a long stretch of this template's life a first install ended with
+`9 high severity vulnerabilities`, and this page told the reader to report the
+nine as known. That instruction was wrong twice over, and both mistakes are
+worth keeping written down, because the shape of them outlives the episode.
+
+- **There was one advisory, not nine problems.** `GHSA-mh99-v99m-4gvg` in
+  `brace-expansion`: a brace bomb expands without bound and takes the process
+  down with an out-of-memory crash. It was reachable on nine **paths** through
+  `eslint-config-next`, and npm was counting paths. `9 high severity
+  vulnerabilities` was that count. Anybody who read it as nine problems learned
+  something that was never true.
+- **It was dev-only throughout.** `npm audit --omit=dev` was clean the whole
+  time the nine were being reported. Nothing in the bundle a customer loads was
+  ever affected by it.
+- **It persisted because of how the advisory range is written** — `<=5.0.7`
+  across every major — so the 1.x backport that actually carries the fix sits
+  *inside* the range and keeps matching. This project's lockfile has pinned a
+  fixed version the whole time.
+- **It is no longer reported on the tree this page ships from**, at any
+  severity, with or without `--omit=dev`. **Why it stopped is not measured
+  here.** A correction to the advisory's range upstream is the likely
+  explanation, and *likely* is as far as this page goes — a measurement nobody
+  took does not become a fact by being plausible.
+
+And that last point is the reason for the rule at the top of this page: an
+account of what npm prints is only ever true of the day it was taken. Judge what
+**you** see. Do not carry a number forward from a document, this one included.
+
+**Two fixes look obvious and are both refused**, with the measurements behind
+the refusal in `scripts/deps.test.ts`:
+
+- **`eslint@10`** — what `npm audit fix --force` proposes. It does not remove
+  the findings, because they arrive through eslint's *plugins* rather than
+  through eslint itself: upgrading eslint leaves the plugins' own `minimatch@3`
+  chain exactly where it was. And it introduces three fresh `ERESOLVE`
+  conflicts. Worse on both counts.
 - **`"overrides": { "minimatch": "^10" }`** — this one does make `npm audit`
   read clean, which is why it is the dangerous one. minimatch 10's CommonJS
   build exports an object rather than a function, and three
@@ -194,10 +290,11 @@ refusal in `scripts/deps.test.ts`:
   it looks like a clean fix and lands as a landmine in the first app that
   enables one.
 
-So: report the nine as known and dev-only, say `npm audit --omit=dev` is clean,
-and leave them. A clean audit number is not worth a crash in somebody's app. The
-way out is upstream — `eslint-config-next` moving its plugins off `minimatch@3`
-— and until then `node run.mjs update` will bring this page with it.
+So: a clean audit summary is not worth a crash in somebody's app, and neither
+override buys one honestly. If a finding in that chain is being reported to you,
+report it as known and dev-only, say what `npm audit --omit=dev` answers, and
+leave it. The way out is upstream — `eslint-config-next` moving its plugins off
+`minimatch@3` — and `node run.mjs update` brings this page along when it does.
 
 `package.json` is JSON and holds no comments, so the reasoning for every
 `overrides` entry lives in **`scripts/deps.test.ts`** instead, the same way the
@@ -208,13 +305,13 @@ pins the two things that must not drift back: the `esbuild` override is a
 deployed — and `brace-expansion` must resolve to a version that caps its
 expansion.
 
-## No greeting appeared — one script, four wirings
+## No greeting appeared — one script, three wirings and one guidance rule
 
 The greeting is not decoration: it carries the `[Setup: …]` line the project's
 rulebook builds its hard precondition on — whether this machine can run the app
-at all. It is printed by `scripts/dev/session-start.mjs`, and because the four
+at all. It is printed by `scripts/dev/session-start.mjs`, and because the
 programs do not agree on how a command runs at session start, that same script
-is invoked four different ways. It lives in `scripts/dev/` and not under any one
+is invoked three different ways. It lives in `scripts/dev/` and not under any one
 program's folder for exactly that reason — it is shared tooling, like everything
 else in there:
 
@@ -222,8 +319,40 @@ else in there:
 |---|---|
 | Claude Code | `.claude/settings.json` → `hooks.SessionStart` |
 | Codex CLI | `.codex/config.toml` — `[[hooks.SessionStart]]` entries, enabled by `[features] codex_hooks = true` in the same file |
-| Gemini CLI | `.gemini/settings.json` → `hooks.SessionStart` |
 | OpenCode | `.opencode/plugins/session-start.js` — it has no declarative hooks, so this one is a module subscribing to `session.created` |
+| **Antigravity CLI** | **nothing — and that is the finished answer, not a gap.** See below |
+
+🚨 **The fourth program has no session-start event, so it gets no hook.**
+Antigravity CLI fires exactly five (`PreToolUse`, `PostToolUse`,
+`PreInvocation`, `PostInvocation`, `Stop`), and none of them is "a session
+began". Hanging the greeting off `PreInvocation` was considered and rejected on
+three counts, each fatal on its own:
+
+- **It is too late.** That event fires before a MODEL invocation, so the
+  earliest it can run is after the user has already typed something. The
+  greeting exists to be read before the first file is touched.
+- **It cannot reach the person.** Its only output is `injectSteps`, which puts
+  text in front of the model. There is no field that displays anything to the
+  human, and the CLI's own ephemeral messages are reported as invisible in the
+  interface — they land in the transcript file and nowhere a person looks.
+- **Getting it wrong is silent.** A `hooks.json` entry naming an event this
+  program does not have is dropped without a word — no error, no warning, no
+  line in the output. That is exactly how somebody ends up believing a greeting
+  is wired when nothing runs, which is the failure this whole section exists to
+  prevent.
+
+So: no hook, rather than one that looks wired and does nothing. A greeting that
+fails silently is worse than one that was never promised.
+
+What replaces it is the rule in `CLAUDE.md` / `AGENTS.md`: *absence of a signal
+is never a signal — if no greeting appeared, run `node run.mjs greet` before you
+touch a file.* That sentence was written for a hook that failed to fire, and in
+this program it is simply the normal path. It needs no wiring at all, because
+Antigravity reads `AGENTS.md` by itself — there is no context-filename setting
+to configure, and none is missing. Both halves are asserted by
+`scripts/agent-setup.test.ts` — that this program ships no greeting hook, and
+that the sentence standing in for one is still in both files — so the exemption
+cannot quietly decay into an omission.
 
 The project ships wired for all four, and `node run.mjs agent-setup` reduces it
 to one. That order is deliberate: a fresh clone works in whichever program it is
@@ -234,6 +363,12 @@ update` does not put them back, and can restore any of it (`--agent <other>` or
 `--undo`). It never touches `.claude/skills/`, the guidance or the greeting:
 those are shared by all four. `setup-machine` runs it on the first session; the
 person building never has to know it exists.
+
+⚠️ **One of the four cannot be detected, and `agent-setup` says so rather than
+guessing.** Antigravity passes session context to hooks as stdin JSON and sets
+no environment variable of its own, so there is nothing to read. Run without
+`--agent` inside it, the command refuses and lists the four names — which is the
+correct outcome: a wrong guess removes the wiring somebody is using.
 
 One case the script cannot cover is its own absence. It is a Node program, so a
 machine without Node cannot report that it has no Node — and "the agent and git
@@ -359,7 +494,8 @@ The fix is the content mechanism, never a workaround:
 - What cannot live in the repo moves by command:
   `node run.mjs content-apply --env prod` (rows + shipped media) and
   `node run.mjs content-media-sync --env prod --apply` (staged media).
-- The proof is `node run.mjs content-check --env prod` — it HEADs every
+- The proof is `node run.mjs content-check --env prod` — it asks every owner,
+  and the core's half HEADs every
   declared file against the production store and counts every applier's rows
   in the production database. Green there, plus one real content page opened
   live, is what "the content is there" actually means. It is a named go-live

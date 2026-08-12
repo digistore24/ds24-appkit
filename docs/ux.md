@@ -214,19 +214,45 @@ same four:
 
 The shell itself is handled: below `md:` the sidebar becomes a `<Sheet>`.
 
+### The icon on the home screen
+
+The same phone can keep the app: `app/manifest.ts` makes it installable, and
+`components/install-app.tsx` offers it — once in the dashboard from the second
+visit, and permanently as *"Als App installieren"* under the user's name. Both
+render nothing wherever installing is impossible or already done.
+
+Three things to know before touching any of it:
+
+- **The notice gets one showing, and that is not laziness.** On iOS there is no
+  way to detect that the app is already installed while somebody is browsing in
+  Safari. A notice that could return would return to people who already have the
+  icon, which is why the permanent home is the menu entry.
+- **On iPhone the installed app signs in separately** — it has its own cookie
+  store, and the sign-in link from an email opens Safari instead. The install
+  text says so; do not shorten it away. [`docs/mobile.md`](mobile.md) →
+  *First: an icon, or an app?* has the full trap.
+- **It is a `Callout`, and it is not sticky.** `AppShell`'s header is
+  `sticky top-0 z-30`, and a second sticky element on that edge is the collision
+  `components/impersonation-banner.tsx` documents.
+
 ---
 
-## 7. Recolouring without breaking it
+## 7. Turning a dial without breaking it
 
-`--primary`, `--primary-foreground` and `--ring`, in **both** blocks of
-`app/globals.css`. The file's own header explains the rest. The trap, and the
-reason `ux-check` measures it:
+The look has **four** dials and the list is closed — the accent, the radius, the
+type and the elevation. Each is a named slot whose value is set once in
+`app/globals.css` or `app/layout.tsx` and **never appears as a class on a page**;
+where each one lives, and why opening a fifth is a change made in the template
+rather than in an app, is [`design-system.md`](design-system.md) §8. Colour is
+only the first of them, and the one with the trap `ux-check` exists to measure:
 
 **`--primary` is a surface AND a text colour.** It is the button, and it is the
 active menu item. A brand colour light enough to look right as a button can be
 unreadable as a word on white — and the mode you were not looking at is the one
 that breaks. `node run.mjs ux-check` measures both roles in both modes and tells
-you the ratio.
+you the ratio. It measures the other three from the other side: a `font-[…]`,
+a `shadow-[…]`, a bare `shadow-lg` or a hex in an arbitrary value is a value
+written past a dial, and each hit says which dial it went past.
 
 ---
 
@@ -240,9 +266,11 @@ node run.mjs ux-check
 |---|---|
 | contrast of every token pair, light and dark | whether the wording is clear |
 | the focus ring at 3:1 | whether the first five minutes make sense |
-| hard-coded colours and hand-built elements | whether a flow has a dead end |
-| icon buttons with no name, images with no `alt` | whether the empty state says the right thing |
-| pages under `/dashboard` that are in no menu | anything that needs the app running |
+| every token defined in **both** blocks, not one | whether a flow has a dead end |
+| a value written past a dial — `font-[…]`, `shadow-[…]`, a bare `shadow-lg`, a hex in an arbitrary value, `font-heading` | whether the empty state says the right thing |
+| hard-coded colours and hand-built elements | whether the look somebody chose is the right one |
+| icon buttons with no name, images with no `alt` | anything that needs the app running |
+| pages under `/dashboard` that are in no menu | |
 
 A green run means the countable things are counted. **It is not a verdict on the
 app.** The verdict is `ux-gateway`, which reads the pages, runs the app and

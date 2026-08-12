@@ -18,13 +18,21 @@ import { existsSync } from "node:fs";
 import { freePort, portInUse, urlPort, urlSetPort } from "../dev/ports.mjs";
 import { readEnvValue, setEnvValue } from "../lib/env-write.mjs";
 import { capture, run } from "../lib/proc.mjs";
+import { composeProjectFlag } from "./compose.mjs";
 import { usesLocalPostgres } from "./driver.mjs";
 import { localUp } from "./local.mjs";
 
 const DEFAULT_DB_PORT = 15432; // as in docker-compose.yml
 
-/** docker compose, output captured. `docker` is a real executable everywhere. */
-const compose = (args) => capture("docker", ["compose", ...args]);
+/**
+ * docker compose, output captured. `docker` is a real executable everywhere.
+ *
+ * `-p` on every call: without it Compose names the project after the folder, so
+ * two apps in two folders both called `test` share one container and one volume
+ * — and the second one silently inherits the first one's database. See
+ * scripts/db/compose.mjs.
+ */
+const compose = (args) => capture("docker", ["compose", ...composeProjectFlag(), ...args]);
 
 function hintPortInUse(dbPort, free) {
   return (
@@ -98,7 +106,7 @@ export async function dbUp() {
   }
 
   // 3) Start it and wait for the healthcheck.
-  if ((await run("docker", ["compose", "up", "-d", "--wait"])) !== 0) {
+  if ((await run("docker", ["compose", ...composeProjectFlag(), "up", "-d", "--wait"])) !== 0) {
     throw new Error(
       `\n✗ Postgres could not start.\n` +
         `  Most common reason: port ${dbPort} is taken.\n` +

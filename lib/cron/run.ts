@@ -39,7 +39,7 @@ export interface JobResult {
  * and does not need to — both mean "not mine, not now".
  */
 async function claim(job: CronJob, now: Date, force: boolean): Promise<boolean> {
-  const settings = jobSettings(job.id);
+  const settings = jobSettings(job.id, job.enabledByDefault);
 
   // The row has to exist before it can be claimed conditionally. `onConflictDoNothing`
   // rather than an upsert: an existing row's schedule must not be reset by the
@@ -100,7 +100,7 @@ async function finish(
 
 /** Run one job if it is claimable. The unit both the scheduler and the endpoint use. */
 export async function runOne(job: CronJob, now: Date, force = false): Promise<JobResult> {
-  const settings = jobSettings(job.id);
+  const settings = jobSettings(job.id, job.enabledByDefault);
   if (!settings.enabled && !force) {
     return { job: job.id, outcome: "skipped", detail: "disabled in config/cron.json", ms: 0 };
   }
@@ -184,7 +184,7 @@ export async function jobStatuses(): Promise<JobStatus[]> {
 
   return CRON_JOBS.map((job) => {
     const row = byId.get(job.id);
-    const settings = jobSettings(job.id);
+    const settings = jobSettings(job.id, job.enabledByDefault);
     return {
       job: job.id,
       describe: job.describe,

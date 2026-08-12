@@ -12,16 +12,22 @@
 // import.
 
 /**
- * The canonical roles. Deliberately only two:
- *   "owner"  = operator/admin — may do everything, including user management
- *   "member" = ordinary user/customer — the default when signing up yourself
+ * The canonical roles. Three of them:
+ *   "owner"     = operator/admin — may do everything, including user management
+ *   "moderator" = a member the operator trusts to keep community rooms clean.
+ *                 NOT an admin: no user management, no roles, no billing —
+ *                 every admin rule answers "notOwner" for a moderator, and
+ *                 `requireOwner()` refuses them like any member. What a
+ *                 moderator may DO is granted per duty (groups, Epic 23),
+ *                 never by this value alone.
+ *   "member"    = ordinary user/customer — the default when signing up yourself
  *
- * In the UI they are called "Admin" and "User" — those display names live in
- * `messages/*.json` under `roles`, not here (see <RoleBadge>,
+ * In the UI they are called "Admin", "Moderator" and "User" — those display
+ * names live in `messages/*.json` under `roles`, not here (see <RoleBadge>,
  * components/role-badge.tsx). The CLI additionally accepts the aliases
  * admin→owner and user→member (scripts/users/_db.mjs).
  */
-export const ROLES = ["owner", "member"] as const;
+export const ROLES = ["owner", "moderator", "member"] as const;
 export type Role = (typeof ROLES)[number];
 
 /** Checks whether an arbitrary value is a valid role (e.g. form input). */
