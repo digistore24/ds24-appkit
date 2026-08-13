@@ -12,9 +12,9 @@
 // parse. The second is the one with teeth — the applier THROWS on it, and a
 // reader that inherited that behaviour would turn one broken file into a page
 // the operator cannot open to find out which file it is.
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { contentFileIndex } from "./content-files";
@@ -29,6 +29,10 @@ function contentDir(files: Record<string, unknown>) {
   const dir = mkdtempSync(join(tmpdir(), "ds24-course-files-"));
   dirs.push(dir);
   for (const [name, body] of Object.entries(files)) {
+    // A key may name a subdirectory, because a course IS a directory since
+    // Story 44.2 — and a key that does not is how the "loose file from the old
+    // layout" case gets exercised.
+    mkdirSync(dirname(join(dir, name)), { recursive: true });
     writeFileSync(join(dir, name), typeof body === "string" ? body : JSON.stringify(body));
   }
   return dir;
@@ -63,7 +67,7 @@ describe("an app with no course files", () => {
 describe("a file that claims slugs", () => {
   const dir = () =>
     contentDir({
-      "01-start.json": {
+      "kurs/01-start.json": {
         slug: "start",
         title: "Los geht es",
         position: 1,
@@ -75,13 +79,13 @@ describe("a file that claims slugs", () => {
     });
 
   it("maps the block slug to its file", () => {
-    expect(contentFileIndex(dir()).blocks.get("start")).toBe("01-start.json");
+    expect(contentFileIndex(dir()).blocks.get("start")).toBe("kurs/01-start.json");
   });
 
   it("maps every lesson slug in it to the same file", () => {
     const { units } = contentFileIndex(dir());
-    expect(units.get("willkommen")).toBe("01-start.json");
-    expect(units.get("werkzeug")).toBe("01-start.json");
+    expect(units.get("willkommen")).toBe("kurs/01-start.json");
+    expect(units.get("werkzeug")).toBe("kurs/01-start.json");
     expect(units.size).toBe(2);
   });
 
@@ -96,21 +100,21 @@ describe("a file that claims slugs", () => {
     // about `position` or `releaseAfterDays` is how two parsers start
     // disagreeing about the operator's own files.
     const index = contentFileIndex(dir());
-    expect(Object.keys(index)).toEqual(["blocks", "units", "unreadable"]);
+    expect(Object.keys(index)).toEqual(["courses", "blocks", "units", "unreadable"]);
   });
 });
 
 describe("a file with no units, and one with junk in the list", () => {
   it("reads a block that declares no lessons", () => {
-    const dir = contentDir({ "leer.json": { slug: "leer", title: "Leer", position: 1 } });
+    const dir = contentDir({ "kurs/leer.json": { slug: "leer", title: "Leer", position: 1 } });
     const index = contentFileIndex(dir);
-    expect(index.blocks.get("leer")).toBe("leer.json");
+    expect(index.blocks.get("leer")).toBe("kurs/leer.json");
     expect(index.units.size).toBe(0);
   });
 
   it("skips a unit entry with no usable slug rather than failing the file", () => {
     const dir = contentDir({
-      "mixed.json": {
+      "kurs/mixed.json": {
         slug: "mixed",
         units: [{ title: "no slug" }, null, { slug: "", title: "empty" }, { slug: "echt" }],
       },
@@ -127,13 +131,13 @@ describe("🚨 a broken file names itself and takes nothing with it", () => {
     // about to write. This reader feeds a PAGE, and a page that dies on a
     // broken file is a page nobody can open to learn which file is broken.
     const dir = contentDir({
-      "01-good.json": { slug: "good", units: [{ slug: "eins" }] },
-      "02-broken.json": "{ this is not json",
-      "03-also-good.json": { slug: "also", units: [{ slug: "zwei" }] },
+      "kurs/01-good.json": { slug: "good", units: [{ slug: "eins" }] },
+      "kurs/02-broken.json": "{ this is not json",
+      "kurs/03-also-good.json": { slug: "also", units: [{ slug: "zwei" }] },
     });
     const index = contentFileIndex(dir);
 
-    expect(index.unreadable).toEqual(["02-broken.json"]);
+    expect(index.unreadable).toEqual(["kurs/02-broken.json"]);
     expect([...index.blocks.keys()].sort()).toEqual(["also", "good"]);
     expect([...index.units.keys()].sort()).toEqual(["eins", "zwei"]);
   });
@@ -156,9 +160,9 @@ describe("two files claiming one slug", () => {
     // somebody is fixing it. Name order is the applier's own reading order, so
     // both speak about the same file.
     const dir = contentDir({
-      "01-first.json": { slug: "a", units: [{ slug: "u" }] },
-      "02-second.json": { slug: "b", units: [{ slug: "u" }] },
+      "kurs/01-first.json": { slug: "a", units: [{ slug: "u" }] },
+      "kurs/02-second.json": { slug: "b", units: [{ slug: "u" }] },
     });
-    expect(contentFileIndex(dir).units.get("u")).toBe("01-first.json");
+    expect(contentFileIndex(dir).units.get("u")).toBe("kurs/01-first.json");
   });
 });

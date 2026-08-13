@@ -58,12 +58,10 @@ import "../../scripts/lib/env.mjs";
 import { readBlocks } from "./content/appliers/course.mjs";
 import { compareCourse, diffCounts, sameSubjectPairs } from "./lib/diff.mjs";
 import { callSetup, reportRefusal, resolveEnvName } from "../../scripts/setup/client.mjs";
+import { flagsFrom } from "../../scripts/lib/args.mjs";
 
 const args = process.argv.slice(2);
-const flag = (name) => {
-  const i = args.indexOf(`--${name}`);
-  return i === -1 ? null : (args[i + 1] ?? null);
-};
+const flag = flagsFrom(args);
 
 const resolved = resolveEnvName(flag("env"));
 if (resolved.error) {
@@ -250,10 +248,11 @@ if (pairs.length > 0) {
     }
 
     console.log(`    a second one   → leave this slug as it is. The existing rows are untouched`);
-    console.log(`      and their buyers stay where they are. ⚠ This app sells ONE course under`);
-    console.log(`      ONE product key, so the new ${pair.kind === "block" ? "block" : "lesson"} is visible to exactly the SAME`);
-    console.log(`      buyers as the old one — position decides where it appears, nothing else.`);
-    console.log(`      Selling it separately is a different piece of work, and it is not this.`);
+    console.log(`      and their buyers stay where they are. ⚠ Inside ONE course, the new`);
+    console.log(`      ${pair.kind === "block" ? "block" : "lesson"} is visible to exactly the SAME buyers as the old one — position`);
+    console.log(`      decides where it appears, nothing else. Selling it to a DIFFERENT set of`);
+    console.log(`      buyers means a second course: its own directory under content/course/,`);
+    console.log(`      its own course.json, its own planKeys.`);
   }
   console.log(`\n  Matching slugs are NOT in this list: an exact match is you having already`);
   console.log(`  said "this one", and the lists above show what it would change.`);

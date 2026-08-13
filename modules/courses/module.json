@@ -85,6 +85,7 @@
   "contentSource": "content-source.ts",
   "coreExport": [
     "rules.ts",
+    "shapes.mjs",
     "slug.mjs"
   ]
 }

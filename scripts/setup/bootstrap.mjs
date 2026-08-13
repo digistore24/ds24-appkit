@@ -45,6 +45,7 @@ import "../lib/env.mjs";
 import { setEnvValue } from "../lib/env-write.mjs";
 import { hashSetupKey, newSetupKey, setupKeyPrefixOf } from "../../lib/setup/key.mjs";
 import { connect } from "../users/_db.mjs";
+import { flagsFrom } from "../lib/args.mjs";
 
 const ENV_FILE = ".env";
 // ⚠️ The key arithmetic is IMPORTED, not spelled here. It used to be a copy of
@@ -55,10 +56,19 @@ const ENV_FILE = ".env";
 const BOOTSTRAP_DAYS = 7;
 
 const args = process.argv.slice(2);
-const flag = (name) => {
-  const i = args.indexOf(`--${name}`);
-  return i === -1 ? null : (args[i + 1] ?? null);
-};
+// 🚨 The shared reading. This file used to have its own, which took the next
+// token whatever it was — and the two flags below fail differently under it,
+// which is the whole argument for not deciding this per script:
+//
+//   · `--email --apply` was caught, but by luck rather than by the reader: the
+//     `@` check three lines down happens to refuse `"--apply"`.
+//   · `--env --apply` was NOT caught. It falls through the three cases below to
+//     `SETUP_KEY`, so an operator who meant `--env prod` bootstraps DEVELOPMENT
+//     and is told it worked — while `--apply` is still true, because that one
+//     is read with `includes()`.
+//
+// `scripts/lib/args.mjs` carries the rule and the rest of the history.
+const flag = flagsFrom(args);
 const apply = args.includes("--apply");
 
 const email = (flag("email") ?? "").trim().toLowerCase();

@@ -96,7 +96,10 @@ async function notify(
 }
 
 /** Return value for useActionState — `error`/`ok` are finished messages. */
-export type ActionState = { error: string | null; ok: string | null };
+import type { ActionState } from "@/lib/action-state";
+
+/** Re-exported so the components beside this file keep importing it from here. */
+export type { ActionState };
 
 /** Turn an error from the rules/database layer into a displayable message. */
 async function toState(error: unknown): Promise<ActionState> {
@@ -125,7 +128,7 @@ export async function setPasswordAction(
 ): Promise<ActionState> {
   try {
     const session = await requireActiveUser();
-    const { email, created } = await setPassword(session.user.id as string, {
+    const { email, created } = await setPassword(session.user.id, {
       password: String(formData.get("password") ?? ""),
       confirmation: String(formData.get("confirmation") ?? ""),
       current: String(formData.get("current") ?? ""),
@@ -159,7 +162,7 @@ export async function requestEmailChangeAction(
   try {
     const session = await requireActiveUser();
     const { newEmail, token } = await requestEmailChange(
-      session.user.id as string,
+      session.user.id,
       formData.get("email"),
     );
 
@@ -186,7 +189,7 @@ export async function removePasswordAction(
 ): Promise<ActionState> {
   try {
     const session = await requireActiveUser();
-    const { email } = await removePassword(session.user.id as string, {
+    const { email } = await removePassword(session.user.id, {
       current: String(formData.get("current") ?? ""),
     });
     await notify(email, "passwordRemoved");

@@ -127,9 +127,19 @@ in `docs/app.md` (the access gate as code).
 
 All registry fields, never props (a gate the browser sends is no gate):
 
-- `requiresPlan`: a key from `config/digistore-products.json` — the course's
-  own key, almost always. `null` is first-class and means every signed-in
-  member: the free practice element. Never invent a fake key to avoid it.
+- `requiresPlan`: a key from `config/digistore-products.json`. `null` is
+  first-class and means every signed-in member: the free practice element.
+  Never invent a fake key to avoid it.
+
+  🚨 **ONE key, and the course it sits in may be sold under SEVERAL.**
+  `config/course.json` → `planKeys` is a list, because one offering is one
+  Digistore24 product per billing interval; this field is not. So an activity
+  inside a course sold monthly and yearly that names one of the two refuses the
+  other half of its buyers — the element simply is not there for them, behind a
+  page that renders. Until this registry takes a list, the honest answers are
+  `null` (every signed-in member, and the course's own gate has already decided
+  who reaches the page) or a key EVERY buyer of that course holds. Do not pick
+  one of the two intervals and hope.
 - `maxAttempts` + `passMark`: a check judges, a game usually does not
   (`maxAttempts: null`). Refused attempts happen BEFORE grading and cost
   nothing.

@@ -81,6 +81,7 @@ import { pathToFileURL } from "node:url";
 // points at the bundle and the record lands where nobody reads it.
 // (`lib/ai/disclosure.mjs` is the shipped precedent for the static half.)
 import { outcomeFrom, recordFrom } from "@/scripts/security/rules.mjs";
+import { finiteNumber } from "@/lib/finite";
 
 /** One rung's state as it appears in the record — numbers and states only. */
 export interface RecordRung {
@@ -202,10 +203,6 @@ export function composeOutcomes(
 }
 
 /** A number that really is one, else 0 — the record crossed JSON to get here. */
-function count(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
-
 /**
  * The one line of NUMBERS that lands in `cron_runs.lastDetail` — pure.
  *
@@ -236,9 +233,9 @@ export function detailLine(record: Pick<SecurityRecord, "counts" | "rungs">): st
   const tally =
     answered === 0
       ? "nothing was measured"
-      : `${count(counts?.critical)} critical, ${count(counts?.high)} high, ` +
-        `${count(counts?.medium)} medium, ${count(counts?.low)} low, ` +
-        `${count(counts?.accepted)} accepted`;
+      : `${finiteNumber(counts?.critical)} critical, ${finiteNumber(counts?.high)} high, ` +
+        `${finiteNumber(counts?.medium)} medium, ${finiteNumber(counts?.low)} low, ` +
+        `${finiteNumber(counts?.accepted)} accepted`;
 
   return `${answered} of ${rungs.length} rung(s) answered — ${tally}; ${notAsked} not asked`;
 }

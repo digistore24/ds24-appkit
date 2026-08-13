@@ -5,6 +5,7 @@
   },
   "errors": {
     "coursesNotFound": "There is no such lesson.",
+    "coursesCourseNotFound": "There is no such course — check the folder under content/course/.",
     "coursesLocked": "This lesson has not opened yet.",
     "coursesShapeForbidsSubmission": "This course does not take hand-ins.",
     "coursesSubmissionTooLong": "That text is too long.",
@@ -27,6 +28,14 @@
   },
   "courses": {
     "title": "Course",
+    "listTitle": "Courses",
+    "listIntro": "What is on offer here — and what you are already working through.",
+    "listEmptyTitle": "This environment holds no course yet",
+    "listEmptyBody": "A course is a folder under content/course/, and `node run.mjs content-apply` brings it into this environment. Rows do not travel with a deploy — that is what the file is for.",
+    "listBadgeOwned": "Unlocked",
+    "listBadgeOperator": "As the operator",
+    "listOpen": "Open course",
+    "listBuy": "Look and buy",
     "lessonTitle": "Lesson",
     "accountExportNote": "Your download contains which lessons you completed and what you handed in, together with the answer you were given.",
     "accountDeletionNote": "Deleting your account removes everything from the course: your progress, your hand-ins and the replies to them.",
@@ -60,6 +69,8 @@
   },
   "coursesAdmin": {
     "title": "Course structure",
+    "noCourseTitle": "This environment holds no course yet",
+    "noCourseBody": "A course is a folder under content/course/ with a course.json in it. `node run.mjs content-apply` brings it into this environment.",
     "description": "{blocks, plural, =0 {No block yet} one {One block} other {# blocks}}, {lessons, plural, =0 {no lesson} one {one lesson} other {# lessons}} — what this environment holds of the course.",
     "environmentTitle": "What is here is only here",
     "environmentBody": "This page shows the rows in the database of the \"{environment}\" environment. A deploy carries code, not rows: whatever was created here exists in no other environment. Anything that should be everywhere belongs in content/course/*.json and reaches every environment with `node run.mjs content-apply`.",

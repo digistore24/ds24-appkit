@@ -22,8 +22,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useActionToast, type ActionState } from "@/hooks/use-action-toast";
 
 import { setCompletedAction, submitTaskAction } from "../actions";
+import { EMPTY_ACTION_STATE } from "@/lib/action-state";
 
-const EMPTY: ActionState = { error: null, ok: null };
 
 export function CompletionToggle({
   unitSlug,
@@ -87,7 +87,7 @@ export function TaskForm({
   hint: string;
   submitLabel: string;
 }) {
-  const [state, action, pending] = useActionState(submitTaskAction, EMPTY);
+  const [state, action, pending] = useActionState(submitTaskAction, EMPTY_ACTION_STATE);
   useActionToast(state);
 
   const fieldId = `course-task-${unitSlug}`;

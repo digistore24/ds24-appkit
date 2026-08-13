@@ -33,8 +33,8 @@ import { MAX_MODERATION_REASON_LENGTH } from "@/modules/community/lib/rules";
 
 import type { ActionState } from "../actions";
 import { removePostAction, setLockedAction } from "./actions";
+import { EMPTY_ACTION_STATE } from "@/lib/action-state";
 
-const EMPTY: ActionState = { error: null, ok: null };
 
 /**
  * Remove somebody else's post.
@@ -48,7 +48,7 @@ export function RemovePostButton({ postId }: { postId: string }) {
   const t = useTranslations("community");
   const tCommon = useTranslations("common");
   const [open, setOpen] = useState(false);
-  const [state, action] = useActionState(removePostAction, EMPTY);
+  const [state, action] = useActionState(removePostAction, EMPTY_ACTION_STATE);
   const [pending, start] = useTransition();
 
   useActionToast(state);
@@ -116,7 +116,7 @@ export function LockDiscussionButton({
   locked: boolean;
 }) {
   const t = useTranslations("community");
-  const [state, action] = useActionState(setLockedAction, EMPTY);
+  const [state, action] = useActionState(setLockedAction, EMPTY_ACTION_STATE);
   const [pending, start] = useTransition();
 
   useActionToast(state);

@@ -19,6 +19,7 @@
 // worth seeing is ZERO, and zero is reported.
 import type { OriginCounts } from "../lib/manage";
 import { countContent, emptyUnitSlugs } from "../lib/manage";
+import { contentFileIndex } from "../lib/content-files";
 import type { PresenceContributor, PresenceItem, PresenceReport } from "@/lib/content/presence";
 
 /**
@@ -28,11 +29,36 @@ import type { PresenceContributor, PresenceItem, PresenceReport } from "@/lib/co
  * is not the counting but the FORM of every item, and that is a pure question.
  */
 export function courseItems(
+  courses: OriginCounts,
   blocks: OriginCounts,
   units: OriginCounts,
   emptyUnits: number,
+  declaredCourses: number,
 ): PresenceItem[] {
   return [
+    // 🚨 **The ONE line here that carries an `expected`, and the only one that
+    // can turn `content-check` red.** Every other item is a count with
+    // `expected: null`, argued below — but a course is different in kind: the
+    // courses come from REPO FILES (`content/course/<slug>/course.json`), so
+    // how many there should be is knowable before the query, and "none of them
+    // arrived" is exactly the silence this command exists against. Block and
+    // lesson counts legitimately grow while somebody writes; the number of
+    // courses does not drift on its own.
+    //
+    // ⚠️ It compares against the files this REPO holds, so a deploy that never
+    // ran `content-apply` reads `0 of 2` and fails. That is the finding, not a
+    // false alarm: an empty course page is a clean 200, which is the whole
+    // reason `docs/content.md` calls this the exit condition.
+    {
+      what: "courses (from content files)",
+      found: courses.content,
+      expected: declaredCourses,
+      missing:
+        courses.content < declaredCourses
+          ? [`${declaredCourses - courses.content} course(s) declared in content/course/ are not here`]
+          : undefined,
+    },
+    { what: "courses (operator-authored)", found: courses.operator, expected: null },
     // Two lines per table rather than one, because they are two questions. The
     // content rows say whether `content-apply` ever reached this database; the
     // operator's rows say what exists here and in no other environment.
@@ -61,12 +87,18 @@ export function courseItems(
 const contributor: PresenceContributor = {
   id: "courses",
   async check(): Promise<PresenceReport> {
-    const { blocks, units } = await countContent();
+    const { courses, blocks, units } = await countContent();
+    // The repo's own answer to "how many should there be" — read from the
+    // files, never from a number kept by hand.
+    const declared = contentFileIndex().courses.size;
     // Only worth asking once there is a course at all: on an empty environment
     // every unit would be "empty", which is noise on top of the finding.
     const empty = units.content + units.operator > 0 ? await emptyUnitSlugs() : [];
 
-    return { owner: "courses", items: courseItems(blocks, units, empty.length) };
+    return {
+      owner: "courses",
+      items: courseItems(courses, blocks, units, empty.length, declared),
+    };
   },
 };
 

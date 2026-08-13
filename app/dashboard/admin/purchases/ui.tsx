@@ -62,8 +62,8 @@ import {
   type RawSearchParams,
 } from "@/lib/digistore/purchase-filter";
 import { attachOrderAction, type ActionState } from "./actions";
+import { EMPTY_ACTION_STATE } from "@/lib/action-state";
 
-const EMPTY: ActionState = { error: null, ok: null };
 
 export interface Row {
   ds24OrderId: string;
@@ -271,7 +271,7 @@ export function PurchasesTable({
   const tCommon = useTranslations("common");
   const format = useFormatter();
 
-  const [state, action] = useActionState(attachOrderAction, EMPTY);
+  const [state, action] = useActionState(attachOrderAction, EMPTY_ACTION_STATE);
   const [isPending, startAction] = useTransition();
   const [toAttach, setToAttach] = useState<Row | null>(null);
   const [memberId, setMemberId] = useState("");

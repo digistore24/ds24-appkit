@@ -223,18 +223,25 @@ export async function onPaymentEvent(body: IpnParams): Promise<void> {
     }
   }
 
-  if (shouldCreditTokens({ packageKey, status, orderId, memberId }) && creditable) {
+  // ⚠️ `memberId &&` and `pkg &&` are in the condition so the compiler can SEE
+  // what the eight `!` assertions used to assert. `shouldCreditTokens()` and
+  // `creditable` already required both — a pure predicate and a boolean const
+  // are simply things TypeScript cannot narrow through, so the knowledge lived
+  // in `!` and in the reader's head. Same branch, same order of evaluation, no
+  // behavioural change: both are pure, and the truthiness checks are exactly
+  // the ones the predicate makes.
+  if (memberId && pkg && creditable && shouldCreditTokens({ packageKey, status, orderId, memberId })) {
     // The lock as it stands BEFORE the credit — the one an outstanding auto
     // charge set. See `releaseLockedAt` below.
     const lockedAtBeforeCredit =
       origin === "auto" && reason === "identity"
-        ? ((await getTokenAccount(memberId!))?.reloadLockedAt ?? null)
+        ? ((await getTokenAccount(memberId))?.reloadLockedAt ?? null)
         : undefined;
     const credit = await creditTokens({
-      memberId: memberId!,
-      credits: pkg!.credits,
+      memberId,
+      credits: pkg.credits,
       ds24OrderId: orderId,
-      note: `Kauf ${pkg!.title} (${pkg!.credits} Token)`,
+      note: `Kauf ${pkg.title} (${pkg.credits} Token)`,
       origin: origin ?? null,
       // Release the reload lock ONLY when this credit answers an auto
       // top-up. A manual purchase landing while an auto charge is
@@ -278,6 +285,10 @@ export async function onPaymentEvent(body: IpnParams): Promise<void> {
     // financial half is complete, and the retry would credit nothing (the
     // ledger is idempotent) while still failing on this line.
     if (
+      // `purchaseId &&` for the same reason: the predicate below already
+      // requires it (there is no mandate without one), and saying so here is
+      // what lets `ds24PurchaseId` be a string instead of an assertion.
+      purchaseId &&
       shouldArmAutoReload({
         armAutoReload: parsed?.kind === "identity" && parsed.armAutoReload,
         reason,
@@ -290,11 +301,11 @@ export async function onPaymentEvent(body: IpnParams): Promise<void> {
     ) {
       try {
         await setAutoReload({
-          memberId: memberId!,
+          memberId,
           enabled: true,
-          threshold: defaultReloadThreshold(pkg!.credits),
-          packageKey: pkg!.key,
-          ds24PurchaseId: purchaseId!,
+          threshold: defaultReloadThreshold(pkg.credits),
+          packageKey: pkg.key,
+          ds24PurchaseId: purchaseId,
         });
       } catch (err) {
         console.error("[ipn] could not arm auto top-up:", err);

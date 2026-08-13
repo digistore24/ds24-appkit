@@ -62,12 +62,12 @@ export default async function ReportsPage({
   const page = Math.max(1, Number(requested) || 1);
 
   const [queue, blocks, t, format] = await Promise.all([
-    openReports(session.user.id as string, page),
+    openReports(session.user.id, page),
     // ⚠️ Derived from the same unconsumed rows the queue lists — there is no
     // block table to read (AD-64). This banner IS v1's notification channel,
     // and nothing else is built: a member silenced automatically is somebody a
     // moderator should meet at the top of their queue.
-    standingSendBlocks(session.user.id as string),
+    standingSendBlocks(session.user.id),
     getTranslations("community"),
     getFormatter(),
   ]);

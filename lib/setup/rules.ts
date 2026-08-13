@@ -366,14 +366,23 @@ export function mayRunDestructive(
 }
 
 /**
- * 🚨 Nobody becomes an operator through this surface outside DEV (AD-92).
+ * 🚨 Nobody gets a PRIVILEGED role through this surface outside DEV (AD-92).
  *
  * The shortest path from prompt-injected text to an account takeover: the agent
  * driving these tools reads what other people wrote — community posts, a
- * member's own `name`, support mail — and a tool that can write `role='owner'`
- * turns any of it into an admin account. The two-act protocol does NOT close
- * this: an autonomous agent calls plan and apply two seconds apart, so the
- * token proves the server was consulted, not that a human agreed.
+ * member's own `name`, support mail — and a tool that can write a privileged
+ * role turns any of it into an account with reach. The two-act protocol does
+ * NOT close this: an autonomous agent calls plan and apply two seconds apart,
+ * so the token proves the server was consulted, not that a human agreed.
+ *
+ * ⚠️ **`moderator` is in scope, and leaving it out was the gap.** The rule was
+ * written as "nobody becomes an OWNER", which reads as the whole story because
+ * `requireOwner()` refuses a moderator exactly as it refuses a member. It is
+ * not: a moderator sees the rooms a group marks `moderators` and can remove
+ * other people's posts (`modules/community/lib/rules.ts`). That is reach over
+ * customers' words, handed out by the same injected sentence, and the argument
+ * above does not get weaker for it. `member` stays open — it is the default and
+ * the reason this tool exists.
  *
  * DEV is exempt because the first account there already becomes owner by itself
  * (`lib/users/bootstrap.ts`), so refusing would protect nothing and cost the
@@ -381,8 +390,8 @@ export function mayRunDestructive(
  * capability that exists in exactly one environment, with the condition
  * written down rather than implied.
  */
-export function mayAssignOwner(env: AppEnv): boolean {
-  return isDev(env);
+export function mayAssignRole(env: AppEnv, role: string): boolean {
+  return role === "member" || isDev(env);
 }
 
 /** A mutation needs a plan first, everywhere but DEV (AD-78). */

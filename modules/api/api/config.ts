@@ -23,6 +23,7 @@
 // `lib/billing-mode.ts` and `lib/ai/chat-config.ts` follow.
 import raw from "@/config/api.json";
 import { allProducts } from "@/lib/digistore/products";
+import { pushEnabledProblem } from "@/lib/config-problems";
 
 export interface ApiConfig {
   enabled: boolean;
@@ -64,9 +65,7 @@ export function apiConfigProblems(): string[] {
   const problems: string[] = [];
   const file = raw as Record<string, unknown>;
 
-  if (file.enabled !== undefined && typeof file.enabled !== "boolean") {
-    problems.push('"enabled" must be true or false');
-  }
+  pushEnabledProblem(problems, file);
 
   if (config.requiresPlan !== null) {
     const plan = allProducts().find((p) => p.key === config.requiresPlan);

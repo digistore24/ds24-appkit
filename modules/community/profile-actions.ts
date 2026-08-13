@@ -74,7 +74,7 @@ export async function saveCommunityProfileAction(
       return { error: t("unknown"), ok: null };
     }
 
-    const memberId = session.user.id as string;
+    const memberId = session.user.id;
     const t2 = await getTranslations("errors");
     const profile = await upsertProfile(memberId, {
       displayName: formData.get("displayName"),

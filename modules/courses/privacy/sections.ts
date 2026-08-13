@@ -18,7 +18,13 @@ import { asc, eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import type { ModulePrivacy } from "@/lib/modules/privacy";
-import { coursesCompletions, coursesSubmissions } from "../schema";
+import {
+  coursesBlocks,
+  coursesCompletions,
+  coursesCourses,
+  coursesSubmissions,
+  coursesUnits,
+} from "../schema";
 
 const privacy: ModulePrivacy = {
   sections: ["coursesCompletions", "coursesSubmissions"],
@@ -26,10 +32,26 @@ const privacy: ModulePrivacy = {
   async build(memberId: string) {
     const completions = await db
       .select({
+        // 🚨 **A LEFT join, and `courseSlug` may be null.** Since Story 44.2 an
+        // app may hold several courses, and a bare lesson slug in an Art. 15
+        // answer is a coordinate the person cannot place — so the course it sat
+        // in travels with it. A course SLUG is a coordinate; its TITLE would be
+        // the operator's material, which this file deliberately leaves out.
+        //
+        // ⚠️ Left, never inner: `unitSlug` is an opaque key with no foreign key
+        // (`../schema.ts` argues why — a completion survives the applier
+        // rewriting the lesson row every run). An inner join would DROP a
+        // completion whose lesson has since been deleted, which is an export
+        // that quietly holds back what the app holds. Null reads as "the lesson
+        // this belongs to is no longer here", which is the truth.
+        courseSlug: coursesCourses.slug,
         unitSlug: coursesCompletions.unitSlug,
         completedAt: coursesCompletions.completedAt,
       })
       .from(coursesCompletions)
+      .leftJoin(coursesUnits, eq(coursesUnits.slug, coursesCompletions.unitSlug))
+      .leftJoin(coursesBlocks, eq(coursesBlocks.id, coursesUnits.blockId))
+      .leftJoin(coursesCourses, eq(coursesCourses.id, coursesBlocks.courseId))
       .where(eq(coursesCompletions.memberId, memberId))
       .orderBy(asc(coursesCompletions.completedAt));
 
@@ -40,6 +62,8 @@ const privacy: ModulePrivacy = {
     // member's copy too.
     const submissions = await db
       .select({
+        // Same coordinate, same left join — see the completions above.
+        courseSlug: coursesCourses.slug,
         unitSlug: coursesSubmissions.unitSlug,
         body: coursesSubmissions.body,
         submittedAt: coursesSubmissions.submittedAt,
@@ -47,6 +71,9 @@ const privacy: ModulePrivacy = {
         repliedAt: coursesSubmissions.repliedAt,
       })
       .from(coursesSubmissions)
+      .leftJoin(coursesUnits, eq(coursesUnits.slug, coursesSubmissions.unitSlug))
+      .leftJoin(coursesBlocks, eq(coursesBlocks.id, coursesUnits.blockId))
+      .leftJoin(coursesCourses, eq(coursesCourses.id, coursesBlocks.courseId))
       .where(eq(coursesSubmissions.memberId, memberId))
       .orderBy(asc(coursesSubmissions.submittedAt));
 

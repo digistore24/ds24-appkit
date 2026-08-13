@@ -79,6 +79,14 @@ export const NOT_EXERCISED = [
   // shared sentence because the second half differs per route: what a run would
   // have to plant before the call could mean anything.
   {
+    route: "/api/v1/courses/[course]",
+    why:
+      "a bearer-key route, and smoke holds no API key — and the segment names " +
+      "a COURSE, which a fresh app has none of until `content-apply` runs. The " +
+      "index one level up (`/api/v1/courses`) is not dynamic and IS swept: it " +
+      "answers the empty list, which is the honest answer for a pristine app",
+  },
+  {
     route: "/api/v1/courses/units/[slug]",
     why:
       "a bearer-key route, and smoke holds no API key. It would also need a " +

@@ -28,6 +28,7 @@
 // is an exact comparison, so `"true"`, `1`, `"yes"` and a missing file all
 // leave the feature switched off rather than guessing what somebody meant.
 import raw from "@/config/impersonation.json";
+import { pushEnabledProblem } from "@/lib/config-problems";
 
 export interface ImpersonationConfig {
   enabled: boolean;
@@ -43,9 +44,7 @@ export const DEFAULT_IMPERSONATION_CONFIG: ImpersonationConfig = {
 export function impersonationConfigProblems(): string[] {
   const file = raw as Record<string, unknown>;
   const problems: string[] = [];
-  if (file.enabled !== undefined && typeof file.enabled !== "boolean") {
-    problems.push('"enabled" must be true or false');
-  }
+  pushEnabledProblem(problems, file);
   return problems;
 }
 

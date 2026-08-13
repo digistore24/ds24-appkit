@@ -271,6 +271,39 @@ export function planProblem(productKey: string): string | null {
 }
 
 /**
+ * What is wrong with a LIST of Product Keys — `null` when nothing is.
+ *
+ * The plural form of `planProblem()`, and the one every write path uses, so a
+ * gate that is a list has exactly one judgement about it rather than five
+ * loops that agree today. Holding ONE of the keys is what opens the item
+ * (`mayAccess()`), so every key in the list has to be one somebody could
+ * conceivably hold.
+ *
+ * ⚠️ **An empty list is a problem here and a refusal at read time**, and the
+ * two are deliberately not the same mechanism: this one stops the row being
+ * written, `mayAccess()` covers the row that got in before this existed, or
+ * through a driver, or by a hand-run `UPDATE`. Write-time validation that is
+ * the only validation is the trap `mayAccess()`'s retired-key branch already
+ * pays for one line down.
+ *
+ * A duplicate is reported rather than tolerated: it changes no answer, and a
+ * key written twice is somebody's belief that they added a second one.
+ */
+export function planKeysProblem(keys: readonly string[]): string | null {
+  if (keys.length === 0) {
+    return 'visibility "entitled" needs at least one Product Key — otherwise nobody could ever fetch it';
+  }
+  const seen = new Set<string>();
+  for (const key of keys) {
+    if (seen.has(key)) return `"${key}" is listed twice`;
+    seen.add(key);
+    const problem = planProblem(key);
+    if (problem) return problem;
+  }
+  return null;
+}
+
+/**
  * Is media available on this installation at all?
  *
  * **One question, one answer: the switch in `config/media.json`.** It used to

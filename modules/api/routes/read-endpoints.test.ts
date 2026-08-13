@@ -69,7 +69,7 @@ beforeEach(() => {
     blockedAt: null,
   });
   vi.mocked(entitlementsFor).mockResolvedValue([
-    { productKey: "basis_monatlich", source: "purchase", accessUntil: WHEN },
+    { productKey: "basic_monthly", source: "purchase", accessUntil: WHEN },
   ]);
   vi.mocked(suspendedKeysFor).mockResolvedValue([]);
   vi.mocked(getTokenAccount).mockResolvedValue(undefined);
@@ -147,11 +147,11 @@ describe("shapes and serialization", () => {
   });
 
   it("GET /entitlements carries paused keys beside the owned ones", async () => {
-    vi.mocked(suspendedKeysFor).mockResolvedValue(["premium_jahr"]);
+    vi.mocked(suspendedKeysFor).mockResolvedValue(["premium_yearly"]);
     const response = await entitlements.GET(nosyRequest());
     expect(await response.json()).toEqual({
-      entitlements: [{ productKey: "basis_monatlich", source: "purchase", accessUntil: ISO }],
-      paused: ["premium_jahr"],
+      entitlements: [{ productKey: "basic_monthly", source: "purchase", accessUntil: ISO }],
+      paused: ["premium_yearly"],
     });
   });
 
@@ -198,7 +198,7 @@ describe("shapes and serialization", () => {
     vi.mocked(listBillingForMember).mockResolvedValue([
       {
         ds24OrderId: "ORDER1",
-        productKey: "basis_monatlich",
+        productKey: "basic_monthly",
         status: "paying",
         amount: "9.00",
         currency: "EUR",
@@ -223,7 +223,7 @@ describe("shapes and serialization", () => {
       orders: [
         {
           ds24OrderId: "ORDER1",
-          productKey: "basis_monatlich",
+          productKey: "basic_monthly",
           status: "paying",
           amount: "9.00",
           currency: "EUR",

@@ -64,6 +64,7 @@ import {
   readAgentProfile,
 } from "./agent-configs.mjs";
 import { stubFor } from "./agent-skills.mjs";
+import { flagsFrom } from "../lib/args.mjs";
 
 const ROOT = process.cwd();
 const PROFILE = PROFILE_FILE;
@@ -170,13 +171,13 @@ function write(file, content) {
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
 const undo = args.includes("--undo");
-const flag = (name) => {
-  const at = args.indexOf(name);
-  return at >= 0 ? args[at + 1] : null;
-};
+// ⚠️ Its own reading wanted the FULL flag name (`flag("--agent")`), so a call
+// written like every other one in this tree found nothing and said so as
+// "unknown program: undefined". The shared helper takes the bare name.
+const flag = flagsFrom(args);
 
 const names = Object.keys(AGENTS);
-const asked = flag("--agent");
+const asked = flag("agent");
 
 if (asked && !AGENTS[asked]) {
   console.error(`✗ Unknown program: ${asked}`);

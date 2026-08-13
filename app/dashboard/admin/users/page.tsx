@@ -43,7 +43,7 @@ export default async function AdminUsersPage() {
           HTTP endpoint of its own and a hidden menu protects nobody. */}
       <UserTable
         users={users}
-        currentUserId={session.user.id as string}
+        currentUserId={session.user.id}
         impersonationEnabled={isImpersonationEnabled()}
       />
 

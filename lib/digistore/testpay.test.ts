@@ -4,7 +4,7 @@
 import { mkdtemp, readFile, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, it, expect, afterEach, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   isTestpayAllowed,
   isTestpayFresh,
@@ -229,6 +229,11 @@ describe("withTestpayParam", () => {
   });
 
   it("returns the URL unchanged on a failed fetch — and memoizes the failure", async () => {
+    // The `console.warn` below is the behaviour under test, not an accident — this
+    // test PROVOKES the failure. Silenced so an UNEXPECTED error stays visible in
+    // the run's output instead of drowning in expected noise.
+    const quiet = vi.spyOn(console, "warn").mockImplementation(() => {});
+    onTestFinished(() => quiet.mockRestore());
     let called = 0;
     const failing = {
       fetcher: async (): Promise<TestpayState> => {

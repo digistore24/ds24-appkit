@@ -71,7 +71,7 @@ export default async function DashboardLayout({
     chatEnabled,
     chat.requiresPlan,
     chatEnabled && chat.requiresPlan !== null
-      ? await hasPlan(session.user.id as string, chat.requiresPlan)
+      ? await hasPlan(session.user.id, chat.requiresPlan)
       : false,
   );
 
@@ -87,8 +87,8 @@ export default async function DashboardLayout({
     MODULES.map(async (mod) =>
       mod.shellState
         ? await mod.shellState({
-            memberId: session.user.id as string,
-            role: session.user.role as string,
+            memberId: session.user.id,
+            role: session.user.role,
             impersonating: Boolean(session.user.impersonation),
           })
         : {},

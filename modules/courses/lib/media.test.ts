@@ -63,7 +63,7 @@ function row(over: Partial<MediaRow> = {}): MediaRow {
     visibility: "entitled",
     // A placeholder only where there is no plan-shaped product at all — every
     // test that would read it skips first, and says why.
-    requiresPlan: PLAN.key ?? "no-plan-shaped-product-in-this-app",
+    planKeys: [PLAN.key ?? "no-plan-shaped-product-in-this-app"],
     storageKey: "courses/worksheet/2026/08/m-1.pdf",
     mime: "application/pdf",
     filename: "arbeitsblatt.pdf",

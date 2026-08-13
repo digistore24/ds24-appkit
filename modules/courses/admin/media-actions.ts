@@ -21,7 +21,7 @@
 // once. `lib/media/manage.test.ts` reads this file and fails on the order.
 //
 // 🚨 **THE SERVER DECIDES WHO MAY SEE THE FILE, AND THE FORM HAS NO SAY.**
-// `visibility` and `requiresPlan` are set HERE, from `courseConfig()`. There is
+// `visibility` and `planKeys` are set HERE, from `courseConfig()`. There is
 // no visibility field, no hidden input and no plan parameter — `CLAUDE.md` →
 // *Media* says "a form may never choose `public` or `entitled`", and the
 // documented way to an `entitled` row is exactly this: `acceptUpload()` from a
@@ -58,8 +58,8 @@ import { acceptUpload, confirmUpload, createUploadTicket } from "@/lib/media/man
 import { MediaError, formatBytes } from "@/lib/media/rules";
 import { guardUploadConfirm, guardUploadEntry } from "@/lib/media/upload-endpoint";
 
-import { courseConfig } from "../lib/config";
-import { setUnitMedia, unitById } from "../lib/manage";
+import { courseByIdForOperator } from "../lib/courses";
+import { blockById, setUnitMedia, unitById } from "../lib/manage";
 import { guard } from "./authz";
 import { slotCeilingFor } from "./ceilings";
 import {
@@ -158,7 +158,7 @@ async function attach(
   if (problem) return slotRefusal(problem, slot, unit.slug, ceiling);
 
   // Both halves of the door, in this order. See the header.
-  const memberId = session.user.id as string;
+  const memberId = session.user.id;
   guardUploadEntry(memberId);
 
   const rules = COURSE_SLOTS[slot];
@@ -183,9 +183,9 @@ async function attach(
       filename: upload.name || null,
       // ── The two fields the form does not have ────────────────────────────
       // What a lesson's media IS: the product, sold under the course's own
-      // Product Key. Read from `courseConfig()`, never from the request.
+      // Product Keys. Read from `courseConfig()`, never from the request.
       visibility: "entitled",
-      requiresPlan: requiredPlan(),
+      planKeys: await requiredPlanKeys(unit),
       // The kind, and — for the two slots whose kind holds more than one type —
       // the type. `text/vtt`, `application/pdf` and `application/zip` are all
       // `file`, so a subtitle door described by its kind alone would take a PDF.
@@ -216,24 +216,46 @@ async function attach(
 }
 
 /**
- * The course's Product Key, or a fault.
+ * The course's Product Keys, or a fault.
  *
  * ⚠️ **Unreachable on this surface, and written out anyway.** A course with no
- * `productKey` is `brokenConfig` (`courseConfigProblems()`), so
+ * `planKeys` is `brokenConfig` (`courseConfigProblems()`), so
  * `isCourseEnabled()` is false and `guard()` has already answered `notFound()`.
- * It throws rather than passing `null` on, because `acceptUpload()` would then
- * refuse with `MediaError("noAccess")` — "no access" is a sentence about the
- * viewer, and this would be a sentence about the config.
+ * It throws rather than passing an empty list on, because `acceptUpload()`
+ * would then refuse with `MediaError("noAccess")` — "no access" is a sentence
+ * about the viewer, and this would be a sentence about the config.
  */
-function requiredPlan(): string {
-  const { productKey } = courseConfig();
-  if (!productKey) {
+async function requiredPlanKeys(unit: { blockId: string }): Promise<readonly string[]> {
+  // 🚨 **The LESSON's own course, walked rather than assumed.** A file attached
+  // to a lesson in course B must carry course B's keys — the media row is what
+  // `mayAccess()` decides on, so keys from the wrong course make the file
+  // unfetchable for exactly the people who bought it, behind a page that
+  // renders. Lesson → block → course, the same walk `pages/actions.ts` makes.
+  const block = await blockById(unit.blockId);
+  const course = block ? await courseByIdForOperator(block.courseId) : null;
+  if (!course || course.planKeys.length === 0) {
     throw new Error(
-      "config/course.json has no productKey, so a lesson's media could never be fetched by " +
-        "anybody — courseConfigProblems() should have made this course brokenConfig",
+      "this lesson's course has no planKeys, so its media could never be fetched by " +
+        "anybody — courseProblems() should have kept this course off the workbench",
     );
   }
-  return productKey;
+  return course.planKeys;
+}
+
+/**
+ * Do two key lists say the same thing? Order-insensitive, because the list is a
+ * SET — `mayAccess()` asks whether the viewer holds any one of them, and two
+ * orderings of the same keys open the same doors.
+ *
+ * ⚠️ The comparison is what stops a ticket minted at another door being
+ * confirmed here; a `===` on a joined string would refuse a ticket that is
+ * identical but written the other way round, which is a refusal of something
+ * lawful rather than of the attack.
+ */
+function sameKeys(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  const set = new Set(a);
+  return b.every((key) => set.has(key));
 }
 
 /** A slot refusal with the values its sentence needs. */
@@ -339,7 +361,7 @@ export async function mintVideoTicketAction(input: {
       return asTicket(slotRefusal("coursesSlotNotAttachable", "video", unit.slug, 0));
     }
 
-    const memberId = session.user.id as string;
+    const memberId = session.user.id;
     guardUploadEntry(memberId);
 
     const ticket = await createUploadTicket({
@@ -359,7 +381,7 @@ export async function mintVideoTicketAction(input: {
       declaredBytes: Number(input.bytes) || 0,
       // ── The two fields the form does not have ────────────────────────────
       visibility: "entitled",
-      requiresPlan: requiredPlan(),
+      planKeys: await requiredPlanKeys(unit),
     });
 
     return { ticketId: ticket.ticketId, url: ticket.url, error: null };
@@ -392,7 +414,7 @@ export async function confirmVideoAction(input: {
 
     const stored = await confirmUpload({
       ticketId: String(input.ticketId ?? "").trim(),
-      memberId: session.user.id as string,
+      memberId: session.user.id,
       role: String(session.user.role ?? ""),
       // The pair the mint half above recorded. A ticket minted anywhere else —
       // the generic HTTP door pins `core`/`upload` — is `uploadTicketInvalid`
@@ -424,7 +446,7 @@ export async function confirmVideoAction(input: {
     // about. The header of this file promises that the documented way to an
     // `entitled` row is exactly this one; up to here that was enforced only
     // where a ticket is WRITTEN.
-    if (stored.visibility !== "entitled" || stored.requiresPlan !== requiredPlan()) {
+    if (stored.visibility !== "entitled" || !sameKeys(stored.planKeys, await requiredPlanKeys(unit))) {
       return slotRefusal("coursesUploadTicketMismatch", "video", unit.slug, 0);
     }
 

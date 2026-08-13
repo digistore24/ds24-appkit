@@ -851,7 +851,7 @@ worth naming rather than quietly correcting:
 | the chosen name, the about text, the picture | shown — that is the table |
 | **the role** | **shown**, as a badge. A moderator is visibly a moderator; that is the point of the role existing |
 | **the account name** | **shown as a fallback**, and only then. A member who has never opened the community has no row here, so the page falls back to `users.name` — which on a Google sign-in is the name that provider supplied. They never chose it *for the community*, and the way to change it is to set a profile name |
-| the email address | **never.** `modules/community/lib/manage.ts` does not select the column at all, so this one is structural rather than a rendering decision |
+| the email address | **never.** `modules/community/lib/messages.ts` — the DM readers, since the shell was split by domain — does not select the column at all, so this one is structural rather than a rendering decision |
 | purchases, balance, grants | never — nothing from the billing tables is joined |
 
 The fallback is deliberate (a person needs *some* name beside their words), but

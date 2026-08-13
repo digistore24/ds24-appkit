@@ -33,6 +33,7 @@ import {
   type LiveScopeAnswer,
   type PostRow,
 } from "@/modules/community/lib/manage";
+import { wirePost } from "../lib/wire";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -73,22 +74,6 @@ function readScope(value: unknown): LiveScope | null {
  * Dates become ISO strings HERE rather than being left to `Response.json()`: a
  * `Date` that has crossed JSON is a string wearing a `Date`'s type.
  */
-function wirePost(post: PostRow) {
-  return {
-    id: post.id,
-    authorId: post.authorId,
-    content: post.content,
-    createdAt: post.createdAt.toISOString(),
-    editedAt: post.editedAt?.toISOString() ?? null,
-    deletedAt: post.deletedAt?.toISOString() ?? null,
-    deletedBy: post.deletedBy,
-    authorProfileName: post.authorProfileName,
-    authorAccountName: post.authorAccountName,
-    // Already authorised and already JSON-safe: `postImagesFor()` asked
-    // `mayAccess()` and minted the addresses in one function.
-    images: post.images,
-  };
-}
 
 export async function POST(request: Request): Promise<Response> {
   const g = await guardApi(request);

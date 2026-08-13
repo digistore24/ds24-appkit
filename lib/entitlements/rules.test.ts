@@ -667,7 +667,7 @@ describe("pausedKeys", () => {
   it("reports a suspended key the Member cannot otherwise use", () => {
     // AC 4 of story 3.5: without this the card-expiry customer sees an empty
     // list and no explanation — the failure docs/entitlements.md warns about.
-    expect(pausedKeys([], ["basis_monatlich"])).toEqual(["basis_monatlich"]);
+    expect(pausedKeys([], ["basic_monthly"])).toEqual(["basic_monthly"]);
   });
 
   it("says nothing when the same key is still usable another way", () => {
@@ -680,20 +680,20 @@ describe("pausedKeys", () => {
     // site hands the rows straight through, so the parameter has to accept
     // them without a projection step nobody would remember to keep.
     const comp: Entitlement = {
-      productKey: "basis_monatlich",
+      productKey: "basic_monthly",
       source: "manual",
       accessUntil: null,
     };
-    expect(pausedKeys([comp], ["basis_monatlich"])).toEqual([]);
+    expect(pausedKeys([comp], ["basic_monthly"])).toEqual([]);
   });
 
   it("subtracts per key, not wholesale", () => {
     expect(
       pausedKeys(
-        [{ productKey: "basis_monatlich" }],
-        ["basis_monatlich", "basis_jaehrlich"],
+        [{ productKey: "basic_monthly" }],
+        ["basic_monthly", "basic_yearly"],
       ),
-    ).toEqual(["basis_jaehrlich"]);
+    ).toEqual(["basic_yearly"]);
   });
 
   it("reports each key once", () => {
@@ -707,7 +707,7 @@ describe("pausedKeys", () => {
   });
 
   it("is empty when nothing is suspended", () => {
-    expect(pausedKeys([{ productKey: "basis_monatlich" }], [])).toEqual([]);
+    expect(pausedKeys([{ productKey: "basic_monthly" }], [])).toEqual([]);
   });
 });
 

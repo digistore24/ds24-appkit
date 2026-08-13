@@ -40,6 +40,7 @@ import { connect } from "../users/_db.mjs";
 import { loadEnv } from "../lib/env.mjs";
 import { readEnvValue, setEnvValue } from "../lib/env-write.mjs";
 import { hashSetupKey, newSetupKey, setupKeyPrefixOf } from "../../lib/setup/key.mjs";
+import { flagsFrom } from "../lib/args.mjs";
 
 loadEnv();
 
@@ -48,22 +49,19 @@ const argv = process.argv.slice(2);
 /**
  * A flag's value — and a REFUSAL when the flag is there without one.
  *
- * 🚨 Returning `undefined` for `--email --apply` is the shape that makes this
- * command guess: with one owner in the table it would mint for them and report
- * success, for a person who never named anybody. The comment further down says
- * "never the first one, the trail is the whole point", and a silent fallback
- * here is exactly that, one typo earlier.
+ * 🚨 This reading was written here first, and the reason is still this command:
+ * answering `--email --apply` with `undefined` is the shape that makes it guess
+ * — with one owner in the table it would mint for them and report success, for
+ * a person who never named anybody. The comment further down says "never the
+ * first one, the trail is the whole point", and a silent fallback here is
+ * exactly that, one typo earlier.
+ *
+ * It now lives in `scripts/lib/args.mjs`, because five other scripts had their
+ * own and three of them guessed — including the one that creates an
+ * environment's first owner. The argument in full, and the test that refuses a
+ * seventh copy, are there.
  */
-const flag = (name) => {
-  const index = argv.indexOf(`--${name}`);
-  if (index === -1) return undefined;
-  const value = argv[index + 1];
-  if (value === undefined || value.startsWith("--")) {
-    console.error(`✗ --${name} needs a value.`);
-    process.exit(2);
-  }
-  return value;
-};
+const flag = flagsFrom(argv);
 
 const APPLY = argv.includes("--apply");
 const ENV_FILE = ".env";

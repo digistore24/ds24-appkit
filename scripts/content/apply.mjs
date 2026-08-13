@@ -170,7 +170,7 @@ async function main() {
   }
 
   if (rows.length > 0 && !apply) {
-    for (const row of rows) warn(`${row.path} — would assert a media row (${row.visibility}${row.requiresPlan ? `, plan ${row.requiresPlan}` : ""})`);
+    for (const row of rows) warn(`${row.path} — would assert a media row (${row.visibility}${row.planKeys.length > 0 ? `, plans ${row.planKeys.join(", ")}` : ""})`);
   }
 
   let sql = null;
@@ -193,22 +193,22 @@ async function main() {
       for (const row of rows) {
         try {
           await sql`
-            insert into media (id, owner_id, kind, visibility, requires_plan,
+            insert into media (id, owner_id, kind, visibility, plan_keys,
                                storage_key, mime, filename, bytes, sha256, source, alt)
-            values (${randomUUID()}, null, ${row.kind}, ${row.visibility}, ${row.requiresPlan},
+            values (${randomUUID()}, null, ${row.kind}, ${row.visibility}, ${row.planKeys},
                     ${row.key}, ${row.contentType}, ${row.filename}, ${row.bytes}, ${row.sha256},
                     'upload', ${row.alt})
             on conflict (storage_key) do update set
               kind = excluded.kind,
               visibility = excluded.visibility,
-              requires_plan = excluded.requires_plan,
+              plan_keys = excluded.plan_keys,
               mime = excluded.mime,
               filename = excluded.filename,
               bytes = excluded.bytes,
               sha256 = excluded.sha256,
               alt = excluded.alt
           `;
-          ok(`${row.path} — media row asserted (${row.visibility}${row.requiresPlan ? `, plan ${row.requiresPlan}` : ""})`);
+          ok(`${row.path} — media row asserted (${row.visibility}${row.planKeys.length > 0 ? `, plans ${row.planKeys.join(", ")}` : ""})`);
         } catch (error) {
           bad(`${row.path} — media row failed: ${error.message}`);
         }

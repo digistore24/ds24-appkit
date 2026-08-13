@@ -12,6 +12,7 @@ import { apiError, apiJson } from "@/modules/api/api/rules";
 
 import { isCommunityEnabled } from "@/modules/community/lib/config";
 import { discussionFor, postsFor } from "@/modules/community/lib/manage";
+import { wirePost } from "../lib/wire";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,17 +57,6 @@ export async function GET(
     group: { id: found.group.id, name: found.group.name },
     page: posts.page,
     total: posts.total,
-    posts: posts.rows.map((post) => ({
-      id: post.id,
-      authorId: post.authorId,
-      content: post.content,
-      createdAt: post.createdAt.toISOString(),
-      editedAt: post.editedAt?.toISOString() ?? null,
-      deletedAt: post.deletedAt?.toISOString() ?? null,
-      deletedBy: post.deletedBy,
-      authorProfileName: post.authorProfileName,
-      authorAccountName: post.authorAccountName,
-      images: post.images,
-    })),
+    posts: posts.rows.map(wirePost),
   });
 }

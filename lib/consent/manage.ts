@@ -63,7 +63,7 @@ export async function recordConsent({
   // The cast is the house idiom (`lib/tokens/spend.ts`, `lib/authz.ts`):
   // Auth.js types `id` as optional, but `requireActiveUser()` has already
   // redirected anyone without a session.
-  const memberId = session.user.id as string;
+  const memberId = session.user.id;
 
   // Not merely tidy: an undeclared purpose would write a row nothing can ever
   // read back — `currentConsent` only answers for purposes in the config, so

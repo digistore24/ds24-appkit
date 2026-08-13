@@ -17,7 +17,13 @@ not the owner is the one nobody updates.
 
 - **`CLAUDE.md`** — a line belongs here only if an agent that has read no other
   file would otherwise cause damage it cannot see. Every `##` section is at most
-  40 lines and ends in a bold link to the doc that carries its long form.
+  40 lines and carries a bold link to the doc that holds its long form. ⚠️ It
+  used to say **ends in** such a link, and 21 of the 29 sections did not: the
+  ones closing with a bullet list put the pointer in their intro instead, which
+  reads the same and costs fewer lines. Nothing measured the difference (G4 in
+  `scripts/guidance-budget.test.mjs` asks only whether the doc is linked at all),
+  so the wording was simply wrong about two thirds of the file — and a rule that
+  is visibly wrong teaches the reader to skim the ones beside it.
 - **`SKILL.md` frontmatter** — says *when to start*, never *how it works*. If a
   sentence would still be true after the steps were rewritten, it is not a
   trigger and does not belong in the description.

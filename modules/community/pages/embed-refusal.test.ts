@@ -77,7 +77,7 @@ const VIEWER = { memberId: "member-1", role: "member" };
 const DECLARED = {
   subjectKey: "course:birth-prep:unit-3",
   accessLevel: "plan" as const,
-  planKeys: ["kurs_komplett"],
+  planKeys: ["course_complete"],
 };
 
 function reply(subjectKey: string): FormData {
@@ -139,13 +139,13 @@ describe("the two gates compose", () => {
     );
 
     expect(await embedAccessFor(DECLARED.subjectKey, VIEWER)).toBe("communityNotEntitled");
-    expect(hasPlan).toHaveBeenCalledWith("member-1", "kurs_komplett");
+    expect(hasPlan).toHaveBeenCalledWith("member-1", "course_complete");
   });
 
   it("serves a member who holds the discussion's plan, however the page was guarded", async () => {
     vi.mocked(findEmbed).mockReturnValue(DECLARED);
     vi.mocked(hasPlan).mockImplementation(
-      async (_memberId: string, key: string) => key === "kurs_komplett",
+      async (_memberId: string, key: string) => key === "course_complete",
     );
 
     expect(await embedAccessFor(DECLARED.subjectKey, VIEWER)).toBeNull();

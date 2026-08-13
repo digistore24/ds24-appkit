@@ -81,6 +81,21 @@ is `npm ci && npm run build` on four hosts, and nothing in it runs a generator.
 manifests byte for byte, so one that stopped matching fails the build rather
 than shipping.
 
+🚨 **The order matters, and the second half is the part people get wrong: edit a
+`modules/<id>/module.json` by hand and you must run `node run.mjs module sync`
+yourself.** `add`, `remove` and `sync` are the only three commands that write
+those files (`scripts/modules/generate.mjs` → `writeGenerated()`), and
+`package.json` has no `prebuild` and no `postinstall` — deliberately, because a
+generator that wrote during a customer's build would be a build that edits its
+own source tree.
+
+So a hand-edited manifest leaves the registries describing the app as it was.
+⚠️ **`npm run build` will not tell you** — it builds the stale registries quite
+happily. The only thing that says so is `npm run test`
+(`scripts/modules/generated.test.ts`), which is also why `CLAUDE.md` makes green
+the commit condition. If you changed a manifest and are not sure: run `module
+sync` again. It is idempotent and costs a second.
+
 ### `slots` — the one thing that is not simply additive
 
 Everything else in that table adds to a registry. A card on `/dashboard/account`
@@ -462,6 +477,56 @@ The assistant may not name a menu entry whose route does not exist, and the
 where switching a module off leaves her running with a door she would still be
 pointing at. So a module's entry is named to a member only while that module is
 installed **and** switched on.
+
+## The community's layers — what a big module looks like inside
+
+The community is the largest module and the one a vendor reads first when they
+write their own. Its shell was **one file of 5,902 lines** — eleven domains,
+96 exported functions — and it is now one file per domain over five small
+helpers. Worth knowing before you build something that size:
+
+**The domains, and what they own**
+
+| | |
+|---|---|
+| `profiles.ts` | the member's face: display name, avatar, the participation profile every write path resolves |
+| `groups.ts` | the operator's rooms and the doors a member sees |
+| `talk.ts` | discussions and posts |
+| `embedded.ts` | a conversation hanging off a page instead of a room |
+| `messages.ts` | direct messages — every reader takes a participant id |
+| `unread.ts` | one writer, one read, no second path |
+| `live.ts` | "what is new since X", for one scope |
+| `feed.ts` | the friends feed, derived at read time and stored nowhere |
+| `following.ts` | one-sided, immediate, visible on the other person's list |
+| `moderation.ts` | the authority is re-read, every act writes its own record |
+| `reports.ts` | a spam report is decided once, then frozen |
+
+**The five `_` files are not a junk drawer.** Each one exists because a helper
+had several consumers, and two of them exist because it was in a CYCLE:
+
+| | |
+|---|---|
+| `_change-stamp.ts` | `CHANGED_AT` and its param binder — the SQL twins of `changedAt()`, which lives in the pure `rules.ts`. **Broke Live ↔ Feed.** |
+| `_blocks.ts` | `sendBlockFor()` / `guardSendBlock()` — a guard about BLOCKING, which had been filed under spam reports. **Broke Talk ↔ Reports and DM ↔ Reports.** |
+| `_access.ts` | which plan keys and which rooms a viewer really has |
+| `_paging.ts` | `pageOffset()`, wanted by four domains |
+| `_post-images.ts` | store, judge, attach, discard — one subject, four functions, plus the media slot they share |
+
+🚨 **`manage.ts` is a BARREL and the export list in it is named, never
+`export *`.** The domain files export more than the old single file did:
+helpers that were private inside it must now be visible to their siblings. A
+`export *` would hand every one of them to the rest of the app, and what a
+barrel exports is what somebody eventually imports. The list is exactly the
+surface the module had before the split — 95 names — so a helper reaching the
+outside is something somebody typed.
+
+⚠️ **Two things hold this, because neither is held by the compiler.**
+`modules/community/lib/layering.test.ts` fails on an import cycle — a cycle does
+NOT fail `npm run typecheck` and does not fail a test, because ES modules hoist
+function declarations, so `a → b → a` simply runs and goes wrong later. And
+`_shell-files.mjs` owns the list of shell files, because a dozen guard tests
+read the shell as TEXT: when `manage.ts` became a barrel they were briefly
+reading a file that contains only re-exports, which is green by emptiness.
 
 ## What a module is not
 

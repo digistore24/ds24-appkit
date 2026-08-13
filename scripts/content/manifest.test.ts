@@ -15,7 +15,7 @@ import {
   isValidContentMediaPath,
 } from "../../lib/content-media/rules.mjs";
 
-const PLANS = ["basis_monatlich", "premium_jahr"];
+const PLANS = ["basic_monthly", "premium_yearly"];
 
 function manifest(entries: unknown[]) {
   return validateManifest({ entries }, { productKeys: PLANS });
@@ -61,7 +61,7 @@ describe("the grammar", () => {
 describe("validateManifest", () => {
   it("enriches a valid entry with kind, contentType, key and filename", () => {
     const { entries, problems } = manifest([
-      { path: "kurs/intro.mp4", visibility: "entitled", requiresPlan: "basis_monatlich" },
+      { path: "kurs/intro.mp4", visibility: "entitled", planKeys: ["basic_monthly"] },
     ]);
     expect(problems).toEqual([]);
     expect(entries).toEqual([
@@ -71,7 +71,7 @@ describe("validateManifest", () => {
         kind: "video",
         contentType: "video/mp4",
         visibility: "entitled",
-        requiresPlan: "basis_monatlich",
+        planKeys: ["basic_monthly"],
         filename: "intro.mp4",
       }),
     ]);
@@ -103,28 +103,67 @@ describe("validateManifest", () => {
     expect(problems[0]).toContain('"public"');
   });
 
-  it("demands requiresPlan on entitled entries, and a KNOWN one", () => {
+  it("demands planKeys on entitled entries, and KNOWN ones", () => {
     expect(manifest([{ path: "kurs/a.pdf", visibility: "entitled" }]).problems[0]).toContain(
-      "requiresPlan",
+      "planKeys",
     );
+    // An empty list is the same refusal as no list at all: an `entitled` file
+    // nobody can be entitled to.
+    expect(
+      manifest([{ path: "kurs/a.pdf", visibility: "entitled", planKeys: [] }]).problems[0],
+    ).toContain("planKeys");
     const unknown = manifest([
-      { path: "kurs/a.pdf", visibility: "entitled", requiresPlan: "nope" },
+      { path: "kurs/a.pdf", visibility: "entitled", planKeys: ["nope"] },
     ]);
     // The reason this check exists: hasPlan() throws on an unknown key.
     expect(unknown.problems[0]).toContain("hasPlan()");
+    // 🚨 EVERY key, not the first one — a list whose SECOND entry is unknown is
+    // exactly as broken, and checking only the head is the defect this list
+    // shape invites.
+    const secondUnknown = manifest([
+      { path: "kurs/a.pdf", visibility: "entitled", planKeys: ["basic_monthly", "nope"] },
+    ]);
+    expect(secondUnknown.problems[0]).toContain("hasPlan()");
+    expect(secondUnknown.problems[0]).toContain("nope");
+  });
+
+  it("takes several keys — the whole reason it is a list", () => {
+    const { entries, problems } = manifest([
+      {
+        path: "kurs/a.pdf",
+        visibility: "entitled",
+        planKeys: ["basic_monthly", "premium_yearly"],
+      },
+    ]);
+    expect(problems).toEqual([]);
+    expect((entries[0] as { planKeys: string[] }).planKeys).toEqual([
+      "basic_monthly",
+      "premium_yearly",
+    ]);
+  });
+
+  it("refuses the same key twice — it changes no answer and hides an intention", () => {
+    const { problems } = manifest([
+      {
+        path: "kurs/a.pdf",
+        visibility: "entitled",
+        planKeys: ["basic_monthly", "basic_monthly"],
+      },
+    ]);
+    expect(problems[0]).toContain("twice");
   });
 
   it("reports an unreadable registry as unverifiable, never as fine", () => {
     const { problems } = validateManifest(
-      { entries: [{ path: "kurs/a.pdf", visibility: "entitled", requiresPlan: "basis_monatlich" }] },
+      { entries: [{ path: "kurs/a.pdf", visibility: "entitled", planKeys: ["basic_monthly"] }] },
       { productKeys: null },
     );
     expect(problems[0]).toContain("cannot be verified");
   });
 
-  it("refuses requiresPlan beside public — it would do nothing", () => {
+  it("refuses planKeys beside public — they would do nothing", () => {
     const { problems } = manifest([
-      { path: "kurs/a.pdf", visibility: "public", requiresPlan: "basis_monatlich" },
+      { path: "kurs/a.pdf", visibility: "public", planKeys: ["basic_monthly"] },
     ]);
     expect(problems[0]).toContain("does nothing");
   });

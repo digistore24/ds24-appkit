@@ -57,7 +57,7 @@ const GROUP = {
   description: null,
   position: 1,
   accessLevel: "plan" as const,
-  planKeys: ["basis_monatlich"],
+  planKeys: ["basic_monthly"],
   archivedAt: null,
   createdAt: WHEN,
 };
@@ -252,7 +252,7 @@ describe("the room list", () => {
     ]);
     // What a room would have cost is product information, and no client needs
     // it for a room the viewer is already in.
-    expect(JSON.stringify(payload)).not.toContain("basis_monatlich");
+    expect(JSON.stringify(payload)).not.toContain("basic_monthly");
   });
 });
 

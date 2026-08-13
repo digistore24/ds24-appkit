@@ -35,6 +35,7 @@ import {
 import { assertCacheableOrder, flattenBlocks } from "./blocks";
 import { parseJson, sseData } from "./sse";
 import { IdleTimeout } from "./idle-timeout";
+import { finiteNumber } from "@/lib/finite";
 
 export interface CompatProfile {
   id: ProviderId;
@@ -187,10 +188,6 @@ export function buildBody(
 
 // ── Pure: reading the answer ────────────────────────────────────────────────
 
-function num(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
-
 /**
  * `usage` → our shape. Returns null when the provider said nothing.
  *
@@ -207,12 +204,12 @@ export function usageFrom(raw: unknown, profile: CompatProfile): Usage | null {
 
   const usage: Usage = {
     ...emptyUsage(),
-    inputTokens: num(u.prompt_tokens),
-    outputTokens: num(u.completion_tokens),
-    cachedInputTokens: num(promptDetails.cached_tokens),
+    inputTokens: finiteNumber(u.prompt_tokens),
+    outputTokens: finiteNumber(u.completion_tokens),
+    cachedInputTokens: finiteNumber(promptDetails.cached_tokens),
     // OpenAI itemises reasoning tokens here; they are already counted inside
     // `completion_tokens`, so this is a breakdown and must NOT be added on top.
-    thinkingTokens: num(completionDetails.reasoning_tokens),
+    thinkingTokens: finiteNumber(completionDetails.reasoning_tokens),
     reportedTotalTokens:
       typeof u.total_tokens === "number" ? u.total_tokens : null,
   };

@@ -31,7 +31,8 @@ import { getTranslations } from "next-intl/server";
 
 import type { ActionState } from "@/hooks/use-action-toast";
 
-import { courseShape } from "../lib/config";
+import { courseByIdForOperator, courseBySlugForOperator } from "../lib/courses";
+import type { CourseShape } from "../rules";
 import {
   blockById,
   blockPositions,
@@ -116,11 +117,14 @@ function whole(formData: FormData, key: string): number {
  * 🚨 **The server does not read the field unless the shape gives it a meaning**
  * (AC 5), which is the other half of the form not RENDERING it. There is
  * deliberately no `shapeForbidsReleaseAfterDays` code: a field that is not
- * there needs no error. `courseShape()` cannot throw behind `guard()` — that is
- * exactly what `isCourseEnabled()` establishes.
+ * there needs no error.
+ *
+ * ⚠️ The shape is a PARAMETER now, because it belongs to the course this block
+ * is in rather than to the app. A helper that read it for itself would have to
+ * pick a course, and there is no such thing as "the" course any more.
  */
-function releaseDays(formData: FormData): number {
-  return courseShape() === "drip" ? whole(formData, "releaseAfterDays") : 0;
+function releaseDays(formData: FormData, shape: CourseShape | null): number {
+  return shape === "drip" ? whole(formData, "releaseAfterDays") : 0;
 }
 
 /**
@@ -142,6 +146,16 @@ export async function createBlockAction(
 ): Promise<ActionState> {
   try {
     await guard();
+    // 🚨 **The course DOES come from the form here, and that is the opposite
+    // ruling from the member surface — deliberately.** On `pages/actions.ts` a
+    // course out of a form would let somebody gate themselves on the cheap one
+    // and act on the expensive one, so it is derived. Here the actor is the
+    // OPERATOR, `guard()` has already answered `requireOwner()`, and they may
+    // legitimately write into any course they own. What the form may not do is
+    // name a course that does not exist, so the value is RESOLVED rather than
+    // trusted, and the create refuses when it names nothing.
+    const course = await courseBySlugForOperator(text(formData, "course"));
+    if (!course) return refuse("coursesCourseNotFound", { slug: text(formData, "course") });
     const slug = text(formData, "slug");
     const index = await claims();
     const problem = slugAvailability(slug, {
@@ -153,15 +167,18 @@ export async function createBlockAction(
     }
 
     const position = whole(formData, "position");
-    const taken = positionAvailability(position, await blockPositions());
+    // Per course: every course orders its own blocks from 1, and the app-wide
+    // question refused a second course's first block.
+    const taken = positionAvailability(position, await blockPositions(course.id));
     if (taken) return refuse(taken, { position });
 
     const block = await createBlock({
+      courseId: course.id,
       slug,
       position,
       title: text(formData, "title"),
       summary: optional(formData, "summary"),
-      releaseAfterDays: releaseDays(formData),
+      releaseAfterDays: releaseDays(formData, course.shape),
     });
     revalidate();
     const t = await getTranslations("coursesAdmin");
@@ -189,10 +206,14 @@ export async function updateBlockAction(
       return refuse(locked, { file: await fileFor(index, "blocks", block.slug) });
     }
 
+    // The block's own course decides whether a drip delay means anything —
+    // read from the row rather than from the form, because an operator editing
+    // block X may not move it into course Y by renaming a field.
+    const blockCourse = await courseByIdForOperator(block.courseId);
     await updateBlock(block.id, {
       title: text(formData, "title"),
       summary: optional(formData, "summary"),
-      releaseAfterDays: releaseDays(formData),
+      releaseAfterDays: releaseDays(formData, blockCourse?.shape ?? null),
     });
     // Its lessons too: `releaseAfterDays` is what their pages lock against.
     revalidate(await unitSlugsIn(block.id));
@@ -364,7 +385,8 @@ export async function moveAction(_prev: ActionState, formData: FormData): Promis
         const index = await claims();
         return refuse(locked, { file: await fileFor(index, "blocks", block.slug) });
       }
-      const taken = positionAvailability(position, await blockPositions(block.id));
+      // Within the block's OWN course, and excluding itself.
+      const taken = positionAvailability(position, await blockPositions(block.courseId, block.id));
       if (taken) return refuse(taken, { position });
 
       await setBlockPosition(block.id, position);

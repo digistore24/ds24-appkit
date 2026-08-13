@@ -45,8 +45,13 @@ import {
   setBlockAction,
   startConversationAction,
 } from "./actions";
+import { EMPTY_ACTION_STATE } from "@/lib/action-state";
 
-const EMPTY: ActionState = { error: null, ok: null };
+// The community's state is WIDER than the core's — `startDiscussion` hands
+// back the new `postId` so the page can scroll to it. The value is still the
+// shared one; only the type it is read at is the module's own.
+const EMPTY: ActionState = EMPTY_ACTION_STATE;
+
 
 /**
  * Submit without handing the form to React.

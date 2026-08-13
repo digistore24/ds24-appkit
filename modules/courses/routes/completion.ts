@@ -16,11 +16,10 @@
 import { guardApi } from "@/modules/api/api/guard";
 import { apiError, apiJson } from "@/modules/api/api/rules";
 
-import { courseShape } from "../lib/config";
-import { blockById, setCompleted, unitBySlug } from "../lib/manage";
+import { setCompleted } from "../lib/manage";
 import { isUnlocked } from "../rules";
 
-import { courseViewer } from "./viewer";
+import { unitViewer } from "./viewer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,8 +31,6 @@ export async function POST(
   const g = await guardApi(request, { scope: "write" });
   if (!g.ok) return g.response;
 
-  const v = await courseViewer(g.memberId, g.role);
-  if (!v.ok) return v.response;
 
   // `{ "done": true }`, and `done` is required rather than defaulted: a client
   // that meant to un-tick and sent a malformed body must not tick instead.
@@ -48,15 +45,14 @@ export async function POST(
   }
 
   const { slug } = await context.params;
-  const unit = await unitBySlug(slug);
-  if (!unit) return apiError("notFound", "No such lesson.");
-
-  const block = await blockById(unit.blockId);
-  if (!block) return apiError("notFound", "No such lesson.");
+  // Lesson → block → course → the gate. See `./viewer.ts`.
+  const v = await unitViewer(g.memberId, g.role, slug);
+  if (!v.ok) return v.response;
+  const { unit, block } = v;
 
   // 🚨 The same re-application the action makes, for the same reason: without
   // it a learner marks week ten done on day one by replaying this request.
-  if (!isUnlocked(block.releaseAfterDays, v.access.startedAt, courseShape(), new Date())) {
+  if (!isUnlocked(block.releaseAfterDays, v.access.startedAt, v.course.shape!, new Date())) {
     return apiError("forbidden", "This lesson has not opened yet.");
   }
 

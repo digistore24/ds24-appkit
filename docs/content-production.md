@@ -281,8 +281,8 @@ Delivery — this is the one place where a subtitle is NOT "just another file":
 
 1. The `.vtt` goes into the media store as `text/vtt` (it lives under the
    `file` kind, `config/media.json`), with the same `visibility: "entitled"`
-   and `requiresPlan` as its video — the transcript of a paid lesson is paid
-   content.
+   and the same `planKeys` as its video — the transcript of a paid lesson is
+   paid content.
 2. **Its address comes from `mediaUrlFor()` like every other file — and for
    `text/vtt` that answer is deliberately the app's own route, never a bucket
    URL.** A `<track>` fetch is CORS-restricted, unlike the video's `src`, and
@@ -342,9 +342,9 @@ A produced file follows the same road as any other media
    goes to `content/media/<topic>/<file>` (≤ 10 MB) or `.data/content-media/…`
    (larger — a lesson video is this leg), one entry in
    `content/media-manifest.json` with `visibility: "entitled"` plus the
-   course's `requiresPlan` — buying the course IS buying the videos. The
-   subtitle `.vtt` travels the same way, with the same visibility and plan as
-   its video. Then `node run.mjs content-apply` (row + shipped bytes) and, for
+   course's own `planKeys` — buying the course IS buying the videos, whichever
+   of its products you bought it under. The subtitle `.vtt` travels the same
+   way, with the same visibility and the same list as its video. Then `node run.mjs content-apply` (row + shipped bytes) and, for
    staged files, `node run.mjs content-media-sync --apply`. **This fills the
    environment you are in — PROD gets the same content at go-live via
    `--env prod`. ⚠️ Nothing proves it arrived — open the page and look.**

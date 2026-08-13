@@ -179,11 +179,32 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
 declare module "next-auth" {
   interface Session {
     user: {
-      id?: string;
+      /**
+       * 🚨 `id` and `role` are REQUIRED, and saying so is not a widening of the
+       * claim — it is the claim catching up with the code.
+       *
+       * Every branch of the `session()` callback in `auth.config.ts` sets both
+       * before returning: the impersonating one, the just-ended one, and the
+       * ordinary one. There is no path that leaves either open. While they were
+       * declared optional the app compensated at the call sites instead —
+       * **60 × `session.user.id as string` and 21 × `role as string`** across
+       * `app/`, `lib/` and `modules/`, a quarter of every cast in the tree,
+       * caused by two question marks.
+       *
+       * That cost is not only ours. A cast is the shape a customer copies into
+       * the first page they write, and it is the shape that stops the compiler
+       * saying anything the day a branch really does leave `id` unset.
+       *
+       * ⚠️ The one place a cast stays is the callback itself — `token.sub as
+       * string` — and it belongs there: that is the boundary where an untyped
+       * JWT claim becomes this app's own type, asserted once, in the file that
+       * knows why.
+       */
+      id: string;
       name?: string | null;
       email?: string | null;
       image?: string | null;
-      role?: string;
+      role: string;
       /**
        * Set while an Operator is signed in as this member — and only then.
        *

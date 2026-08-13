@@ -51,6 +51,7 @@ import {
   type LiveScopeAnswer,
   type PostRow,
 } from "@/modules/community/lib/manage";
+import { wirePost } from "../lib/wire";
 
 // Sessions, the database and the entitlements seam — none of it runs on the
 // edge, and every answer is per-viewer by construction.
@@ -114,24 +115,6 @@ function readScope(value: unknown): LiveScope | null {
  * arrival rather than to pretend. The client's `PostView` reads exactly these
  * fields, so the two shapes are one shape.
  */
-function wirePost(post: PostRow) {
-  return {
-    id: post.id,
-    authorId: post.authorId,
-    content: post.content,
-    createdAt: post.createdAt.toISOString(),
-    editedAt: post.editedAt?.toISOString() ?? null,
-    deletedAt: post.deletedAt?.toISOString() ?? null,
-    deletedBy: post.deletedBy,
-    authorProfileName: post.authorProfileName,
-    authorAccountName: post.authorAccountName,
-    // Already JSON-safe and already authorised: `postImagesFor()` asked
-    // `mayAccess()` and minted the addresses in one function, and a post that is
-    // not visible arrives with an empty list rather than with blanked fields —
-    // there is nothing here to serialise differently or to forget to strip.
-    images: post.images,
-  };
-}
 
 export async function POST(request: Request): Promise<Response> {
   // 1. Enablement, before anything is read.
@@ -146,7 +129,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!memberId) {
     return Response.json({ error: "notSignedIn" }, { status: 401 });
   }
-  const viewer = { memberId, role: current.session.user.role as string };
+  const viewer = { memberId, role: current.session.user.role };
 
   // 2b. The direct-message carve-out (FR-209), from the ONE seam — over the
   //     session already read, so a poll every five seconds does not pay for a

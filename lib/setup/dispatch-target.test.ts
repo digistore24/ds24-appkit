@@ -20,7 +20,7 @@
 // `recordAct()` was handed. Deleting the `target:` line from either refusal
 // branch turns them red; so does dropping a tool's `targetField`.
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 const {
   recordAct,
@@ -30,6 +30,7 @@ const {
   store,
   grantByHand,
   createUser,
+  countOwners,
   selected,
   memberOfGrant,
   revokeGrantByHand,
@@ -46,6 +47,11 @@ const {
   store: { head: vi.fn(), firstBytes: vi.fn(), remove: vi.fn(), createUploadUrl: vi.fn() },
   grantByHand: vi.fn(),
   createUser: vi.fn(async () => ({ id: "member-42", email: "neu@example.com", role: "member" })),
+  // `user_upsert` asks the role rule before it writes, and the rule needs the
+  // owner count (lib/users/manage.ts → createUser). Two owners, so the answer
+  // never turns on `lastOwnerRole` — the cases here are about the TRAIL, and a
+  // fixture that also refused would be measuring the wrong thing.
+  countOwners: vi.fn(async () => 2),
   /** What the tools' own `db.select(...).limit(1)` answers with. */
   selected: { rows: [] as unknown[] },
   memberOfGrant: vi.fn(async () => null as string | null),
@@ -90,7 +96,11 @@ vi.mock("@/db", () => {
   chain.limit = () => Promise.resolve(selected.rows);
   return { db: { select: () => chain } };
 });
-vi.mock("@/lib/users/manage", () => ({ createUser, listUsers: vi.fn(async () => []) }));
+vi.mock("@/lib/users/manage", () => ({
+  createUser,
+  countOwners,
+  listUsers: vi.fn(async () => []),
+}));
 vi.mock("@/lib/content/publish", async (importOriginal) => ({
   ...((await importOriginal()) as Record<string, unknown>),
   publishContent,
@@ -117,7 +127,7 @@ const ENTRY = {
   kind: "video",
   contentType: "video/mp4",
   visibility: "entitled",
-  requiresPlan: "kurs_komplett",
+  requiresPlan: "course_complete",
   alt: null,
   filename: "intro.mp4",
   bytes: 15_728_640,
@@ -229,6 +239,11 @@ describe("🚨 a refused act keeps its target", () => {
   // The other branch that records without a result. An act that threw halfway is
   // exactly what somebody goes looking for, and "which one" is the question.
   it("names the subject of a crash, not only of a refusal", async () => {
+    // The `console.error` below is the behaviour under test, not an accident — this
+    // test PROVOKES the failure. Silenced so an UNEXPECTED error stays visible in
+    // the run's output instead of drowning in expected noise.
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => quiet.mockRestore());
     const broken = Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" });
     store.head.mockRejectedValue(broken);
 
@@ -340,7 +355,7 @@ describe("🚨 an act names its member, and a refusal keeps its reason", () => {
 
     const row = await actOn("grant_by_hand", {
       email: "kunde@example.com",
-      productKey: "kurs_komplett",
+      productKey: "course_complete",
       reason: "paid by invoice, order 4711",
     });
 
@@ -362,7 +377,7 @@ describe("🚨 an act names its member, and a refusal keeps its reason", () => {
     revokeGrantByHand.mockResolvedValue({
       id: "gr_1",
       memberId: "member-7",
-      productKey: "kurs_komplett",
+      productKey: "course_complete",
       endedAt: new Date("2026-08-12T08:00:00.000Z"),
     });
     const applied = await actOn("grant_revoke", { grantId: "gr_1", reason: "wrong person" });
@@ -387,6 +402,8 @@ describe("🚨 an act names its member, and a refusal keeps its reason", () => {
   });
 
   it("keeps the reason when the act CRASHED", async () => {
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => quiet.mockRestore());
     revokeGrantByHand.mockRejectedValue(
       Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }),
     );
@@ -500,10 +517,23 @@ describe("🚨 a refusal the tool ANSWERS with is recorded as one", () => {
       target: "neuer.chef@example.com",
     },
     {
+      // 🚨 The half AD-92 was written without. `moderator` is not an admin —
+      // `requireOwner()` refuses one exactly as it refuses a member — which is
+      // why the rule read as complete while naming only the owner. It is reach
+      // over other people's words all the same: `moderators`-visible rooms, and
+      // removing somebody else's post. The injected sentence asking for one
+      // costs what the one asking for an owner costs.
+      tool: "user_upsert",
+      input: { email: "neuer.mod@example.com", role: "moderator" },
+      mode: "apply",
+      code: "ownerPromotionRefused",
+      target: "neuer.mod@example.com",
+    },
+    {
       tool: "grant_by_hand",
       input: {
         email: "niemand@example.com",
-        productKey: "kurs_komplett",
+        productKey: "course_complete",
         reason: "paid by invoice, order 4711",
       },
       mode: "apply",
@@ -570,6 +600,49 @@ describe("🚨 a refusal the tool ANSWERS with is recorded as one", () => {
   // that role changes nothing: `created: 0, changed: 0, rows: 0` — the very
   // numbers every refusal above carries. It is an honest `applied`, and a rule
   // that read the numbers would have turned it into a refusal.
+  // 🚨 AD-92's chain pointed the OTHER WAY, and it is a different mechanism
+  // from the five above — which is why it is not one of the CASES.
+  //
+  // Those five are DECLARED refusals: the tool returns `SetupResult.refused`
+  // and `dispatch.ts` reads the field. This one is a domain error THROWN by
+  // `createUser()` and recovered by `domainCodeOf()`, so the scan at the foot
+  // of this block would not find it in the source — correctly. Putting it in
+  // the table made that scan red, and the scan was right.
+  //
+  // What it protects: `role` defaults to "member", so an upsert naming the sole
+  // owner and simply OMITTING the field demoted them — in production, from an
+  // agent reading text somebody else wrote — and the tool reported `changed: 1`
+  // about it. Not "make somebody an owner" but "remove the one there is".
+  //
+  // Asked in `plan` on purpose. The apply refuses either way; what is pinned
+  // here is that the FIRST act refuses too, instead of promising a change the
+  // second one will not make.
+  it("refuses to demote the last owner — in the PLAN, not only the apply", async () => {
+    // A different id from the harness's `ownerId` ("owner-1"): the same person
+    // would trip `selfDemote` first, and this test is about the other half.
+    selected.rows = [{ id: "owner-9", role: "owner" }];
+    countOwners.mockResolvedValue(1);
+    memberIdForEmail.mockResolvedValue("owner-9");
+
+    const row = await actOn("user_upsert", { email: "der.einzige@example.com" }, "plan");
+
+    expect(row.outcome).toBe("refused");
+    expect(row.code).toBe("lastOwnerRole");
+    expect(row.rows ?? 0).toBe(0);
+    expect(row.target).toBe("der.einzige@example.com");
+  });
+
+  it("refuses an owner demoting themselves through this surface", async () => {
+    selected.rows = [{ id: "owner-1", role: "owner" }];
+    countOwners.mockResolvedValue(2);
+    memberIdForEmail.mockResolvedValue("owner-1");
+
+    const row = await actOn("user_upsert", { email: "ich@example.com" }, "plan");
+
+    expect(row.outcome).toBe("refused");
+    expect(row.code).toBe("selfDemote");
+  });
+
   it("leaves an honest no-op success as applied", async () => {
     selected.rows = [{ id: "member-42", role: "member" }];
     memberIdForEmail.mockResolvedValue("member-42");

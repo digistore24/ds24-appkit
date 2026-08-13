@@ -20,8 +20,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { SHARED_NAMESPACES, mergeModuleMessages } from "@/lib/modules/messages-merge";
-import { loadModules } from "./registry.mjs";
-import { installedModules } from "./installed.mjs";
+import { availableModules } from "./registry.mjs";
 import { blankComments } from "@/scripts/lib/source-text.mjs";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -92,10 +91,25 @@ describe("i18n/catalogue.ts really uses it", () => {
   });
 });
 
-describe("what an installed module may put in a shared namespace", () => {
-  const records = installedModules(ROOT).length > 0 ? loadModules(ROOT) : [];
+describe("what a module may put in a shared namespace", () => {
+  // AVAILABLE, not installed — the same correction as `privacy.test.ts` and
+  // `modules/boundary.test.ts` §2. `config/modules.json` ships empty, so this
+  // read zero catalogues in the tree a customer clones. Which keys a module's
+  // own `de.json` puts in a SHARED namespace is a property of that file; it
+  // does not become true or false by installing anything.
+  const records = availableModules(ROOT).map((id) => {
+    const dir = join("modules", id);
+    return {
+      id,
+      dir,
+      manifest: JSON.parse(readFileSync(join(ROOT, dir, "module.json"), "utf8")),
+    };
+  });
 
-  it(`checks the ${records.length} installed module(s)`, () => {
+  it(`checks the ${records.length} available module(s)`, () => {
+    // The count guard — zero records is what used to look like a pass.
+    expect(records.length, "no modules found in the tree").toBeGreaterThan(1);
+    let read = 0;
     for (const { id, dir, manifest } of records) {
       const messages = manifest.messages as { dir: string } | undefined;
       if (!messages) continue;
@@ -114,7 +128,12 @@ describe("what an installed module may put in a shared namespace", () => {
               `overwrite each other, and a module could silently replace a core text.`,
           ).toEqual([]);
         }
+        read += 1;
       }
     }
+
+    // The second half of the guard: records exist, but if none of them declared
+    // a `messages` dir the loop would still assert nothing.
+    expect(read, "no module catalogue was read at all").toBeGreaterThan(1);
   });
 });

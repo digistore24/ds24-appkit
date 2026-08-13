@@ -48,6 +48,7 @@ import {
 import { assertCacheableOrder, flattenBlocks } from "./blocks";
 import { parseJson, sseData } from "./sse";
 import { IdleTimeout } from "./idle-timeout";
+import { finiteNumber } from "@/lib/finite";
 
 export const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 export const GEMINI_ENV_VAR = "GEMINI_API_KEY";
@@ -169,10 +170,6 @@ export function endpointFor(model: string, stream: boolean): string {
 
 // ── Pure: reading the answer ────────────────────────────────────────────────
 
-function num(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
-
 /**
  * `usageMetadata` → our shape. Null when the provider said nothing.
  *
@@ -193,13 +190,13 @@ export function usageFrom(raw: unknown): Usage | null {
   if (typeof raw !== "object" || raw === null) return null;
   const u = raw as Record<string, unknown>;
 
-  const thinking = num(u.thoughtsTokenCount) || num(u.thoughtTokenCount);
+  const thinking = finiteNumber(u.thoughtsTokenCount) || finiteNumber(u.thoughtTokenCount);
 
   return {
     ...emptyUsage(),
-    inputTokens: num(u.promptTokenCount),
-    outputTokens: num(u.candidatesTokenCount) + thinking,
-    cachedInputTokens: num(u.cachedContentTokenCount),
+    inputTokens: finiteNumber(u.promptTokenCount),
+    outputTokens: finiteNumber(u.candidatesTokenCount) + thinking,
+    cachedInputTokens: finiteNumber(u.cachedContentTokenCount),
     thinkingTokens: thinking,
     reportedTotalTokens:
       typeof u.totalTokenCount === "number" ? u.totalTokenCount : null,

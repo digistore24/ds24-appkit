@@ -20,8 +20,8 @@ import { Button } from "@/components/ui/button";
 
 import type { ActionState } from "../actions";
 import { consumeReportAction, liftBlockAction } from "./actions";
+import { EMPTY_ACTION_STATE } from "@/lib/action-state";
 
-const EMPTY: ActionState = { error: null, ok: null };
 
 export function ConsumeReportButton({
   reportId,
@@ -36,7 +36,7 @@ export function ConsumeReportButton({
   conflicted?: boolean;
 }) {
   const t = useTranslations("community");
-  const [state, action] = useActionState(consumeReportAction, EMPTY);
+  const [state, action] = useActionState(consumeReportAction, EMPTY_ACTION_STATE);
   const [pending, start] = useTransition();
 
   useActionToast(state);
@@ -79,7 +79,7 @@ export function LiftBlockButton({
   conflicted: boolean;
 }) {
   const t = useTranslations("community");
-  const [state, action] = useActionState(liftBlockAction, EMPTY);
+  const [state, action] = useActionState(liftBlockAction, EMPTY_ACTION_STATE);
   const [pending, start] = useTransition();
 
   useActionToast(state);

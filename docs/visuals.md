@@ -357,13 +357,17 @@ await createMedia({
   bytes,
   filename: "Workbook.pdf",
   visibility: "entitled",
-  requiresPlan: "basis_monatlich",   // a key from config/digistore-products.json
+  // 🚨 A LIST, and holding ONE of them buys the file. One offering is one
+  // Digistore24 product per billing interval, so anything sold monthly AND
+  // yearly names both keys — a single one would leave the yearly buyer with a
+  // page that renders and a file that is not there.
+  planKeys: ["basic_monthly", "basic_yearly"],   // keys from config/digistore-products.json
   alt: null,
   source: "upload",
 });
 ```
 
-The Product Key is checked by `createMedia()` itself, so this call refuses a
+Every Product Key is checked by `createMedia()` itself, so this call refuses a
 typo rather than storing it. That matters because `hasPlan()` **throws** on a
 key it does not know: an unchecked one would not mean "no access", it would take
 down the page that renders the item. A token package is refused for a different

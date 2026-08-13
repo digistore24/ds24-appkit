@@ -54,7 +54,7 @@ export default async function ModerationPage({
   if (!isCommunityEnabled()) notFound();
 
   const session = await requireActiveUser();
-  const actorId = session.user.id as string;
+  const actorId = session.user.id;
 
   const requested = (await searchParams).page;
   const page = Math.max(1, Number(requested) || 1);

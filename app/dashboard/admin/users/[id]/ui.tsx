@@ -54,8 +54,8 @@ import {
   revokeGrantAction,
   type ActionState,
 } from "./actions";
+import { EMPTY_ACTION_STATE } from "@/lib/action-state";
 
-const EMPTY: ActionState = { error: null, ok: null };
 
 /** One booking. Mirrors LedgerRow in lib/tokens/account.ts. */
 export interface LedgerRow {
@@ -151,7 +151,7 @@ function AdjustBalance({
   const tCommon = useTranslations("common");
   const [state, formAction, isPending] = useActionState(
     adjustTokensAction,
-    EMPTY,
+    EMPTY_ACTION_STATE,
   );
   const [confirming, setConfirming] = useState(false);
   const [amount, setAmount] = useState("");
@@ -304,7 +304,7 @@ function GrantPlan({
 }) {
   const t = useTranslations("memberBilling");
   const tCommon = useTranslations("common");
-  const [state, formAction, isPending] = useActionState(grantPlanAction, EMPTY);
+  const [state, formAction, isPending] = useActionState(grantPlanAction, EMPTY_ACTION_STATE);
   const [productKey, setProductKey] = useState(products[0]?.key ?? "");
   const [reason, setReason] = useState("");
   const [day, setDay] = useState("");
@@ -433,7 +433,7 @@ function RevokeGrant({
   const tCommon = useTranslations("common");
   const [state, formAction, isPending] = useActionState(
     revokeGrantAction,
-    EMPTY,
+    EMPTY_ACTION_STATE,
   );
   const formRef = useRef<HTMLFormElement>(null);
 

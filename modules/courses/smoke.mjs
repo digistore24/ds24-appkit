@@ -70,9 +70,17 @@ export async function assert({ baseUrl, cookie, isLocal }) {
     // with `[`, so `…/submissions/[submissionId]` is never called by it. This
     // file fetches LITERAL paths and is not subject to that skip, so the
     // dynamic route's off-state is asserted here or nowhere.
+    // 🚨 **Two SHAPES of not-there, and both are asserted.** Since Story 44.2 a
+    // lesson lives at `/dashboard/course/<course>/<lesson>`, so "no such course"
+    // and "no such lesson in a course that does exist" are different paths
+    // through the page — and with the module switched off BOTH have to answer
+    // the document a route that never existed answers. The one-segment form is
+    // kept too: it is now the course LIST, a literal path, and the one this
+    // sweep would notice a rewrite on.
     const routes = [
       "/dashboard/course",
       "/dashboard/course/never-existed",
+      "/dashboard/course/never-existed/also-never-existed",
       "/dashboard/admin/course",
       "/dashboard/admin/course/submissions",
       "/dashboard/admin/course/submissions/never-existed",

@@ -422,7 +422,7 @@ interface ManifestRow {
   readonly kind: string;
   readonly contentType: string;
   readonly visibility: string;
-  readonly requiresPlan: string | null;
+  readonly planKeys: readonly string[];
   readonly alt: string | null;
   readonly filename: string;
   readonly bytes: number;
@@ -446,7 +446,7 @@ interface LoadedManifest {
  * A manifest with problems is a REFUSAL before anything is written — the same
  * ruling `content-apply` makes ("Fix the manifest first — nothing was applied"),
  * for the same reason: a bad entry would otherwise become a bad object key, or a
- * `requiresPlan` that turns a page into a 500 rather than a refusal.
+ * a `planKeys` entry that turns a page into a 500 rather than a refusal.
  */
 async function loadEntries(root: string): Promise<LoadedManifest> {
   const { loadManifest } = await import("@/scripts/content/_manifest.mjs");
@@ -555,15 +555,15 @@ async function publishMedia(input: {
       let changed = 0;
       for (const row of rows) {
         await tx`
-          insert into media (id, owner_id, kind, visibility, requires_plan,
+          insert into media (id, owner_id, kind, visibility, plan_keys,
                              storage_key, mime, filename, bytes, sha256, source, alt)
           values (${crypto.randomUUID()}, null, ${row.kind}, ${row.visibility},
-                  ${row.requiresPlan}, ${row.key}, ${row.contentType}, ${row.filename},
+                  ${[...row.planKeys]}, ${row.key}, ${row.contentType}, ${row.filename},
                   ${row.bytes}, ${row.sha256}, 'upload', ${row.alt})
           on conflict (storage_key) do update set
             kind = excluded.kind,
             visibility = excluded.visibility,
-            requires_plan = excluded.requires_plan,
+            plan_keys = excluded.plan_keys,
             mime = excluded.mime,
             filename = excluded.filename,
             bytes = excluded.bytes,
@@ -648,7 +648,7 @@ export interface ContentMediaRow {
   readonly kind: string;
   readonly contentType: string;
   readonly visibility: string;
-  readonly requiresPlan: string | null;
+  readonly planKeys: readonly string[];
   readonly alt: string | null;
   readonly filename: string;
   readonly bytes: number;
@@ -673,15 +673,15 @@ export async function assertContentMediaRow(
   return sql.begin(async (tx) => {
     const before = await tx`select 1 from media where storage_key = ${key}`;
     await tx`
-      insert into media (id, owner_id, kind, visibility, requires_plan,
+      insert into media (id, owner_id, kind, visibility, plan_keys,
                          storage_key, mime, filename, bytes, sha256, source, alt)
       values (${crypto.randomUUID()}, null, ${row.kind}, ${row.visibility},
-              ${row.requiresPlan}, ${key}, ${row.contentType}, ${row.filename},
+              ${[...row.planKeys]}, ${key}, ${row.contentType}, ${row.filename},
               ${row.bytes}, ${row.sha256}, 'upload', ${row.alt})
       on conflict (storage_key) do update set
         kind = excluded.kind,
         visibility = excluded.visibility,
-        requires_plan = excluded.requires_plan,
+        plan_keys = excluded.plan_keys,
         mime = excluded.mime,
         filename = excluded.filename,
         bytes = excluded.bytes,

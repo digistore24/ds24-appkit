@@ -33,11 +33,12 @@ import {
   windowMessageIds,
 } from "./rules";
 import { blankComments as withoutComments } from "@/scripts/lib/source-text.mjs";
+import { shellFiles, shellSource } from "./_shell-files.mjs";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 
 const MANAGE = withoutComments(
-  readFileSync(join(ROOT, "modules/community/lib/manage.ts"), "utf8"),
+  shellSource(),
 );
 
 // ── Who may act ────────────────────────────────────────────────────────────
@@ -318,9 +319,20 @@ describe("the audit trail is append-only", () => {
 // reports against them by getting the reporters' access revoked, or, more
 // ordinarily, reports would evaporate whenever somebody's subscription lapsed.
 
-const REPORTS_BLOCK = MANAGE.slice(
-  MANAGE.indexOf("export async function reportContent("),
-);
+// 🚨 The reports FILE, not a slice that runs to the end of the shell.
+//
+// This was `MANAGE.slice(indexOf("reportContent("))` — an approximation of "the
+// spam-reports section" back when the shell was one 5,902-line file, and the
+// best that could be done then. After the split there IS a file that is exactly
+// that section, so the assertion below can be about it rather than about
+// everything that happens to follow it alphabetically. (Measured: the old slice
+// reached into `talk.ts`, where `discussionForViewer(` legitimately lives, and
+// reported it as a re-derivation.)
+const REPORTS_BLOCK = (() => {
+  const file = shellFiles().find(([path]) => path.endsWith("/reports.ts"));
+  expect(file, "modules/community/lib/reports.ts is gone — where did the reports go?").toBeDefined();
+  return withoutComments(file![1]);
+})();
 
 describe("a spam report is decided once and then frozen", () => {
   it("checks eligibility BEFORE the insert and nowhere after", () => {

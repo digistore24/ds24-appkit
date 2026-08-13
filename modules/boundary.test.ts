@@ -46,7 +46,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { availableModules, loadModules } from "@/scripts/modules/registry.mjs";
+import { availableModules } from "@/scripts/modules/registry.mjs";
 import { expectedGenerated } from "@/scripts/modules/generate.mjs";
 import { RESERVED_IDS } from "@/scripts/modules/manifest.mjs";
 import { installedModules } from "@/scripts/modules/installed.mjs";
@@ -511,9 +511,32 @@ describe("a module's entry files stay in their own world", () => {
       (m) => m[1] ?? m[2],
     );
 
-  const records = installedModules(ROOT).length > 0 ? loadModules(ROOT) : [];
+  // 🚨 AVAILABLE, not installed — and that is the whole point of this block.
+  //
+  // It used to read `installedModules(ROOT).length > 0 ? loadModules(ROOT) : []`,
+  // and `config/modules.json` ships EMPTY. So in the tree a customer clones,
+  // and in every run of `make test` here, this checked nothing: the loop had no
+  // records and the assertion passed by describing an empty set. §1c and §3
+  // below already learned that lesson and ask `availableModules()`; this one
+  // did not, and unlike §1 it had no compensation — `scripts/modules/profiles.test.ts`
+  // measures gate COVERAGE (which module answers for which subtree), never the
+  // gate's import closure.
+  //
+  // Asking the available set is not a widening of the claim, it is the claim:
+  // what a gate imports is a property of the FILE, true or false whether or not
+  // anybody has installed it. A module that would put the database in front of
+  // every request is worth knowing about before `module add`, not after.
+  // `dir` stays RELATIVE — `read()` joins it with ROOT itself.
+  const records = availableModules(ROOT).map((id) => {
+    const dir = join("modules", id);
+    return { id, dir, manifest: JSON.parse(read(join(dir, "module.json"))) };
+  });
 
-  it(`checks the ${records.length} installed module(s)`, () => {
+  it(`checks the ${records.length} available module(s)`, () => {
+    // Non-vacuity, the reason this block was silent for so long: zero records
+    // is the state that used to look like a pass.
+    expect(records.length, "no modules to check").toBeGreaterThan(1);
+    let checked = 0;
     for (const { id, dir, manifest } of records) {
       if (typeof manifest.gate === "string") {
         // 🚨 The gate runs in front of EVERY matched request. Since Next 16 the
@@ -527,14 +550,20 @@ describe("a module's entry files stay in their own world", () => {
         expect(heavy, `${id}'s gate.ts pulls ${heavy.join(", ")} in front of every request`).toEqual(
           [],
         );
+        checked += 1;
       }
       if (typeof manifest.nav === "string") {
         // The nav file reaches the BROWSER through the client shell.
         const nav = importsOf(read(join(dir, manifest.nav)));
         const server = nav.filter((s) => /^@\/db|^node:|config\.json$/.test(s));
         expect(server, `${id}'s nav.ts would put ${server.join(", ")} in the browser`).toEqual([]);
+        checked += 1;
       }
     }
+
+    // The second half of the same guard: records exist, but if none of them
+    // declared a `gate` or a `nav` the loop above would still assert nothing.
+    expect(checked, "no module declares a gate or a nav — nothing was read").toBeGreaterThan(1);
   });
 });
 

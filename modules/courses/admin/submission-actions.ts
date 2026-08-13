@@ -78,7 +78,7 @@ export async function replyToSubmissionAction(
     const written = await replyToSubmission({
       id: submission.id,
       reply: reply.trim(),
-      ownerId: session.user.id as string,
+      ownerId: session.user.id,
     });
     // An UPDATE matching nothing succeeds, so `false` means the row went away
     // between the read and the write — a member deleting their account takes

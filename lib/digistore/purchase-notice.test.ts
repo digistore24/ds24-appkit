@@ -6,7 +6,7 @@ import { purchaseNotice, type PurchaseOrder } from "./purchase-notice";
 import type { ProductDef } from "./products";
 
 const plan: ProductDef = {
-  key: "basis_monatlich",
+  key: "basic_monthly",
   name: "Basic (monthly)",
   kind: "subscription",
   billingInterval: "1_month",
@@ -31,7 +31,7 @@ const once: ProductDef = {
 };
 
 const registry: Record<string, ProductDef> = {
-  basis_monatlich: plan,
+  basic_monthly: plan,
   starter: pack,
   lifetime: once,
 };
@@ -40,7 +40,7 @@ const lookup = (key: string) => registry[key] ?? null;
 
 const order = (over: Partial<PurchaseOrder> = {}): PurchaseOrder => ({
   status: "paid",
-  productKey: "basis_monatlich",
+  productKey: "basic_monthly",
   credits: null,
   ...over,
 });

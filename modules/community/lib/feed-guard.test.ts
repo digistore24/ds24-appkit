@@ -28,11 +28,12 @@ import { join } from "node:path";
 
 import { feedVisible } from "./rules";
 import { blankComments as withoutComments } from "@/scripts/lib/source-text.mjs";
+import { shellSource } from "./_shell-files.mjs";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 
 const MANAGE = withoutComments(
-  readFileSync(join(ROOT, "modules/community/lib/manage.ts"), "utf8"),
+  shellSource(),
 );
 
 /**

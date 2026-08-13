@@ -6,6 +6,8 @@ node_modules/
 .data/
 dist/
 out/
+# `npm run test:coverage` — a tool, run on purpose, never committed.
+coverage/
 *.log
 
 .env

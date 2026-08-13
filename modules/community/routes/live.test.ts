@@ -198,7 +198,7 @@ describe("one refusal for every no", () => {
     vi.mocked(findEmbed).mockReturnValue({
       subjectKey: "course:paid:1",
       accessLevel: "plan",
-      planKeys: ["kurs_komplett"],
+      planKeys: ["course_complete"],
     });
     vi.mocked(hasPlan).mockResolvedValue(false);
 
@@ -212,7 +212,7 @@ describe("one refusal for every no", () => {
     vi.mocked(findEmbed).mockReturnValue({
       subjectKey: "course:paid:1",
       accessLevel: "plan",
-      planKeys: ["kurs_komplett"],
+      planKeys: ["course_complete"],
     });
     await POST(
       post({

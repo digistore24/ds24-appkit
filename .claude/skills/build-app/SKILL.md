@@ -328,17 +328,12 @@ reasoning, and the two references it points at, are in
   which components carry a result, what sits above the fold, the one signature
   element. Read it before laying out the page; do not re-decide per page what
   that file already settled (the skill `design` is where it changes).
-- Messages (notice/success/warning/error) always via `Callout`
-  (`components/ui/callout.tsx`, variants `info` | `success` | `warning` |
-  `danger`) — no hand-picked color classes. Details in `CLAUDE.md`.
-- **Every action reports back, and there are exactly three ways to do it** —
-  use them, do not build a fourth: `<Callout>` for what has to stay on screen,
-  `useActionToast(state)` for a server action on the same page, and
-  `<FlashToast>` (`components/flash-toast.tsx`) for a result that arrives after
-  a `redirect()`. That last one is the one that gets forgotten, and it is
-  exactly where a purchase or a sign-up ends up. Pass `<FlashToast>` a *reference*
-  in the URL and resolve the text on the receiving page — never put the message
-  itself in the address. The table is in `CLAUDE.md`, under **UI**.
+- **Every action reports back — three mechanisms, never a fourth.** Which one
+  to reach for is decided by *where the result has to appear*, and that table is
+  `CLAUDE.md` → **UI**, already loaded in this session. Do not re-decide it here.
+  The one worth naming at build time is the third: a result that arrives after a
+  `redirect()` needs `<FlashToast>`, it is the one that gets forgotten, and it
+  is exactly where a purchase or a sign-up ends up.
 - Every page has to be readable in light **and** dark; the app has a toggle
   (default: system). With tokens this follows by itself.
 - **A page that renders the app's CONTENT (a lesson, an article) gives its
@@ -443,7 +438,7 @@ copy it when creating the file, and keep it, so every entry reads the same.
 
 Three rules about it:
 
-- **Access is quoted, not described.** `hasPlan(memberId, "basis_monatlich")`, not
+- **Access is quoted, not described.** `hasPlan(memberId, "basic_monthly")`, not
   "only for paying customers". The next session has to be able to read the gate
   off the line without opening the page.
 - **A decision AGAINST is a decision.** "No pictures in the messages" belongs

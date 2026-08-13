@@ -98,8 +98,8 @@ import {
   startImpersonationAction,
   type ActionState,
 } from "./actions";
+import { EMPTY_ACTION_STATE } from "@/lib/action-state";
 
-const EMPTY: ActionState = { error: null, ok: null };
 
 // One icon per role, for the row menu's "make …" entries. Same order of ideas
 // as the badge variants: the owner filled, the moderator marked but not the
@@ -115,7 +115,7 @@ export function CreateUserDialog() {
   const tRoles = useTranslations("roles");
   const tCommon = useTranslations("common");
   const [open, setOpen] = useState(false);
-  const [state, action, pending] = useActionState(createUserAction, EMPTY);
+  const [state, action, pending] = useActionState(createUserAction, EMPTY_ACTION_STATE);
 
   useActionToast(state);
   // Close after creating; leave open on error so the input is not lost.
@@ -227,13 +227,13 @@ export function UserTable({
   const tCommon = useTranslations("common");
   const format = useFormatter();
 
-  const [roleState, roleAction] = useActionState(setRoleAction, EMPTY);
-  const [blockState, blockAction] = useActionState(setBlockedAction, EMPTY);
-  const [linkState, linkAction] = useActionState(sendLoginLinkAction, EMPTY);
-  const [deleteState, deleteAction] = useActionState(deleteUserAction, EMPTY);
+  const [roleState, roleAction] = useActionState(setRoleAction, EMPTY_ACTION_STATE);
+  const [blockState, blockAction] = useActionState(setBlockedAction, EMPTY_ACTION_STATE);
+  const [linkState, linkAction] = useActionState(sendLoginLinkAction, EMPTY_ACTION_STATE);
+  const [deleteState, deleteAction] = useActionState(deleteUserAction, EMPTY_ACTION_STATE);
   const [impersonateState, impersonateAction] = useActionState(
     startImpersonationAction,
-    EMPTY,
+    EMPTY_ACTION_STATE,
   );
   const [isPending, startAction] = useTransition();
   // The user whose delete confirmation is open (null = none).
@@ -603,7 +603,7 @@ function EditEmailDialog({
 }) {
   const t = useTranslations("users");
   const tCommon = useTranslations("common");
-  const [state, action, pending] = useActionState(setEmailAction, EMPTY);
+  const [state, action, pending] = useActionState(setEmailAction, EMPTY_ACTION_STATE);
 
   useActionToast(state);
   // Close on success only — otherwise the rejected address (e.g. already

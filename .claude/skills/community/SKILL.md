@@ -161,7 +161,7 @@ component, and nothing else:
 // level are ever written down. Ships empty.
 { subjectKey: "kurs:wehen-atmung:lektion-3",
   accessLevel: "plan",
-  planKeys: ["kurs_komplett"] }
+  planKeys: ["course_complete"] }
 ```
 
 ```tsx
@@ -194,7 +194,7 @@ impersonation or a second account — as a member who has not bought the gated
 product. A page that loads is not a page that gates.
 
 Finish with **one entry in `docs/app.md`**: the rooms, the embeds, and the
-access gate quoted as code (`hasPlan(memberId, "kurs_komplett")`), never as
+access gate quoted as code (`hasPlan(memberId, "course_complete")`), never as
 prose.
 
 ## 3 · `gate` — who gets into which room
@@ -233,7 +233,7 @@ Four hunts, in this order. Each says what it reads.
 1. **The ungated embed.** Read every declaration in `modules/community/lib/embeds.ts`
    and open the page each one sits on. Does the discussion's access level match
    what the page's own content demands? An `open` embed under a lesson gated on
-   `kurs_komplett` means anybody signed in reads what buyers wrote about
+   `course_complete` means anybody signed in reads what buyers wrote about
    material they did not buy. ❌ HIGH when the levels disagree and nobody
    decided it; ℹ️ when the page itself is open.
 2. **The leaking profile.** Read what the profile page and the member card

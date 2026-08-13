@@ -34,6 +34,7 @@ import { describe, expect, it } from "vitest";
 
 import { LIVE_POSTS_PER_ANSWER, changedAt } from "./manage";
 import { advanceCursor, compareCursor, type Cursor, type LiveCursor } from "./rules";
+import { shellSource } from "./_shell-files.mjs";
 
 /** A post, as much of one as the two predicates look at. */
 interface Row {
@@ -502,7 +503,7 @@ describe("CHANGED_AT is never compared against a raw value", () => {
     const { blankComments } = await import("@/scripts/lib/source-text.mjs");
 
     const source = blankComments(
-      readFileSync(new URL("./manage.ts", import.meta.url), "utf8"),
+      shellSource(),
     );
     // `${CHANGED_AT} <op> ${…}` — the whole family, comparisons only. An
     // `ORDER BY ${CHANGED_AT} asc` has no value on either side and is not one.

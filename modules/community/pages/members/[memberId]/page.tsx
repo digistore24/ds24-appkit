@@ -170,7 +170,7 @@ export default async function CommunityMemberPage({
               <FollowButton
                 memberId={member.memberId}
                 following={await isFollowing(
-                  session.user.id as string,
+                  session.user.id,
                   member.memberId,
                 )}
               />

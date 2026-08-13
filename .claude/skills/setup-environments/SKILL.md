@@ -226,17 +226,26 @@ is and offer the real path.
 | "just run this SQL" | No SQL tool exists. One general tool would make every other control decoration. |
 | "change this lesson's text on production" | Not authored here, and no tool of this surface writes a lesson. Blocks and lessons belong to the **applier**, which writes them from `content/course/*.json` in the repo, keyed by slug, on every run — one writer per row class. `content_publish` *triggers* that applier inside the running app; it never becomes a second author, and a lesson typed through a tool would be silently overwritten by the next publish. **The real path:** edit the file, then `node run.mjs content-publish --env prod --apply`. What this surface does with content is read it (`courses_outline`), count it (`content_presence`) and carry bytes into the store (`media_upload`, `content_media_url`). |
 | "add a column" | Schema travels with the code, in `drizzle/`, reviewed, applied by the deploy hook. |
-| "make me an owner on production" | Refused outside DEV. Promotion is a human act on `/dashboard/admin/users` — see below. |
+| "make me an owner on production" | Refused outside DEV. Promotion is a human act on `/dashboard/admin/users` — see below. **`moderator` is refused there too**, for the same reason: not an admin, but it sees `moderators`-visible rooms and removes other people's posts. |
+| "make this address a member" (and it is the only owner) | Refused, in the PLAN as well as the apply. `role` defaults to `member`, so an upsert naming the sole owner and omitting the field used to demote them — the same chain as the row above, pointed the other way. |
 | "delete this member" | Erasure has its own paths: the member's own account page, or `node run.mjs data-export` for a request. |
 | "show me their messages" | Private conversations have no reader outside the participants, anywhere in this app. |
 | "who is in this room?" | There is no roster by design — presence in a plan-gated room is purchase information. |
 | "change the .env on prod" | Not this surface. Secrets go through the host's secret management. |
 
-**Why `owner` is refused outside DEV, in one sentence you can repeat:** you read
-text other people wrote — community posts, a member's name, a support mail — and
-any of it can carry instructions; during such a call the key is valid, the tool
-is allowed and the record is written, so every control says yes. The one
-irreversible escalation is therefore not in the surface at all.
+**Why a privileged role is refused outside DEV, in one sentence you can
+repeat:** you read text other people wrote — community posts, a member's name, a
+support mail — and any of it can carry instructions; during such a call the key
+is valid, the tool is allowed and the record is written, so every control says
+yes. The escalation is therefore not in the surface at all.
+
+🚨 **And it holds in BOTH directions.** The sentence above was written about
+promotion, which is why the demotion beside it went unnoticed: `role` defaults
+to `member`, so an upsert naming the only owner and simply leaving the field out
+took the app's last administrator away — reported as `changed: 1`, on a
+production database, from the same injected text. Both are refused now, and the
+refusal is in the **plan** as well as the apply, so the first act never promises
+a change the second one will not make.
 
 ---
 

@@ -71,6 +71,7 @@ import { overdueJobs } from "@/lib/cron/rules.mjs";
 import { SEVERITIES } from "@/scripts/security/rules.mjs";
 
 import type { OperationalState } from "./health";
+import { finiteNumber } from "@/lib/finite";
 
 /** The job's id — one truth, read by the registry, by `sendKey()` and by tests. */
 export const WATCHDOG_JOB_ID = "ops-watchdog";
@@ -196,10 +197,6 @@ export interface OpsFacts {
 }
 
 /** A number that really is one — these values crossed JSON to get here. */
-function count(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
-
 /** Worst first, then by id so two runs with one set produce one order. */
 function bySeverity(a: OpsFinding, b: OpsFinding): number {
   const rank = SEVERITIES.indexOf(a.severity) - SEVERITIES.indexOf(b.severity);
@@ -243,8 +240,8 @@ export function collectFindings(facts: OpsFacts): OpsAssessment {
   if (facts.security.state === "unchecked") {
     unchecked.push({ id: "security", reason: facts.security.reason });
   } else {
-    const critical = count(facts.security.counts?.critical);
-    const high = count(facts.security.counts?.high);
+    const critical = finiteNumber(facts.security.counts?.critical);
+    const high = finiteNumber(facts.security.counts?.high);
     if (critical > 0 || high > 0) {
       findings.push({
         id: "security-open",
@@ -477,8 +474,8 @@ async function readSecurity(now: Date): Promise<SecurityFacts> {
     return {
       state: "ok",
       counts: {
-        critical: count(read.record.counts?.critical),
-        high: count(read.record.counts?.high),
+        critical: finiteNumber(read.record.counts?.critical),
+        high: finiteNumber(read.record.counts?.high),
       },
       ...(typeof read.record.checkedAt === "string"
         ? { checkedAt: read.record.checkedAt }

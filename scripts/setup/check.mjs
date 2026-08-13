@@ -26,12 +26,10 @@ import {
   setupConfigFrom,
   setupProblemsFrom,
 } from "../../lib/setup/config-shape.mjs";
+import { flagsFrom } from "../lib/args.mjs";
 
 const args = process.argv.slice(2);
-const flag = (name) => {
-  const i = args.indexOf(`--${name}`);
-  return i === -1 ? null : (args[i + 1] ?? null);
-};
+const flag = flagsFrom(args);
 const live = args.includes("--live");
 
 const ENVIRONMENTS = {

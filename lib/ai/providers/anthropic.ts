@@ -28,6 +28,7 @@ import {
   type Usage,
 } from "./types";
 import { assertCacheableOrder, lastCacheableIndex } from "./blocks";
+import { finiteNumber } from "@/lib/finite";
 
 export const ANTHROPIC_ENV_VAR = "ANTHROPIC_API_KEY";
 
@@ -175,10 +176,6 @@ export function buildParams(req: NormalizedRequest): Record<string, unknown> {
 
 // ── Pure: reading the answer ────────────────────────────────────────────────
 
-function num(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
-
 /**
  * Anthropic's `usage` → our shape.
  *
@@ -192,14 +189,14 @@ export function usageFrom(raw: unknown): Usage | null {
   if (typeof raw !== "object" || raw === null) return null;
   const u = raw as Record<string, unknown>;
 
-  const uncached = num(u.input_tokens);
-  const cacheRead = num(u.cache_read_input_tokens);
-  const cacheWrite = num(u.cache_creation_input_tokens);
+  const uncached = finiteNumber(u.input_tokens);
+  const cacheRead = finiteNumber(u.cache_read_input_tokens);
+  const cacheWrite = finiteNumber(u.cache_creation_input_tokens);
 
   return {
     ...emptyUsage(),
     inputTokens: uncached + cacheRead + cacheWrite,
-    outputTokens: num(u.output_tokens),
+    outputTokens: finiteNumber(u.output_tokens),
     cachedInputTokens: cacheRead,
     cacheWriteTokens: cacheWrite,
     // Thinking tokens are billed as output and are already inside

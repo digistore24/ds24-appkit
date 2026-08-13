@@ -48,7 +48,7 @@ export async function disableAutoReloadAction(): Promise<State> {
   const session = await requireActiveUser();
   const t = await getTranslations("billing");
   try {
-    await setAutoReloadEnabled({ memberId: session.user.id as string, enabled: false });
+    await setAutoReloadEnabled({ memberId: session.user.id, enabled: false });
   } catch (err) {
     console.error("[billing] could not disable auto top-up:", err);
     return { error: t("autoReloadDisableFailed"), ok: null };
@@ -78,7 +78,7 @@ export async function enableAutoReloadAction(): Promise<State> {
   const t = await getTranslations("billing");
   try {
     const armed = await setAutoReloadEnabled({
-      memberId: session.user.id as string,
+      memberId: session.user.id,
       enabled: true,
     });
     if (!armed) return { error: t("autoReloadNoMandate"), ok: null };

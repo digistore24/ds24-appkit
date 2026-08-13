@@ -29,7 +29,15 @@ the user is one click: the authorization in the browser at Digistore24.
 Digistore24 is the payment provider and the app touches no money — it **reacts to
 events**. A purchase arrives as the IPN event `on_payment`, is attributed to a
 Member out of `tracking[custom]` and recorded; refunds, chargebacks and missed
-subscription payments update that record, and every event is idempotent.
+subscription payments update that record.
+
+⚠️ **The shipped handler is idempotent; the EVENT is not.** Digistore24
+redelivers until it gets a 200, and the signature check says who wrote the
+payload rather than whether it has been seen — so a retry replays the whole
+handler. What survives it is three UNIQUE constraints on the three things the
+template writes, and anything you add beside them carries its own or is done
+twice. **[`docs/digistore-integration.md`](../../../docs/digistore-integration.md)**
+→ *Replay*.
 
 🚨 **The IPN is what grants access, never the billing row.** The event is the
 authority, the row is the record — ask `hasPlan(memberId, productKey)` when you need

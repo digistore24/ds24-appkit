@@ -180,7 +180,7 @@ in **`content/media-manifest.json`**, one entry per file:
   "entries": [
     { "path": "geburtsbeginn/wehen-atmung.mp4",
       "visibility": "entitled",
-      "requiresPlan": "kurs_komplett" },
+      "planKeys": ["course_complete", "course_yearly"] },
     { "path": "geburtsbeginn/cover.png",
       "visibility": "public",
       "alt": "A calm birth room, warm light" }
@@ -199,9 +199,11 @@ in **`content/media-manifest.json`**, one entry per file:
   is a **reserved namespace**, so `storageKey()` refuses to build an upload key
   on this prefix rather than merely never happening to
   ([`visuals.md`](visuals.md) → *What the keys in your bucket look like*).
-- **`visibility`** is `public` or `entitled` (+ `requiresPlan`, a Product Key
-  from `config/digistore-products.json` — validated, because `hasPlan()`
-  throws on an unknown key). `owner` does not apply: product media belong to
+- **`visibility`** is `public` or `entitled` (+ `planKeys`, a LIST of Product
+  Keys from `config/digistore-products.json` — every one validated, because
+  `hasPlan()` throws on an unknown key). Holding **any one** of them buys the
+  file, which is what lets one offering be sold monthly and yearly without its
+  files having to choose an interval. `owner` does not apply: product media belong to
   the product, not to an account (`ownerId` stays null).
 - **`alt`** is required for images — the same rule the upload endpoint
   enforces.

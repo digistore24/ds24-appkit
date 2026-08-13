@@ -49,7 +49,7 @@ What falls away, and what stays:
   authorship: files are declared in `content/media-manifest.json` and land in
   every environment's bucket via the content commands
   ([`docs/content.md`](content.md)) — `visibility: "public"` for what anyone
-  may see (covers, a free lesson), `"entitled"` + `requiresPlan` for what is
+  may see (covers, a free lesson), `"entitled"` + `planKeys` for what is
   sold. The constant carries the media **path** (`"topic/file.mp4"`), never a
   media id: an id is a row in ONE database, a path resolves to the right row
   in every environment (`media.storageKey = "content/" + path`).

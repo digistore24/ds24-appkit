@@ -28,7 +28,7 @@ import { db } from "@/db";
 import { media, mediaUploads, type MediaRow } from "@/db/schema-media";
 import { hasPlan } from "@/lib/entitlements/manage";
 
-import { mediaConfig, planProblem } from "./config";
+import { mediaConfig, planKeysProblem, planProblem } from "./config";
 import { OWNED_MEDIA_VISIBILITIES } from "./rules";
 import { stripMetadata } from "./exif";
 import {
@@ -62,8 +62,8 @@ export interface AcceptUploadInput extends MediaSlot {
   claimedMime: string | null;
   filename: string | null;
   visibility?: MediaVisibility;
-  /** Required when `visibility` is `entitled`. */
-  requiresPlan?: string | null;
+  /** Required when `visibility` is `entitled` — holding ONE of them opens it. */
+  planKeys?: readonly string[];
   alt?: string | null;
   /**
    * Restrict what KIND this door accepts, whatever the role may otherwise
@@ -149,18 +149,13 @@ export async function acceptUpload(input: AcceptUploadInput): Promise<MediaRow> 
   if (needsAlt(kind) && !alt) throw new MediaError("altRequired");
 
   const visibility: MediaVisibility = input.visibility ?? "owner";
-  const requiresPlan = visibility === "entitled" ? (input.requiresPlan?.trim() ?? null) : null;
+  const planKeys =
+    visibility === "entitled" ? (input.planKeys ?? []).map((key) => key.trim()).filter(Boolean) : [];
   if (visibility === "entitled") {
-    if (!requiresPlan) {
-      throw new MediaError(
-        "noAccess",
-        'visibility "entitled" needs a Product Key — otherwise nobody could ever fetch it',
-      );
-    }
     // `hasPlan()` throws on an unknown key, so an unchecked one would not mean
     // "no access", it would take down the page that renders the item.
-    const problem = planProblem(requiresPlan);
-    if (problem) throw new MediaError("noAccess", `requiresPlan: ${problem}`);
+    const problem = planKeysProblem(planKeys);
+    if (problem) throw new MediaError("noAccess", `planKeys: ${problem}`);
   }
 
   // GPS and camera data off, before anything is written anywhere. Images only —
@@ -180,7 +175,7 @@ export async function acceptUpload(input: AcceptUploadInput): Promise<MediaRow> 
     bytes: stored,
     filename: input.filename ? safeFilename(input.filename, extensionFor(mime)) : null,
     visibility,
-    requiresPlan,
+    planKeys,
     alt,
     source: "upload",
   });
@@ -193,7 +188,7 @@ export interface CreateMediaInput extends MediaSlot {
   bytes: Uint8Array;
   filename: string | null;
   visibility: MediaVisibility;
-  requiresPlan: string | null;
+  planKeys: readonly string[];
   alt: string | null;
   source: MediaSource;
   width?: number | null;
@@ -229,14 +224,8 @@ export async function createMedia(input: CreateMediaInput): Promise<MediaRow> {
   // `hasPlan()` throws on an unknown key: a typo took the page down instead of
   // denying access, which is exactly what AD-41 exists to prevent.
   if (input.visibility === "entitled") {
-    if (!input.requiresPlan) {
-      throw new MediaError(
-        "noAccess",
-        'visibility "entitled" needs a Product Key — otherwise nobody could ever fetch it',
-      );
-    }
-    const problem = planProblem(input.requiresPlan);
-    if (problem) throw new MediaError("noAccess", `requiresPlan: ${problem}`);
+    const problem = planKeysProblem(input.planKeys);
+    if (problem) throw new MediaError("noAccess", `planKeys: ${problem}`);
   }
 
   const id = crypto.randomUUID();
@@ -280,7 +269,7 @@ export async function createMedia(input: CreateMediaInput): Promise<MediaRow> {
     sha256: createHash("sha256").update(input.bytes).digest("hex"),
     filename: input.filename,
     visibility: input.visibility,
-    requiresPlan: input.requiresPlan,
+    planKeys: input.planKeys,
     alt: input.alt,
     source: input.source,
     // ⚠️ **The MEASURED size wins over the caller's**, and only falls back to
@@ -323,7 +312,7 @@ async function insertMediaRow(input: {
   sha256: string | null;
   filename: string | null;
   visibility: MediaVisibility;
-  requiresPlan: string | null;
+  planKeys: readonly string[];
   alt: string | null;
   source: MediaSource;
   width?: number | null;
@@ -351,7 +340,7 @@ async function insertMediaRow(input: {
         ownerId: input.ownerId,
         kind: input.kind,
         visibility: input.visibility,
-        requiresPlan: input.requiresPlan,
+        planKeys: [...input.planKeys],
         storageKey: input.storageKey,
         mime: input.mime,
         filename: input.filename,
@@ -418,7 +407,8 @@ export interface CreateUploadTicketInput extends MediaSlot {
    * with `requireOwner()` in front of it is what may pass anything else.
    */
   visibility?: MediaVisibility;
-  requiresPlan?: string | null;
+  /** Required when `visibility` is `entitled` — holding ONE of them opens it. */
+  planKeys?: readonly string[];
 }
 
 export interface UploadTicket {
@@ -465,16 +455,11 @@ export async function createUploadTicket(
   if (refusal) throw new MediaError(refusal);
 
   const visibility: MediaVisibility = input.visibility ?? "owner";
-  const requiresPlan = visibility === "entitled" ? (input.requiresPlan?.trim() ?? null) : null;
+  const planKeys =
+    visibility === "entitled" ? (input.planKeys ?? []).map((key) => key.trim()).filter(Boolean) : [];
   if (visibility === "entitled") {
-    if (!requiresPlan) {
-      throw new MediaError(
-        "noAccess",
-        'visibility "entitled" needs a Product Key — otherwise nobody could ever fetch it',
-      );
-    }
-    const problem = planProblem(requiresPlan);
-    if (problem) throw new MediaError("noAccess", `requiresPlan: ${problem}`);
+    const problem = planKeysProblem(planKeys);
+    if (problem) throw new MediaError("noAccess", `planKeys: ${problem}`);
   }
 
   const id = crypto.randomUUID();
@@ -527,7 +512,7 @@ export async function createUploadTicket(
     claimedMime: claimed,
     filename: input.filename,
     visibility,
-    requiresPlan,
+    planKeys,
     expiresAt,
     createdAt,
   });
@@ -722,7 +707,7 @@ export async function confirmUpload(
     sha256: null,
     filename: ticket.filename ? safeFilename(ticket.filename, extensionFor(mime)) : null,
     visibility: ticket.visibility,
-    requiresPlan: ticket.requiresPlan,
+    planKeys: ticket.planKeys,
     alt: null,
     source: "upload",
     createdAt,
@@ -885,7 +870,9 @@ export async function mayAccess(row: MediaRow, viewer: Viewer): Promise<boolean>
 
   // entitled
   if (viewer.role === "owner") return true;
-  if (!row.requiresPlan) return false;
+  // An empty list is the same refusal a NULL `requires_plan` was: an
+  // `entitled` item nobody can be entitled to. The doubt falls closed.
+  if (row.planKeys.length === 0) return false;
 
   // Write-time validation cannot cover a LATER edit. Retiring a product from
   // `config/digistore-products.json` is an ordinary thing to do and nothing
@@ -894,15 +881,30 @@ export async function mayAccess(row: MediaRow, viewer: Viewer): Promise<boolean>
   // component rendering the item answer 500 rather than refusing access.
   // Refusing is the right answer: a plan that no longer exists is a plan nobody
   // holds.
-  if (planProblem(row.requiresPlan)) {
+  //
+  // 🚨 **Per key, and a retired one is SKIPPED rather than fatal.** A course
+  // sold monthly and yearly whose monthly product was retired must still open
+  // for its yearly buyers; taking the whole row down because one of its keys
+  // went stale would turn an ordinary registry edit into a refusal for people
+  // who paid. Every key going stale ends as an empty list, which is the
+  // refusal above, and the log names the row either way.
+  const live = row.planKeys.filter((key) => {
+    if (!planProblem(key)) return true;
     console.error(
-      `[media] ${row.id}: requiresPlan "${row.requiresPlan}" is no longer a product — ` +
-        `access refused. Fix the row or restore the product.`,
+      `[media] ${row.id}: plan key "${key}" is no longer a product — ` +
+        `ignored. Fix the row or restore the product.`,
     );
     return false;
-  }
+  });
+  if (live.length === 0) return false;
 
-  return hasPlan(viewer.memberId, row.requiresPlan);
+  // 🚨 **ANY of them, never all of them.** `mayEnterGroup()`
+  // (`modules/community/lib/rules.ts`) asks the identical question of the
+  // identical shape, and this is the same sentence one subsystem over.
+  for (const key of live) {
+    if (await hasPlan(viewer.memberId, key)) return true;
+  }
+  return false;
 }
 
 /**

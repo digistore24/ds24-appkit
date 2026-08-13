@@ -82,6 +82,8 @@
 // `summary` and `origin` per block — no body, no task prompt, no media id, and
 // nothing about a member.
 import { mediaIdsIn, outlinePayload } from "../lib/outline";
+import { FINGERPRINT_VERSION } from "../lib/fingerprint.mjs";
+import { allCourses, courseProblems } from "../lib/courses";
 import { courseOutline, mediaKeysFor } from "../lib/manage";
 import type { ModuleSetupTools, SetupResult, SetupTool } from "@/lib/setup/types";
 
@@ -96,37 +98,98 @@ const outline: SetupTool = {
   // purpose: this file may not contain the literal the writers check reads.
   description:
     "The course this environment holds: every block with its lessons, in order. Each lesson carries a fingerprint — a comparison key over its own content, so you can see WHICH lesson differs from your files without downloading any of them — and each row carries the origin that says whose row it is. This tool does not mutate; read it before changing anything.",
-  // The whole course is the subject and this tool takes no input, so there is
-  // nothing to name — declared rather than left out (`SetupTool.targetField`),
-  // which is what keeps "about nothing nameable" different from "forgotten".
+  // ⚠️ **Deliberately null although the schema now HAS a field — and this
+  // comment is a correction.** The reasoning that replaced the original one was
+  // wrong: "an app may hold several courses, so the act is about one of them,
+  // and `targetField` says which." `courses_outline` with no argument answers
+  // for the WHOLE environment, so `course` is a FILTER over every course, not
+  // the thing the act is about — exactly the shape `user_list`'s `role` has one
+  // file over, with exactly that ruling.
+  //
+  // `lib/setup/registry.test.ts` is what said so, and its rule is the sharper
+  // half: a `targetField` must be REQUIRED, because an optional one makes the
+  // audit row's target present or absent depending on how the caller phrased
+  // the request — which is the ambiguity the whole mechanism exists to remove.
+  // 🚨 It was invisible to `make check`: the empty profile has no `courses`
+  // module, so nothing composed this tool into the registry. `make
+  // deploy-test-modules` found it on its first run after the change.
   targetField: null,
   // A course outline is about the repo's rows, never about one member.
   subjectEmailField: null,
   mutates: false,
-  inputSchema: { type: "object", properties: {}, additionalProperties: false },
-  async run(context): Promise<SetupResult> {
-    const blocks = await courseOutline();
-    const units = blocks.reduce((sum, block) => sum + block.units.length, 0);
+  inputSchema: {
+    type: "object",
+    properties: {
+      // Optional, and the two answers are different questions: with a slug,
+      // "what does this course hold"; without one, "what does this environment
+      // hold at all". An agent preparing a publish asks the first; one that has
+      // just arrived asks the second and gets the slugs to ask it with.
+      course: { type: "string", maxLength: 200 },
+    },
+    additionalProperties: false,
+  },
+  async run(context, input): Promise<SetupResult> {
+    const wanted = typeof input.course === "string" ? input.course : null;
+    // ⚠️ `allCourses()`, not `usableCourses()`: this is the OPERATOR's surface,
+    // and a course whose row does not hold is precisely what an agent needs to
+    // be told about. `problems` travels with each one rather than the course
+    // being dropped.
+    const courses = (await allCourses()).filter((row) => !wanted || row.slug === wanted);
+    if (wanted && courses.length === 0) {
+      return {
+        mode: context.mode,
+        created: 0,
+        found: 0,
+        changed: 0,
+        subjects: [],
+        detail: `no course "${wanted}" in ${context.appEnv}`,
+        data: { fingerprintVersion: FINGERPRINT_VERSION, courses: [] },
+      };
+    }
+
+    const outlines = await Promise.all(
+      courses.map(async (course) => {
+        const blocks = await courseOutline(course.id);
+        const mediaKeys = await mediaKeysFor(mediaIdsIn(blocks));
+        return {
+          slug: course.slug,
+          title: course.title,
+          shape: course.shape,
+          planKeys: course.planKeys,
+          origin: course.origin,
+          // 🚨 What is WRONG with it, carried rather than hidden. An agent
+          // comparing files to an environment has to be able to see that a
+          // course is there and unusable — that is a different repair from a
+          // course that is missing.
+          problems: courseProblems(course),
+          ...outlinePayload(blocks, mediaKeys),
+        };
+      }),
+    );
+
+    const blocks = outlines.reduce((sum, row) => sum + row.blocks.length, 0);
+    const units = outlines.reduce(
+      (sum, row) => sum + row.blocks.reduce((n, block) => n + block.units.length, 0),
+      0,
+    );
     // The second read, and the only one that leaves this module's own tables:
     // media id → storage key, for the four slots the fingerprint hashes. One
-    // query, and it is asked HERE rather than inside `courseOutline()` so that
-    // the member's overview does not pay for a value only this tool reads
-    // (`../lib/manage.ts` argues it where the function lives).
-    const mediaKeys = await mediaKeysFor(mediaIdsIn(blocks));
-
     return {
       mode: context.mode,
       created: 0,
-      found: blocks.length,
+      found: courses.length,
       changed: 0,
-      subjects: [],
-      detail: `${blocks.length} block(s), ${units} lesson(s) in ${context.appEnv}`,
+      subjects: courses.map((course) => course.slug),
+      detail: `${courses.length} course(s), ${blocks} block(s), ${units} lesson(s) in ${context.appEnv}`,
       // I/O here, the shape in the domain — `lib/setup/types.ts` asks a `run()`
       // for exactly that and never for a second implementation. It is also what
       // lets the refusal above be TESTED without a database: `outline.test.ts`
       // asserts no lesson text reaches this payload, which nothing could do
       // while the mapping lived inside this call.
-      data: outlinePayload(blocks, mediaKeys),
+      // One level up from what it used to be: the payload is a LIST of courses,
+      // each carrying the block outline that used to be the whole answer.
+      // `courses-diff` and `lib/diff.mjs` read this shape.
+      data: { fingerprintVersion: FINGERPRINT_VERSION, courses: outlines },
     };
   },
 };

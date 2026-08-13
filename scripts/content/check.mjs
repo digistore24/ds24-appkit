@@ -31,14 +31,12 @@ import { presenceProblems } from "../../lib/content/presence-rules.mjs";
 import { callSetup, reportRefusal, resolveEnvName } from "../setup/client.mjs";
 import { declaredVsReported, loadManifest } from "./_manifest.mjs";
 import "../lib/env.mjs";
+import { flagsFrom } from "../lib/args.mjs";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
 const args = process.argv.slice(2);
-const flag = (name) => {
-  const i = args.indexOf(`--${name}`);
-  return i === -1 ? null : (args[i + 1] ?? null);
-};
+const flag = flagsFrom(args);
 
 // 🚨 The environment table and NFR-60's three sentences live in
 // `scripts/setup/client.mjs`, not here. They were a copy per reader once, and a

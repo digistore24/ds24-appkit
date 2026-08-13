@@ -34,6 +34,33 @@ produced via [`docs/content-production.md`](content-production.md) (skill
 The course is a MODULE — `node run.mjs module add courses`, then `db-migrate`.
 A fresh app does not have it, and `node run.mjs module list` is what says so.
 
+### A course is a folder, and an app may hold several
+
+```
+content/course/<course-slug>/course.json    title, summary, position, shape, planKeys
+content/course/<course-slug>/<block>.json   its blocks, with their lessons
+```
+
+The **directory name is the course's slug** — the segment in
+`/dashboard/course/<course>/<lesson>` — and it is not repeated inside
+`course.json`: two places to write it are two places to write it differently,
+so a `slug` key there is refused rather than ignored.
+
+🚨 **`shape` and `planKeys` belong to the COURSE, not to the app.** An app with
+a self-study primer and an accompanied workshop needs both shapes at once, and
+two courses sharing one key list would be one course in two halves. What stays
+in `config/course.json` is the question that really is about the installation —
+is the course surface running here at all. A leftover `shape` there is reported
+as an unknown field rather than obeyed: a value nobody reads is one somebody
+believes they set.
+
+⚠️ **Lesson and block slugs stay unique across the whole APP**, not per course.
+That is not carried over by accident: `courses_completions.unit_slug`,
+`courses_submissions.unit_slug`, an activity's `subject` and a companion's
+conversation all key on the bare string, so a `woche-7` in two courses would
+merge two learners' states into one. A second course prefixes its slugs
+(`kurs-b-woche-7`) — the same convention *Subjects* below already described.
+
 Its switch is **`config/course.json`**, and it ships OFF. That is not caution:
 the commonest reason it is off is the window between installing the module and
 writing the content, and a course whose pages answer before it has lessons is an
@@ -161,13 +188,18 @@ is exactly what makes the update direction safe.
 
 ⚠️ **And "a second one" does not mean "sold separately" in this app.** Measured
 against the tree rather than assumed: `config/course.json` holds **one** `shape`,
-**one** `productKey` and **one** `enabled`, and `courses_blocks` is flat — so a
-second set of blocks is served by the same pages and gated by the same product
-key, and it is visible to exactly the **same** buyers as the first. Selling a
-second course separately would need that config to carry more than one product
-key and the module's gate to pick one per block; no part of this is that, and the
-agent says so rather than letting it be implied. A capability that is absent must
-not read like one that is present.
+**one** `planKeys` list and **one** `enabled`, and `courses_blocks` is flat — so a
+second set of blocks is served by the same pages and gated by the same list, and
+it is visible to exactly the **same** buyers as the first.
+
+🚨 **`planKeys` being a list does NOT make this a second course.** It answers a
+different question — *which products unlock THIS course* — and it exists because
+one offering is one Digistore24 product per billing interval, so a single course
+sold monthly and yearly names two keys. Selling a second course SEPARATELY would
+need a course row above `courses_blocks`, its own list, and the module's gate to
+pick one per block; no part of this is that, and the agent says so rather than
+letting it be implied. A capability that is absent must not read like one that is
+present.
 
 When the target row's `origin` is not `content`, the update choice is not
 available at all, and the report says so instead of offering it: renaming onto
@@ -286,8 +318,9 @@ export const courseUnits = pgTable(
     title: text("title").notNull(),
     position: integer("position").notNull(),
     // The video and the worksheet are media rows (docs/visuals.md). The
-    // worksheet is visibility "entitled" + requiresPlan — the same check as
-    // the course itself, so buying the course IS buying the files. Both
+    // worksheet is visibility "entitled" + planKeys — the SAME list the course
+    // itself is sold under, so buying the course IS buying the files, whichever
+    // of its products you bought. Both
     // nullable: a unit may be text-only (put its text in `body`), and the
     // FK's `set null` keeps a deleted media row from leaving a dangling id.
     videoMediaId: text("video_media_id")
@@ -346,7 +379,7 @@ A course area OUTSIDE `/dashboard` needs the three edits `CLAUDE.md` →
 `docs/app.md` as code, never as prose:
 
 ```ts
-if (!(await hasPlan(memberId, "kurs_komplett"))) redirect("/plans");
+if (!(await hasPlan(memberId, "course_complete"))) redirect("/plans");
 ```
 
 No per-unit gate. This shape's defining property is that nothing stands
@@ -429,7 +462,7 @@ disagree with it, and the entitlement layer answers it in one call:
 ```ts
 import { planStartedAt } from "@/lib/entitlements/manage";
 
-const startedAt = await planStartedAt(memberId, "kurs_komplett");
+const startedAt = await planStartedAt(memberId, "course_complete");
 // null = no ACTIVE grant for that key. Not "no such product" — an unknown
 // key throws, exactly as hasPlan() does.
 ```

@@ -13,7 +13,7 @@
 // is `scripts/modules/profiles.test.ts`, which reads the `app` list through
 // `guardableSubtrees()` and fails on any dashboard/ subtree missing here.
 import type { ModuleGate } from "@/lib/modules/gate";
-import { coversSubtrees } from "@/lib/modules/gate";
+import { coversSubtrees, stateFromOffReason } from "@/lib/modules/gate";
 
 import { courseOffReason } from "./lib/config";
 
@@ -28,11 +28,7 @@ const gate: ModuleGate = {
   // everybody else. A gate that reported `isCourseEnabled()` here would rewrite
   // that door away with the kill switch, which is exactly the fault
   // `modules/community/gate.ts` carries the post-mortem for.
-  state: () => {
-    const reason = courseOffReason();
-    if (reason === "disabledInConfig") return "off";
-    return reason === "brokenConfig" ? "broken" : "on";
-  },
+  state: () => stateFromOffReason(courseOffReason()),
   covers: coversSubtrees(["dashboard/course", "dashboard/admin/course"]),
 };
 

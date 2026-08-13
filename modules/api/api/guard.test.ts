@@ -154,13 +154,13 @@ describe("the runaway brake", () => {
 
 describe("plan and scope", () => {
   it("refuses a member without the required plan, after authentication", async () => {
-    vi.mocked(apiConfig).mockReturnValue({ enabled: true, requiresPlan: "basis_monatlich" });
+    vi.mocked(apiConfig).mockReturnValue({ enabled: true, requiresPlan: "basic_monthly" });
     vi.mocked(hasPlan).mockResolvedValue(false);
     const result = await guardApi(withBearer());
     if (result.ok) throw new Error("unreachable");
     expect(result.response.status).toBe(403);
     expect((await body(result.response)).error).toBe("planRequired");
-    expect(hasPlan).toHaveBeenCalledWith("member-1", "basis_monatlich");
+    expect(hasPlan).toHaveBeenCalledWith("member-1", "basic_monthly");
   });
 
   it("refuses a read key on a writing handler — the refusal is in the call path", async () => {

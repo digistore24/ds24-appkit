@@ -124,7 +124,7 @@ export async function askCompanionAction(input: {
   //    status, which is the right shape for a form post and the one every other
   //    server action in this app uses.
   const session = await requireActiveUser();
-  const memberId = session.user.id as string;
+  const memberId = session.user.id;
 
   // 2. Is the feature on at all? Product half, machine half and a coherent
   //    registry — `isCompanionEnabled()` is the one answer.
@@ -299,7 +299,7 @@ export async function loadCompanionAction(input: {
   subject: string;
 }): Promise<CompanionState> {
   const session = await requireActiveUser();
-  const memberId = session.user.id as string;
+  const memberId = session.user.id;
 
   // Why the reason and not just an empty list: the panel renders a notice
   // instead of an input box, so the customer learns before they write rather

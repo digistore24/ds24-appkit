@@ -26,7 +26,7 @@
 // red. (`api/community` is deliberately absent — `proxy.ts`'s matcher never runs
 // for it, and that handler refuses for itself. `guardableSubtrees()` says why.)
 import type { ModuleGate } from "@/lib/modules/gate";
-import { coversSubtrees } from "@/lib/modules/gate";
+import { coversSubtrees, stateFromOffReason } from "@/lib/modules/gate";
 
 import { communityOffReason } from "./lib/config";
 
@@ -52,11 +52,7 @@ const gate: ModuleGate = {
   // through to the pages, which make the fork themselves: `pages/page.tsx`
   // renders the diagnosis for an owner and `notFound()`s everybody else, while
   // every other page and action refuses on `isCommunityEnabled()`.
-  state: () => {
-    const reason = communityOffReason();
-    if (reason === "disabledInConfig") return "off";
-    return reason === "brokenConfig" ? "broken" : "on";
-  },
+  state: () => stateFromOffReason(communityOffReason()),
   covers: coversSubtrees(["dashboard/community", "dashboard/admin/community"]),
 };
 

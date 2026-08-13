@@ -19,7 +19,10 @@ import { attachOrder } from "@/lib/digistore/purchases";
 const PAGE = "/dashboard/admin/purchases";
 
 /** Return value for useActionState — `error`/`ok` are finished messages. */
-export type ActionState = { error: string | null; ok: string | null };
+import type { ActionState } from "@/lib/action-state";
+
+/** Re-exported so the components beside this file keep importing it from here. */
+export type { ActionState };
 
 export async function attachOrderAction(
   _prev: ActionState,

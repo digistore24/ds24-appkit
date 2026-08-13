@@ -13,7 +13,10 @@ import type { ChatMessage } from "./ui";
 
 const PAGE = "/dashboard/chat";
 
-export type ActionState = { error: string | null; ok: string | null };
+import type { ActionState } from "@/lib/action-state";
+
+/** Re-exported so the components beside this file keep importing it from here. */
+export type { ActionState };
 
 async function toState(error: unknown): Promise<ActionState> {
   unstable_rethrow(error);
@@ -36,7 +39,7 @@ async function toState(error: unknown): Promise<ActionState> {
  */
 export async function loadChatAction(): Promise<ChatMessage[]> {
   const session = await requireActiveUser();
-  const history = await listConversation(session.user.id as string);
+  const history = await listConversation(session.user.id);
   return history.map((turn) => ({
     id: turn.id,
     role: turn.role,
@@ -60,7 +63,7 @@ export async function clearChatAction(
 ): Promise<ActionState> {
   try {
     const session = await requireActiveUser();
-    await clearConversation(session.user.id as string);
+    await clearConversation(session.user.id);
     revalidatePath(PAGE);
 
     const t = await getTranslations("chat");

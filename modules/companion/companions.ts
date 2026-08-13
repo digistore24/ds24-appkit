@@ -77,7 +77,7 @@ export interface Companion {
  *     instruction:
  *       "You are a writing coach on a twelve-week course. Two short " +
  *       "paragraphs, warm but specific. Never rewrite their text for them.",
- *     requiresPlan: "kurs_komplett",   // a key from config/digistore-products.json
+ *     requiresPlan: "course_complete",   // a key from config/digistore-products.json
  *     costsTokens: 2,                  // 0 = included in the plan
  *     maxInputChars: 12_000,
  *     async load({ memberId, subject }) {

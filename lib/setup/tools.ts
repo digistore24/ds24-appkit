@@ -16,7 +16,8 @@ import { users } from "@/db/schema";
 import { MODULE_GATES } from "@/lib/modules/gate-registry";
 import { installedModules } from "@/lib/modules/installed";
 import { grantByHand, memberOfGrant, revokeGrantByHand } from "@/lib/entitlements/manage";
-import { createUser, listUsers } from "@/lib/users/manage";
+import { countOwners, createUser, listUsers } from "@/lib/users/manage";
+import { canChangeRole, UserError } from "@/lib/users/rules";
 import { acceptUpload } from "@/lib/media/manage";
 import { guardUploadEntry } from "@/lib/media/upload-endpoint";
 import { mediaStore } from "@/lib/media/store";
@@ -32,7 +33,7 @@ import { CONTENT_MEDIA_MANIFEST } from "@/lib/content-media/rules.mjs";
 import { keyFor, loadManifest } from "@/scripts/content/_manifest.mjs";
 import type { MediaVisibility } from "@/lib/media/rules";
 import { isRole } from "@/lib/roles";
-import { mayAssignOwner } from "./rules";
+import { mayAssignRole } from "./rules";
 import { describeTools } from "./registry";
 import type { SetupContext, SetupResult, SetupTool } from "./types";
 
@@ -166,10 +167,12 @@ const userUpsert: SetupTool = {
 
     // 🚨 AD-92. The shortest path from prompt-injected text to an account
     // takeover: the agent driving this reads what other people wrote, and a
-    // tool that can write role='owner' turns any of it into an admin account.
-    // The two-act protocol does NOT close this — an autonomous agent calls plan
-    // and apply back to back — so the capability is removed instead.
-    if (role === "owner" && !mayAssignOwner(context.appEnv)) {
+    // tool that can write a privileged role turns any of it into an account
+    // with reach. The two-act protocol does NOT close this — an autonomous
+    // agent calls plan and apply back to back — so the capability is removed
+    // instead. `moderator` counts: it is not an admin, but it sees
+    // `moderators`-visible rooms and removes other people's posts.
+    if (!mayAssignRole(context.appEnv, role)) {
       return {
         mode: context.mode,
         created: 0,
@@ -177,13 +180,20 @@ const userUpsert: SetupTool = {
         changed: 0,
         subjects: [email],
         detail:
-          `refused: an operator is not made through this surface in ${context.appEnv}. ` +
+          `refused: a ${role} is not made through this surface in ${context.appEnv}. ` +
           "Do it on /dashboard/admin/users, signed in as an owner.",
         // 🚨 The trail's half of the same word. `data.refused` is the WIRE
         // signal (`scripts/setup/client.mjs` → `toolRefusal()`); this is what
         // makes `dispatch.ts` write `outcome: refused` rather than `applied`.
         // Without it the row for the sharpest refusal this surface makes — an
-        // attempted owner promotion — read as a successful act with no rows.
+        // attempted privileged promotion — read as a successful act with no
+        // rows.
+        //
+        // The code keeps its name although the condition now covers `moderator`
+        // too: it is an enumerated wire value with a status mapping
+        // (`lib/setup/rules.ts`) and a line in `docs/setup-mcp.md`, so a client
+        // matching on it would break for a widening that changes nothing about
+        // what the caller should do. The `detail` above names the actual role.
         refused: "ownerPromotionRefused",
         data: { refused: "ownerPromotionRefused" },
       };
@@ -194,6 +204,33 @@ const userUpsert: SetupTool = {
       .from(users)
       .where(eq(users.email, email))
       .limit(1);
+
+    // 🚨 The role rule is asked in BOTH acts, and that is the point of a plan.
+    //
+    // `createUser()` refuses `selfDemote` and `lastOwnerRole` on an address that
+    // already exists, and `dispatch.ts` turns that into a clean refusal with the
+    // domain's own code. So the apply was already safe with this block absent —
+    // what was NOT safe is what the plan SAID: `… and would become member` for a
+    // call that is going to be refused. A two-act protocol whose first act
+    // promises what the second refuses teaches its caller to stop reading plans.
+    //
+    // Asked by handing the rule the same actor the apply hands `createUser()`.
+    //
+    // ⚠️ Only when the role really MOVES. `canChangeRole()` answers `null` for
+    // `target.role === newRole` anyway, so skipping there is exactly equivalent
+    // — but the count is an argument, and an argument is evaluated first. Asking
+    // eagerly would put a `count(*)` on the commonest call this tool takes (an
+    // upsert of somebody who already has that role) and, worse, would drag the
+    // no-op branch into a guard it has no business in.
+    if (existing && existing.role !== role) {
+      const roleDenial = canChangeRole(
+        { id: context.ownerId, role: "owner" },
+        existing,
+        role,
+        await countOwners(),
+      );
+      if (roleDenial) throw new UserError(roleDenial);
+    }
 
     if (context.mode === "plan") {
       return {
@@ -718,9 +755,11 @@ const mediaUpload: SetupTool = {
         default: "public",
       },
       // Required by `acceptUpload()` when the visibility is `entitled` — this is
-      // a file somebody paid for, and the key is validated there because
-      // `hasPlan()` throws on one it does not know.
-      requiresPlan: { type: "string", maxLength: 120 },
+      // a file somebody paid for, and every key is validated there because
+      // `hasPlan()` throws on one it does not know. A LIST, because one
+      // offering is one Digistore24 product per billing interval: holding any
+      // one of them buys the file.
+      planKeys: { type: "array", items: { type: "string", maxLength: 120 }, maxItems: 32 },
       // Not derived from anything, and required for a picture: alternative text
       // is a sentence for a person, and a filename is not one.
       alt: { type: "string", maxLength: 500 },
@@ -784,7 +823,7 @@ const mediaUpload: SetupTool = {
       claimedMime,
       filename,
       visibility: input.visibility as MediaVisibility | undefined,
-      requiresPlan: typeof input.requiresPlan === "string" ? input.requiresPlan : null,
+      planKeys: Array.isArray(input.planKeys) ? input.planKeys.map(String) : [],
       alt: typeof input.alt === "string" ? input.alt : null,
     });
 
@@ -870,7 +909,7 @@ interface DeclaredEntry {
   kind: string;
   contentType: string;
   visibility: string;
-  requiresPlan: string | null;
+  planKeys: readonly string[];
   alt: string | null;
   filename: string;
   bytes: number;
@@ -1203,7 +1242,7 @@ const contentMediaConfirm: SetupTool = {
       detail:
         `${path} — ${head.bytes} byte(s) of ${mime}; media row ` +
         `${created ? "created" : "re-asserted"} (${entry.visibility}` +
-        `${entry.requiresPlan ? `, plan ${entry.requiresPlan}` : ""})`,
+        `${entry.planKeys.length > 0 ? `, plans ${entry.planKeys.join(", ")}` : ""})`,
       data: {
         path,
         key,

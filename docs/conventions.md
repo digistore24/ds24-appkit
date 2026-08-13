@@ -41,6 +41,83 @@ missing — because "I could not look" and "there is nothing there" are the same
 colour everywhere else in this app too. `scripts/lib/import-graph.test.ts`
 refuses a fourth copy.
 
+## A script that reads `--flag value` goes through `flagsFrom()`
+
+`scripts/lib/args.mjs` — never its own `indexOf`.
+
+**A flag that is present without a value is a REFUSAL, never a guess.** There
+were **eight** copies of that six-line function under `scripts/` and
+`modules/`, in three semantics, and the difference is not cosmetic — it decides
+what `--email --apply` means.
+
+`scripts/setup/mint-key.mjs` refused it, and wrote down why: with one owner in
+the table the command would otherwise mint a key for them and report success,
+for a person who never named anybody. Five others took the next token whatever
+it was, and one wanted the full `--name` spelling, so a call written like every
+other one in the tree silently found nothing.
+
+🚨 **What that cost, measured.** `scripts/setup/bootstrap.mjs` — the script that
+creates an environment's FIRST OWNER and its first setup key — was safe on
+`--email --apply` only by luck, because an `@` check three lines further down
+happens to refuse `"--apply"`. It was **not** safe on `--env --apply`: that fell
+through to `SETUP_KEY`, so an operator who meant `--env prod` bootstrapped
+DEVELOPMENT and was told it worked, while `--apply` stayed true because that one
+is read with `includes()`.
+
+The failure modes are not symmetric, which is why the strict reading won:
+refusing costs a re-typed command, guessing writes a credential nobody asked
+for. `scripts/lib/args.test.ts` refuses a ninth copy — with a needle probe, so a
+regex that matched nothing cannot make it green. A script that needs a per-flag
+example in its message imports `flagValue()` and keeps only the sentence
+(`scripts/ai/check.mjs` is the one case).
+
+## What checks a component, and why it is not a unit test
+
+`vitest.config.ts` runs with `environment: "node"` and no DOM. That is a
+decision, not an omission, and it is worth knowing before you write your first
+component test — because the thing it protects you from is the failure this
+whole repo is organised against.
+
+**What checks the pages is the running app.** `node run.mjs smoke` calls every
+page twice — anonymously and signed in — and `node run.mjs errors` reads what
+the log picked up, including on a clean 200 (CLAUDE.md → *Never ship a broken
+page*). A rendered-in-isolation test would tell you a component returns markup;
+those two tell you the page a customer opens actually works, with a real
+database, real translations and the real layout around it. For an app whose
+pages are mostly composition over a design system, the second question is the
+one worth paying for.
+
+⚠️ **A JSX test is COLLECTED, and it fails saying what is missing.** `include`
+is `**/*.test.{ts,tsx}` on purpose: with `.ts` alone such a file is not
+rejected, it is silently not collected — `vitest run` stays green and never
+mentions it. Now it runs and fails with `document is not defined`, which names
+the missing piece instead of hiding the test.
+
+**Where the server-side gaps are, ask the report rather than guess.**
+`npm run test:coverage` prints a summary and writes `coverage/`. It has no
+threshold and is not in `npm run test` — a percentage would be the wrong
+instrument here, because the files at 0 % include the `ui.tsx` this project
+deliberately checks another way, and a gate that asks for the wrong thing is the
+one somebody removes. What it is FOR is the list: server logic at or near zero.
+Read on 2026-08-13, that list named `lib/impersonation/session.ts` (0 %, and its
+one `operatorId !== caller` comparison is what the whole feature rests on),
+`lib/credentials/manage.ts`, `lib/email-change/manage.ts` and
+`lib/digistore/claim.ts`.
+
+**If a unit test really is the right tool** — a hook with awkward arithmetic, a
+component whose logic cannot be reached through a page — the usual answer is to
+pull the logic out into a plain function and test that; every `rules.ts` in this
+tree is that move. Where it genuinely is not, add a DOM environment yourself:
+
+```bash
+npm i -D jsdom @testing-library/react @testing-library/jest-dom
+```
+
+…and give the file its own environment rather than switching the whole suite
+over — `// @vitest-environment jsdom` at the top of that test. A tree-wide
+change would put a DOM under 349 files that neither need one nor are written
+for one, and slow every run to buy it.
+
 ## A `.mjs` beside a `.ts` — always import it by its extension
 
 Some rules live in a `.mjs` rather than a `.ts` because a plain-Node script has to
@@ -141,8 +218,9 @@ rows that were still inside it (measured, `troubleshooting.md`).
   `format.dateTime(null)` renders *1 January 1970*, `undefined` renders *today*,
   and neither throws nor logs, so no log check can catch either.
 - **`accessUntil` and every other end-of-day value is rendered with an explicit
-  `timeZone: "UTC"`** — it stores the last millisecond of a day, so without the
-  pin every viewer ahead of UTC reads the next day.
+  `timeZone: "UTC"`** — [`entitlements.md`](entitlements.md) → *`timeZone:
+  "UTC"` is load-bearing* carries the reasoning and the case that makes it
+  sharpest (31 December, where the unpinned reading is the following YEAR).
 
 The full post-mortem, with the measured example and the shape of the guard, is
 [`troubleshooting.md`](troubleshooting.md) → *Dates and raw SQL*. What Drizzle

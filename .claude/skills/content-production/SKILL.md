@@ -159,7 +159,7 @@ checked, then the manifest road from
 [`docs/content.md`](../../../docs/content.md) — the file to
 `content/media/<topic>/…` (≤ 10 MB) or `.data/content-media/…` (a lesson
 video), one entry in `content/media-manifest.json` with
-`visibility: "entitled"` + the course's `requiresPlan`, then
+`visibility: "entitled"` + the course's own `planKeys` list, then
 `node run.mjs content-apply` and, for staged files,
 `node run.mjs content-media-sync --apply`. Units are wired **by path**, never
 by a copied row id: `mediaIdFor("<topic>/<file>.mp4")` in an applier for

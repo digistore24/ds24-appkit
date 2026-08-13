@@ -37,12 +37,26 @@ import { join } from "node:path";
 /** Where the operator's course files live, same as the applier's `CONTENT_DIR`. */
 const CONTENT_DIR = join(process.cwd(), "content", "course");
 
+/** The name of a course's own file — the applier's `COURSE_FILE`, same string. */
+const COURSE_FILE = "course.json";
+
 export interface ContentFileIndex {
-  /** Block slug → the file that claims it. */
+  /** Course slug → the file that claims it (`<course>/course.json`). */
+  readonly courses: ReadonlyMap<string, string>;
+  /** Block slug → the file that claims it, as `<course>/<file>.json`. */
   readonly blocks: ReadonlyMap<string, string>;
-  /** Lesson slug → the file that claims it. */
+  /** Lesson slug → the file that claims it, as `<course>/<file>.json`. */
   readonly units: ReadonlyMap<string, string>;
-  /** Files that could not be read as one block object, by name. */
+  /**
+   * Files that could not be read, by path.
+   *
+   * ⚠️ **A loose `.json` directly under `content/course/` is listed here.** The
+   * applier REFUSES the whole run for one (it is a block from the layout before
+   * courses had rows, and applying three quarters of a course is worse than
+   * applying none). This surface cannot refuse anything — it exists to tell the
+   * operator which file a row came from — so it reports the file as one it
+   * could not place, which is the same sentence in the mood this page can use.
+   */
   readonly unreadable: readonly string[];
 }
 
@@ -58,44 +72,74 @@ export interface ContentFileIndex {
  * fault: empty maps, exactly as `blockFiles()` in the applier answers.
  */
 export function contentFileIndex(dir: string = CONTENT_DIR): ContentFileIndex {
+  const courses = new Map<string, string>();
   const blocks = new Map<string, string>();
   const units = new Map<string, string>();
   const unreadable: string[] = [];
 
-  let names: string[];
+  let entries: { name: string; isDirectory: () => boolean; isFile: () => boolean }[];
   try {
-    names = readdirSync(dir)
-      .filter((name) => name.endsWith(".json"))
-      .sort();
+    entries = readdirSync(dir, { withFileTypes: true });
   } catch {
-    return { blocks, units, unreadable };
+    return { courses, blocks, units, unreadable };
   }
 
-  for (const name of names) {
-    let parsed: unknown;
+  // The old layout, reported rather than swept up — see `unreadable` above.
+  for (const entry of entries.filter((e) => e.isFile() && e.name.endsWith(".json")).sort(byName)) {
+    unreadable.push(entry.name);
+  }
+
+  for (const dirEntry of entries.filter((e) => e.isDirectory()).sort(byName)) {
+    const courseSlug = dirEntry.name;
+    let names: string[];
     try {
-      parsed = JSON.parse(readFileSync(join(dir, name), "utf8"));
+      names = readdirSync(join(dir, courseSlug))
+        .filter((name) => name.endsWith(".json"))
+        .sort();
     } catch {
-      unreadable.push(name);
-      continue;
-    }
-    // The applier demands one block OBJECT per file and refuses anything else;
-    // a file that is an array or a bare number claims no slug, so it is
-    // unreadable here in exactly the sense that matters — nothing in it can be
-    // matched to a row.
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      unreadable.push(name);
       continue;
     }
 
-    const block = parsed as { slug?: unknown; units?: unknown };
-    claim(blocks, block.slug, name);
-    for (const unit of Array.isArray(block.units) ? block.units : []) {
-      claim(units, (unit as { slug?: unknown } | null)?.slug, name);
+    for (const name of names) {
+      const rel = `${courseSlug}/${name}`;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(readFileSync(join(dir, courseSlug, name), "utf8"));
+      } catch {
+        unreadable.push(rel);
+        continue;
+      }
+      // The applier demands one OBJECT per file and refuses anything else; a
+      // file that is an array or a bare number claims no slug, so it is
+      // unreadable here in exactly the sense that matters — nothing in it can
+      // be matched to a row.
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        unreadable.push(rel);
+        continue;
+      }
+
+      // 🚨 The course's own file claims the DIRECTORY's name, not a `slug` key.
+      // The applier refuses a `slug` in it outright, so reading one here would
+      // be this surface believing a value the writer rejects.
+      if (name === COURSE_FILE) {
+        claim(courses, courseSlug, rel);
+        continue;
+      }
+
+      const block = parsed as { slug?: unknown; units?: unknown };
+      claim(blocks, block.slug, rel);
+      for (const unit of Array.isArray(block.units) ? block.units : []) {
+        claim(units, (unit as { slug?: unknown } | null)?.slug, rel);
+      }
     }
   }
 
-  return { blocks, units, unreadable };
+  return { courses, blocks, units, unreadable };
+}
+
+/** Name order — the applier's own reading order, so the two agree. */
+function byName(a: { name: string }, b: { name: string }): number {
+  return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
 }
 
 /**

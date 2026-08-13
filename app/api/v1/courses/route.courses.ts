@@ -11,4 +11,4 @@
 // off, and the two are indistinguishable from outside on purpose.
 //
 // It delegates and holds no logic; `modules/boundary.test.ts` §1b enforces that.
-export { GET } from "@/modules/courses/routes/outline";
+export { GET } from "@/modules/courses/routes/courses";

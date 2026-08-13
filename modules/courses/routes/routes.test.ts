@@ -21,9 +21,30 @@
 //      every check the lesson endpoint makes.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+/** The course these routes serve — hoisted for the mock factories. */
+const COURSE_ROW = {
+  id: "course-1",
+  slug: "kurs",
+  title: "Der Kurs",
+  summary: null,
+  position: 1,
+  shape: "drip" as string | null,
+  planKeys: ["basic_monthly"],
+  origin: "content",
+};
+
 vi.mock("@/modules/api/api/guard", () => ({ guardApi: vi.fn() }));
 vi.mock("../lib/access", () => ({ courseAccessFor: vi.fn() }));
-vi.mock("../lib/config", () => ({ courseOffReason: vi.fn(), courseShape: vi.fn() }));
+vi.mock("../lib/config", () => ({ courseOffReason: vi.fn() }));
+
+// The shape and the sale live on the COURSE. The API reaches it two ways —
+// `courseBySlug()` for the outline, whose URL names it, and `courseById()` for
+// the three lesson routes, which derive it from the lesson.
+vi.mock("../lib/courses", () => ({
+  courseBySlug: vi.fn(async () => COURSE_ROW),
+  courseById: vi.fn(async () => COURSE_ROW),
+  usableCourses: vi.fn(async () => [COURSE_ROW]),
+}));
 vi.mock("../lib/manage", () => ({
   blockById: vi.fn(),
   completedSlugsFor: vi.fn(),
@@ -37,7 +58,8 @@ vi.mock("../lib/manage", () => ({
 import { guardApi } from "@/modules/api/api/guard";
 
 import { courseAccessFor } from "../lib/access";
-import { courseOffReason, courseShape } from "../lib/config";
+import { courseOffReason } from "../lib/config";
+import { courseById, courseBySlug, usableCourses } from "../lib/courses";
 import {
   blockById,
   completedSlugsFor,
@@ -48,7 +70,7 @@ import {
   upsertSubmission,
 } from "../lib/manage";
 
-import * as outline from "./outline";
+import * as outline from "./course-outline";
 import * as unit from "./unit";
 import * as completion from "./completion";
 import * as submission from "./submission";
@@ -73,6 +95,7 @@ const ISO = "2026-08-01T10:00:00.000Z";
  */
 const BLOCK = {
   id: "b1",
+  courseId: "course-1",
   slug: "week-1",
   origin: "content",
   title: "Week 1",
@@ -119,12 +142,14 @@ function nosyRequest(method = "GET", body?: unknown): Request {
 }
 
 const params = (slug = UNIT.slug) => ({ params: Promise.resolve({ slug }) });
+/** The outline route names its COURSE in the path; the lesson routes do not. */
+const courseParams = (course = COURSE_ROW.slug) => ({ params: Promise.resolve({ course }) });
 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(guardApi).mockResolvedValue({ ...GUARDED });
   vi.mocked(courseOffReason).mockReturnValue(null);
-  vi.mocked(courseShape).mockReturnValue("workshop");
+  COURSE_ROW.shape = "workshop";
   vi.mocked(courseAccessFor).mockResolvedValue({
     entitled: true,
     startedAt: new Date(0),
@@ -140,7 +165,7 @@ beforeEach(() => {
 
 /** Every door, so a new one cannot be added without meeting the claims below. */
 const DOORS = [
-  { name: "GET /courses", call: () => outline.GET(nosyRequest()) },
+  { name: "GET /courses", call: () => outline.GET(nosyRequest(), courseParams()) },
   { name: "GET /courses/units/{slug}", call: () => unit.GET(nosyRequest(), params()) },
   {
     name: "POST /courses/units/{slug}/completion",
@@ -187,7 +212,10 @@ describe("the account acted on is the key's owner", () => {
           expect(call[0]).toBe(MEMBER);
         }
       }
-      expect(courseAccessFor).toHaveBeenCalledWith(MEMBER, "member");
+      // The gate takes the COURSE now — the account is still the guard's, and
+      // the course is still never the request's: the outline route reads it out
+      // of its path, the three lesson routes derive it from the lesson.
+      expect(courseAccessFor).toHaveBeenCalledWith(MEMBER, "member", COURSE_ROW);
     });
   }
 
@@ -219,7 +247,7 @@ describe("the unlock rule is re-applied at every lesson door", () => {
     it(`${door.name} refuses a block that has not opened`, async () => {
       // A drip course, a member whose clock started today, a block that opens
       // after 70 days.
-      vi.mocked(courseShape).mockReturnValue("drip");
+      COURSE_ROW.shape = "drip";
       vi.mocked(courseAccessFor).mockResolvedValue({
         entitled: true,
         startedAt: new Date(),
@@ -240,7 +268,7 @@ describe("the unlock rule is re-applied at every lesson door", () => {
 
 describe("the outline carries structure and no content", () => {
   it("hands out no body and no media id", async () => {
-    const response = await outline.GET(nosyRequest());
+    const response = await outline.GET(nosyRequest(), courseParams());
     const payload = await response.json();
 
     expect(response.status).toBe(200);
@@ -313,7 +341,7 @@ describe("the course's own gate", () => {
     it(`answers 404 when ${what} — never 403`, async () => {
       arrange();
 
-      const response = await outline.GET(nosyRequest());
+      const response = await outline.GET(nosyRequest(), courseParams());
 
       // 🚨 404 and not 403: a member without the plan must not learn that a
       // course exists. The pages call `notFound()` for both of these, and a
@@ -370,7 +398,7 @@ describe("a course refusal becomes an HTTP-shaped one", () => {
   });
 
   it("refuses a hand-in in a course that does not take them", async () => {
-    vi.mocked(courseShape).mockReturnValue("self-study");
+    COURSE_ROW.shape = "self-study";
 
     const response = await submission.POST(nosyRequest("POST", { body: "my work" }), params());
 
@@ -405,7 +433,7 @@ describe("the completion endpoint", () => {
     vi.clearAllMocks();
     vi.mocked(guardApi).mockResolvedValue({ ...GUARDED });
     vi.mocked(courseOffReason).mockReturnValue(null);
-    vi.mocked(courseShape).mockReturnValue("workshop");
+    COURSE_ROW.shape = "workshop";
     vi.mocked(courseAccessFor).mockResolvedValue({
       entitled: true,
       startedAt: new Date(0),

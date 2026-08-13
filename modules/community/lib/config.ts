@@ -51,6 +51,7 @@
 // applies to them the day one of them gets a surface; this module was simply
 // the first to render one.
 import raw from "@/config/community.json";
+import { pushEnabledProblem } from "@/lib/config-problems";
 
 export interface CommunityConfig {
   enabled: boolean;
@@ -547,9 +548,7 @@ export function communityConfigProblems(): string[] {
     );
   }
 
-  if (file.enabled !== undefined && typeof file.enabled !== "boolean") {
-    problems.push('"enabled" must be true or false');
-  }
+  pushEnabledProblem(problems, file);
 
   // ── The posting brake ────────────────────────────────────────────────────
   // An app that predates this block has no `posting` at all, and that is not a

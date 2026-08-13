@@ -40,8 +40,8 @@
 //    `modules/activity/activities.ts` rule 2 documents).
 //
 // 2. 🚨 **COMPOSITION.** The host page's own guard does not substitute for
-//    this one. A lesson page gated on `kurs_komplett` and a discussion gated
-//    on `kurs_komplett_plus` compose: the page decides whether the page is
+//    this one. A lesson page gated on `course_complete` and a discussion gated
+//    on `course_complete_plus` compose: the page decides whether the page is
 //    shown, the discussion decides — server-side, on every read and every
 //    write — whether the discussion is. Neither delegates to the other, so
 //    moving the component to a differently-gated page cannot widen it.
@@ -70,7 +70,7 @@
 //     // Meaningful for "plan" and empty for every other level. ANY of them
 //     // opens it, never all — a member mid-upgrade briefly holds two keys, or
 //     // neither.
-//     planKeys: ["kurs_komplett"],   // keys from config/digistore-products.json
+//     planKeys: ["course_complete"],   // keys from config/digistore-products.json
 //   },
 // ];
 // ```

@@ -105,8 +105,8 @@ import {
   updateGroupAction,
   type ActionState,
 } from "./actions";
+import { EMPTY_ACTION_STATE } from "@/lib/action-state";
 
-const EMPTY: ActionState = { error: null, ok: null };
 
 /**
  * Submit a dialog form WITHOUT handing the form itself to React.
@@ -307,7 +307,7 @@ export function CreateGroupDialog({ plans }: { plans: PlanOption[] }) {
   const t = useTranslations("communityAdmin");
   const tCommon = useTranslations("common");
   const [open, setOpen] = useState(false);
-  const [state, action] = useActionState(createGroupAction, EMPTY);
+  const [state, action] = useActionState(createGroupAction, EMPTY_ACTION_STATE);
   const { onSubmit, pending } = useDialogSubmit(action);
 
   useActionToast(state);
@@ -364,7 +364,7 @@ function EditGroupDialog({
 }) {
   const t = useTranslations("communityAdmin");
   const tCommon = useTranslations("common");
-  const [state, action] = useActionState(updateGroupAction, EMPTY);
+  const [state, action] = useActionState(updateGroupAction, EMPTY_ACTION_STATE);
   const { onSubmit, pending } = useDialogSubmit(action);
 
   useActionToast(state);
@@ -430,11 +430,11 @@ function ModeratorsDialog({
   const tCommon = useTranslations("common");
   const [assignState, assign, assigning] = useActionState(
     assignModeratorAction,
-    EMPTY,
+    EMPTY_ACTION_STATE,
   );
   const [removeState, remove, removing] = useActionState(
     removeModeratorAction,
-    EMPTY,
+    EMPTY_ACTION_STATE,
   );
 
   useActionToast(assignState);
@@ -588,11 +588,11 @@ export function GroupTable({
 
   const [archiveState, archiveAction] = useActionState(
     setGroupArchivedAction,
-    EMPTY,
+    EMPTY_ACTION_STATE,
   );
   const [reorderState, reorderAction] = useActionState(
     reorderGroupsAction,
-    EMPTY,
+    EMPTY_ACTION_STATE,
   );
   const [isPending, startAction] = useTransition();
 

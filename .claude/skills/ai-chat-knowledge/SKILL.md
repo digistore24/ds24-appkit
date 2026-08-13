@@ -46,7 +46,7 @@ If yes, settle two things in the same breath:
 - **Who may use her.** Every signed-in member (`"requiresPlan": null`), or only
   a plan. If a plan, it is a `kind: "subscription"` or `"one_time"` key from
   `config/digistore-products.json`; access is then answered by
-  `hasPlan(memberId, "basis_monatlich")` from `lib/entitlements/manage.ts` — the
+  `hasPlan(memberId, "basic_monthly")` from `lib/entitlements/manage.ts` — the
   entitlement API, never a billing table. A token package cannot gate her; a
   balance is not an entitlement.
 

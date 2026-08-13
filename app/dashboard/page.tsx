@@ -66,7 +66,7 @@ export default async function DashboardPage({
   // null for a foreign order, an unattributed one, and anything not `paid` —
   // the rule is in lib/digistore/purchase-notice.ts and is tested there.
   const notice = purchase
-    ? await purchaseNoticeFor(session.user.id as string, purchase)
+    ? await purchaseNoticeFor(session.user.id, purchase)
     : null;
 
   // The Digistore24 connection is a matter of the installation, not of the
@@ -86,7 +86,7 @@ export default async function DashboardPage({
   // is hidden by that — the card only ever renders on an UPCOMING date, so a
   // legacy subscription would still be shown by flipping the mode back.
   const nextPaymentAt = sellsPlans()
-    ? await nextPaymentForMember(session.user.id as string)
+    ? await nextPaymentForMember(session.user.id)
     : null;
   // The rule stated once more where it is rendered, so the card cannot advertise
   // a charge that will never come even if the query above is ever loosened.
@@ -108,10 +108,10 @@ export default async function DashboardPage({
   // about a balance, so nobody pays for a step that could not appear anyway
   // (lib/billing-mode.ts).
   const owned = sellsPlans()
-    ? await entitlementsFor(session.user.id as string)
+    ? await entitlementsFor(session.user.id)
     : [];
   const tokenBalance = sellsTokens()
-    ? ((await getTokenAccount(session.user.id as string))?.balance ?? 0)
+    ? ((await getTokenAccount(session.user.id))?.balance ?? 0)
     : 0;
 
   // The plan is named, not counted. "1 plan active" is the answer to a

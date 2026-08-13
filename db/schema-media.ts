@@ -22,10 +22,12 @@
 // `public` is product imagery, `owner` is what a customer uploaded, and
 // `entitled` is the file somebody bought. That last one is why a Content-Access
 // app can sell a PDF at all, and its check is `hasPlan()` — the same call the
-// rest of the app makes. `requiresPlan` is validated against the product
-// registry when it is written (`lib/media/config.ts` → `planProblem()`),
-// because `hasPlan()` THROWS on an unknown key: an unchecked value would not
-// mean "no access", it would mean the page is a 500.
+// rest of the app makes. `planKeys` is a LIST and holding one of them is
+// enough, because one offering is one Digistore24 product per billing
+// interval; every key in it is validated against the product registry when it
+// is written (`lib/media/config.ts` → `planProblem()`), because `hasPlan()`
+// THROWS on an unknown key: an unchecked value would not mean "no access", it
+// would mean the page is a 500.
 //
 // `members` is the fourth and the newest: a face members show each other,
 // delivered to any active session and nothing more. It exists because none of
@@ -69,9 +71,27 @@ export const media = pgTable(
     kind: mediaKindEnum("kind").notNull(),
     visibility: mediaVisibilityEnum("visibility").notNull().default("owner"),
 
-    // The plan somebody must hold, for `visibility: "entitled"`. A Product Key
-    // from config/digistore-products.json — never a token package.
-    requiresPlan: text("requires_plan"),
+    // The plans that unlock this item, for `visibility: "entitled"` — Product
+    // Keys from config/digistore-products.json, never a token package.
+    //
+    // 🚨 **A LIST, and holding ONE of them is enough.** One offering is one
+    // Digistore24 product per billing interval, so a course sold monthly AND
+    // yearly is two keys before it has a second customer — and a single column
+    // could only ever name one of them. What that cost was invisible by
+    // construction: the yearly buyer reached the lesson page (its own gate
+    // passed) and every medium on it resolved to `null`, which a page renders
+    // as "there is none". A clean 200 over a product half-delivered.
+    //
+    // The shape is not invented here: `community_groups.plan_keys` has been
+    // `text[]` with `mayEnterGroup()` asking `.some()` since its first
+    // migration. Two vocabularies for one gate is the drift, so this column
+    // takes that one's name rather than keeping `requires_plan` and its
+    // singular verb.
+    //
+    // Empty is not "free" — `mayAccess()` refuses an `entitled` row with no
+    // keys, exactly as it refused a NULL `requires_plan`. The doubt falls
+    // closed, like every other one on this path.
+    planKeys: text("plan_keys").array().notNull().default([]),
 
     // Where it sits in the bucket. Derived (`lib/media/rules.ts` →
     // `storageKey()`), never supplied by a request:
@@ -171,7 +191,10 @@ export const media = pgTable(
     // "this member's items, newest first" — the gallery and the export.
     index("media_owner").on(t.ownerId, t.createdAt),
     // "everything behind this plan" — the operator's view of what a plan buys.
-    index("media_requires_plan").on(t.requiresPlan),
+    // GIN rather than btree, because the question is now containment
+    // (`plan_keys @> ARRAY['basic_yearly']`) and a btree over an array answers
+    // only equality of the WHOLE list, which nobody asks.
+    index("media_plan_keys").using("gin", t.planKeys),
   ],
 );
 
@@ -266,7 +289,10 @@ export const mediaUploads = pgTable(
     // Decided by the CALLER at mint time, never read from a form — the same
     // rule the through-the-app door states at `lib/media/upload-endpoint.ts`.
     visibility: mediaVisibilityEnum("visibility").notNull().default("owner"),
-    requiresPlan: text("requires_plan"),
+    // The same list the finished row carries, minted with the ticket — see
+    // `media.planKeys`. It travels through the presigned upload unchanged, so
+    // the confirm step has nothing to decide.
+    planKeys: text("plan_keys").array().notNull().default([]),
 
     // Short, and load-bearing: a presigned PUT cannot enforce a length, so the
     // window in which an oversized object can be written is the window this

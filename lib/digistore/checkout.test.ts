@@ -16,7 +16,7 @@ import type { ProductDef } from "./products";
 import { blankComments } from "@/scripts/lib/source-text.mjs";
 
 const sub: ProductDef = {
-  key: "basis_monatlich",
+  key: "basic_monthly",
   name: "Basic (monthly)",
   description: "Full access.",
   kind: "subscription",
@@ -85,7 +85,7 @@ describe("offerFor", () => {
     // checkout URL to an English buyer straight from the cache. `offerHash`
     // does not save it: it detects the change, it does not give them a row each.
     expect(offerFor(bilingual, "de").key).not.toBe(offerFor(bilingual, "en").key);
-    expect(offerFor(bilingual, "en").key).toBe("basis_monatlich:en");
+    expect(offerFor(bilingual, "en").key).toBe("basic_monthly:en");
   });
 
   it("keeps a language it has no product for buyable", () => {

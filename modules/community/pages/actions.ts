@@ -73,8 +73,8 @@ async function viewer(): Promise<{ memberId: string; role: string }> {
   if (!isCommunityEnabled()) notFound();
   const session = await requireActiveUser();
   return {
-    memberId: session.user.id as string,
-    role: session.user.role as string,
+    memberId: session.user.id,
+    role: session.user.role,
   };
 }
 
@@ -306,8 +306,8 @@ export async function acknowledgeReadAction(
       discussionId,
       postId,
       viewer: {
-        memberId: session.user.id as string,
-        role: session.user.role as string,
+        memberId: session.user.id,
+        role: session.user.role,
       },
     });
   } catch (error) {

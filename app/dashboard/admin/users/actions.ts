@@ -35,11 +35,14 @@ import { UserError, canImpersonate, type Actor } from "@/lib/users/rules";
 const PAGE = "/dashboard/admin/users";
 
 /** Return value for useActionState — `error`/`ok` are finished messages. */
-export type ActionState = { error: string | null; ok: string | null };
+import type { ActionState } from "@/lib/action-state";
+
+/** Re-exported so the components beside this file keep importing it from here. */
+export type { ActionState };
 
 async function actor(): Promise<Actor> {
   const session = await requireOwner();
-  return { id: session.user.id as string, role: session.user.role as string };
+  return { id: session.user.id, role: session.user.role };
 }
 
 /** Turn an error from the rules/database layer into a displayable message. */
@@ -225,8 +228,8 @@ export async function startImpersonationAction(
   try {
     const session = await requireOwner();
     const me: Actor = {
-      id: session.user.id as string,
-      role: session.user.role as string,
+      id: session.user.id,
+      role: session.user.role,
     };
 
     const id = String(formData.get("id") ?? "");

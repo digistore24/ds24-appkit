@@ -42,7 +42,7 @@ import type { ActionState } from "../actions";
 async function viewer(): Promise<{ memberId: string }> {
   if (!isCommunityEnabled()) notFound();
   const session = await requireActiveUser();
-  return { memberId: session.user.id as string };
+  return { memberId: session.user.id };
 }
 
 async function toState(error: unknown): Promise<ActionState> {

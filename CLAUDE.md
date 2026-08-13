@@ -133,7 +133,7 @@ Five surfaces, and a fact belongs in exactly one of them — two copies drift, a
 
 | | |
 |---|---|
-| **`CLAUDE.md`** | a line belongs here only if an agent that has read no other file would otherwise cause damage it cannot see. Every `##` section is at most 40 lines and ends in a bold link to the doc carrying its long form |
+| **`CLAUDE.md`** | a line belongs here only if an agent that has read no other file would otherwise cause damage it cannot see. Every `##` section is at most 40 lines and carries a bold link to the doc holding its long form |
 | **`SKILL.md` frontmatter** | says *when to start*, never *how it works* |
 | **`SKILL.md` body** | the ORDER of the work — steps, decision points, hand-overs. Anything still true if the steps changed does not belong in it |
 | **`references/*.md`** | what ONE step of ONE skill reads once. Linked from its own skill and nothing else, never from here |
@@ -151,11 +151,11 @@ or keep a name while meaning something else by it.
 
 ## Rules
 
-Each line below is a refusal. The conventions behind them — checkers, raw SQL,
-dates — are **[`docs/conventions.md`](docs/conventions.md)**.
+Each line below is a refusal. The conventions behind them — checkers, command
+line flags, raw SQL, dates — are **[`docs/conventions.md`](docs/conventions.md)**.
 
 - **Sign-in is opt-in, not opt-out: the refusal is `authorized()` in `auth.config.ts`**, which returns true for every path outside `/dashboard` — so **any new route outside `/dashboard` is public until you protect it there.** ⚠️ The `matcher` in `proxy.ts` says where the proxy RUNS, not what is protected. `app/route-protection.test.ts` is the backstop: a page outside `/dashboard` is either protected or carries a line saying what guards it instead, so a forgotten route fails the build rather than a customer. The three things a new protected area needs and the public-by-design list: **[`docs/auth-setup.md`](docs/auth-setup.md)**.
-- **IPN signature verification (SHA512) is mandatory.** Never switch off `lib/digistore/ipn.ts`, and set order status only through IPN events.
+- **IPN signature verification (SHA512) is mandatory.** Never switch off `lib/digistore/ipn.ts`, and set order status only through IPN events. 🚨 **Anything you hang off that event must be safe to receive TWICE** — the signature is checked, a timestamp and a nonce are not, so a redelivery (which Digistore24 makes until it gets a 200) replays the whole handler. Today's writes survive it because three UNIQUE constraints say so, not because the webhook deduplicates; a mail, a module hook or a table of your own inherits nothing. Same rule as a scheduled job, one door over — [`docs/digistore-integration.md`](docs/digistore-integration.md).
 - **Access comes from the entitlement API.** What a Member may use is answered by `hasPlan(memberId, productKey)` / `entitlementsFor(memberId)` (`lib/entitlements/manage.ts`) — never by reading a billing table. See **Access** below.
 - **No secrets in the code.** Read from `process.env` and add new variables to `.env.example`; the operator's Digistore24 credentials are read via `lib/digistore/settings.ts` — never from the database.
 - **No mock/demo fallback** on Digistore API errors — throw errors.
@@ -170,7 +170,7 @@ dates — are **[`docs/conventions.md`](docs/conventions.md)**.
 - **Call up the app yourself before you say "done", then ask the log.** Green tests are no proof that the page loads, and a page that loads is no proof that it rendered. See **Never ship a broken page** below.
 - **Linux, macOS and Windows all count.** Every command in `run.mjs` and every script under `scripts/` MUST work on all three — a developer on Windows who cannot start the app has no way around it. See **Three systems**.
 - **Commit your work — a finished change is a commit, every time.** Unfinished work too: `git commit --no-verify`, saying so in the message, and that is the flag's only legitimate use. Session artifacts (screenshots, throwaway scripts) live in `.dev/` or get deleted, never committed; at the end of a unit of work `git status` is empty and every commit was made on green. (`AGENTS.md` is generated from this file — never edit it.)
-- **A checker that reads source as TEXT goes through `blankComments()`** (`scripts/lib/source-text.mjs`), and one that WALKS imports goes through `resolveImport()` (`scripts/lib/import-graph.mjs`) — never its own regex, never its own `@/` branch. Both refuse a further copy of themselves.
+- **A checker that reads source as TEXT goes through `blankComments()`** (`scripts/lib/source-text.mjs`), one that WALKS imports goes through `resolveImport()` (`scripts/lib/import-graph.mjs`), and a script that reads `--flag value` goes through `flagsFrom()` (`scripts/lib/args.mjs`) — never its own regex, never its own `@/` branch, never its own `indexOf`. All three refuse a further copy of themselves, and the third is why: there were eight, in three semantics, and one of them bootstrapped the wrong environment on `--env --apply`.
 - 🚨 **Never write a bracketed arbitrary Tailwind class in prose — a comment is not a comment to Tailwind.** It scans every file here as RAW TEXT and emits a rule for anything that looks like a utility, so a class written to EXPLAIN that it is wrong becomes a real rule; measured, that took eight pages to 500 with typecheck and every test green. Say what the form is in words instead.
 - **A type on a query is a claim, and raw SQL does not keep it.** ``sql<Date>`min(created_at)` `` is a string wearing a `Date`'s clothes — `db/sql-cast.test.ts` fails on it, and `new Date(value)` is not the way out.
 
@@ -308,7 +308,7 @@ one machine, a fresh app whose first migration says "already exists" — are
 app, which nobody else has.** What is not in that file gets built a second time, and the
 session greeting names anything of your own it does not mention: a page, a **table**, a
 scheduled **job**. Two rules keep it worth reading: **quote the access gate, do not
-describe it** (`hasPlan(memberId, "basis_monatlich")`, never "only for paying
+describe it** (`hasPlan(memberId, "basic_monthly")`, never "only for paying
 customers"), and **write down what was decided *against*, and why** — the rejected
 alternative cannot be read out of the code. The file's shape is
 `.claude/skills/build-app/references/app-md-template.md`; dates and raw SQL, the
@@ -362,10 +362,10 @@ Three functions, all in `lib/entitlements/manage.ts`, and nothing else:
 import { hasPlan, entitlementsFor, planStartedAt } from "@/lib/entitlements/manage";
 
 // One feature, one plan. A token package is a BALANCE, never an entitlement.
-if (await hasPlan(memberId, "basis_monatlich")) { /* show it */ }
+if (await hasPlan(memberId, "basic_monthly")) { /* show it */ }
 const owned = await entitlementsFor(memberId); // [{ productKey, source, accessUntil }]
 // SINCE WHEN — what a week-by-week course unlocks against.
-const startedAt = await planStartedAt(memberId, "kurs_komplett"); // Date | null
+const startedAt = await planStartedAt(memberId, "course_complete"); // Date | null
 ```
 
 🚨 **Do not answer "since when" out of `entitlementsFor()`.** It is a
@@ -620,10 +620,12 @@ Six refusals, and every one of them fails **silently** when it is skipped:
 - **`MEDIA_DRIVER=local` stops the app from starting in STAGING and PROD**
   (`lib/env-guard.ts`): a local disk loses every file on the next redeploy and
   serves a customer's picture about half the time on two nodes.
-- **Selling a file is a visibility and a Product Key**, not a feature:
-  `visibility: "entitled"` plus `requiresPlan`, and `hasPlan()` decides. The key
-  is validated when it is written, because `hasPlan()` **throws** on an unknown
-  one — an unchecked value would take the page down rather than mean "no access".
+- **Selling a file is a visibility and a LIST of Product Keys**: `visibility:
+  "entitled"` plus `planKeys`, and holding **one** of them is enough. One
+  offering is one Digistore24 product per billing interval, so anything sold
+  monthly and yearly names both — name one and the other half of your buyers
+  get a page that renders with the file missing. Every key is validated when
+  written (`hasPlan()` **throws** on an unknown one); an empty list refuses.
 
 ## Content that must exist in PROD
 

@@ -23,7 +23,7 @@
 // The four impure sources are mocked rather than reached: `vitest.config.ts`
 // puts every `.test.ts` under `template/` inside `make check`, so a test here
 // may not touch a database, a bucket, a transport or the network.
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 
 import { SEND_KEY_MAX, SEND_KEY_PATTERN } from "@/lib/notify/sent-once";
 import { SEVERITIES } from "@/scripts/security/rules.mjs";
@@ -648,6 +648,11 @@ describe("adminUrl", () => {
 
 describe("readFacts — one unreadable source cannot take the other three", () => {
   it("🚨 a throwing source becomes `unchecked`, and the rest still answer", async () => {
+    // The `console.error` below is the behaviour under test, not an accident — this
+    // test PROVOKES the failure. Silenced so an UNEXPECTED error stays visible in
+    // the run's output instead of drowning in expected noise.
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => quiet.mockRestore());
     sources.security = () => {
       throw new Error("no .dev/ here");
     };
@@ -698,6 +703,8 @@ describe("runWatchdog — the silence needle", () => {
   });
 
   it("🚨 three of four sources unreadable and nothing open: still no mail", async () => {
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => quiet.mockRestore());
     // The near side of the needle. A watchdog that mails about its own
     // incompleteness is a watchdog people filter (AC7) — the state is reported
     // in the line, in the health verdict and in the greeting instead.
@@ -727,6 +734,8 @@ describe("runWatchdog — the silence needle", () => {
   });
 
   it("🚨 the far side: one real finding beside them DOES mail, and says so", async () => {
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => quiet.mockRestore());
     // A test that only checks the first half passes against a job that never
     // mails at all.
     reset();

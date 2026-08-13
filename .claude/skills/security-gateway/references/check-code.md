@@ -8,9 +8,19 @@ recipes. Severities and the format of a finding are defined in SKILL.md.
 
 ### Protection is opt-in, and that is the trap
 
-Only the paths in `proxy.ts`'s `matcher` are guarded — today `/dashboard/:path*`
-— and `auth.config.ts` returns true for everything else. **A route that is in
-neither list is public by accident, not by design.**
+What guards a page is **`authorized()` in `auth.config.ts`**, and it returns
+true for every path outside `/dashboard`. **A route outside `/dashboard` that is
+not on the list below is public by accident, not by design.**
+
+🚨 **Do not subtract the `matcher` — it is not a list of protected paths.**
+`proxy.ts` matches five entries and four of them are fully public; they are
+there so a cookie sweep reaches the pages a signed-out person opens
+([`docs/auth-setup.md`](../../../../docs/auth-setup.md) → *Which routes are
+protected*). An earlier version of this recipe said "subtract the matcher", and
+that is the one sentence that would make this check miss the thing it exists to
+find: somebody who believes a matcher entry protects a page adds one, and an
+audit that subtracts the matcher then agrees with them and looks away. Subtract
+`/dashboard`, and nothing else.
 
 Public on purpose, and this list is exhaustive: the home page, `/login`,
 `/plans`, `/optin/*`, `/account/confirm-email`, the legal pages
@@ -19,16 +29,22 @@ Public on purpose, and this list is exhaustive: the home page, `/login`,
 
 The legal pages are public **because they have to be** — § 5 DDG wants the
 Impressum easily reachable, and a privacy policy behind a sign-in cannot be read
-by the person deciding whether to sign in. Do not "fix" them into the matcher.
+by the person deciding whether to sign in. Do not "fix" them into `/dashboard`.
 
-So: list every route in `app/`, subtract the matcher, subtract that list. What
-is left is a finding — **HIGH**, and **CRITICAL** if it renders customer data.
-When a route is public on purpose, it goes into the list above in the same
-change, or the next audit reads it as an accident.
+So: list every route in `app/`, subtract everything under `/dashboard`, subtract
+that list. What is left is a finding — **HIGH**, and **CRITICAL** if it renders
+customer data. When a route is public on purpose, it goes into the list above in
+the same change, or the next audit reads it as an accident.
+
+⚠️ **`app/route-protection.test.ts` is not a substitute for this check.** It
+forces a DECISION per route — under `/dashboard`, or named in its `PUBLIC` list
+with the mechanism that guards it instead — and it says of itself that it never
+verifies the guard WORKS. A route parked in `PUBLIC` with a reason that names no
+real mechanism passes it and is exactly what this check is looking for.
 
 `/account/confirm-email` is authenticated by its single-use token, not by a
 session, because the mail carrying it is read on whichever device holds the
-inbox. Putting it behind the matcher breaks the feature for exactly the person
+inbox. Putting it behind `/dashboard` breaks the feature for exactly the person
 it exists for. Leave it.
 
 ### IDOR — reaching another member's data

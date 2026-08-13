@@ -42,7 +42,8 @@ import { mediaAnchor, slugifyAnchor } from "@/lib/content-source/anchors";
 
 import { MemberText } from "../../components/member-text";
 import { courseAccessFor } from "../../lib/access";
-import { courseOffReason, courseShape } from "../../lib/config";
+import { courseOffReason } from "../../lib/config";
+import { courseBySlug } from "../../lib/courses";
 import { blockById, completedSlugsFor, submissionFor, unitBySlug } from "../../lib/manage";
 import { unitMedia } from "../../lib/media";
 import { MAX_SUBMISSION_CHARS, isUnlocked } from "../../rules";
@@ -68,7 +69,7 @@ export async function generateMetadata() {
 export default async function CourseUnitPage({
   params,
 }: {
-  params: Promise<{ unit: string }>;
+  params: Promise<{ course: string; unit: string }>;
 }) {
   if (courseOffReason() === "disabledInConfig") {
     notFound();
@@ -83,13 +84,22 @@ export default async function CourseUnitPage({
     notFound();
   }
 
-  const memberId = session.user.id as string;
-  const { entitled, startedAt } = await courseAccessFor(memberId, session.user.role as string);
+  // 🚨 **The course comes BEFORE the gate**, because the gate is about a
+  // course: `courseAccessFor()` reads that course's own `planKeys`, so
+  // resolving it afterwards would mean gating on whichever course happened to
+  // be in scope. `courseBySlug()` answers `null` for "there is none" and for
+  // "its row does not hold" alike — a learner gets the same not-found either
+  // way, and the operator's surface is where the two differ.
+  const { course: courseSlug, unit: slug } = await params;
+  const course = await courseBySlug(courseSlug);
+  if (!course) notFound();
+
+  const memberId = session.user.id;
+  const { entitled, startedAt } = await courseAccessFor(memberId, session.user.role, course);
   if (!entitled) {
-    redirect("/plans?course=1");
+    redirect(`/plans?course=${encodeURIComponent(course.slug)}`);
   }
 
-  const { unit: slug } = await params;
   const unit = await unitBySlug(slug);
   // A slug nobody wrote is a 404, and so is one whose block vanished — a unit
   // with no block cannot be placed, and rendering it would put a lesson outside
@@ -98,8 +108,18 @@ export default async function CourseUnitPage({
   const block = await blockById(unit.blockId);
   if (!block) notFound();
 
-  if (!isUnlocked(block.releaseAfterDays, startedAt, courseShape(), new Date())) {
-    redirect("/dashboard/course");
+  // 🚨 **And the block has to belong to the course in the URL.** Unit slugs are
+  // unique across the app (`../../schema.ts` says why: the learners' rows key
+  // on the bare string), so `unitBySlug()` finds a lesson whatever course
+  // stands in the path — which means without this line the gate above is
+  // decided by one course and the CONTENT by another. Somebody who bought the
+  // cheap course could read the expensive one's lessons by editing one segment
+  // of the URL. Not a redirect: from outside, a lesson that is not in this
+  // course and a lesson that does not exist are the same thing.
+  if (block.courseId !== course.id) notFound();
+
+  if (!isUnlocked(block.releaseAfterDays, startedAt, course.shape!, new Date())) {
+    redirect(`/dashboard/course/${encodeURIComponent(course.slug)}`);
   }
 
   // 🚨 **Both conditions, and this line is where they meet.** A hand-in surface
@@ -108,12 +128,12 @@ export default async function CourseUnitPage({
   // `taskPrompt` non-null IS "this lesson asks for one" (`../../schema.ts`).
   // Either one missing and there is nothing here: no task, no form, and no read
   // of the submissions table at all.
-  const taskPrompt = courseShape() === "workshop" ? unit.taskPrompt : null;
+  const taskPrompt = course.shape! === "workshop" ? unit.taskPrompt : null;
 
   const [media, completed, submission] = await Promise.all([
     // 🚨 The access check is inside `unitMedia()` — `mayAccess()` before
     // `mediaUrlFor()`, so this page cannot mint an address without it.
-    unitMedia(unit, { memberId, role: (session.user.role as string) ?? null }),
+    unitMedia(unit, { memberId, role: (session.user.role) ?? null }),
     completedSlugsFor(memberId),
     // Not merely unrendered — not FETCHED. A page that read the row and then
     // decided not to show it would be a page that queries somebody's private
@@ -135,7 +155,7 @@ export default async function CourseUnitPage({
 
       <div className="mb-4">
         <Button asChild variant="ghost" size="sm">
-          <Link href="/dashboard/course">
+          <Link href={`/dashboard/course/${encodeURIComponent(course.slug)}`}>
             <ArrowLeft aria-hidden="true" />
             {t("backToCourse")}
           </Link>

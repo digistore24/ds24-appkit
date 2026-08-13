@@ -13,6 +13,18 @@
 // `isUnlocked()`/`unlockedAt()`, because "a locked lesson is not searchable" is
 // a claim about that function and a stub of it would assert nothing.
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+/** The one course these fixtures live in — hoisted for the mock factory. */
+const COURSE_ROW = {
+  id: "course-1",
+  slug: "kurs",
+  title: "Der Kurs",
+  summary: null,
+  position: 1,
+  shape: "self-study" as string | null,
+  planKeys: ["basic_monthly"],
+  origin: "content",
+};
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,7 +36,13 @@ import type { MediaRow } from "@/db/schema-media";
 
 vi.mock("./lib/config", () => ({
   isCourseEnabled: vi.fn(() => true),
-  courseShape: vi.fn(() => "self-study"),
+}));
+
+// The shape and the sale live on the COURSE. This source asks `usableCourses()`
+// for every course the asker might be in, then gates each — so the mock is the
+// LIST, not a single value.
+vi.mock("./lib/courses", () => ({
+  usableCourses: vi.fn(async () => [COURSE_ROW]),
 }));
 
 vi.mock("./lib/access", () => ({ courseAccessFor: vi.fn() }));
@@ -45,7 +63,8 @@ import { mayAccess } from "@/lib/media/manage";
 
 import source, { COURSES_SOURCE_ID } from "./content-source";
 import { courseAccessFor } from "./lib/access";
-import { courseShape, isCourseEnabled } from "./lib/config";
+import { isCourseEnabled } from "./lib/config";
+import { usableCourses } from "./lib/courses";
 import { blockById, courseOutline, searchUnits, unitBySlug, unitsWithMedia } from "./lib/manage";
 import { mediaRowsFor } from "./lib/media";
 
@@ -63,12 +82,14 @@ const NOT_ENTITLED = { entitled: false, startedAt: null, asOperator: false };
 const PAUSED = { entitled: true, startedAt: null, asOperator: false };
 
 const WEEK_ONE_ROW = {
+  courseId: "course-1",
   slug: "knoten-binden",
   title: "Lektion 1: Knoten binden",
   body: "Der Palomar-Knoten haelt am besten, und er ist in zehn Sekunden gebunden.",
   releaseAfterDays: 0,
 };
 const WEEK_TWO_ROW = {
+  courseId: "course-1",
   slug: "der-verkaufsabschluss",
   title: "Lektion 7: Der Verkaufsabschluss",
   body: "Am Ende steht der Knoten im Gespraech.",
@@ -136,7 +157,7 @@ const mediaRow = (over: Record<string, unknown>) =>
     ownerId: null,
     kind: "video",
     visibility: "entitled",
-    requiresPlan: "kurs_komplett",
+    requiresPlan: "course_complete",
     storageKey: "content/kurs/knoten.mp4",
     mime: "video/mp4",
     filename: "knoten.mp4",
@@ -200,6 +221,9 @@ interface OutlineLike {
 function withMedia(outline: readonly OutlineLike[]) {
   return outline.flatMap((block) =>
     block.units.map((unit) => ({
+      // The row says which course it is in — `unitsWithMedia()` carries it so
+      // the url can be composed without a lookup per row.
+      courseId: "course-1",
       slug: unit.slug,
       title: unit.title,
       releaseAfterDays: block.releaseAfterDays,
@@ -244,13 +268,14 @@ beforeEach(() => {
   vi.setSystemTime(TODAY);
 
   vi.mocked(isCourseEnabled).mockReturnValue(true);
-  vi.mocked(courseShape).mockReturnValue("self-study");
+  COURSE_ROW.shape = "self-study";
+  vi.mocked(usableCourses).mockResolvedValue([COURSE_ROW] as never);
   vi.mocked(courseAccessFor).mockResolvedValue(ENTITLED);
   vi.mocked(searchUnits).mockResolvedValue([WEEK_ONE_ROW, WEEK_TWO_ROW]);
   vi.mocked(unitBySlug).mockResolvedValue(
     unit({ id: "u-1", slug: WEEK_ONE_ROW.slug, title: WEEK_ONE_ROW.title, body: WEEK_ONE_ROW.body, blockId: "b-1", videoMediaId: "med-1", worksheetMediaId: "med-2" }) as never,
   );
-  vi.mocked(blockById).mockResolvedValue({ id: "b-1", releaseAfterDays: 0 } as never);
+  vi.mocked(blockById).mockResolvedValue({ id: "b-1", courseId: "course-1", releaseAfterDays: 0 } as never);
   vi.mocked(courseOutline).mockResolvedValue(OUTLINE as never);
   vi.mocked(unitsWithMedia).mockResolvedValue(withMedia(OUTLINE) as never);
   vi.mocked(mediaRowsFor).mockResolvedValue(MEDIA);
@@ -272,9 +297,11 @@ describe("the course source refuses before it asks the database", () => {
     expectNoDataRead();
     // Not even the gate: an off course has nobody to let in.
     expect(courseAccessFor).toHaveBeenCalledTimes(0);
-    // And it did not throw — `courseShape()` throws in the broken state, and a
-    // source that leaned on `guarded()` would log an error line per question.
-    expect(courseShape).toHaveBeenCalledTimes(0);
+    // And it did not throw. The broken state is `usableCourses()` answering
+    // with an empty list — a course whose row does not hold is filtered out
+    // there, so this source never reaches a shape it cannot read. A source that
+    // leaned on `guarded()` instead would log an error line per question.
+    expect(usableCourses).toHaveBeenCalledTimes(0);
   });
 
   it("asks isCourseEnabled(), never isCourseSwitchedOn()", () => {
@@ -321,7 +348,7 @@ describe("the course source refuses before it asks the database", () => {
   it("asks the gate exactly once per call, with the viewer's own role", async () => {
     await source.search("Knoten", { memberId: "m-1", role: null }, 10);
     expect(courseAccessFor).toHaveBeenCalledTimes(1);
-    expect(courseAccessFor).toHaveBeenCalledWith("m-1", null);
+    expect(courseAccessFor).toHaveBeenCalledWith("m-1", null, COURSE_ROW);
   });
 });
 
@@ -336,7 +363,7 @@ describe("search", () => {
     expect(hits[0].ref).toBe(WEEK_ONE_ROW.slug);
     expect(hits[0].kind).toBe("page");
     expect(hits[0].title).toBe(WEEK_ONE_ROW.title);
-    expect(hits[0].url).toBe(`/dashboard/course/${WEEK_ONE_ROW.slug}`);
+    expect(hits[0].url).toBe(`/dashboard/course/kurs/${WEEK_ONE_ROW.slug}`);
     // The text card on the lesson page carries `id={slugifyAnchor(unit.slug)}`.
     expect(hits[0].anchor).toBe(WEEK_ONE_ROW.slug);
     expect(hits[0].snippet).toContain("Palomar");
@@ -358,7 +385,7 @@ describe("search", () => {
 
   it("caps the candidates it asks for", async () => {
     await source.search("Knoten", BUYER, 10);
-    expect(searchUnits).toHaveBeenCalledWith(["knoten"], 200);
+    expect(searchUnits).toHaveBeenCalledWith(["knoten"], 200, ["course-1"]);
   });
 });
 
@@ -375,14 +402,14 @@ describe("a locked lesson", () => {
   });
 
   it("🚨 drip: is not searchable", async () => {
-    vi.mocked(courseShape).mockReturnValue("drip");
+    COURSE_ROW.shape = "drip";
     const hits = await source.search("Knoten", BUYER, 10);
     expect(hits.map((hit) => hit.ref)).toEqual([WEEK_ONE_ROW.slug]);
     expect(JSON.stringify(hits)).not.toContain("Verkaufsabschluss");
   });
 
   it("🚨 drip: and cannot be fetched either", async () => {
-    vi.mocked(courseShape).mockReturnValue("drip");
+    COURSE_ROW.shape = "drip";
     vi.mocked(unitBySlug).mockResolvedValue(
       unit({ id: "u-2", slug: WEEK_TWO_ROW.slug, title: WEEK_TWO_ROW.title, blockId: "b-2" }) as never,
     );
@@ -394,11 +421,11 @@ describe("a locked lesson", () => {
   });
 
   it("🚨 drip: but list() shows it, with the day it opens and no link", async () => {
-    vi.mocked(courseShape).mockReturnValue("drip");
+    COURSE_ROW.shape = "drip";
     const toc = await source.list!(BUYER);
 
     const open = toc.find((entry) => entry.ref === WEEK_ONE_ROW.slug)!;
-    expect(open.url).toBe(`/dashboard/course/${WEEK_ONE_ROW.slug}`);
+    expect(open.url).toBe(`/dashboard/course/kurs/${WEEK_ONE_ROW.slug}`);
     expect(open.summary).toBe("Woche 1 — Die Grundlagen");
 
     const locked = toc.find((entry) => entry.ref === WEEK_TWO_ROW.slug)!;
@@ -417,7 +444,7 @@ describe("a locked lesson", () => {
   it("a paused member has no clock, so nothing is open", async () => {
     // A SUSPENDED grant is not active, so `planStartedAt()` answers null and
     // `unlockedAt()` answers "never". Week one at day zero included.
-    vi.mocked(courseShape).mockReturnValue("drip");
+    COURSE_ROW.shape = "drip";
     vi.mocked(courseAccessFor).mockResolvedValue(PAUSED);
 
     expect(await source.search("Knoten", BUYER, 10)).toEqual([]);
@@ -441,7 +468,7 @@ describe("get", () => {
 
     expect(doc.sourceId).toBe(COURSES_SOURCE_ID);
     expect(doc.ref).toBe(WEEK_ONE_ROW.slug);
-    expect(doc.url).toBe(`/dashboard/course/${WEEK_ONE_ROW.slug}`);
+    expect(doc.url).toBe(`/dashboard/course/kurs/${WEEK_ONE_ROW.slug}`);
     expect(doc.body).toBe(WEEK_ONE_ROW.body);
     expect(doc.sections).toEqual([
       { anchor: WEEK_ONE_ROW.slug, title: WEEK_ONE_ROW.title },
@@ -504,7 +531,7 @@ describe("findMedia", () => {
     expect(hits.length).toBeGreaterThan(0);
     for (const hit of hits) {
       expect(hit.kind).toBe("media");
-      expect(hit.url).toBe(`/dashboard/course/${WEEK_ONE_ROW.slug}`);
+      expect(hit.url).toBe(`/dashboard/course/kurs/${WEEK_ONE_ROW.slug}`);
       // The registry's own judgement, borrowed rather than restated — a second
       // opinion about what a linkable path is would be the thing to drift.
       expect(isLinkableAppPath(hit.url!)).toBe(true);
@@ -526,7 +553,7 @@ describe("findMedia", () => {
   });
 
   it("leaves a locked lesson's media out", async () => {
-    vi.mocked(courseShape).mockReturnValue("drip");
+    COURSE_ROW.shape = "drip";
     const hits = await source.findMedia!("", BUYER, 10);
     // Week two's video is behind a page that would redirect them.
     expect(hits.map((hit) => hit.media?.path)).not.toContain("content/kurs/abschluss.mp4");
@@ -696,7 +723,7 @@ describe("🚨 findMedia asks the free question first", () => {
   it("a locked lesson is still out, and its media are never asked about", async () => {
     // The filter that must NOT move below the gate: the cheap text filter went
     // first, the drip check stays where it was — above everything.
-    vi.mocked(courseShape).mockReturnValue("drip");
+    COURSE_ROW.shape = "drip";
     const { outline, rows } = bigCourse();
     // Week nine (lessons 41–45) is still shut on day zero — and lesson 43 says
     // the needle, so it would be a hit if the drip check ever slipped below the
@@ -774,17 +801,40 @@ const SOURCE_FILE = join(MODULE_ROOT, "content-source.ts");
 const GATE_FILE = "lib/access.ts";
 
 /**
- * The production files that may name `hasPlan`, each with the reason.
+ * Every function the core's entitlement layer exports as a gate.
+ *
+ * 🚨 **A LIST, and it was one name until the gate stopped using that name.**
+ * The rule scanned for `hasPlan` alone while `lib/access.ts` called it; when
+ * the course became sellable under SEVERAL Product Keys the gate moved to
+ * `planStartedAt()` — which answers "since when" and `null` for "not at all",
+ * so one walk decides entitlement and clock together instead of two that can
+ * disagree. At that moment a second gate written as `planStartedAt(...)` in
+ * some other file would have passed this rule silently, which is the exact
+ * failure the rule exists to prevent. Whoever narrows this back to one name
+ * re-opens that door.
+ */
+const GATE_CALLS = ["hasPlan", "planStartedAt", "entitlementsFor"] as const;
+
+/**
+ * The import the gate is allowed to make — the structural half of the same
+ * claim, and the half a rename cannot escape. A future export of that module
+ * needs no edit here to be covered.
+ */
+const ENTITLEMENTS_MODULE = "lib/entitlements/manage";
+
+/**
+ * The production files that may name one of {@link GATE_CALLS}, each with the
+ * reason.
  *
  * Everything else in this module asks `courseAccessFor()`, and that is not a
- * style rule: two `hasPlan()` calls that agree today are two that can drift,
+ * style rule: two entitlement calls that agree today are two that can drift,
  * and the drift makes the assistant an existence oracle in a way no test in
  * this template could see afterwards.
  */
 const ALLOWED: Record<string, string> = {
   [GATE_FILE]: "the gate itself — the ONE call, and every surface asks here",
   "check.mjs":
-    "names it in a SENTENCE the operator reads (\"hasPlan() throws on an unknown key\"), inside a template literal rather than a comment, so `blankComments()` cannot reach it. A diagnostic explaining the trap is not a second gate",
+    "names `hasPlan` in a SENTENCE the operator reads (\"hasPlan() throws on an unknown key\"), inside a template literal rather than a comment, so `blankComments()` cannot reach it. A diagnostic explaining the trap is not a second gate — and it imports nothing from the entitlement layer, which the second assertion below checks separately",
 };
 
 /**
@@ -819,11 +869,13 @@ describe("🚨 the purchase gate is ONE function", () => {
   });
 
   it("reads content — the needle is really there", () => {
-    // The probe for the walk: `lib/access.ts` DOES name `hasPlan`, in code and
-    // not only in a comment. If the reader ever stops reading, or
-    // `blankComments()` ever starts blanking too much, this fails first.
+    // The probe for the walk: `lib/access.ts` DOES name a gate call and DOES
+    // import the entitlement layer, in code and not only in a comment. If the
+    // reader ever stops reading, or `blankComments()` ever starts blanking too
+    // much, this fails first.
     const gate = blankComments(readFileSync(join(MODULE_ROOT, GATE_FILE), "utf8"));
-    expect(gate).toContain("hasPlan");
+    expect(GATE_CALLS.some((call) => gate.includes(call))).toBe(true);
+    expect(gate).toContain(ENTITLEMENTS_MODULE);
   });
 
   it("keeps no allowance for a file that is gone", () => {
@@ -832,7 +884,7 @@ describe("🚨 the purchase gate is ONE function", () => {
     for (const file of Object.keys(ALLOWED)) expect(files).toContain(file);
   });
 
-  it("no other file in the module names hasPlan", () => {
+  it("no other file in the module names an entitlement call", () => {
     // Through `blankComments()`, or the scanner punishes the files that EXPLAIN
     // the rule — `content-source.ts`'s own header says "never a second
     // `hasPlan()` here" three times (`CLAUDE.md` → *A checker that reads source
@@ -840,7 +892,9 @@ describe("🚨 the purchase gate is ONE function", () => {
     const offenders = files.filter(
       (file) =>
         !(file in ALLOWED) &&
-        blankComments(readFileSync(join(MODULE_ROOT, file), "utf8")).includes("hasPlan"),
+        GATE_CALLS.some((call) =>
+          blankComments(readFileSync(join(MODULE_ROOT, file), "utf8")).includes(call),
+        ),
     );
     expect(
       offenders,
@@ -848,5 +902,26 @@ describe("🚨 the purchase gate is ONE function", () => {
         `courseAccessFor() (${GATE_FILE}). A source more permissive than its page ` +
         "turns the assistant into an existence oracle:\n" + offenders.join("\n"),
     ).toEqual([]);
+  });
+
+  it("🚨 and no other file IMPORTS it — the half a rename cannot escape", () => {
+    // The name scan above is text and inherits text's weakness: a call reached
+    // through an alias, a re-export or a name this list has not heard of is
+    // invisible to it. The import is not — every route to those functions goes
+    // through that module specifier, so this assertion holds for exports that
+    // do not exist yet.
+    //
+    // ⚠️ No allowance but the gate, deliberately: `check.mjs` is on the list
+    // above because it SAYS the word, and a file that says it has no reason to
+    // import it. An allowance here would be an allowance to build the second
+    // gate.
+    const offenders = files.filter(
+      (file) =>
+        file !== GATE_FILE &&
+        blankComments(readFileSync(join(MODULE_ROOT, file), "utf8")).includes(
+          ENTITLEMENTS_MODULE,
+        ),
+    );
+    expect(offenders, offenders.join("\n")).toEqual([]);
   });
 });

@@ -32,7 +32,7 @@ import { ChatWindow } from "./ui";
 // files and the database, and neither belongs in a browser bundle.
 export default async function ChatPage() {
   const session = await requireActiveUser();
-  const memberId = session.user.id as string;
+  const memberId = session.user.id;
   const t = await getTranslations("chat");
   const config = chatConfig();
 

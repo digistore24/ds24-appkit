@@ -30,6 +30,7 @@ import {
 import { LiveDiscussion } from "@/modules/community/components/live-discussion";
 import { Pager } from "@/modules/community/components/pager";
 import { ReadReceipt } from "@/modules/community/components/read-receipt";
+import { wirePost } from "@/modules/community/lib/wire";
 
 // One thread.
 //
@@ -61,11 +62,11 @@ export default async function DiscussionPage({
 
   const session = await requireActiveUser();
   const { discussionId } = await params;
-  const memberId = session.user.id as string;
+  const memberId = session.user.id;
 
   const found = await discussionFor(discussionId, {
     memberId,
-    role: session.user.role as string,
+    role: session.user.role,
   });
   if (!found) notFound();
 
@@ -90,7 +91,7 @@ export default async function DiscussionPage({
       // first.
       postsFor(found.discussion.id, page, {
         memberId,
-        role: session.user.role as string,
+        role: session.user.role,
       }),
       profileFor(memberId),
       // The AD-63 re-read, for the CONTROLS. Whether they appear is cosmetics:
@@ -167,21 +168,7 @@ export default async function DiscussionPage({
         memberId={memberId}
         viewerProfileName={profile?.displayName ?? null}
         viewerAccountName={(session.user.name as string | null) ?? null}
-        initialPosts={rows.map((post) => ({
-          id: post.id,
-          authorId: post.authorId,
-          content: post.content,
-          createdAt: post.createdAt.toISOString(),
-          editedAt: post.editedAt?.toISOString() ?? null,
-          deletedAt: post.deletedAt?.toISOString() ?? null,
-          deletedBy: post.deletedBy,
-          authorProfileName: post.authorProfileName,
-          authorAccountName: post.authorAccountName,
-          // Already resolved and already authorised by `postsFor()` — the
-          // addresses were minted beside their `mayAccess()` check, and a post
-          // that is not visible arrives with an empty list.
-          images: post.images,
-        }))}
+        initialPosts={rows.map(wirePost)}
         initialCursor={
           rows.length > 0
             ? cursorToken({

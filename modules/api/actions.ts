@@ -93,7 +93,7 @@ export async function createApiKeyAction(
     const lifetimeDays = isLifetime(parsed) ? parsed : 90;
 
     const created = await createKey({
-      memberId: session.user.id as string,
+      memberId: session.user.id,
       name: checked.name,
       scope,
       lifetimeDays,
@@ -127,7 +127,7 @@ export async function revokeApiKeyAction(
     const session = await requireActiveUser();
 
     await revokeKey({
-      memberId: session.user.id as string,
+      memberId: session.user.id,
       keyId: String(formData.get("keyId") ?? ""),
     });
 

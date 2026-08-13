@@ -15,7 +15,7 @@
 // a version that returned `unchecked` for everything would pass the first half
 // and fail the second.
 
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 import {
   IPN_ACTIVE_DAYS,
@@ -42,6 +42,15 @@ function healthy(overrides: Partial<OpsProbes> = {}): OpsProbes {
     ...overrides,
   };
 }
+
+// Eleven of the sixteen tests below hand a probe something that throws — that is
+// what `operationalState()` is FOR, and each one logs on its way to a state. The
+// log is the behaviour under test, not an accident, so it is silenced here for
+// the whole file: an UNEXPECTED error then stands out instead of drowning in it.
+beforeEach(() => {
+  const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+  onTestFinished(() => quiet.mockRestore());
+});
 
 describe("operationalState — the media probe", () => {
   it("is ok when the store answers, and reports the driver and a duration", async () => {

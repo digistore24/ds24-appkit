@@ -517,6 +517,48 @@ describe("the guidance does not quietly grow back", () => {
     ).toEqual([]);
   });
 
+  // 🚨 A line cap falls to dense tables, and here it already has.
+  //
+  // The exact hole `scripts/guidance-budget.test.mjs` describes for CLAUDE.md
+  // and closed there with a second cap in BYTES. It was never carried across,
+  // and the measurement says why it needed to be: `setup-monitoring/SKILL.md`
+  // is **498 lines / 36,866 bytes = 74 bytes a line** — two lines under the cap
+  // above, and the densest file in the tree. In absolute bytes it is bigger
+  // than `build-app` (28,716) and `security-gateway` (25,249) at the same line
+  // count. Three skills sit at 498; that is not a coincidence, it is a cap
+  // being written against.
+  //
+  // What a session pays for is bytes, not newlines.
+  //
+  // ⚠️ The number is today's maximum plus room, and it is stated as a
+  // measurement rather than a round figure so the next reader can tell whether
+  // raising it is a decision or a reflex. `references/` is deliberately NOT
+  // capped: the split there is right — a run loads SKILL.md plus the one
+  // reference its step names — so a folder cap would be a brake with no finding
+  // behind it.
+  const SKILL_MAX_BYTES = 40_000;
+
+  it(`keeps every SKILL.md under ${SKILL_MAX_BYTES.toLocaleString("en-US")} bytes`, () => {
+    const measured = SKILLS.map((skill) => ({
+      skill,
+      bytes: Buffer.byteLength(CORPUS.get(`.claude/skills/${skill}/SKILL.md`)!, "utf8"),
+    }));
+
+    // The count guard: an empty corpus would make the assertion below vacuous.
+    expect(measured.length, "no skills were measured").toBeGreaterThan(20);
+
+    const oversized = measured
+      .filter(({ bytes }) => bytes >= SKILL_MAX_BYTES)
+      .map(({ skill, bytes }) => `${skill} (${bytes.toLocaleString("en-US")} bytes)`);
+
+    expect(
+      oversized,
+      `over ${SKILL_MAX_BYTES.toLocaleString("en-US")} bytes. The line cap above ` +
+        `does not catch a dense table — move it into references/ rather than ` +
+        `rewrapping it: ${oversized.join(", ")}`,
+    ).toEqual([]);
+  });
+
   // "Three things that are easy to get wrong:" followed by four bullets. Nobody
   // writes that on purpose — it is what a later change looks like when it adds
   // a bullet and does not re-read the sentence above it. It is worth catching

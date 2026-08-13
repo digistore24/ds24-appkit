@@ -64,11 +64,11 @@ export default async function CommunityGroupPage({
 
   const session = await requireActiveUser();
   const { groupId } = await params;
-  const memberId = session.user.id as string;
+  const memberId = session.user.id;
 
   const group = await groupFor(groupId, {
     memberId,
-    role: session.user.role as string,
+    role: session.user.role,
   });
   if (!group) notFound();
 

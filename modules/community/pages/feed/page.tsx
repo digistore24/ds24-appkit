@@ -42,8 +42,8 @@ export default async function FeedPage() {
 
   const session = await requireActiveUser();
   const viewer = {
-    memberId: session.user.id as string,
-    role: session.user.role as string,
+    memberId: session.user.id,
+    role: session.user.role,
   };
 
   const [{ items, nextCursor }, { following }, t] = await Promise.all([

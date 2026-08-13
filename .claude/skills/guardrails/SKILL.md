@@ -22,6 +22,16 @@ following rules. They are the "golden path" — do not rip them out.
   twice. Digistore24 **retries an IPN until it receives `OK` with HTTP 200**, so
   a transient failure must fail loudly (throw → 500 → redelivery). Only a
   permanent one may be acknowledged with `OK`.
+- 🚨 **And the retry replays the WHOLE handler.** The signature is verified; a
+  timestamp and a nonce are not. What makes today's writes survive it is three
+  UNIQUE constraints (`orders.ds24OrderId`, `invoices.ds24TransactionId`, the
+  token ledger's `(accountId, ds24OrderId)`) — a property of those three paths,
+  not of the webhook. **Anything you add beside them inherits nothing**: a mail,
+  a module hook, a table of your own. Sending a mail is not idempotent unless
+  the sender records that it sent one (`claimSend()`). The reasoning and the
+  shape of a door-level dedup:
+  **[`docs/digistore-integration.md`](../../../docs/digistore-integration.md)**
+  → *Replay*.
 
 ## Attribution — whose payment is this?
 
@@ -43,37 +53,26 @@ following rules. They are the "golden path" — do not rip them out.
 
 ## Access — who may use what
 
-`lib/entitlements/manage.ts` answers this, and it is the only thing that does:
+`lib/entitlements/manage.ts` answers this, and it is the only thing that does.
+**The three functions, which event does what to a grant, and why a Member can
+hold two plans at once are `CLAUDE.md` → *Access*** — already loaded in this
+session, so repeating them here would only be a second copy to keep in step.
+The full reference, the failure modes and worked examples are
+**[`docs/entitlements.md`](../../../docs/entitlements.md)**.
 
-```ts
-import { hasPlan, entitlementsFor } from "@/lib/entitlements/manage";
+What belongs in a security review, and is nowhere else:
 
-// The key is a plan from config/digistore-products.json — a token package is a
-// balance, not an entitlement, and always answers false.
-if (await hasPlan(memberId, "basis_monatlich")) { /* the feature */ }
-const owned = await entitlementsFor(memberId); // [{ productKey, source, accessUntil }]
-```
-
-- **Never answer an access question from a billing table.** `orders` records
-  money, `subscriptions` mirrors what Digistore24 believes; neither says what a
-  Member may use. Both carry values that mean the opposite of the access
-  decision — a cancelled subscription reads `cancelled` while the customer still
-  legitimately has access to the end of the period they paid for. Reading it as
-  "blocked" takes away time somebody has paid for; that is a refund case.
-- **Access is decided by the IPN events, and by nothing else.** `on_payment`
-  grants it, `on_refund` and `on_chargeback` end it for good, `on_payment_missed`
-  suspends it reversibly, `last_paid_day` ends it — and `on_rebill_cancelled`
-  changes nothing at all. Do not derive the decision from a mapped status
-  instead: the mapping collapses `on_rebill_cancelled` and `last_paid_day` into
-  the same value, and those two mean opposite things.
-- **Never cache the answer as a boolean** on the user or in a session. A stored
-  yes survives the chargeback that should have revoked it. Derive it per request;
-  it is one indexed query.
-- **A Member may hold two plans at once** during a Digistore24 plan switch (the
-  old rebilling stops and the new purchase starts days apart, in either order).
-  Ask `hasPlan` per feature — never `entitlements[0]`.
-
-Full reference, failure modes and examples: `docs/entitlements.md`.
+- **Never cache the answer as a boolean** on the user, in a session or in a JWT.
+  A stored yes survives the chargeback that should have revoked it, and it
+  survives it silently — the customer keeps the feature and no log says why.
+  Derive it per request; it is one indexed query.
+- **Never widen a gate to "has any entitlement".** `entitlementsFor()` is a
+  list, and `.length > 0` is the shape that hands a token-package buyer a course
+  they never bought. One feature, one `hasPlan(memberId, key)`.
+- **A gate that exists in two places is two decisions.** When a page and a
+  content source both answer for one feature, they call ONE function — two
+  `hasPlan()` calls that agree today are the shape that turns the assistant into
+  an existence oracle (`CLAUDE.md` → *Content sources*).
 
 ## By hand — what the Operator can do without a payment
 
@@ -237,14 +236,26 @@ data, and the changes that matter are already recorded elsewhere.
 
 ## Auth
 
-- Auth protection is **opt-in, not opt-out**. `proxy.ts` guards only what
-  its `matcher` lists (today `/dashboard/:path*`); `auth.config.ts` returns
-  true for everything else. **A new page holding customer data is world-
-  readable until you add it to the matcher.** Public by design: home, `/login`,
-  `/plans`, `/optin/*`, `/account/confirm-email` and the IPN endpoint.
-  The confirmation route is authenticated by its single-use token, not by a
-  session — the mail is read wherever the inbox is. Do not "fix" it into the
-  matcher.
+- Auth protection is **opt-in, not opt-out**. The refusal is `authorized()` in
+  `auth.config.ts`, and it returns true for every path outside `/dashboard` —
+  so **any new route outside `/dashboard` is public until you protect it
+  there.**
+- 🚨 **The `matcher` in `proxy.ts` says where the proxy RUNS, not what is
+  protected — adding a path to it protects nothing.** Four of its five entries
+  are fully public and are listed only so a cookie sweep reaches them. A new
+  protected area needs **three** things: the path in the matcher, the
+  `/dashboard` prefix decision in `proxy()`, *and* `authorized()` taught about
+  it. Which routes are public by design, and why the two lists stopped being
+  the same one: **[`docs/auth-setup.md`](../../../docs/auth-setup.md)** →
+  *Which routes are protected*.
+- `app/route-protection.test.ts` is the backstop, and knowing what it does NOT
+  do matters: it forces a DECISION per route — under `/dashboard`, or named in
+  its `PUBLIC` list with the mechanism that guards it instead — and it never
+  verifies that the guard WORKS. "Protected by the matcher" is a sentence it
+  will accept and the code will not.
+- `/account/confirm-email` is authenticated by its single-use token, not by a
+  session — the mail is read wherever the inbox is. Do not "fix" it into
+  `/dashboard`.
 
 ## STOP — involve a human here
 

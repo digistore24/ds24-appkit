@@ -48,6 +48,14 @@ export interface SchemaProperty {
   readonly minimum?: number;
   readonly maximum?: number;
   readonly items?: SchemaProperty;
+  /**
+   * A ceiling on an `array` — the list's own `maxLength`.
+   *
+   * ⚠️ Bounded for the same reason every string here is: this schema is what a
+   * MODEL fills in, and an unbounded list is an unbounded row. `maxLength`
+   * cannot say it, because it is about the strings INSIDE the array.
+   */
+  readonly maxItems?: number;
   readonly format?: string;
 }
 

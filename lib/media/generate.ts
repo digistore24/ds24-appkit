@@ -37,7 +37,7 @@
 // Doing it here would put a debit inside a library that a cron job might call.
 import { MAX_IMAGES_PER_CALL, runImageTask } from "@/lib/ai/run";
 import type { MediaVisibility } from "./rules";
-import { planProblem } from "./config";
+import { planKeysProblem } from "./config";
 import { createMedia } from "./manage";
 import { MediaError } from "./rules";
 import type { MediaRow } from "@/db/schema-media";
@@ -60,8 +60,8 @@ export interface GenerateImageInput {
   ownerId?: string | null;
   /** Product imagery is `public`; a customer's own picture is `owner`. */
   visibility?: MediaVisibility;
-  /** Required when `visibility` is `entitled`. */
-  requiresPlan?: string | null;
+  /** Required when `visibility` is `entitled` — holding ONE of them opens it. */
+  planKeys?: readonly string[];
   /** How many. Each one is billed; the ceiling is {@link MAX_IMAGES_PER_CALL}. */
   n?: number;
   /** Provider-shaped, e.g. `"1024x1024"`. */
@@ -93,19 +93,14 @@ export async function generateImage(input: GenerateImageInput): Promise<MediaRow
   if (!alt) throw new MediaError("altRequired");
 
   const visibility: MediaVisibility = input.visibility ?? "owner";
-  const requiresPlan = visibility === "entitled" ? (input.requiresPlan?.trim() ?? null) : null;
+  const planKeys =
+    visibility === "entitled" ? (input.planKeys ?? []).map((key) => key.trim()).filter(Boolean) : [];
   if (visibility === "entitled") {
-    if (!requiresPlan) {
-      throw new MediaError(
-        "noAccess",
-        'visibility "entitled" needs a Product Key — otherwise nobody could ever fetch it',
-      );
-    }
     // Checked BEFORE the model is asked. `hasPlan()` throws on an unknown key,
     // so an unchecked one would mean a picture that was paid for and then
     // stored behind a page that cannot render.
-    const problem = planProblem(requiresPlan);
-    if (problem) throw new MediaError("noAccess", `requiresPlan: ${problem}`);
+    const problem = planKeysProblem(planKeys);
+    if (problem) throw new MediaError("noAccess", `planKeys: ${problem}`);
   }
 
   const result = await runImageTask("image", {
@@ -133,7 +128,7 @@ export async function generateImage(input: GenerateImageInput): Promise<MediaRow
         // name derived from the media type rather than exposing the storage key.
         filename: null,
         visibility,
-        requiresPlan,
+        planKeys,
         alt,
         source: "generated",
         width: image.width,

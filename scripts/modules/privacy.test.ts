@@ -22,17 +22,45 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { loadModules } from "./registry.mjs";
-import { installedModules } from "./installed.mjs";
+import { availableModules } from "./registry.mjs";
 import { blankComments } from "@/scripts/lib/source-text.mjs";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-const records = installedModules(ROOT).length > 0 ? loadModules(ROOT) : [];
+// 🚨 AVAILABLE, not installed — and of everything in this file that matters,
+// this line matters most.
+//
+// It read `installedModules(ROOT).length > 0 ? loadModules(ROOT) : []`, and
+// `config/modules.json` ships EMPTY. So the clamp around the module system's
+// sharpest claim — that a member's own download and the operator's Art. 15
+// command answer the same request the same way — checked ZERO modules in the
+// tree a customer clones and in every `make test` here. It said so out loud in
+// its own test name ("checks the 0 module(s) that answer Art. 15") and that read
+// as a pass.
+//
+// Whether the two halves of a module's export agree is a property of the two
+// FILES. It does not become true or false by installing anything, and there is
+// a regulator on the other end of the question.
+const records = availableModules(ROOT).map((id) => {
+  const dir = join("modules", id);
+  return { id, dir, manifest: JSON.parse(read(join(dir, "module.json"))) };
+});
 const withPrivacy = records.filter((r) => r.manifest.privacy);
 
 describe("🚨 both halves declare exactly what the manifest declares", () => {
+  // 🚨 The count guard, and it is not decoration here — it is the exact failure
+  // this file spent its life in. A `describe` whose name says "the 0 module(s)"
+  // and whose loop never runs is green, and reads as green in a report.
+  it("has modules to check at all", () => {
+    expect(records.length, "no modules found in the tree").toBeGreaterThan(1);
+    expect(
+      withPrivacy.length,
+      "no module declares `privacy` — either the manifests changed shape or " +
+        "this walk stopped reading them; both are failures, not clean trees",
+    ).toBeGreaterThan(1);
+  });
+
   it(`checks the ${withPrivacy.length} module(s) that answer Art. 15`, async () => {
     for (const { id, dir, manifest } of withPrivacy) {
       const declared = [...(manifest.privacy as { sections: string[] }).sections].sort();

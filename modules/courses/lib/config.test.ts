@@ -24,7 +24,7 @@ import { keysOrSkip, planShapedKey, tokenKey } from "@/lib/digistore/test-produc
 const CONFIG: Record<string, unknown> = {};
 vi.mock("@/config/course.json", () => ({ default: CONFIG }));
 
-const { courseConfigProblems, courseOffReason, isCourseEnabled } = await import("./config");
+const { courseConfig, courseConfigProblems, courseOffReason } = await import("./config");
 
 // 🚨 The Product Key is read out of THIS app's registry, never written in.
 // `config/digistore-products.json` ships five EXAMPLES and CLAUDE.md tells the
@@ -45,57 +45,55 @@ beforeEach(() => {
   // depend on one skip below, and the ones that do not (a key nothing holds, a
   // missing key, a course switched off) must not silently start asserting
   // against a literal this app does not sell either.
-  set({ enabled: true, shape: "self-study", productKey: PLAN.key ?? "" });
+  set({ enabled: true, shape: "self-study", planKeys: PLAN.key ? [PLAN.key] : [] });
 });
 
-describe("the course's Product Key has to be one hasPlan() can answer", () => {
-  it("is happy with a product this app really sells", (ctx) => {
-    // The needle: without it, every refusal below could be a function that
-    // refuses everything.
-    keysOrSkip(ctx, PLAN);
-    expect(courseConfigProblems()).toEqual([]);
-    expect(isCourseEnabled()).toBe(true);
+describe("the switch, which is all this file decides now", () => {
+  // 🚨 **`shape` and `planKeys` are NOT tested here any more, and that is the
+  // point of this comment.** They moved onto the course row in Story 44.2 and
+  // their assertions moved with them, to `./courses.test.ts`. What is left is
+  // the question that really is about the INSTALLATION: is the course surface
+  // running here at all.
+
+  it("is off unless `enabled` is exactly true", () => {
+    for (const value of [false, "true", 1, null, undefined]) {
+      set({ enabled: value });
+      expect(courseConfig().enabled, JSON.stringify(value)).toBe(false);
+      expect(courseOffReason()).toBe("disabledInConfig");
+    }
   });
 
-  it("🚨 refuses a key no product in the registry holds", () => {
-    set({ enabled: true, shape: "self-study", productKey: "kurs_der_nie_existierte" });
-    const problems = courseConfigProblems();
-    expect(problems.join(" ")).toContain("productKey");
-    expect(problems.join(" ")).toContain("kurs_der_nie_existierte");
-    // And it makes the course BROKEN rather than merely noted: the operator's
-    // admin page is what names the value, and a member gets the same "not
-    // found" as a course that was never switched on.
+  it("previews are on unless somebody switched them off", () => {
+    // Defaults ON: without it an operator cannot look at the last week of their
+    // own drip course, because they hold no grant and therefore have no clock.
+    set({ enabled: true });
+    expect(courseConfig().operatorPreviewsUnlocked).toBe(true);
+    set({ enabled: true, operatorPreviewsUnlocked: false });
+    expect(courseConfig().operatorPreviewsUnlocked).toBe(false);
+  });
+
+  it("🚨 reports a LEFTOVER shape or planKeys as an unknown field", () => {
+    // The one thing this file must still say about the two values it lost: a
+    // customer's config carries them from before the split, they now decide
+    // nothing, and a value nobody reads is one somebody believes they set.
+    // Reported rather than obeyed, and rather than ignored.
+    set({ enabled: true, shape: "self-study", planKeys: ["basic_monthly"] });
+    const problems = courseConfigProblems().join(" ");
+    expect(problems).toContain("shape");
+    expect(problems).toContain("planKeys");
     expect(courseOffReason()).toBe("brokenConfig");
-    expect(isCourseEnabled()).toBe(false);
   });
 
-  it("🚨 refuses a token package, which nobody could ever hold as a plan", (ctx) => {
-    // A balance is not an entitlement. `hasPlan()` answers false for one for
-    // ever, so a course sold under it is a course nobody can open — including
-    // the buyer, who paid.
-    //
-    // ⚠️ It has to be a token package this app REALLY sells: handed a key the
-    // registry does not hold, the refusal comes from the branch above instead
-    // and this test agrees with the wrong sentence.
-    const [token] = keysOrSkip(ctx, TOKEN);
-    set({ enabled: true, shape: "self-study", productKey: token });
-    expect(courseConfigProblems().join(" ")).toContain("token package");
-    expect(isCourseEnabled()).toBe(false);
-  });
-
-  it("still says 'missing' rather than 'unusable' when there is no key at all", () => {
-    set({ enabled: true, shape: "self-study", productKey: null });
-    expect(courseConfigProblems().join(" ")).toContain("missing");
-  });
-
-  it("asks nothing of a course that is switched off", () => {
-    // An app that has not switched the course on yet is not carrying a fault —
-    // that window is the normal state between `module add courses` and the
-    // content being written.
-    set({ enabled: false, shape: "self-study", productKey: "kurs_der_nie_existierte" });
+  it("says nothing about a `_`-prefixed key — those are documentation", () => {
+    set({ enabled: true, _comment: "anything" });
     expect(courseConfigProblems()).toEqual([]);
-    // …and "off" wins over "broken": an operator who parked the file gets
-    // "off", not a lint about a value they deliberately left behind.
+  });
+
+  it("refuses an `enabled` that is not a boolean, and still counts as OFF", () => {
+    set({ enabled: "yes" });
+    expect(courseConfigProblems().join(" ")).toContain("enabled");
+    // Both directions at once: it is a PROBLEM and it is OFF — and "off" wins,
+    // because an operator who parked the file gets "off" rather than a lint.
     expect(courseOffReason()).toBe("disabledInConfig");
   });
 });

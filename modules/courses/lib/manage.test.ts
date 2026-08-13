@@ -328,7 +328,7 @@ describe("every lesson that has a medium", () => {
     // course's whole prose left Postgres to read four id columns per row, once
     // per question to the assistant. A behavioural test cannot see that: the
     // answer is identical either way.
-    const { sql } = await readStatement(() => unitsWithMedia());
+    const { sql } = await readStatement(() => unitsWithMedia(["course-1"]));
     const select = sql.slice(0, sql.indexOf(" from "));
     expect(select).toContain('"slug"');
     expect(select).toContain('"cover_media_id"');
@@ -344,20 +344,27 @@ describe("every lesson that has a medium", () => {
     // `releaseAfterDays` lives on the BLOCK and the drip check needs it per
     // row. Fetching it separately would be the N+1 over the very list this
     // door exists to keep to one.
-    const { sql } = await readStatement(() => unitsWithMedia());
+    const { sql } = await readStatement(() => unitsWithMedia(["course-1"]));
     expect(sql).toContain('from "courses_units"');
     expect(sql).toMatch(/inner join "courses_blocks"/);
     expect(sql).toContain('"release_after_days"');
   });
 
   it("leaves a lesson with no medium in the database", async () => {
-    const { sql } = await readStatement(() => unitsWithMedia());
+    const { sql } = await readStatement(() => unitsWithMedia(["course-1"]));
     const where = sql.slice(sql.indexOf(" where "));
     for (const column of ["cover_media_id", "video_media_id", "subtitle_media_id", "worksheet_media_id"]) {
       expect(where, `${column} is not in the filter`).toContain(`"${column}" is not null`);
     }
     // The course's own order, so a capped answer takes the rows the overview
     // shows first.
-    expect(sql).toMatch(/order by "courses_blocks"\."position" asc, "courses_units"\."position" asc/);
+    // 🚨 The COURSE leads the ordering, and that is not cosmetic: block
+    // position is only unique WITHIN a course since Story 44.2, so without it
+    // two courses' blocks at position 1 come back in whatever order the planner
+    // felt like — and every consumer of this list inherits a ranking that
+    // differs between machines.
+    expect(sql).toMatch(
+      /order by "courses_blocks"\."course_id" asc, "courses_blocks"\."position" asc, "courses_units"\."position" asc/,
+    );
   });
 });

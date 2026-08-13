@@ -14,10 +14,21 @@
 // `grants.accessUntil` already does from the other direction. A scheduled job
 // belongs here only if the vendor wants a MESSAGE sent when a week opens.
 
-/** The three products `docs/courses.md` names. Config chooses one. */
+import { COURSE_SHAPES as SHAPES } from "./shapes.mjs";
+
+/**
+ * The three products `docs/courses.md` names — each COURSE chooses one, and the
+ * choice is a column on `courses_courses` rather than a line in a config file:
+ * an app with a self-study primer and an accompanied workshop needs both
+ * answers at once.
+ *
+ * ⚠️ **Re-exported, not restated.** The list itself is `../shapes.mjs`, because
+ * the applier is bare Node and cannot import this file. Writing it out here
+ * again is how the two stopped agreeing before that file existed.
+ */
 export type CourseShape = "self-study" | "drip" | "workshop";
 
-export const COURSE_SHAPES: readonly CourseShape[] = ["self-study", "drip", "workshop"];
+export const COURSE_SHAPES: readonly CourseShape[] = SHAPES as readonly CourseShape[];
 
 /**
  * Who owns a block or lesson row — the discriminator that lets two lawful
@@ -67,6 +78,11 @@ export function mayOperatorWrite(origin: string): boolean {
  */
 export const COURSES_ERROR_CODES = [
   "coursesNotFound",
+  // The course a form named does not exist. Operator-only, and separate from
+  // `coursesNotFound` on purpose: "no such lesson" and "no such course" send
+  // somebody to different files, and one message covering both is one nobody
+  // can act on.
+  "coursesCourseNotFound",
   "coursesLocked",
   "coursesShapeForbidsSubmission",
   "coursesSubmissionTooLong",

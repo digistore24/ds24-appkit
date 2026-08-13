@@ -390,7 +390,7 @@ export default async function AccountPage() {
           // is worse than admitting the type is loose.
           viewer={{
             memberId,
-            role: session.user.role as string,
+            role: session.user.role,
             impersonating: Boolean(session.user.impersonation),
           }}
         />

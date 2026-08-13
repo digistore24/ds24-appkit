@@ -465,7 +465,7 @@ one that worked:
 
 | tool | refuses when |
 |---|---|
-| `user_upsert` | `ownerPromotionRefused` — an owner is not made through this surface outside DEV |
+| `user_upsert` | `ownerPromotionRefused` — a PRIVILEGED role (`owner` **or** `moderator`) is not handed out through this surface outside DEV. The code keeps the older name because it is a wire value with a status mapping; the `detail` names the role actually refused |
 | `grant_by_hand` | `notFound` — no account has that address here |
 | `media_upload` | `badRequest` — the call came through the door that carries no bytes |
 | `content_media_url` | `noUploadAddress` — this environment's media driver cannot mint one |

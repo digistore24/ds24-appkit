@@ -63,7 +63,8 @@ import { requireOwner } from "@/lib/authz";
 import { appEnv } from "@/lib/env-guard";
 import { isOwner } from "@/lib/roles";
 
-import { courseConfigProblems, courseOffReason, courseShape } from "../lib/config";
+import { courseConfigProblems, courseOffReason } from "../lib/config";
+import { allCourses, courseProblems } from "../lib/courses";
 import { contentFileIndex } from "../lib/content-files";
 import { courseOutline } from "../lib/manage";
 import { mediaSummaries } from "../lib/media";
@@ -78,7 +79,49 @@ export async function generateMetadata() {
   return { title: t("title") };
 }
 
-export default async function CourseAdminPage() {
+/**
+ * Which course this workbench is about.
+ *
+ * A row of links rather than a `<select>`, and that is why it lives here as a
+ * server component instead of in `./ui.tsx`: a picker that needed client
+ * JavaScript to change a search parameter would be a form where a link does.
+ * It also means every course is a real, shareable address for the operator.
+ *
+ * ⚠️ It renders a course whose row does not hold, marked. Hiding it would take
+ * away the only way to reach the page that names what is wrong with it.
+ */
+function CoursePicker({
+  courses,
+  current,
+}: {
+  courses: readonly { slug: string; title: string; shape: string | null }[];
+  current: string;
+}) {
+  if (courses.length < 2) return null;
+  return (
+    <nav className="flex flex-wrap gap-2" aria-label="Kurse">
+      {courses.map((course) => (
+        <Button
+          key={course.slug}
+          asChild
+          size="sm"
+          variant={course.slug === current ? "default" : "outline"}
+        >
+          <Link href={`/dashboard/admin/course?course=${encodeURIComponent(course.slug)}`}>
+            {course.title}
+            {course.shape === null ? " ⚠" : ""}
+          </Link>
+        </Button>
+      ))}
+    </nav>
+  );
+}
+
+export default async function CourseAdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ course?: string }>;
+}) {
   // 🚨 First line, before any session work. See the header.
   if (courseOffReason() === "disabledInConfig") {
     notFound();
@@ -114,10 +157,27 @@ export default async function CourseAdminPage() {
     );
   }
 
-  const blocks = await courseOutline();
-  // Safe here and nowhere earlier: the broken branch has returned, so the file
-  // holds and `courseShape()` cannot throw.
-  const shape = courseShape();
+  // ── Which course this page is about ─────────────────────────────────────
+  // 🚨 **`allCourses()`, not `usableCourses()`.** This is the one surface that
+  // must show a course whose row does NOT hold — naming the bad value is what
+  // it is for, and a picker that quietly dropped the broken course would leave
+  // the operator with no way to reach the thing they have to fix.
+  //
+  // A search parameter rather than a route segment, and that is a decision:
+  // `/dashboard/admin/course` stays a real page (`nav.ts` links it, `smoke.mjs`
+  // sweeps it, every `revalidatePath()` in this module names it), and the
+  // picker is a filter on an operator's own workbench rather than a new
+  // address. The member surface went the other way, because there the URL is
+  // something people share.
+  const courses = await allCourses();
+  const wanted = (await searchParams).course;
+  const course = courses.find((row) => row.slug === wanted) ?? courses[0] ?? null;
+
+  const blocks = course ? await courseOutline(course.id) : [];
+  // Per course, and `null` when its row does not hold — the page renders the
+  // problems instead of the workbench in that case.
+  const shape = course?.shape ?? null;
+  const problems = course ? courseProblems(course) : [];
   const files = contentFileIndex();
   const lessons = blocks.reduce((sum, block) => sum + block.units.length, 0);
 
@@ -170,10 +230,41 @@ export default async function CourseAdminPage() {
   const nextPosition = (taken: readonly number[]) =>
     taken.reduce((highest, value) => Math.max(highest, value), 0) + 1;
 
+  // ── The two states before the workbench ─────────────────────────────────
+  // Neither is an error page: an app with no course yet is the normal state
+  // between `module add courses` and the first `content-apply`, and a course
+  // whose row does not hold is one the operator is in the middle of writing.
+  if (!course) {
+    return (
+      <>
+        <PageHeader title={t("title")} />
+        <EmptyState icon={Inbox} title={t("noCourseTitle")} description={t("noCourseBody")} />
+      </>
+    );
+  }
+  if (!shape || problems.length > 0) {
+    return (
+      <>
+        <PageHeader title={course.title} />
+        <CoursePicker courses={courses} current={course.slug} />
+        <Callout variant="warning" title={t("brokenTitle")}>
+          <p>{t("brokenIntro")}</p>
+          <ul className="mt-2 list-disc pl-5">
+            {problems.map((problem) => (
+              <li key={problem}>
+                <code>{problem}</code>
+              </li>
+            ))}
+          </ul>
+        </Callout>
+      </>
+    );
+  }
+
   return (
     <>
       <PageHeader
-        title={t("title")}
+        title={course.title}
         description={t("description", { blocks: blocks.length, lessons })}
       >
         {/* The answering surface is reached from HERE and from nowhere else —
@@ -190,10 +281,13 @@ export default async function CourseAdminPage() {
           </Button>
         ) : null}
         <CreateBlockDialog
+          courseSlug={course.slug}
           shape={shape}
           nextPosition={nextPosition(blocks.map((block) => block.position))}
         />
       </PageHeader>
+
+      <CoursePicker courses={courses} current={course.slug} />
 
       <div className="flex flex-col gap-6">
         {/* A STATE, so a Callout and never a toast: it is true on every visit,
@@ -222,7 +316,7 @@ export default async function CourseAdminPage() {
           // UI, rule 3). The sentence still points at `content/course/*.json`
           // first: what is typed here exists in one environment only.
           <EmptyState title={t("emptyTitle")} description={t("emptyBody")}>
-            <CreateBlockDialog shape={shape} nextPosition={1} />
+            <CreateBlockDialog courseSlug={course.slug} shape={shape} nextPosition={1} />
           </EmptyState>
         ) : (
           blocks.map((block) => (

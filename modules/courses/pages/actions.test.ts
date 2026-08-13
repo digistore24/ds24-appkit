@@ -18,7 +18,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../lib/config", () => ({
   courseOffReason: vi.fn(() => null),
-  courseShape: vi.fn(() => "workshop"),
+}));
+
+// The shape lives on the COURSE now, and the actions reach it by walking the
+// lesson: unit → block → `courseById()`. Mocking that walk's last step is what
+// used to be a one-line `courseShape()` mock.
+vi.mock("../lib/courses", () => ({
+  courseById: vi.fn(async () => ({
+    id: "course-1",
+    slug: "kurs",
+    title: "Der Kurs",
+    summary: null,
+    position: 1,
+    shape: "workshop",
+    planKeys: ["basic_monthly"],
+    origin: "content",
+  })),
 }));
 
 vi.mock("../lib/access", () => ({
@@ -65,7 +80,8 @@ vi.mock("next-intl/server", () => ({
 import { requireActiveUser } from "@/lib/authz";
 
 import { courseAccessFor } from "../lib/access";
-import { courseOffReason, courseShape } from "../lib/config";
+import { courseOffReason } from "../lib/config";
+import { courseById } from "../lib/courses";
 import { blockById, submissionFor, unitBySlug, upsertSubmission } from "../lib/manage";
 import { MAX_SUBMISSION_CHARS } from "../rules";
 import { submitTaskAction } from "./actions";
@@ -100,7 +116,16 @@ function expectNothingWritten() {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(courseOffReason).mockReturnValue(null);
-  vi.mocked(courseShape).mockReturnValue("workshop");
+  vi.mocked(courseById).mockResolvedValue({
+    id: "course-1",
+    slug: "kurs",
+    title: "Der Kurs",
+    summary: null,
+    position: 1,
+    shape: "workshop",
+    planKeys: ["basic_monthly"],
+    origin: "content",
+  });
   vi.mocked(requireActiveUser).mockResolvedValue({
     user: { id: "member-1", role: "member" },
   } as never);
@@ -149,7 +174,10 @@ describe("handing work in", () => {
   it("revalidates the lesson it wrote", async () => {
     const { revalidatePath } = await import("next/cache");
     await submitTaskAction(EMPTY, HAND_IN());
-    expect(revalidatePath).toHaveBeenCalledWith(`/dashboard/course/${UNIT.slug}`);
+    // The lesson's path carries its COURSE now — a revalidate of the old,
+    // course-less path would name a route that no longer exists, so the page
+    // would keep serving a hand-in that is no longer there.
+    expect(revalidatePath).toHaveBeenCalledWith(`/dashboard/course/kurs/${UNIT.slug}`);
   });
 });
 
@@ -224,7 +252,16 @@ describe("what it refuses", () => {
   });
 
   it("refuses one on a course that takes no hand-ins", async () => {
-    vi.mocked(courseShape).mockReturnValue("drip");
+    vi.mocked(courseById).mockResolvedValue({
+    id: "course-1",
+    slug: "kurs",
+    title: "Der Kurs",
+    summary: null,
+    position: 1,
+    shape: "drip",
+    planKeys: ["basic_monthly"],
+    origin: "content",
+  });
 
     const state = await submitTaskAction(EMPTY, HAND_IN());
     expect(state.error).toBe("errors.coursesShapeForbidsSubmission");

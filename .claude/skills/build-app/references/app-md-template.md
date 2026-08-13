@@ -33,7 +33,7 @@ moment the feature works._
 - **Does:** turns a member's entries into a monthly PDF.
 - **Done when:** a member sees their monthly PDF — <the sentence the user OK'd
   before building (CLAUDE.md → Adding a feature, step 0), recorded once it held>
-- **Access:** `hasPlan(memberId, "basis_monatlich")`
+- **Access:** `hasPlan(memberId, "basic_monthly")`
 - **Data:** tables `reports`, `report_runs` (`db/schema.ts`)
 - **Costs tokens:** 5 per run (`spendTokens`)
 - **Tests:** `lib/reports/rules.test.ts`

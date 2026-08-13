@@ -232,6 +232,39 @@ Fields worth knowing before you design anything:
 | `api_mode` | `live` or `test`. Test purchases arrive as `test` — whether made with the test-purchase cookie or with the testpay parameter that DEV checkout links append by themselves (`node run.mjs ds24-testpay`). The template deliberately processes `test` events exactly like `live` ones: that identical path is what makes a test purchase prove the chain. An operator who wants test orders segregated in PROD branches on this field — nothing in the template does |
 | `order_id` | stable across all transactions of one order → the idempotency key |
 
+### 🚨 Replay — the signature does not stop it, and neither does the handler
+
+`lib/digistore/ipn.ts` verifies the SHA512 signature timing-safely, fail-closed,
+at the edge, before anything else runs. That answers *did Digistore24 write this*.
+It does **not** answer *have I seen it before*: there is no timestamp check and
+no nonce, deliberately — Digistore24 **redelivers an event until it receives
+`OK` with HTTP 200**, so a handler that refused a repeat would break the retry
+that makes the whole chain reliable.
+
+So a redelivery replays `onPaymentEvent()` from its first line, and the reason
+that is safe today is **three UNIQUE constraints**, not the webhook:
+
+| | |
+|---|---|
+| `orders.ds24OrderId` | `onConflictDoUpdate` — and its `set` is written so money moves in ONE direction (a refunded order cannot flip back to paid) |
+| `invoices.ds24TransactionId` | `onConflictDoNothing` — one invoice per payment, a retry adds none |
+| `(accountId, ds24OrderId)` on the token ledger | what makes a double credit impossible; `creditTokens()` reports `credited: false` on the second run |
+
+⚠️ **That is a property of those three write paths, and nothing else inherits
+it.** Whatever you hang off this event — a welcome mail, a module's own hook, a
+table of your own — is replayed with it and must carry its own idempotence. The
+rule is the one `CLAUDE.md` already states for scheduled jobs, one door over:
+*it must be safe to run twice*. Deleting rows older than a cutoff is idempotent;
+**sending a mail is not**, unless the sender records that it sent one —
+`claimSend()` in `lib/notify/`, claim before you send.
+
+The failure mode is quiet and it is not rare: a retry is the NORMAL path after
+any transient error, so "it worked when I tested it" and "it sends one mail" are
+different statements. If you need the stronger guarantee at the door rather than
+per table, the shape is a dedup row on `(ds24_order_id, event)` written before
+`onPaymentEvent()` — that is a deliberate design change, not a default, because
+it also swallows the redelivery that a genuinely failed first attempt needs.
+
 ### The order form's language — one product per language
 
 **A Digistore24 product carries exactly ONE language, and that language is the
@@ -249,7 +282,7 @@ language, which is exactly the moment a purchase gets abandoned.
 **Two products, one per language, is the only way**, and the registry says so:
 
 ```json
-"basis_monatlich": {
+"basic_monthly": {
   "name": "Basic (monthly)",
   "priceCents": 1900,
   "productIds": {

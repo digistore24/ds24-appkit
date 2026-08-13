@@ -36,7 +36,7 @@ const planTool: ChatTool = {
   description: "A read tool that belongs to one plan, as an app would gate one.",
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
   readOnly: true,
-  requiresPlan: "basis_monatlich",
+  requiresPlan: "basic_monthly",
   costTokens: 0,
   async run() {
     return toolText("gated content");
@@ -72,7 +72,7 @@ const linkingTool: ChatTool = {
 const gatedLinkingTool: ChatTool = {
   ...linkingTool,
   name: "fixture_gated_linking",
-  requiresPlan: "basis_monatlich",
+  requiresPlan: "basic_monthly",
 };
 
 const FIXTURES = [writeTool, planTool, openReadTool, linkingTool, gatedLinkingTool];

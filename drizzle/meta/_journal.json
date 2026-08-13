@@ -57,6 +57,20 @@
       "when": 1786360344469,
       "tag": "0007_chief_moondragon",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786632539765,
+      "tag": "0008_drop_requires_plan",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786632546382,
+      "tag": "0009_plan_keys_list",
+      "breakpoints": true
     }
   ]
 }

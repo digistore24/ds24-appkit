@@ -18,7 +18,7 @@ const session = await auth();
 if (!session?.user?.id) redirect("/login");
 // A plan key from config/digistore-products.json. A token package is a
 // balance, not an entitlement, and always answers false here.
-if (!(await hasPlan(session.user.id, "basis_monatlich"))) redirect("/plans");
+if (!(await hasPlan(session.user.id, "basic_monthly"))) redirect("/plans");
 ```
 
 ## Usage-metered content charges tokens

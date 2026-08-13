@@ -5,6 +5,7 @@
   },
   "errors": {
     "coursesNotFound": "Diese Lektion gibt es nicht.",
+    "coursesCourseNotFound": "Diesen Kurs gibt es nicht — prüfe den Ordner unter content/course/.",
     "coursesLocked": "Diese Lektion ist noch nicht freigeschaltet.",
     "coursesShapeForbidsSubmission": "In diesem Kurs wird nichts eingereicht.",
     "coursesSubmissionTooLong": "Der Text ist zu lang.",
@@ -27,6 +28,14 @@
   },
   "courses": {
     "title": "Kurs",
+    "listTitle": "Kurse",
+    "listIntro": "Was es hier gibt — und woran du schon dran bist.",
+    "listEmptyTitle": "In dieser Umgebung ist noch kein Kurs",
+    "listEmptyBody": "Ein Kurs ist ein Ordner unter content/course/, und `node run.mjs content-apply` bringt ihn in diese Umgebung. Zeilen reisen nicht mit dem Deploy — deshalb der Umweg über die Datei.",
+    "listBadgeOwned": "Freigeschaltet",
+    "listBadgeOperator": "Als Betreiber",
+    "listOpen": "Kurs öffnen",
+    "listBuy": "Ansehen und buchen",
     "lessonTitle": "Lektion",
     "accountExportNote": "Dein Download enthält, welche Lektionen du abgeschlossen hast und was du eingereicht hast — samt der Antwort darauf.",
     "accountDeletionNote": "Mit deinem Konto verschwindet alles aus dem Kurs: dein Fortschritt, deine Abgaben und die Antworten darauf.",
@@ -60,6 +69,8 @@
   },
   "coursesAdmin": {
     "title": "Kursaufbau",
+    "noCourseTitle": "In dieser Umgebung ist noch kein Kurs",
+    "noCourseBody": "Ein Kurs ist ein Ordner unter content/course/ mit einer course.json darin. `node run.mjs content-apply` bringt ihn in diese Umgebung.",
     "description": "{blocks, plural, =0 {Noch kein Block} one {Ein Block} other {# Blöcke}}, {lessons, plural, =0 {keine Lektion} one {eine Lektion} other {# Lektionen}} — was diese Umgebung an Kurs hält.",
     "environmentTitle": "Was hier steht, steht nur hier",
     "environmentBody": "Diese Seite zeigt die Zeilen in der Datenbank der Umgebung „{environment}“. Ein Deploy nimmt Code mit, keine Zeilen: Was hier angelegt wurde, ist in keiner anderen Umgebung vorhanden. Alles, was überall sein soll, gehört in content/course/*.json und kommt mit `node run.mjs content-apply` in jede Umgebung.",

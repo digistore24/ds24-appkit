@@ -37,7 +37,7 @@ function statement() {
   return db
     .select({ startedAt: PLAN_START })
     .from(grants)
-    .where(and(activeFor("member-1"), eq(grants.productKey, "kurs_komplett")))
+    .where(and(activeFor("member-1"), eq(grants.productKey, "course_complete")))
     .toSQL();
 }
 
@@ -63,7 +63,7 @@ describe("the statement behind planStartedAt", () => {
     // course's clock would start at their first purchase of anything.
     const { sql, params } = statement();
     expect(sql).toContain('"product_key"');
-    expect(params).toContain("kurs_komplett");
+    expect(params).toContain("course_complete");
   });
 
   it("is NOT a DISTINCT ON — the shape that produced the wrong answer", () => {

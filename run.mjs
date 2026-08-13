@@ -745,10 +745,16 @@ if (!Object.hasOwn(TASKS, command) || TASKS[command].hidden) {
 // way to make it do it.
 //
 // ⚠️ This is the ONE flag `run.mjs` claims. Rejecting unknown flags in general
-// would need a per-command list this file does not have: 28 documented flags
-// across 40 commands, `module` takes positional subcommands, and `ds24-sync`
-// feeds one array to two scripts that know different flags. That is a bigger
-// change, and it is written down rather than half-done here.
+// would need a per-command list this file does not have: every command has its
+// own set, `module` takes positional subcommands, and `ds24-sync` feeds one
+// array to two scripts that know different flags. That is a bigger change, and
+// it is written down rather than half-done here.
+//
+// (This paragraph used to carry a count — "28 documented flags across 40
+// commands". The commands grew past sixty and the sentence kept the old number,
+// so the reason to do nothing rested on an argument that was 60 % wrong. A
+// number in a comment is a measurement with a date on it; this one had neither,
+// and the point stands without it.)
 //
 // ⚠️ `brand` is exempt: it is the one command in this tree with a help text of
 // its own — subcommands, the contrast behaviour, a paragraph about what a `--url`

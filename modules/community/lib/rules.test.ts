@@ -497,7 +497,7 @@ describe("mayEnterGroup", () => {
   const open = { accessLevel: "open" as const, planKeys: [], archivedAt: null };
   const plan = {
     accessLevel: "plan" as const,
-    planKeys: ["basis_monatlich", "basis_jaehrlich"],
+    planKeys: ["basic_monthly", "basic_yearly"],
     archivedAt: null,
   };
   const mods = {
@@ -512,7 +512,7 @@ describe("mayEnterGroup", () => {
   };
 
   const member = { role: "member", grantedKeys: [] as string[] };
-  const buyer = { role: "member", grantedKeys: ["basis_monatlich"] };
+  const buyer = { role: "member", grantedKeys: ["basic_monthly"] };
   const moderator = { role: "moderator", grantedKeys: [] as string[] };
   const owner = { role: "owner", grantedKeys: [] as string[] };
 
@@ -547,7 +547,7 @@ describe("mayEnterGroup", () => {
   it("lets ANY of the listed keys in, not all of them", () => {
     // The upgrade window: a member mid plan switch holds the other key.
     expect(
-      mayEnterGroup(plan, { role: "member", grantedKeys: ["basis_jaehrlich"] }),
+      mayEnterGroup(plan, { role: "member", grantedKeys: ["basic_yearly"] }),
     ).toBe(true);
     // And a key the room does not list opens nothing.
     expect(
@@ -629,14 +629,14 @@ describe("mayEnterGroup", () => {
 describe("planKeysToResolve", () => {
   it("collects the distinct keys of plan rooms only", () => {
     const keys = planKeysToResolve([
-      { accessLevel: "plan", planKeys: ["basis_monatlich", "basis_jaehrlich"] },
-      { accessLevel: "plan", planKeys: ["basis_monatlich"] },
+      { accessLevel: "plan", planKeys: ["basic_monthly", "basic_yearly"] },
+      { accessLevel: "plan", planKeys: ["basic_monthly"] },
       // A stale key on a non-plan room must not become a query — the shell
       // stores none, and a row from before that rule must not cost anything.
       { accessLevel: "open", planKeys: ["starter"] },
       { accessLevel: "operator", planKeys: [] },
     ]);
-    expect(keys.sort()).toEqual(["basis_jaehrlich", "basis_monatlich"]);
+    expect(keys.sort()).toEqual(["basic_monthly", "basic_yearly"]);
   });
 
   it("asks nothing for a list with no plan rooms", () => {
@@ -1317,7 +1317,7 @@ describe("mayViewEmbed", () => {
   // `modules/community/pages/embed-refusal.test.ts`.
   const PLAN_GATED = {
     accessLevel: "plan" as const,
-    planKeys: ["kurs_komplett"],
+    planKeys: ["course_complete"],
   };
 
   it("refuses an undeclared key with the SAME code as an unentitled one", () => {

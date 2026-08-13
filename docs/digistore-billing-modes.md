@@ -100,7 +100,7 @@ there.
 
 **And that is safe for the shipped test suite.** Every test here that needs a
 Product Key reads one out of THIS file through `lib/digistore/test-product-keys.ts`
-rather than naming `basis_monatlich` or `starter` — so deleting a sample product
+rather than naming `basic_monthly` or `starter` — so deleting a sample product
 does not turn somebody's suite red about a product they deliberately do not sell.
 Where your registry no longer holds the *shape* a test needs at all — an app
 selling a single one-off product has neither a subscription nor a token package —

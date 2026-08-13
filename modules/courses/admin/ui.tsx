@@ -149,9 +149,12 @@ function ReleaseField({
 }
 
 export function CreateBlockDialog({
+  courseSlug,
   shape,
   nextPosition,
 }: {
+  /** Which course the new block joins — a hidden field, resolved by the action. */
+  courseSlug: string;
   shape: string;
   nextPosition: number;
 }) {
@@ -183,6 +186,13 @@ export function CreateBlockDialog({
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
+            {/* 🚨 Which course the block joins. A hidden field is lawful HERE
+                and not on the member surface: the actor is the operator,
+                `guard()` has already answered `requireOwner()`, and they may
+                write into any course they own — so the action RESOLVES this
+                value rather than trusting it, and refuses when it names
+                nothing. */}
+            <input type="hidden" name="course" value={courseSlug} />
             <Field id="block-slug" label={t("fieldSlug")} hint={t("fieldSlugHint")}>
               <Input id="block-slug" name="slug" required autoComplete="off" />
             </Field>

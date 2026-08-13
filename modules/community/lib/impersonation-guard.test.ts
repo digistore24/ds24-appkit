@@ -424,7 +424,13 @@ describe("every DM-touching file is classified", () => {
       ...Object.keys(MIXED_SURFACES),
       // The DM machinery itself, and the one module that applies the seam for
       // presence questions. These are where the answers come FROM.
-      "modules/community/lib/manage.ts",
+      // The DM machinery, one file per domain since `manage.ts` was split into
+      // eleven — the same set as before, named rather than lumped.
+      "modules/community/lib/messages.ts",
+      "modules/community/lib/unread.ts",
+      "modules/community/lib/live.ts",
+      "modules/community/lib/reports.ts",
+      "modules/community/lib/_blocks.ts",
       "modules/community/lib/dm-presence.ts",
       "modules/community/lib/dm-actor.ts",
       "modules/community/pages/messages/ui.tsx",
@@ -480,7 +486,13 @@ describe("group surfaces are untouched by the carve-out", () => {
     "modules/community/pages/groups/[groupId]/page.tsx",
     "modules/community/pages/discussions/[discussionId]/page.tsx",
     "modules/community/components/embedded-discussion.tsx",
-    "modules/community/lib/manage.ts",
+    // The ROOM half of the old `manage.ts`. The DM files are deliberately not
+    // here — they are the carve-out, and this block is about what it must not
+    // reach.
+    "modules/community/lib/groups.ts",
+    "modules/community/lib/talk.ts",
+    "modules/community/lib/embedded.ts",
+    "modules/community/lib/moderation.ts",
   ];
 
   it("consults neither the seam nor the impersonation state", () => {

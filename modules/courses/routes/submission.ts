@@ -19,11 +19,10 @@
 import { guardApi } from "@/modules/api/api/guard";
 import { apiError, apiJson, type ApiErrorCode } from "@/modules/api/api/rules";
 
-import { courseShape } from "../lib/config";
-import { blockById, submissionFor, unitBySlug, upsertSubmission } from "../lib/manage";
+import { submissionFor, upsertSubmission } from "../lib/manage";
 import { MAX_SUBMISSION_CHARS, isUnlocked, submissionProblem } from "../rules";
 
-import { courseViewer } from "./viewer";
+import { unitViewer } from "./viewer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -71,8 +70,6 @@ export async function POST(
   const g = await guardApi(request, { scope: "write" });
   if (!g.ok) return g.response;
 
-  const v = await courseViewer(g.memberId, g.role);
-  if (!v.ok) return v.response;
 
   let body: unknown;
   try {
@@ -85,18 +82,17 @@ export async function POST(
   }
 
   const { slug } = await context.params;
-  const unit = await unitBySlug(slug);
-  if (!unit) return refuse("coursesNotFound");
-
-  const block = await blockById(unit.blockId);
-  if (!block) return refuse("coursesNotFound");
-  if (!isUnlocked(block.releaseAfterDays, v.access.startedAt, courseShape(), new Date())) {
+  // Lesson → block → course → the gate. See `./viewer.ts`.
+  const v = await unitViewer(g.memberId, g.role, slug);
+  if (!v.ok) return v.response;
+  const { unit, block } = v;
+  if (!isUnlocked(block.releaseAfterDays, v.access.startedAt, v.course.shape!, new Date())) {
     return refuse("coursesLocked");
   }
 
   const existing = await submissionFor(g.memberId, unit.slug);
   const problem = submissionProblem({
-    shape: courseShape(),
+    shape: v.course.shape!,
     taskPrompt: unit.taskPrompt,
     alreadyReplied: existing?.repliedAt != null,
     body,

@@ -33,6 +33,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join, sep } from "node:path";
 import { blankComments as withoutComments } from "@/scripts/lib/source-text.mjs";
+import { shellSource } from "./_shell-files.mjs";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 
@@ -77,7 +78,22 @@ const DM_NEEDLES = [
 const ALLOWED: Record<string, string> = {
   "modules/community/schema.ts": "the definition",
   "db/schema.ts": "re-exports the domain file wholesale (`export *`)",
-  "modules/community/lib/manage.ts": "the participant-scoped readers, and the only ones",
+  // 🚨 The DM readers were all in `manage.ts` until it was split into eleven
+  // domain files. They are all in ONE of them — which is the same statement the
+  // old single entry made, and the reason the split kept them together rather
+  // than scattering them across the files that call them.
+  "modules/community/lib/messages.ts": "the participant-scoped readers, and the only ones",
+  // Reads a conversation to decide what a report may show, through
+  // `conversationForParticipant()` — the resolver above, never a table of its own.
+  "modules/community/lib/reports.ts": "the spam report's own scoped read",
+  "modules/community/lib/unread.ts": "the badge, which counts through the same resolver",
+  "modules/community/lib/live.ts": "the live poll, likewise",
+  "modules/community/lib/_blocks.ts": "the block tables themselves — one member, by id",
+  // Reads `communityMemberBlocks` for `blockMember()`/`unblockMember()`, and
+  // scopes every statement by `blockerId` — one of the two names the signature
+  // half below accepts. Named here because the split gave following its own
+  // file, not because the rule loosened.
+  "modules/community/lib/following.ts": "block and unblock, scoped by blockerId",
   // ⚠️ These two used to be `lib/privacy/export.ts` and
   // `scripts/privacy/export-data.mjs`. The Art. 15 answer MOVED into this
   // module when the community became one — and the allowance moved with it,
@@ -179,7 +195,7 @@ describe("nothing outside the allowlist names a direct-message table", () => {
     // scanning nothing at all.
     const files = allFiles();
     expect(files.length).toBeGreaterThan(50);
-    expect(files).toContain("modules/community/lib/manage.ts");
+    expect(files).toContain("modules/community/lib/messages.ts");
   });
 
   it("would catch a violation if there were one", () => {
@@ -187,7 +203,7 @@ describe("nothing outside the allowlist names a direct-message table", () => {
     // near-miss (a copy of manage.ts under another name) is an offender.
     const source = 'import { communityMessages } from "../schema";';
     expect(DM_NEEDLES.some((needle) => source.includes(needle))).toBe(true);
-    expect("modules/community/lib/manage-v2.ts" in ALLOWED).toBe(false);
+    expect("modules/community/lib/messages-v2.ts" in ALLOWED).toBe(false);
   });
 });
 
@@ -200,7 +216,7 @@ describe("nothing outside the allowlist names a direct-message table", () => {
 // because it takes a conversation id and answers for whoever asks.
 
 const MANAGE = withoutComments(
-  readFileSync(join(ROOT, "modules/community/lib/manage.ts"), "utf8"),
+  shellSource(),
 );
 
 /**
@@ -234,6 +250,29 @@ const SCOPE_PARAMS = ["participantId", "blockerId"];
  * nothing to anybody, and the assertion below still demands it be scoped —
  * just by a differently-named id. Anything that reads gets no exemption.
  */
+/**
+ * Functions that name a DM table only in a TYPE, and read nothing.
+ *
+ * 🚨 **A third category, and it appeared the day `manage.ts` was split.** The
+ * rule below asks about every EXPORTED function whose body names one of these
+ * tables — and `toMessageRow` names `communityMessages` exactly once, as
+ * `typeof communityMessages.$inferSelect` on a parameter. It is handed a row
+ * somebody else already scoped and turns it into the shape the browser gets; it
+ * has no query, no `db`, and nothing to scope.
+ *
+ * It was private inside the old file, so the scanner never saw it. Making it
+ * visible to a sibling is what the split cost, and this is the honest way to
+ * pay it: an entry with a reason, rather than widening the rule for everybody.
+ *
+ * ⚠️ The condition is checked, not trusted — the assertion below refuses an
+ * entry whose body contains a `db.` call.
+ */
+const PURE_MAPPERS: Record<string, string> = {
+  toMessageRow:
+    "a mapper: takes a row that was already scoped by its caller and returns " +
+    "the shape a browser gets. Names the table only as a parameter type.",
+};
+
 const SCOPED_WRITERS: Record<string, string> = {
   scrubCommunityContentFor:
     "the account-deletion scrub: UPDATEs over the departing member's OWN rows, " +
@@ -313,6 +352,9 @@ describe("every DM reader in manage.ts names a participant", () => {
         // A writer over the caller's own rows, exempted by name with its
         // reason — and still asserted to be scoped, one test down.
         if (name in SCOPED_WRITERS) return false;
+        // A mapper that names a table only as a parameter type. Checked, not
+        // trusted — the test below refuses an entry whose body queries.
+        if (name in PURE_MAPPERS) return false;
         // AD-71's one granted exception, bounded by other means — asserted
         // below rather than waved through.
         if (name in BOUNDED_EXCEPTIONS) return false;
@@ -340,6 +382,20 @@ describe("every DM reader in manage.ts names a participant", () => {
         "which is the thing this module promises does not exist:\n  " +
         offenders.join("\n  "),
     ).toEqual([]);
+  });
+
+  it("🚨 keeps the pure mappers pure", () => {
+    // The exemption above is granted for "reads nothing". This is what makes
+    // that a measurement rather than a claim: an entry that grew a query would
+    // otherwise sit in the list forever, exempt from the rule it now breaks.
+    expect(Object.keys(PURE_MAPPERS).length, "the mapper list is empty").toBeGreaterThan(0);
+    for (const name of Object.keys(PURE_MAPPERS)) {
+      const found = functions.find(([fn]) => fn === name);
+      expect(found, `${name} is in PURE_MAPPERS but no longer exists`).toBeDefined();
+      const body = found?.[1] ?? "";
+      expect(body, `${name} is exempted as a mapper but calls the database`).not.toMatch(/\bdb\s*\./);
+      expect(body, `${name} is exempted as a mapper but builds a query`).not.toMatch(/\.from\(|\.select\(/);
+    }
   });
 
   it("keeps the exempt writers scoped too", () => {

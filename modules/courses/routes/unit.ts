@@ -17,11 +17,10 @@
 import { guardApi } from "@/modules/api/api/guard";
 import { apiError, apiJson } from "@/modules/api/api/rules";
 
-import { courseShape } from "../lib/config";
 import { blockById, completedSlugsFor, submissionFor, unitBySlug } from "../lib/manage";
 import { isUnlocked } from "../rules";
 
-import { courseViewer } from "./viewer";
+import { unitViewer } from "./viewer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,15 +32,13 @@ export async function GET(
   const g = await guardApi(request);
   if (!g.ok) return g.response;
 
-  const v = await courseViewer(g.memberId, g.role);
-  if (!v.ok) return v.response;
-
   const { slug } = await context.params;
-  const unit = await unitBySlug(slug);
-  if (!unit) return apiError("notFound", "No such lesson.");
-
-  const block = await blockById(unit.blockId);
-  if (!block) return apiError("notFound", "No such lesson.");
+  // Lesson → block → course → the gate, in one place. The URL carries no
+  // course segment: the slug is unique app-wide, so the lesson names its own
+  // course and a segment would be a second statement of the same fact.
+  const v = await unitViewer(g.memberId, g.role, slug);
+  if (!v.ok) return v.response;
+  const { unit, block } = v;
 
   // 🚨 403 here where `courseViewer()` answers 404, and the difference is
   // deliberate. A member without the plan must not learn the course exists at
@@ -49,7 +46,7 @@ export async function GET(
   // `unlocked: false` by the outline — refusing with 404 would tell them
   // something they can already see is untrue, and a client could not tell "not
   // yet" from "gone".
-  if (!isUnlocked(block.releaseAfterDays, v.access.startedAt, courseShape(), new Date())) {
+  if (!isUnlocked(block.releaseAfterDays, v.access.startedAt, v.course.shape!, new Date())) {
     return apiError("forbidden", "This lesson has not opened yet.");
   }
 

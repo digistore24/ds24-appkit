@@ -26,6 +26,7 @@ import { NextIntlClientProvider } from "next-intl";
 
 import { blankComments } from "@/scripts/lib/source-text.mjs";
 import { findPaletteClasses } from "@/scripts/ux/rules.mjs";
+import { appTimeZone } from "@/i18n/catalogue";
 import de from "@/messages/de.json";
 
 import { InstallHint } from "./install-app";
@@ -45,9 +46,16 @@ describe("the install offer on the server", () => {
     // ⚠️ `useEffect` does NOT run in `renderToStaticMarkup`, so this proves the
     // FIRST render and nothing after it. Everything the effect does is proven
     // on a real phone — see docs/mobile.md.
+    //
+    // `timeZone` is not decoration: without it use-intl reports ENVIRONMENT_FALLBACK
+    // ("markup mismatches caused by environment differences") on every run, which is
+    // the one warning `appTimeZone()` exists to prevent — see its doc comment. The
+    // app never renders this component without a zone (`i18n/request.ts`), so a
+    // provider built here without one measures a configuration no request has.
     const markup = renderToStaticMarkup(
       createElement(NextIntlClientProvider, {
         locale: "de",
+        timeZone: appTimeZone(),
         messages: de,
         children: createElement(InstallHint),
       }),

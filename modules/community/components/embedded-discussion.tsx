@@ -79,6 +79,7 @@ import type { PostView } from "@/modules/community/pages/ui";
 
 import { LiveDiscussion } from "./live-discussion";
 import { Pager } from "./pager";
+import { wirePost } from "../lib/wire";
 
 /**
  * A row as the client reads it.
@@ -88,23 +89,6 @@ import { Pager } from "./pager";
  * pretending. The shape is the live endpoint's `wirePost()`, deliberately: the
  * first render and every poll after it must hand the list the same thing.
  */
-function toPostView(post: PostRow): PostView {
-  return {
-    id: post.id,
-    authorId: post.authorId,
-    content: post.content,
-    createdAt: post.createdAt.toISOString(),
-    editedAt: post.editedAt?.toISOString() ?? null,
-    deletedAt: post.deletedAt?.toISOString() ?? null,
-    deletedBy: post.deletedBy,
-    authorProfileName: post.authorProfileName,
-    authorAccountName: post.authorAccountName,
-    // Carried straight through, exactly as `wirePost()` does — the first render
-    // and every poll after it must hand the list the same thing, and the
-    // addresses were minted beside their `mayAccess()` check upstream.
-    images: post.images,
-  };
-}
 
 /**
  * Where the live channel should start reading from: the newest row THIS render
@@ -163,8 +147,8 @@ export async function EmbeddedDiscussion({
   const current = await currentActiveUser();
   if (current.state !== "active") return null;
 
-  const memberId = current.session.user.id as string;
-  const viewer = { memberId, role: current.session.user.role as string };
+  const memberId = current.session.user.id;
+  const viewer = { memberId, role: current.session.user.role };
 
   // 3. + 4. Declaration and entitlement, as ONE answer.
   const view = await embeddedDiscussionView(subjectKey, viewer, page);
@@ -232,7 +216,7 @@ export async function EmbeddedDiscussion({
           memberId={memberId}
           viewerProfileName={profile?.displayName ?? null}
           viewerAccountName={(current.session.user.name as string | null) ?? null}
-          initialPosts={view.rows.map(toPostView)}
+          initialPosts={view.rows.map(wirePost)}
           // The same policy the section's thread page hands its composer. An
           // embed is a place to write like any other, and a picture in a lesson's
           // discussion is the same thing as one in a room's.

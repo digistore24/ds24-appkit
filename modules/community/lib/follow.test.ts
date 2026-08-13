@@ -297,7 +297,7 @@ describe("no aggregate over the follow graph exists anywhere", () => {
         ),
     );
     expect(naming.length).toBeGreaterThan(2);
-    expect(naming).toContain("modules/community/lib/manage.ts");
+    expect(naming).toContain("modules/community/lib/following.ts");
   });
 });
 

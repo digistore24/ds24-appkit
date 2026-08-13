@@ -20,7 +20,7 @@
 // server-decided visibility and `mayAccess()` (`docs/visuals.md`).
 //
 // 🚨 **Nothing here decides anything.** The form has no visibility field and no
-// plan parameter — `./media-actions.ts` sets `visibility` and `requiresPlan`
+// plan parameter — `./media-actions.ts` sets `visibility` and `planKeys`
 // from `courseConfig()` on BOTH routes, and a `content` row is refused by the
 // server whatever this file renders. `disabled` is cosmetics; the callout beside
 // it is the part that helps.
@@ -72,8 +72,8 @@ import {
   detachSlotAction,
   mintVideoTicketAction,
 } from "./media-actions";
+import { EMPTY_ACTION_STATE } from "@/lib/action-state";
 
-const EMPTY: ActionState = { error: null, ok: null };
 
 /**
  * One slot's form action — for the three that travel THROUGH the app.
@@ -97,7 +97,7 @@ const ACTIONS: Partial<Record<CourseSlotId, (prev: ActionState, data: FormData) 
  * SAME object every time, which is what keeps `useActionToast()` — an identity
  * comparison — silent for a form that is never submitted.
  */
-const NO_FORM_ACTION = async (): Promise<ActionState> => EMPTY;
+const NO_FORM_ACTION = async (): Promise<ActionState> => EMPTY_ACTION_STATE;
 
 /**
  * Extra `accept` entries, by extension.
@@ -197,8 +197,8 @@ function Slot({
   const tErrors = useTranslations("errors");
   const locale = useLocale();
   const formAction = ACTIONS[slot];
-  const [state, action, pending] = useActionState(formAction ?? NO_FORM_ACTION, EMPTY);
-  const [detachState, detachAction] = useActionState(detachSlotAction, EMPTY);
+  const [state, action, pending] = useActionState(formAction ?? NO_FORM_ACTION, EMPTY_ACTION_STATE);
+  const [detachState, detachAction] = useActionState(detachSlotAction, EMPTY_ACTION_STATE);
   // ⚠️ The confirm button calls the action OUTSIDE a form, so it has to open its
   // own transition — `useActionState`'s dispatch called bare logs "An async
   // function with useActionState was called outside of a transition" and leaves
@@ -212,7 +212,7 @@ function Slot({
   const [blocked, setBlocked] = useState(false);
   // The direct path has no form and therefore no `useActionState` — its result
   // is held here and reported through the same toast as everything else.
-  const [directState, setDirectState] = useState<ActionState>(EMPTY);
+  const [directState, setDirectState] = useState<ActionState>(EMPTY_ACTION_STATE);
 
   useActionToast(state);
   useActionToast(detachState);

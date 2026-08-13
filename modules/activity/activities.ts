@@ -70,7 +70,7 @@
 // export const ACTIVITIES: readonly Activity[] = [
 //   {
 //     id: "silben-spiel",
-//     requiresPlan: "kurs_komplett",   // a key from config/digistore-products.json
+//     requiresPlan: "course_complete",   // a key from config/digistore-products.json
 //     costsTokens: 0,
 //     maxAttempts: null,               // a game is replayable
 //     async load({ memberId, subject }) {

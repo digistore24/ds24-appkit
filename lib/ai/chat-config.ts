@@ -38,6 +38,7 @@ import raw from "@/config/ai-chat.json";
 import { allProducts } from "@/lib/digistore/products";
 import { bindingFor } from "./tasks";
 import { envVarFor, isConfigured } from "./providers/registry";
+import { pushEnabledProblem } from "@/lib/config-problems";
 
 export interface ChatConfig {
   enabled: boolean;
@@ -153,9 +154,7 @@ export function chatConfigProblems(): string[] {
   const problems: string[] = [];
   const file = raw as Record<string, unknown>;
 
-  if (file.enabled !== undefined && typeof file.enabled !== "boolean") {
-    problems.push('"enabled" must be true or false');
-  }
+  pushEnabledProblem(problems, file);
   // Two leftovers from before the provider layer, and both are worth naming
   // rather than ignoring: an Operator who edited either field is holding a
   // belief about how their assistant runs, and neither is true any more. A

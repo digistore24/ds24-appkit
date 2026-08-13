@@ -51,7 +51,10 @@ import {
 const PAGE = "/dashboard/admin/community";
 
 /** Return value for useActionState — `error`/`ok` are finished messages. */
-export type ActionState = { error: string | null; ok: string | null };
+import type { ActionState } from "@/lib/action-state";
+
+/** Re-exported so the components beside this file keep importing it from here. */
+export type { ActionState };
 
 /**
  * The two guards, in the one order that is correct.

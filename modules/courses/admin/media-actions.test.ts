@@ -17,16 +17,25 @@
 //     protects.
 //   * a `content` row reaches NEITHER of them.
 //   * detaching a slot calls no `deleteMedia()`, ever.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+
+// A lesson's media carry ITS COURSE's Product Keys — the action walks
+// unit → block → course to find them, so the walk's last step is mocked.
+vi.mock("../lib/courses", () => ({
+  courseByIdForOperator: vi.fn(async () => ({
+    id: "course-1",
+    slug: "kurs",
+    title: "Der Kurs",
+    summary: null,
+    position: 1,
+    shape: "self-study",
+    planKeys: ["course_complete"],
+    origin: "content",
+  })),
+}));
 
 vi.mock("../lib/config", () => ({
   isCourseEnabled: vi.fn(() => true),
-  courseConfig: vi.fn(() => ({
-    enabled: true,
-    shape: "self-study",
-    productKey: "kurs_komplett",
-    operatorPreviewsUnlocked: true,
-  })),
 }));
 
 vi.mock("@/lib/authz", () => ({
@@ -35,11 +44,14 @@ vi.mock("@/lib/authz", () => ({
 
 vi.mock("../lib/manage", () => ({
   unitById: vi.fn(),
+  // The middle step of the walk to the lesson's course.
+  blockById: vi.fn(async () => ({ id: "b-1", courseId: "course-1" })),
   setUnitMedia: vi.fn(async () => true),
 }));
 
 vi.mock("../lib/content-files", () => ({
   contentFileIndex: vi.fn(() => ({
+    courses: new Map<string, string>(),
     blocks: new Map<string, string>(),
     units: new Map<string, string>(),
     unreadable: [] as string[],
@@ -105,7 +117,8 @@ import {
 import { guardUploadConfirm, guardUploadEntry } from "@/lib/media/upload-endpoint";
 import { SERVER_ACTION_BODY_LIMIT_BYTES } from "@/lib/media/rules";
 
-import { courseConfig, isCourseEnabled } from "../lib/config";
+import { isCourseEnabled } from "../lib/config";
+import { courseByIdForOperator } from "../lib/courses";
 import { setUnitMedia, unitById } from "../lib/manage";
 import { contentFileIndex } from "../lib/content-files";
 import {
@@ -159,15 +172,22 @@ beforeEach(() => {
     // What a ticket minted by `mintVideoTicketAction` carries into the row.
     // Both are asserted again on the way out — see the two probes below.
     visibility: "entitled",
-    requiresPlan: "kurs_komplett",
+    planKeys: ["course_complete"],
   } as never);
-  vi.mocked(courseConfig).mockReturnValue({
-    enabled: true,
+  // `clearAllMocks()` wipes the factory implementation, so the walk's last step
+  // is re-armed per test.
+  vi.mocked(courseByIdForOperator).mockResolvedValue({
+    id: "course-1",
+    slug: "kurs",
+    title: "Der Kurs",
+    summary: null,
+    position: 1,
     shape: "self-study",
-    productKey: "kurs_komplett",
-    operatorPreviewsUnlocked: true,
-  } as never);
+    planKeys: ["course_complete"],
+    origin: "content",
+  });
   vi.mocked(contentFileIndex).mockReturnValue({
+    courses: new Map(),
     blocks: new Map(),
     units: new Map(),
     unreadable: [],
@@ -182,7 +202,7 @@ describe("🚨 AC 2 — the SERVER decides who may see the file, never the form"
     expect(acceptUpload).toHaveBeenCalledTimes(1);
     expect(vi.mocked(acceptUpload).mock.calls[0][0]).toMatchObject({
       visibility: "entitled",
-      requiresPlan: "kurs_komplett",
+      planKeys: ["course_complete"],
     });
   });
 
@@ -193,14 +213,14 @@ describe("🚨 AC 2 — the SERVER decides who may see the file, never the form"
     await attachCoverAction(
       EMPTY,
       form(
-        { id: "u-1", alt: "Ein Knoten", visibility: "public", requiresPlan: "fremd_plan" },
+        { id: "u-1", alt: "Ein Knoten", visibility: "public", planKeys: "fremd_plan" },
         SMALL,
       ),
     );
 
     const passed = vi.mocked(acceptUpload).mock.calls[0][0];
     expect(passed.visibility).toBe("entitled");
-    expect(passed.requiresPlan).toBe("kurs_komplett");
+    expect(passed.planKeys).toEqual(["course_complete"]);
   });
 
   it("takes the owner from the SESSION, and the alt from its own field", async () => {
@@ -353,7 +373,7 @@ describe("🚨 Story 8.2 — the video slot goes straight to the bucket", () => 
       namespace: "courses",
       category: "video",
       visibility: "entitled",
-      requiresPlan: "kurs_komplett",
+      planKeys: ["course_complete"],
       claimedMime: "video/mp4",
       declaredBytes: 900_000_000,
     });
@@ -365,12 +385,12 @@ describe("🚨 Story 8.2 — the video slot goes straight to the bucket", () => 
     // tickets pins `owner` and this is the only place `entitled` is reachable.
     await mintVideoTicketAction({
       ...MINT,
-      ...({ visibility: "public", requiresPlan: "fremd_plan" } as unknown as object),
+      ...({ visibility: "public", planKeys: ["fremd_plan"] } as unknown as object),
     });
 
     const passed = vi.mocked(createUploadTicket).mock.calls[0][0];
     expect(passed.visibility).toBe("entitled");
-    expect(passed.requiresPlan).toBe("kurs_komplett");
+    expect(passed.planKeys).toEqual(["course_complete"]);
   });
 
   it("🚨 meters BEFORE it mints — the hourly slot is spent at the address", async () => {
@@ -394,6 +414,7 @@ describe("🚨 Story 8.2 — the video slot goes straight to the bucket", () => 
   it("refuses a content row, names its file, and spends nothing", async () => {
     vi.mocked(unitById).mockResolvedValue(CONTENT_UNIT as never);
     vi.mocked(contentFileIndex).mockReturnValue({
+      courses: new Map(),
       blocks: new Map(),
       units: new Map([["woche-1-intro", "01-woche.json"]]),
       unreadable: [],
@@ -450,7 +471,7 @@ describe("🚨 Story 8.2 — the video slot goes straight to the bucket", () => 
       id: "media-odd",
       mime: "video/quicktime",
       visibility: "entitled",
-      requiresPlan: "kurs_komplett",
+      planKeys: ["course_complete"],
     } as never);
     const state = await confirmVideoAction({ id: "u-1", ticketId: "ticket-1" });
     expect(state.error).toContain("coursesSlotNotAttachable");
@@ -468,7 +489,7 @@ describe("🚨 Story 8.2 — the video slot goes straight to the bucket", () => 
       id: "media-owner-only",
       mime: "video/mp4",
       visibility: "owner",
-      requiresPlan: null,
+      planKeys: [],
     } as never);
     const state = await confirmVideoAction({ id: "u-1", ticketId: "ticket-1" });
     expect(state.error).toContain("coursesUploadTicketMismatch");
@@ -483,7 +504,7 @@ describe("🚨 Story 8.2 — the video slot goes straight to the bucket", () => 
       id: "media-stale",
       mime: "video/mp4",
       visibility: "entitled",
-      requiresPlan: "ein_anderer_kurs",
+      planKeys: ["ein_anderer_kurs"],
     } as never);
     const state = await confirmVideoAction({ id: "u-1", ticketId: "ticket-1" });
     expect(state.error).toContain("coursesUploadTicketMismatch");
@@ -535,6 +556,7 @@ describe("🚨 AC 4 — a content row is unreachable from all four form actions"
   it("names the file the lesson came from", async () => {
     vi.mocked(unitById).mockResolvedValue(CONTENT_UNIT as never);
     vi.mocked(contentFileIndex).mockReturnValue({
+      courses: new Map(),
       blocks: new Map(),
       units: new Map([["woche-1-intro", "01-woche.json"]]),
       unreadable: [],
@@ -644,22 +666,34 @@ describe("what a write reports back", () => {
   });
 
   it("an unexpected failure becomes the unknown error, not a stack trace", async () => {
+    // The `console.error` below is the behaviour under test, not an accident — this
+    // test PROVOKES the failure. Silenced so an UNEXPECTED error stays visible in
+    // the run's output instead of drowning in expected noise.
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => quiet.mockRestore());
     vi.mocked(setUnitMedia).mockRejectedValue(new Error("pool exhausted"));
     const state = await detachSlotAction(EMPTY, form({ id: "u-1", slot: "cover" }));
     expect(state.error).toContain("errors.unknown");
   });
 
   it("🚨 a course with no Product Key faults rather than storing an unreachable file", async () => {
-    // Unreachable behind the guard — a missing productKey is `brokenConfig`, so
-    // `isCourseEnabled()` is false. Written out anyway, because passing `null`
-    // on would make `acceptUpload()` answer MediaError("noAccess"): a sentence
-    // about the VIEWER for a fault in the config.
-    vi.mocked(courseConfig).mockReturnValue({
-      enabled: true,
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => quiet.mockRestore());
+    // Unreachable behind the guard — an empty planKeys makes `courseProblems()`
+    // non-empty, so the course never reaches the workbench. Written out anyway,
+    // because passing an empty list on would make `acceptUpload()` answer
+    // MediaError("noAccess"): a sentence about the VIEWER for a fault in the
+    // course row.
+    vi.mocked(courseByIdForOperator).mockResolvedValue({
+      id: "course-1",
+      slug: "kurs",
+      title: "Der Kurs",
+      summary: null,
+      position: 1,
       shape: "self-study",
-      productKey: null,
-      operatorPreviewsUnlocked: true,
-    } as never);
+      planKeys: [],
+      origin: "content",
+    });
     const state = await attachCoverAction(EMPTY, form({ id: "u-1", alt: "x" }, SMALL));
     expect(state.error).toContain("errors.unknown");
     expect(acceptUpload).not.toHaveBeenCalled();

@@ -35,22 +35,17 @@ import raw from "@/config/course.json";
 // for. It lives beside the media config because that is where the trap was
 // first paid for; a second copy here would be a second set of rules about the
 // same registry.
-import { planProblem } from "@/lib/media/config";
 
-import { COURSE_SHAPES, type CourseShape } from "../rules";
 
 export interface CourseConfig {
   readonly enabled: boolean;
-  readonly shape: CourseShape | null;
-  readonly productKey: string | null;
+
   readonly operatorPreviewsUnlocked: boolean;
 }
 
 /** Every key this file understands. An unknown one is a PROBLEM, never ignored. */
 const KNOWN = new Set([
   "enabled",
-  "shape",
-  "productKey",
   "operatorPreviewsUnlocked",
 ]);
 
@@ -62,12 +57,9 @@ function file(): Record<string, unknown> {
 
 export function courseConfig(): CourseConfig {
   const f = file();
-  const shape = f.shape;
   return {
     // `=== true`, so a string "true", a 1 or a missing key are all OFF.
     enabled: f.enabled === true,
-    shape: COURSE_SHAPES.includes(shape as CourseShape) ? (shape as CourseShape) : null,
-    productKey: typeof f.productKey === "string" && f.productKey ? f.productKey : null,
     // Defaults ON: without it an operator cannot preview the last week of their
     // own drip course, because they hold no grant and therefore have no clock.
     operatorPreviewsUnlocked: f.operatorPreviewsUnlocked !== false,
@@ -93,32 +85,15 @@ export function courseConfigProblems(): string[] {
   if (f.enabled !== undefined && typeof f.enabled !== "boolean") {
     problems.push(`"enabled" must be true or false, not ${JSON.stringify(f.enabled)}`);
   }
-  if (f.shape !== undefined && !COURSE_SHAPES.includes(f.shape as CourseShape)) {
-    problems.push(
-      `"shape" is ${JSON.stringify(f.shape)} — it must be one of ${COURSE_SHAPES.join(", ")}`,
-    );
-  }
-  // Only demanded once the course is meant to run: an app that has not switched
-  // it on yet is not carrying a fault.
-  if (f.enabled === true) {
-    if (f.shape === undefined) problems.push('"shape" is missing, and there is no default');
-    if (typeof f.productKey !== "string" || !f.productKey) {
-      problems.push('"productKey" is missing — the course has to be sold as something');
-    } else {
-      // 🚨 **Present is not the same as usable, and the gap was measurable.**
-      // A key naming a product that has been retired from
-      // `config/digistore-products.json` — or a TOKEN package, for which
-      // `hasPlan()` answers false for ever — left the course `enabled`: every
-      // lesson's media then failed with `MediaError("noAccess")`, and
-      // `courseAccessFor()` (`./access.ts` → `hasPlan()`) THREW, because
-      // `hasPlan()` throws on a key it does not know. So a typo took the page
-      // down instead of meaning "no access", which is the exact trap AD-41 and
-      // `planProblem()` exist for. Answering `brokenConfig` sends the operator
-      // to the diagnosis page that names the value.
-      const problem = planProblem(f.productKey);
-      if (problem) problems.push(`"productKey": ${problem}`);
-    }
-  }
+  // 🚨 **`shape` and `planKeys` are NOT here any more, and their absence is the
+  // point.** They moved onto `courses_courses` in Story 44.2, because an app
+  // may hold several courses and each is a different product: one with a
+  // self-study primer and an accompanied workshop needs both shapes at once,
+  // and two courses sharing one key list would be one course in two halves.
+  // `lib/courses.ts` → `courseProblems()` makes the same three judgements
+  // where the values now live, per course. A leftover `shape` in this file is
+  // reported by the unknown-key loop above rather than quietly obeyed — which
+  // is what tells an operator their old value stopped deciding anything.
   if (f.operatorPreviewsUnlocked !== undefined && typeof f.operatorPreviewsUnlocked !== "boolean") {
     problems.push('"operatorPreviewsUnlocked" must be true or false');
   }
@@ -165,7 +140,7 @@ export function isCourseEnabled(): boolean {
  *     up, and the surface the mail points at is the one that DIAGNOSES that
  *     state instead of refusing in it. A job asking the wide question would fall
  *     silent in exactly the state the operator most needs to hear about —
- *     `productKey` mistyped, the course dead, and the queue still growing. The
+ *     `planKeys` mistyped, the course dead, and the queue still growing. The
  *     same thought as `check-stuck-reloads` (`docs/cron.md`): the state that
  *     most needs reporting is the one nobody is touching.
  *
@@ -179,15 +154,3 @@ export function isCourseSwitchedOn(): boolean {
   return courseConfig().enabled;
 }
 
-/**
- * The shape, for code that has already established the course is running.
- *
- * Throws rather than defaulting, and the throw is unreachable behind
- * `isCourseEnabled()` — it exists so that a caller who skipped that check gets a
- * fault instead of the most permissive shape.
- */
-export function courseShape(): CourseShape {
-  const { shape } = courseConfig();
-  if (!shape) throw new Error("courseShape() called while config/course.json has no valid shape");
-  return shape;
-}

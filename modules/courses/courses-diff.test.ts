@@ -276,16 +276,24 @@ describe("Story 35.3 — the question is printed, and asked by nobody here", () 
     // The second-one side names what is real in THIS app, including position.
     expect(source).toContain("a second one");
     expect(source).toContain("The existing rows are untouched");
-    expect(source).toContain("position decides where it appears");
+    expect(source).toContain("decides where it appears");
   });
 
-  it("🚨 says the third consequence rather than implying it — one course, one product key", () => {
-    // The capability that is ABSENT must not read like one that is present.
-    // `config/course.json` holds ONE productKey, so a "second course" is visible
-    // to exactly the same buyers.
-    expect(source).toContain("ONE course under");
-    expect(source).toContain("ONE product key");
-    expect(source).toContain("Selling it separately is a different piece of work");
+  it("🚨 says the third consequence rather than implying it — same course, same buyers", () => {
+    // 🚨 **This claim INVERTED in Story 44.2 and the test inverted with it.** It
+    // used to read "this app sells ONE course under ONE product key, so a second
+    // set of blocks is visible to the same buyers" — a true sentence about a
+    // capability that was absent. The capability is now present, so the same
+    // sentence would be the opposite mistake: a reader would take "you cannot
+    // sell this separately" as the answer and never look for the way to.
+    //
+    // What has to survive is the SHAPE of the warning, not its verdict: adding
+    // blocks inside one course changes who sees them not at all, and the reader
+    // is told what to do instead rather than left to infer it.
+    expect(source).toContain("Inside ONE course");
+    expect(source).toContain("the SAME buyers as the old one");
+    expect(source).toContain("means a second course");
+    expect(source).toContain("its own planKeys");
   });
 
   it("🚨 chooses the refusal line from `origin`, and tells 'not ours' from 'not sent' apart", () => {

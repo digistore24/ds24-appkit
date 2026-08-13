@@ -32,7 +32,7 @@ hasPlan(memberId: string, productKey: string): Promise<boolean>
 One Member, one plan, one boolean. This is what a feature asks.
 
 ```ts
-if (await hasPlan(memberId, "basis_monatlich")) {
+if (await hasPlan(memberId, "basic_monthly")) {
   // the feature
 }
 ```
@@ -61,7 +61,7 @@ a badge or an account overview:
 
 ```ts
 const owned = await entitlementsFor(memberId);
-const keys = owned.map((e) => e.productKey);   // ["basis_monatlich"]
+const keys = owned.map((e) => e.productKey);   // ["basic_monthly"]
 ```
 
 `source` says where it came from: `"purchase"` — somebody paid — or `"manual"`,
@@ -77,7 +77,7 @@ And that is the point of the whole design, not an accident of the return type.
 // Answers true for a subscription that billed this morning AND for the comp
 // the operator typed in at 11pm to fix a support case. Identically. There is
 // no second function and no flag.
-if (await hasPlan(memberId, "basis_monatlich")) { /* the feature */ }
+if (await hasPlan(memberId, "basic_monthly")) { /* the feature */ }
 ```
 
 An operator can settle a purchase that never matched, or hand somebody a month
@@ -146,7 +146,7 @@ export default async function ReportsPage() {
   if (!session?.user?.id) redirect("/login");
 
   // Not entitled? Send them where they can become entitled.
-  if (!(await hasPlan(session.user.id, "basis_monatlich"))) {
+  if (!(await hasPlan(session.user.id, "basic_monthly"))) {
     redirect("/plans");
   }
 
@@ -255,7 +255,7 @@ import { pausedKeys } from "@/lib/entitlements/rules";
 
 const owned  = await entitlementsFor(memberId);
 const paused = pausedKeys(owned, await suspendedKeysFor(memberId));
-// paused = ["basis_monatlich"] → "your access to Basis is paused"
+// paused = ["basic_monthly"] → "your access to Basis is paused"
 ```
 
 `suspendedKeysFor` returns Product Keys and nothing else — no note, no operator
@@ -287,7 +287,7 @@ So there is no such thing as "the Member's plan":
 const plan = (await entitlementsFor(memberId))[0].productKey;
 
 // RIGHT — ask per feature.
-const canExport = await hasPlan(memberId, "basis_jaehrlich");
+const canExport = await hasPlan(memberId, "basic_yearly");
 ```
 
 If you want to *display* something like a current plan, pick it deliberately —
@@ -408,7 +408,7 @@ The two models combine well and are meant to: a subscription gates *whether*
 the feature exists for this customer, the balance limits *how much* they use it.
 
 ```ts
-if (!(await hasPlan(memberId, "basis_monatlich"))) return notEntitled();
+if (!(await hasPlan(memberId, "basic_monthly"))) return notEntitled();
 await spendTokens({ amount: cost, note: "report generation" });
 ```
 

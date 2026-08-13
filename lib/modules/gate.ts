@@ -98,6 +98,42 @@ export interface ModuleGate {
 }
 
 /**
+ * Why a module is not running — `null` when it is.
+ *
+ * The vocabulary every module's `<x>OffReason()` already answers in. It lives
+ * here so the mapping below can be written once; a module still computes its
+ * own reason, because only the module knows what its config means.
+ */
+export type ModuleOffReason = "disabledInConfig" | "brokenConfig";
+
+/**
+ * The trichotomy, in one place.
+ *
+ * 🚨 **Which of the three a doubt falls to is the decision, and it was being
+ * made twice.** `modules/courses/gate.ts` and `modules/community/gate.ts` each
+ * wrote this mapping out by hand, identically, down to the ternary — and the
+ * community's carries a post-mortem about getting it wrong: reporting
+ * `isCommunityEnabled()` (which is `enabled && no problems`, so false in the
+ * BROKEN state too) made the proxy rewrite away the operator's own diagnosis
+ * page. What that operator actually got, with one mistyped key: `module list`
+ * reporting the switch as ON, every page answering 404, and the page whose job
+ * is to name the typo gone with them.
+ *
+ * A rule with a post-mortem attached is exactly the kind that must not exist
+ * twice — the second copy is the one nobody re-reads. `lib/modules/gate.test.ts`
+ * pins all three rows.
+ *
+ * ⚠️ Note which way `brokenConfig` falls: **`"broken"`, never `"off"`**. Only
+ * `"off"` earns the rewrite, and the broken state deliberately keeps its pages
+ * reachable so they can render the diagnosis for an owner and `notFound()`
+ * everybody else.
+ */
+export function stateFromOffReason(reason: ModuleOffReason | null): ModuleState {
+  if (reason === "disabledInConfig") return "off";
+  return reason === "brokenConfig" ? "broken" : "on";
+}
+
+/**
  * A `covers` built from the route subtrees a module declares.
  *
  * ⚠️ **Use this rather than writing the comparison by hand.** The community's

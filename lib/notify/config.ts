@@ -32,6 +32,7 @@
 import { DEFAULT_LOCALE, isLocale, type Locale } from "@/i18n/config";
 
 import raw from "@/config/notifications.json";
+import { pushEnabledProblem } from "@/lib/config-problems";
 
 export interface NotifyConfig {
   enabled: boolean;
@@ -73,9 +74,7 @@ function fileProblems(file: Record<string, unknown>): string[] {
     );
   }
 
-  if (file.enabled !== undefined && typeof file.enabled !== "boolean") {
-    problems.push('"enabled" must be true or false');
-  }
+  pushEnabledProblem(problems, file);
 
   if (file.locale !== undefined && !isLocale(file.locale)) {
     problems.push(

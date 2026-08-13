@@ -10,7 +10,7 @@
 // menu in the player just stays empty, because a `<track>` fetch is
 // CORS-restricted and will not follow that redirect. Same mocking deal as
 // `manage.test.ts`: the store is faked, the LOGIC is not.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 import type { MediaRow } from "@/db/schema-media";
 
@@ -41,7 +41,7 @@ function row(over: Partial<MediaRow> = {}): MediaRow {
     ownerId: "alice",
     kind: "video",
     visibility: "entitled",
-    requiresPlan: "basis_monatlich",
+    requiresPlan: "basic_monthly",
     storageKey: "courses/video/2026/08/m1.mp4",
     mime: "video/mp4",
     filename: null,
@@ -96,6 +96,11 @@ describe("deliverMedia — bucket redirect or app stream", () => {
   });
 
   it("keeps the refusal shape for subtitle text — a missing object is 404", async () => {
+    // The `console.error` below is the behaviour under test, not an accident — this
+    // test PROVOKES the failure. Silenced so an UNEXPECTED error stays visible in
+    // the run's output instead of drowning in expected noise.
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => quiet.mockRestore());
     findMedia.mockResolvedValue(row({ mime: "text/vtt", kind: "file" }));
     getBytes.mockResolvedValue(null);
 

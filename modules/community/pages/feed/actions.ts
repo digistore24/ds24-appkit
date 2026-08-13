@@ -50,8 +50,8 @@ export async function loadMoreFeedAction(
 
   const { items, nextCursor } = await feedFor(
     {
-      memberId: session.user.id as string,
-      role: session.user.role as string,
+      memberId: session.user.id,
+      role: session.user.role,
     },
     cursor,
   );

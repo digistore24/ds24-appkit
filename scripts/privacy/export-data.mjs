@@ -32,6 +32,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { connect } from "../users/_db.mjs";
 import { moduleExportSections } from "../modules/inventory.mjs";
+import { flagsFrom } from "../lib/args.mjs";
 
 // ── Where the community's thirteen sections went ───────────────────────────
 // They were spelled out below until Epic 24 made the community a module; the
@@ -51,10 +52,7 @@ import { moduleExportSections } from "../modules/inventory.mjs";
 // currently enabled.
 
 const argv = process.argv.slice(2);
-function arg(name) {
-  const i = argv.indexOf(`--${name}`);
-  return i >= 0 ? argv[i + 1] : undefined;
-}
+const arg = flagsFrom(argv);
 
 const rawEmail = arg("email");
 const email = typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : "";

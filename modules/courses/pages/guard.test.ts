@@ -118,7 +118,15 @@ describe("every action on the course's member surface", () => {
     expect(FOUND.map((action) => action.name)).toContain("submitTaskAction");
   });
 
-  it("🚨 opens with viewer() — the off state, the session and the purchase gate", () => {
+  // 🚨 **Two spellings of the guard, and the second is the STRICTER one.**
+  // `viewer()` answers "is the module on, and who is this". It could not also
+  // answer the purchase gate once an app held several courses, because that
+  // gate is per course — so the lesson-scoped actions go through
+  // `unitInCourse()`, which derives the course from the lesson (never from the
+  // form) and gates on that. Widening this rule rather than dropping it is the
+  // point: a rule that named only the old spelling would pass an action that
+  // reached NEITHER, which is the hole it exists to close.
+  it("🚨 opens with viewer() or unitInCourse() — the off state, the session, the gate", () => {
     for (const { name, file } of FOUND) {
       expect(name, `${file} → ${name} is exported but is not named …Action`).toMatch(/Action$/);
     }
@@ -127,9 +135,10 @@ describe("every action on the course's member surface", () => {
         body,
         `${file} → ${name} does not call viewer(). A Server Action is an HTTP endpoint of its own — ` +
           `the page that rendered its form proves nothing about a request somebody replayed. ` +
-          `viewer() is courseOffReason(), then requireActiveUser(), then courseAccessFor(), and ` +
-          `none of the three is optional.`,
-      ).toMatch(/await\s+viewer\(\)/);
+          `viewer() is courseOffReason() then requireActiveUser(); unitInCourse() is that plus ` +
+          `lesson → block → course and courseAccessFor() on the course it FOUND. None of it is ` +
+          `optional, and an action that reaches neither is an open endpoint.`,
+      ).toMatch(/await\s+(viewer|unitInCourse)\(/);
     }
   });
 

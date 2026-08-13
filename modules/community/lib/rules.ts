@@ -220,7 +220,7 @@ export type CommunityErrorCode = (typeof COMMUNITY_ERROR_CODES)[number];
 export class CommunityError extends Error {
   readonly code: CommunityErrorCode;
   /**
-   * Values the translated sentence needs — e.g. `{ key: "basis_monatlich" }`
+   * Values the translated sentence needs — e.g. `{ key: "basic_monthly" }`
    * for `communityUnknownPlanKey`, whose whole point is naming the key the operator
    * mistyped. The delivery layer passes it straight into `t(code, detail)`;
    * it never contains anything a member typed, and never anything private.
@@ -2369,4 +2369,22 @@ export function hasUnread(
   // asymmetry above.
   if (lastActivity.id === undefined) return false;
   return compareCursor({ at: lastActivity.at, id: lastActivity.id }, marker) > 0;
+}
+
+/**
+ * The later of a post's two change stamps — the JS twin of `CHANGED_AT`, the
+ * SQL expression `manage.ts` orders the live feed by.
+ *
+ * Timezone-innocent on purpose: it compares `Date` values handed in and never
+ * reads a clock, which is what lets the live cursor be tested without one.
+ * `greatest(deletedAt, editedAt)`, with a missing stamp counting as the epoch
+ * so a post that has neither sorts before every post that has one.
+ */
+export function changedAt(post: {
+  deletedAt: Date | null;
+  editedAt: Date | null;
+}): Date {
+  const deleted = post.deletedAt?.getTime() ?? 0;
+  const edited = post.editedAt?.getTime() ?? 0;
+  return new Date(Math.max(deleted, edited));
 }

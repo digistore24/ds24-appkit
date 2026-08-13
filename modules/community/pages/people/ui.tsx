@@ -24,8 +24,8 @@ import { Button } from "@/components/ui/button";
 
 import type { ActionState } from "../actions";
 import { setFollowAction } from "./actions";
+import { EMPTY_ACTION_STATE } from "@/lib/action-state";
 
-const EMPTY: ActionState = { error: null, ok: null };
 
 export function FollowButton({
   memberId,
@@ -38,7 +38,7 @@ export function FollowButton({
   size?: "default" | "sm";
 }) {
   const t = useTranslations("community");
-  const [state, action] = useActionState(setFollowAction, EMPTY);
+  const [state, action] = useActionState(setFollowAction, EMPTY_ACTION_STATE);
   const [pending, startAction] = useTransition();
 
   useActionToast(state);

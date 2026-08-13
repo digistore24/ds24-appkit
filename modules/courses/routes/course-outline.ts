@@ -13,30 +13,43 @@
 import { guardApi } from "@/modules/api/api/guard";
 import { apiJson } from "@/modules/api/api/rules";
 
-import { courseShape } from "../lib/config";
 import { completedSlugsFor, courseOutline } from "../lib/manage";
 import { isUnlocked, unlockedAt } from "../rules";
 
-import { courseViewer } from "./viewer";
+import { courseFor, courseViewer } from "./viewer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request): Promise<Response> {
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ course: string }> },
+): Promise<Response> {
   const g = await guardApi(request);
   if (!g.ok) return g.response;
 
-  const v = await courseViewer(g.memberId, g.role);
+  const { course: courseSlug } = await context.params;
+  // 🚨 The course FIRST, because the gate is about a course: `courseViewer()`
+  // reads that course's own `planKeys`. Three states collapse into one 404 in
+  // `courseFor()` — off, no such slug, row does not hold — so a caller cannot
+  // learn that a course exists which they have not bought.
+  const c = await courseFor(courseSlug);
+  if (!c.ok) return c.response;
+
+  const v = await courseViewer(g.memberId, g.role, c.course);
   if (!v.ok) return v.response;
 
-  const shape = courseShape();
+  const shape = c.course.shape!;
   const now = new Date();
   const [blocks, completed] = await Promise.all([
-    courseOutline(),
+    courseOutline(c.course.id),
     completedSlugsFor(g.memberId),
   ]);
 
   return apiJson({
+    slug: c.course.slug,
+    title: c.course.title,
+    summary: c.course.summary,
     shape,
     // What the operator sees is not what a buyer sees, and a client showing a
     // preview banner needs to know which it is holding (`../lib/access.ts`).

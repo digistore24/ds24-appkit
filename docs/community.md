@@ -37,7 +37,7 @@ tree — the one exception is a thin one-line route declaration per page under
 | the manifest — what this module joins by declaring it | `modules/community/module.json` |
 | the switch, and every knob | `config/community.json`, read through `isCommunityEnabled()` / `communityConfig()` (`modules/community/lib/config.ts`) |
 | the pure core — every rule as a function, no I/O | `modules/community/lib/rules.ts` |
-| the shell — every read and every write | `modules/community/lib/manage.ts` |
+| the shell — every read and every write | **one file per domain** under `modules/community/lib/`: `profiles` · `groups` · `talk` · `embedded` · `messages` · `unread` · `live` · `feed` · `following` · `moderation` · `reports`, over five `_`-prefixed helpers. `manage.ts` is the BARREL — it names the module's 95 exports and holds no logic. It was one file of 5,902 lines; the layering, and why each helper file exists, is [`docs/modules.md`](modules.md) → *The community's layers* |
 | the embed registry — **ships empty**, the app's own list | `modules/community/lib/embeds.ts` |
 | the seam an impersonated session finds empty | `modules/community/lib/dm-actor.ts` |
 | the one live endpoint | `modules/community/routes/live.ts` (declared at `app/api/community/live/route.community.ts`) |

@@ -78,6 +78,20 @@ async function requireUser(id: string): Promise<UserRow> {
 /**
  * Creates a user (or updates the role if the email already exists). The user
  * then signs in the normal way, via a magic link.
+ *
+ * 🚨 **An address that already exists makes this an UPDATE, and updating a role
+ * is `setUserRole()`'s question — so it is answered by `setUserRole()`'s rule.**
+ * Without that second check this door went around both safeguards the role
+ * rules exist for: `canCreateUser()` asks only whether the actor is an owner,
+ * so an owner typing an address that was already taken could demote themselves
+ * (`selfDemote`) or demote the LAST remaining owner (`lastOwnerRole`) — leaving
+ * an app nobody can administer, with no support desk that could let them back
+ * in. It happened silently in both directions: the admin form reports
+ * "created" for a row it only updated, and `user_upsert` (lib/setup/tools.ts)
+ * defaults `role` to "member", so an upsert naming the sole owner and omitting
+ * the field was enough. That is AD-92's chain pointed the other way — not
+ * "make somebody an owner" but "remove the owner" — and the two-act protocol
+ * does not close it, for the reason lib/setup/rules.ts already gives.
  */
 export async function createUser(
   actor: Actor,
@@ -88,6 +102,29 @@ export async function createUser(
 
   const email = normalizeEmail(input.email);
   if (!email) throw new UserError("invalidEmail");
+
+  // The lookup before the upsert. Same shape as `setUserRole()`: read the
+  // target, count the owners, ask the rule.
+  //
+  // ⚠️ The count is only paid for when the address is really taken AND the role
+  // really moves. `canChangeRole()` answers `null` for `target.role === newRole`
+  // anyway, so the second condition is exactly equivalent — but the count is an
+  // ARGUMENT, and an argument is evaluated before the function it is passed to.
+  // Asking eagerly would put a `count(*)` on every genuine create.
+  const [existing] = await db
+    .select({ id: users.id, role: users.role })
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+  if (existing && existing.role !== input.role) {
+    const roleDenial = canChangeRole(
+      actor,
+      existing,
+      input.role,
+      await countOwners(),
+    );
+    if (roleDenial) throw new UserError(roleDenial);
+  }
 
   const [row] = await db
     .insert(users)
@@ -341,8 +378,8 @@ export async function deleteOwnAccount(): Promise<void> {
   const session = await requireActiveUser();
 
   const actor: Actor = {
-    id: session.user.id as string,
-    role: session.user.role as string,
+    id: session.user.id,
+    role: session.user.role,
   };
 
   const denial = canDeleteOwnAccount(actor, await countOwners());

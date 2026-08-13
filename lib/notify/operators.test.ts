@@ -21,7 +21,7 @@
 // address leak this channel exists to contain (AC 11) is produced BY the
 // transport, in Postmark's own response body, so a test that stops above it
 // asserts against a failure it invented rather than the one that happens.
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 interface Captured {
   sql: string;
@@ -271,6 +271,13 @@ describe("the off states — quiet, and each one measured", () => {
 });
 
 describe("a delivery that fails", () => {
+  // Every test in here PROVOKES a failed delivery, and `notifyOperators()` logs
+  // the original on its way past — deliberately (see line 42 of operators.ts).
+  // Silenced so an UNEXPECTED error stays visible in the run's output.
+  beforeEach(() => {
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => quiet.mockRestore());
+  });
   it("🚨 reports numbers, not an address", async () => {
     probe().owners = [owner(1), owner(2), owner(3)];
     failOn = 2;
@@ -344,6 +351,13 @@ describe("a delivery that fails", () => {
 });
 
 describe("a caller whose own code throws", () => {
+  // Every test in here PROVOKES a failed delivery, and `notifyOperators()` logs
+  // the original on its way past — deliberately (see line 42 of operators.ts).
+  // Silenced so an UNEXPECTED error stays visible in the run's output.
+  beforeEach(() => {
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => quiet.mockRestore());
+  });
   /** A `compose` that fails the way 8.6's will: a date that is not one. */
   const BROKEN = {
     ...DIGEST,

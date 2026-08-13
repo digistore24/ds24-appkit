@@ -83,6 +83,7 @@ import { rememberedPort } from "../dev/app-port.mjs";
 import { hostOf, isLocalHost } from "../lib/host-env.mjs";
 import { readEnvValue, setEnvValue } from "../lib/env-write.mjs";
 import "../lib/env.mjs";
+import { FlagError, flagValue as readFlag } from "../lib/args.mjs";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -94,11 +95,12 @@ const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const argv = process.argv.slice(2);
 const wantsLive = argv.includes("--live");
 
+// The RULE is `scripts/lib/args.mjs` — a flag without a usable value is a
+// refusal, never a guess. Only the MESSAGE is local, because a per-flag example
+// is worth more here than a generic sentence, and the shared `flag()` cannot
+// know one.
 function flagValue(name) {
-  const at = argv.indexOf(name);
-  if (at === -1) return null;
-  const value = String(argv[at + 1] ?? "").trim();
-  if (!value || value.startsWith("--")) {
+  const refuse = () => {
     console.error(`ERROR: ${name} needs a value.`);
     console.error(
       name === "--task"
@@ -106,7 +108,19 @@ function flagValue(name) {
         : "  node run.mjs ai-check --live --url https://app.example.com",
     );
     process.exit(2);
+  };
+  let raw;
+  try {
+    raw = readFlag(argv, name.replace(/^--/, ""));
+  } catch (error) {
+    if (!(error instanceof FlagError)) throw error;
+    return refuse();
   }
+  if (raw === undefined) return null;
+  // An empty or blank value is refused too — the same answer the local version
+  // gave, and `--url ""` is a typo rather than a request.
+  const value = String(raw).trim();
+  if (!value) return refuse();
   return value;
 }
 

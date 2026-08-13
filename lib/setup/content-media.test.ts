@@ -31,7 +31,7 @@ const ENTRY = {
   kind: "video",
   contentType: "video/mp4",
   visibility: "entitled",
-  requiresPlan: "kurs_komplett",
+  planKeys: ["course_complete"],
   alt: null,
   filename: "intro.mp4",
   bytes: 15_728_640,

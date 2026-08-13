@@ -64,7 +64,7 @@ export async function currentActiveUser(): Promise<ActiveUser> {
   if (!session?.user) return { state: "anonymous" };
 
   const { isUserBlocked } = await import("@/lib/users/blocked");
-  if (await isUserBlocked(session.user.id as string)) return { state: "blocked" };
+  if (await isUserBlocked(session.user.id)) return { state: "blocked" };
 
   return { state: "active", session };
 }

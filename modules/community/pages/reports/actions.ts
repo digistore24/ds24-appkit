@@ -76,7 +76,7 @@ export async function reportAction(
     } else {
       if (!isCommunityEnabled()) notFound();
       const session = await requireActiveUser();
-      reporterId = session.user.id as string;
+      reporterId = session.user.id;
     }
 
     // The context the reporter chose, as a repeated field. Every id is
@@ -123,7 +123,7 @@ export async function liftBlockAction(
     if (!isCommunityEnabled()) notFound();
     const session = await requireActiveUser();
     await liftSendBlock({
-      actorId: session.user.id as string,
+      actorId: session.user.id,
       memberId: String(formData.get("memberId") ?? ""),
     });
     revalidatePath("/dashboard/community/reports");
@@ -150,7 +150,7 @@ export async function consumeReportAction(
     if (!isCommunityEnabled()) notFound();
     const session = await requireActiveUser();
     await consumeReport({
-      actorId: session.user.id as string,
+      actorId: session.user.id,
       reportId: String(formData.get("reportId") ?? ""),
     });
     revalidatePath("/dashboard/community/reports");

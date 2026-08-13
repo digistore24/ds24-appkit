@@ -61,7 +61,7 @@ export default async function LoginPage({
   // Without that exception an endless loop would form: the dashboard sends
   // blocked users back here, and this line would send them straight back.
   // Instead they stay here and see the message below.
-  if (session?.user && !(await isUserBlocked(session.user.id as string))) {
+  if (session?.user && !(await isUserBlocked(session.user.id))) {
     redirect("/dashboard");
   }
 

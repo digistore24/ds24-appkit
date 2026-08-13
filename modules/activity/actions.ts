@@ -87,7 +87,7 @@ export async function loadActivityAction(input: {
   subject: string;
 }): Promise<ActivityState> {
   const session = await requireActiveUser();
-  const memberId = session.user.id as string;
+  const memberId = session.user.id;
 
   const activity = findActivity(input.activityId);
   if (!activity) return { state: "off", code: "activityUnavailable" };
@@ -151,7 +151,7 @@ export async function submitActivityAction(input: {
   // 1. Who is submitting. Redirects rather than answering a status — the
   //    shape every server action in this app uses.
   const session = await requireActiveUser();
-  const memberId = session.user.id as string;
+  const memberId = session.user.id;
 
   // 2. Is this an element this app has?
   const activity = findActivity(input.activityId);

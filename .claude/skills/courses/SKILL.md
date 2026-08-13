@@ -54,7 +54,8 @@ Say the cost out loud: the `api_keys` table and the App-keys card on
 `config/api.json` — a course does not need it switched on; a mobile companion
 does ([`docs/api.md`](../../../docs/api.md)).
 
-Then `config/course.json`: `shape`, and `productKey` once step 3 has created it.
+Then `config/course.json`: `shape`, and `planKeys` once step 3 has created the
+products.
 **Leave `enabled` at `false`.** It ships off on purpose — a course whose pages
 answer before it has lessons is an empty product behind a clean 200. Step 6
 switches it on.
@@ -64,9 +65,21 @@ switches it on.
 One entry in `config/digistore-products.json`, `kind: "one_time"` for all three
 shapes unless the vendor says otherwise. Then the skill `setup-digistore`.
 
-Put that key in `config/course.json` → `productKey`.
+Put those keys in `config/course.json` → `planKeys`, a **list**.
+
+🚨 **It is a list because one offering is one Digistore24 product per billing
+interval.** A course a vendor sells "monthly or yearly" is TWO registry entries,
+and holding either one opens the course — so both keys go in. Naming only one
+leaves the other half of your buyers on a page that renders with nothing on it:
+their own gate passes, and every medium resolves to `null`, which the page shows
+as "there is none". A clean 200 over a course they paid for.
+
+The same list gates the lesson media (`planKeys` on the manifest entry), so buying
+the course is buying its files, whichever product you bought it under.
+
 ⚠️ `hasPlan()` **throws** on a key the registry does not know, so a typo here is
-a 500 on the course page rather than a locked-out member.
+a 500 on the course page rather than a locked-out member. `node run.mjs
+courses-check` names every unknown key at once rather than the first.
 
 ## 4. Write the content
 
@@ -74,11 +87,23 @@ a 500 on the course page rather than a locked-out member.
 already told this app most of what an interview would ask — plan the course from
 it (`docs/courses.md` → *Planning from a corpus*).
 
-**You author FILES, not tool calls.** One file per block in
-`content/course/*.json` — that is the one writer for a course's rows, and
-`content-apply` carries them into whichever environment is asked for. The
-module's `courses_outline` setup tool reads a remote environment and never
-writes; a lesson typed in through a tool would be overwritten by the next apply.
+**You author FILES, not tool calls.** A course is a FOLDER, and one file per
+block inside it:
+
+```
+content/course/<course-slug>/course.json    the course: title, shape, planKeys
+content/course/<course-slug>/01-block.json  a block, with its lessons
+```
+
+The **folder name is the course's slug** — do not repeat it inside
+`course.json`, which refuses a `slug` key. An app may hold several courses; each
+folder is one, sold on its own. ⚠️ Lesson and block slugs are unique across the
+whole APP, so a second course prefixes them (`kurs-b-woche-1`).
+
+That is the one writer for a course's rows, and `content-apply` carries them
+into whichever environment is asked for. The module's `courses_outline` setup
+tool reads a remote environment and never writes; a lesson typed in through a
+tool would be overwritten by the next apply.
 
 
 
@@ -143,7 +168,7 @@ create yours **beside** the one already there. The order of acts:
    | They choose | Say this |
    |---|---|
    | **update the existing one** | the lessons your customers currently see are replaced by the ones in your files. Their progress is keyed by **slug**, so it survives — somebody who finished lesson three has still finished lesson three |
-   | **a second one** | the existing blocks are untouched and their buyers stay where they are. ⚠️ **And**: this app sells ONE course under ONE product key, so the new blocks are visible to the **same** buyers. Selling them separately is separate work — say that, do not leave it implied |
+   | **a second one** | the existing blocks are untouched and their buyers stay where they are. ⚠️ **And**: inside one course the new blocks are visible to the **same** buyers. Selling them to a different set means a **second course** — its own folder under `content/course/`, its own `course.json` with its own `planKeys`. Say which of the two it is, do not leave it implied |
 
 2. **Apply the answer by editing a slug in `content/course/*.json`.** 🚨 That is
    the whole mechanism, and it is worth saying to the user in their words: *you

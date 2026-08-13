@@ -18,7 +18,7 @@
 // only make them slower and flakier without testing anything more. The round
 // trip against real storage is `node run.mjs media-check`, which is a different
 // question and has its own command.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -131,7 +131,7 @@ function row(over: Partial<MediaRow> = {}): MediaRow {
     ownerId: "alice",
     kind: "image",
     visibility: "owner",
-    requiresPlan: null,
+    planKeys: [],
     storageKey: "core/upload/2026/07/m1.png",
     mime: "image/png",
     filename: null,
@@ -334,7 +334,7 @@ describe("why an avatar needed a fourth visibility — driven through mayAccess"
   // They run against the real function here, which is the only place the claim
   // can be false.
   const avatar = (visibility: MediaRow["visibility"]) =>
-    row({ visibility, ownerId: "alice", requiresPlan: null });
+    row({ visibility, ownerId: "alice", planKeys: [] });
 
   const anonymous = { memberId: null, role: null };
   const otherMember = { memberId: "bob", role: "member" };
@@ -355,7 +355,7 @@ describe("why an avatar needed a fourth visibility — driven through mayAccess"
     hasPlan.mockClear();
     planProblem.mockReturnValue(null);
     hasPlan.mockResolvedValue(false);
-    const paid = row({ visibility: "entitled", requiresPlan: "basis", ownerId: "alice" });
+    const paid = row({ visibility: "entitled", planKeys: ["basis"], ownerId: "alice" });
     expect(await mayAccess(paid, otherMember)).toBe(false);
     expect(hasPlan).toHaveBeenCalled();
 
@@ -381,7 +381,7 @@ describe("mayAccess — a blocked account gets no bytes", () => {
     expect(await mayAccess(row({ visibility: "members" }), blockedShape)).toBe(false);
     expect(await mayAccess(row({ visibility: "owner", ownerId: "alice" }), blockedShape)).toBe(false);
     expect(
-      await mayAccess(row({ visibility: "entitled", requiresPlan: "basis" }), blockedShape),
+      await mayAccess(row({ visibility: "entitled", planKeys: ["basis"] }), blockedShape),
     ).toBe(false);
   });
 
@@ -398,7 +398,7 @@ describe("mayAccess — a blocked account gets no bytes", () => {
 });
 
 describe("mayAccess — entitled", () => {
-  const item = row({ visibility: "entitled", ownerId: null, requiresPlan: "basis" });
+  const item = row({ visibility: "entitled", ownerId: null, planKeys: ["basis"] });
 
   it("lets a member who holds the plan have it", async () => {
     hasPlan.mockResolvedValue(true);
@@ -425,19 +425,91 @@ describe("mayAccess — entitled", () => {
   });
 
   it("refuses a row with no plan named", async () => {
-    expect(await mayAccess(row({ visibility: "entitled", requiresPlan: null }), {
+    expect(await mayAccess(row({ visibility: "entitled", planKeys: [] }), {
       memberId: "bob",
       role: "member",
     })).toBe(false);
   });
 
   it("DENIES rather than throwing when the plan was retired", async () => {
+    // The `console.error` below is the behaviour under test, not an accident — this
+    // test PROVOKES the failure. Silenced so an UNEXPECTED error stays visible in
+    // the run's output instead of drowning in expected noise.
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => quiet.mockRestore());
     // Write-time validation cannot cover a later edit to
     // `config/digistore-products.json`, and `hasPlan()` throws on a key it does
     // not know — so without this the delivery route and every server component
     // rendering the item answered 500 instead of refusing access.
     planProblem.mockReturnValue('no product "basis" in config/digistore-products.json');
     expect(await mayAccess(item, { memberId: "bob", role: "member" })).toBe(false);
+    expect(hasPlan).not.toHaveBeenCalled();
+  });
+});
+
+describe("🚨 mayAccess — entitled under SEVERAL plans, and holding one is enough", () => {
+  // ── What this catches, and why it had nothing ──────────────────────────
+  // The column was ONE key until Story 44.1. One offering is one Digistore24
+  // product per billing interval, so a course sold monthly and yearly is two
+  // keys before it has a second customer — and the failure of asking only the
+  // first is invisible by construction: the yearly buyer's lesson page passes
+  // its own gate and every medium on it resolves to `null`, which the page
+  // renders as "there is none". A clean 200 over a product half-delivered,
+  // exactly the class `CLAUDE.md` → *Never ship a broken page* is about.
+  //
+  // ⚠️ Measured while writing it: with `mayAccess()` reduced to
+  // `hasPlan(memberId, live[0])`, the ENTIRE suite of 7206 tests stayed green.
+  // Every test above passes a one-key list, so none of them can tell the two
+  // apart. These four are what make the loop falsifiable.
+  const sold = row({ visibility: "entitled", ownerId: null, planKeys: ["monthly", "yearly"] });
+
+  it("🚨 lets in a member who holds the SECOND key — the needle", async () => {
+    // The one that goes red on a gate that stops at the head of the list.
+    hasPlan.mockImplementation(async (_member: string, key: string) => key === "yearly");
+    expect(await mayAccess(sold, { memberId: "bob", role: "member" })).toBe(true);
+  });
+
+  it("lets in a member who holds the FIRST key without asking about the rest", async () => {
+    // The counter-test: short-circuiting is right, and a gate that asked every
+    // key regardless would pass the needle above while making one pointless
+    // round-trip per key on every render of every lesson.
+    hasPlan.mockImplementation(async (_member: string, key: string) => key === "monthly");
+    expect(await mayAccess(sold, { memberId: "bob", role: "member" })).toBe(true);
+    expect(hasPlan).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a member who holds NEITHER, having asked about both", async () => {
+    // The other counter-test: "any" must not decay into "always true". The call
+    // count is half the assertion — a gate that refused without asking would
+    // satisfy the verdict and be a different function.
+    hasPlan.mockResolvedValue(false);
+    expect(await mayAccess(sold, { memberId: "bob", role: "member" })).toBe(false);
+    expect(hasPlan).toHaveBeenCalledTimes(2);
+  });
+
+  it("🚨 skips a RETIRED key and still opens for the live one", async () => {
+    // Retiring a product is an ordinary thing to do. Taking the whole row down
+    // because ONE of its keys went stale would refuse people who paid — so a
+    // stale key is skipped rather than fatal, and only an all-stale list is a
+    // refusal. The `console.error` is the behaviour under test.
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => quiet.mockRestore());
+    planProblem.mockImplementation((key: string) =>
+      key === "monthly" ? 'no product "monthly" in config/digistore-products.json' : null,
+    );
+    hasPlan.mockImplementation(async (_member: string, key: string) => key === "yearly");
+    expect(await mayAccess(sold, { memberId: "bob", role: "member" })).toBe(true);
+    // 🚨 And it never ASKED about the retired one: `hasPlan()` throws on a key
+    // the registry does not know, so asking would be a 500 rather than a
+    // refusal — the trap this filter exists for.
+    expect(hasPlan).not.toHaveBeenCalledWith("bob", "monthly");
+  });
+
+  it("refuses when EVERY key has been retired", async () => {
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => quiet.mockRestore());
+    planProblem.mockReturnValue("gone");
+    expect(await mayAccess(sold, { memberId: "bob", role: "member" })).toBe(false);
     expect(hasPlan).not.toHaveBeenCalled();
   });
 });
@@ -510,7 +582,9 @@ describe("every upload door enters the outer guard", () => {
     // live inside the function that owns that order, where no caller can enter
     // past them. `modules/community/lib/post-image-write.test.ts` measures the
     // order against the guards as well as against each other.
-    { file: "modules/community/lib/manage.ts", stores: "acceptUpload", guard: "guardUploadEntry" },
+    // ⚠️ `_post-images.ts` since the split of `manage.ts` (5,902 lines → eleven
+    // domain files). The door did not move; the file it lives in was named.
+    { file: "modules/community/lib/_post-images.ts", stores: "acceptUpload", guard: "guardUploadEntry" },
     // Direct-to-bucket, half one: mints an address, stores nothing, and is
     // where the hourly slot is spent.
     {

@@ -15,9 +15,9 @@ function def(key: string, kind: ProductKind): ProductDef {
   return { key, name: key, kind };
 }
 
-const sub = def("basis_monatlich", "subscription");
-const sub2 = def("basis_jaehrlich", "subscription");
-const once = def("kurs_komplett", "one_time");
+const sub = def("basic_monthly", "subscription");
+const sub2 = def("basic_yearly", "subscription");
+const once = def("course_complete", "one_time");
 const tok = def("starter", "token");
 
 const idsOf = (products: ProductDef[]): PlanSectionId[] =>

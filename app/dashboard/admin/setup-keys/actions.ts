@@ -58,7 +58,7 @@ export async function createSetupKeyAction(
     // `as string` the way every other admin action here reads it: the session
     // type carries it optional, and `requireOwner()` has already proven there
     // is one.
-    ownerId: session.user.id as string,
+    ownerId: session.user.id,
     name,
     expiresAt: days === null ? null : new Date(Date.now() + days * 86_400_000),
   });

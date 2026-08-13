@@ -32,7 +32,8 @@ import { requireActiveUser } from "@/lib/authz";
 import { isOwner } from "@/lib/roles";
 
 import { courseAccessFor } from "../lib/access";
-import { courseConfigProblems, courseOffReason, courseShape } from "../lib/config";
+import { courseConfigProblems, courseOffReason } from "../lib/config";
+import { courseBySlug } from "../lib/courses";
 import { courseOutline, completedSlugsFor } from "../lib/manage";
 import { isUnlocked, nextUnit, progress } from "../rules";
 
@@ -54,13 +55,27 @@ export async function generateMetadata() {
   return { title: t("title") };
 }
 
-export default async function CoursePage() {
+export default async function CoursePage({
+  params,
+}: {
+  params: Promise<{ course: string }>;
+}) {
   if (courseOffReason() === "disabledInConfig") {
     notFound();
   }
 
   const session = await requireActiveUser();
   const t = await getTranslations("courses");
+
+  // 🚨 **`courseBySlug()` answers `null` for "there is none" AND for "it is
+  // broken", and this page keeps both as 404.** A learner who reached a course
+  // whose `shape` is unreadable must get what a slug that never existed gets;
+  // telling them apart would say "this exists and is broken" to somebody who
+  // cannot act on it. The OPERATOR's surface reads `allCourses()` and sees the
+  // difference — `lib/courses.ts` argues the split at length.
+  const { course: courseSlug } = await params;
+  const course = await courseBySlug(courseSlug);
+  if (!course) notFound();
 
   if (courseOffReason() === "brokenConfig") {
     if (!isOwner(session.user.role)) {
@@ -83,20 +98,23 @@ export default async function CoursePage() {
     );
   }
 
-  const memberId = session.user.id as string;
-  const shape = courseShape();
+  const memberId = session.user.id;
+  // Per course, not per app — `courses_courses.shape`. Non-null by
+  // construction here: `courseBySlug()` has already refused a row whose shape
+  // is not one of the three.
+  const shape = course.shape!;
 
   // 🚨 The purchase gate — ONE function, shared with the lesson page and with
   // anything this module later registers as a content source. Two `hasPlan()`
   // calls that agree today is how an assistant becomes an existence oracle.
-  const { entitled, startedAt } = await courseAccessFor(memberId, session.user.role as string);
+  const { entitled, startedAt } = await courseAccessFor(memberId, session.user.role, course);
   if (!entitled) {
     // Not a 404: the course exists and this person may buy it. `/plans` is
     // where that happens, and it needs to know why they arrived.
-    redirect("/plans?course=1");
+    redirect(`/plans?course=${encodeURIComponent(course.slug)}`);
   }
 
-  const [blocks, completed] = await Promise.all([courseOutline(), completedSlugsFor(memberId)]);
+  const [blocks, completed] = await Promise.all([courseOutline(course.id), completedSlugsFor(memberId)]);
   const now = new Date();
 
   const units = blocks.flatMap((block) =>
@@ -113,7 +131,7 @@ export default async function CoursePage() {
 
   return (
     <>
-      <PageHeader title={t("title")} />
+      <PageHeader title={course.title} description={course.summary ?? undefined} />
 
       {blocks.length === 0 ? (
         // Empty is the state most operators meet first, and the one nobody
@@ -155,7 +173,7 @@ export default async function CoursePage() {
                     title: next.title,
                     lesson: (chunks) => (
                       <Link
-                        href={`/dashboard/course/${encodeURIComponent(next.slug)}`}
+                        href={`/dashboard/course/${encodeURIComponent(course.slug)}/${encodeURIComponent(next.slug)}`}
                         className="text-primary underline underline-offset-4"
                       >
                         {chunks}
@@ -208,7 +226,7 @@ export default async function CoursePage() {
                       <li key={unit.slug} className="text-sm">
                         {open ? (
                           <Link
-                            href={`/dashboard/course/${encodeURIComponent(unit.slug)}`}
+                            href={`/dashboard/course/${encodeURIComponent(course.slug)}/${encodeURIComponent(unit.slug)}`}
                             className="text-primary underline underline-offset-4"
                           >
                             {unit.title}

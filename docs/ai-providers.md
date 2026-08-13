@@ -346,7 +346,7 @@ worked example in a comment.
 {
   id: "writing-coach",              // [a-z0-9-], ≤ 40 — half of the conversation key
   instruction: "You are a writing coach …",
-  requiresPlan: "kurs_komplett",    // or null for every signed-in member
+  requiresPlan: "course_complete",    // or null for every signed-in member
   costsTokens: 2,                   // 0 = included in the plan
   maxInputChars: 12_000,
   async load({ memberId, subject }) { … },

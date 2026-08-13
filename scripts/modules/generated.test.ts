@@ -51,7 +51,10 @@ describe("the generated files match the manifests", () => {
         onDisk,
         `${file} no longer matches config/modules.json and the manifests. ` +
           `Run \`node run.mjs module sync\` and commit the result — it is an ordinary ` +
-          `source file, and the customer's build runs no generator.`,
+          `source file, and the customer's build runs no generator.\n\n` +
+          `  This usually means a module.json was edited by hand: only \`add\`, ` +
+          `\`remove\` and \`sync\` write these files, and \`npm run build\` builds the ` +
+          `stale ones without a word. This test is the only thing that says so.`,
       ).toBe(content);
     });
   }

@@ -16,7 +16,7 @@
 // from what the client said", and checking that against a stubbed
 // `agreedMime()` would be checking the claim by assuming it. So the fixtures
 // are real byte signatures, the same ones `sniff.test.ts` uses.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 const remove = vi.fn<(key: string) => Promise<void>>();
 const head = vi.fn<(key: string) => Promise<{ bytes: number } | null>>();
@@ -135,7 +135,7 @@ const TICKET = {
   claimedMime: "video/mp4",
   filename: "lektion-7.mp4",
   visibility: "owner" as const,
-  requiresPlan: null,
+  planKeys: [],
   expiresAt: new Date(Date.now() + 60_000),
   consumedAt: null as Date | null,
   createdAt: new Date(),
@@ -505,6 +505,11 @@ describe("the sweep for uploads nobody finished", () => {
   });
 
   it("🚨 keeps the row when the object could not be removed", async () => {
+    // The `console.error` below is the behaviour under test, not an accident — this
+    // test PROVOKES the failure. Silenced so an UNEXPECTED error stays visible in
+    // the run's output instead of drowning in expected noise.
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => quiet.mockRestore());
     // The row is the only record that the object exists. Dropping it after a
     // failed delete would strand the bytes where nothing can find them again —
     // so the row stays, is counted, and tomorrow's run tries once more.
@@ -528,6 +533,8 @@ describe("the sweep for uploads nobody finished", () => {
   });
 
   it("gives up after a whole batch of failures rather than growing its query", async () => {
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => quiet.mockRestore());
     // `stuck` is excluded from the next `select`, one bind parameter per
     // failure — and Postgres refuses a statement past 65 535 of them. An
     // unreachable bucket and a large backlog used to end this job in a driver

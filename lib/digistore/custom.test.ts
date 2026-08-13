@@ -197,7 +197,7 @@ describe("purchaseOriginFor", () => {
     const v = buildIdentity({
       memberId: MEMBER,
       checkoutToken: TOKEN,
-      productKey: "kurs_komplett",
+      productKey: "course_complete",
       kind: purchaseOriginFor("one_time"),
     });
     expect(v).toContain("k:sub");

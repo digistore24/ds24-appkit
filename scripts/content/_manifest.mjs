@@ -6,7 +6,7 @@
 //
 // The manifest is the DECLARATION of the product's media: one entry per file,
 // carrying what a `media` row needs and a file on disk cannot say — who may
-// see it (`visibility`), which plan that takes (`requiresPlan`), what a
+// see it (`visibility`), which plans buy it (`planKeys`), what a
 // screen reader gets (`alt`). Everything derivable is derived (kind and
 // content type come from the extension), everything else is validated here so
 // that a bad entry is refused with a sentence, in every command, identically.
@@ -17,7 +17,7 @@
 //     "entries": [
 //       { "path": "kurs-basics/intro.mp4",
 //         "visibility": "entitled",
-//         "requiresPlan": "basis_monatlich",
+//         "planKeys": ["basic_monthly", "basic_yearly"],
 //         "alt": null,
 //         "sha256": "…",          // staged-leg files: written back by
 //         "bytes": 123456789 }    // content-media-sync --apply
@@ -84,7 +84,7 @@ const SHA256_RE = /^[0-9a-f]{64}$/;
  * and key derived) and every problem as a finished sentence naming the entry.
  *
  * `productKeys` is the plan registry (`config/digistore-products.json` →
- * product keys) — `requiresPlan` is validated against it because `hasPlan()`
+ * product keys) — every `planKeys` entry is validated against it because `hasPlan()`
  * THROWS on an unknown key: an unchecked value would not mean "no access", it
  * would take the page down. `null` means the registry could not be read; then
  * the plan check is reported as unverifiable rather than silently passed.
@@ -144,33 +144,49 @@ export function validateManifest(data, { productKeys }) {
       continue;
     }
 
-    const requiresPlan = entry.requiresPlan ?? null;
+    // A LIST, and holding ONE of them buys the file — the same shape
+    // `media.plan_keys` and `community_groups.plan_keys` carry. One offering is
+    // one Digistore24 product per billing interval, so a file sold monthly and
+    // yearly names two keys and a single string could never have said so.
+    const declared = entry.planKeys ?? null;
+    let planKeys = [];
     if (visibility === "entitled") {
-      if (typeof requiresPlan !== "string" || requiresPlan === "") {
+      if (!Array.isArray(declared) || declared.length === 0) {
         problems.push(
-          `${where} ("${path}"): visibility "entitled" needs "requiresPlan" — the Product Key ` +
-            "from config/digistore-products.json that buys this file",
+          `${where} ("${path}"): visibility "entitled" needs "planKeys" — a list of the Product ` +
+            "Keys from config/digistore-products.json that buy this file, any one of which does",
         );
+        continue;
+      }
+      if (declared.some((key) => typeof key !== "string" || key === "")) {
+        problems.push(`${where} ("${path}"): every entry of "planKeys" must be a non-empty string`);
+        continue;
+      }
+      const duplicate = declared.find((key, i) => declared.indexOf(key) !== i);
+      if (duplicate !== undefined) {
+        problems.push(`${where} ("${path}"): "planKeys" lists "${duplicate}" twice`);
         continue;
       }
       if (productKeys === null) {
         problems.push(
-          `${where} ("${path}"): requiresPlan "${requiresPlan}" cannot be verified — ` +
+          `${where} ("${path}"): "planKeys" cannot be verified — ` +
             "config/digistore-products.json is unreadable",
         );
         continue;
       }
-      if (!productKeys.includes(requiresPlan)) {
+      const unknown = declared.find((key) => !productKeys.includes(key));
+      if (unknown !== undefined) {
         problems.push(
-          `${where} ("${path}"): requiresPlan "${requiresPlan}" is not in ` +
+          `${where} ("${path}"): planKeys "${unknown}" is not in ` +
             "config/digistore-products.json — hasPlan() throws on an unknown key, so this " +
             "would be a 500, not a refusal",
         );
         continue;
       }
-    } else if (requiresPlan !== null) {
+      planKeys = declared;
+    } else if (declared !== null) {
       problems.push(
-        `${where} ("${path}"): "requiresPlan" beside visibility "public" does nothing — ` +
+        `${where} ("${path}"): "planKeys" beside visibility "public" does nothing — ` +
           'remove it, or make the file "entitled"',
       );
       continue;
@@ -202,7 +218,7 @@ export function validateManifest(data, { productKeys }) {
       kind,
       contentType,
       visibility,
-      requiresPlan,
+      planKeys,
       alt,
       sha256,
       bytes,

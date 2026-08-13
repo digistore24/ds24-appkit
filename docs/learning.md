@@ -62,7 +62,7 @@ game at full length):
 ```ts
 {
   id: "silben-spiel",
-  requiresPlan: "kurs_komplett",
+  requiresPlan: "course_complete",
   costsTokens: 0,
   maxAttempts: null,                       // a game is replayable
   async load({ memberId, subject }) {
@@ -114,7 +114,7 @@ are all registry fields:
 ```ts
 {
   id: "abschluss-check",
-  requiresPlan: "kurs_komplett",
+  requiresPlan: "course_complete",
   costsTokens: 0,
   maxAttempts: 3,        // refused BEFORE grade() — a refused attempt costs nothing
   passMark: 0.7,         // one definition of passing (rules.ts → passedFrom)

@@ -39,7 +39,7 @@ export default async function PeoplePage() {
   if (!isCommunityEnabled()) notFound();
 
   const session = await requireActiveUser();
-  const memberId = session.user.id as string;
+  const memberId = session.user.id;
 
   const [{ following, followedBy }, t] = await Promise.all([
     followsFor(memberId),

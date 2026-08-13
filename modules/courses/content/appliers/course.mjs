@@ -47,18 +47,137 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { MAX_UNIT_BODY_CHARS, MAX_UNIT_TITLE_CHARS, slugProblem } from "../../slug.mjs";
+// The three shapes, from the module's own pure layer — never a second list here.
+import { COURSE_SHAPES } from "../../shapes.mjs";
 
 // modules/courses/content/appliers/ → the app root.
 const ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 const CONTENT_DIR = join(ROOT, "content", "course");
 
-/** The block files, in name order. Absent directory = an app with no course yet. */
-function blockFiles(dir) {
+/** The name of a course's own file, inside its directory. */
+const COURSE_FILE = "course.json";
+
+/**
+ * The course directories, in name order. Absent = an app with no course yet.
+ *
+ * 🚨 **A `.json` lying loose in `content/course/` is a REFUSAL, not a file to
+ * skip.** That was the layout before there could be more than one course, so a
+ * loose file is somebody's block from the old shape — and skipping it silently
+ * would apply three quarters of a course and report success. The message names
+ * the move rather than the rule.
+ */
+function courseDirs(dir) {
+  let entries;
   try {
-    return readdirSync(dir).filter((name) => name.endsWith(".json")).sort();
+    entries = readdirSync(dir, { withFileTypes: true });
   } catch {
     return [];
   }
+  const loose = entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+    .map((entry) => entry.name)
+    .sort();
+  if (loose.length > 0) {
+    throw new Error(
+      `content/course/ holds ${loose.length} loose .json file(s) (${loose.join(", ")}). ` +
+        `A course is a DIRECTORY now: move them into content/course/<course-slug>/ and put ` +
+        `that course's own ${COURSE_FILE} beside them — title, shape and planKeys. Nothing was ` +
+        `applied; a block with no course is a block no page can reach.`,
+    );
+  }
+  return entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+}
+
+/** The block files of one course, in name order — everything but `course.json`. */
+function blockFiles(dir) {
+  try {
+    return readdirSync(dir)
+      .filter((name) => name.endsWith(".json") && name !== COURSE_FILE)
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * One course's own file, read and checked.
+ *
+ * ⚠️ **The slug is the DIRECTORY name and is not in the file.** One place, so
+ * the two can never disagree — and a `slug` key is refused rather than ignored,
+ * because a value somebody wrote and nothing reads is a value they believe they
+ * set. Same reasoning as `KNOWN` in `../../lib/config.ts`.
+ */
+function readCourseFile(dir, slug) {
+  const path = join(dir, slug, COURSE_FILE);
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      throw new Error(
+        `content/course/${slug}/ has no ${COURSE_FILE} — a course needs a title, a shape and ` +
+          `the Product Keys it is sold under. Without them nothing can serve it or gate it.`,
+      );
+    }
+    throw new Error(`content/course/${slug}/${COURSE_FILE} is not valid JSON: ${error.message}`);
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`content/course/${slug}/${COURSE_FILE} must be one course object`);
+  }
+
+  const problem = slugProblem(slug);
+  if (problem) {
+    throw new Error(`content/course/${slug}/: the directory name is not a slug — ${problem}`);
+  }
+  if ("slug" in parsed) {
+    throw new Error(
+      `content/course/${slug}/${COURSE_FILE}: remove "slug" — the DIRECTORY name is the ` +
+        `course's slug, and two places to write it are two places to write it differently.`,
+    );
+  }
+  if (typeof parsed.title !== "string" || !parsed.title.trim()) {
+    throw new Error(`content/course/${slug}/${COURSE_FILE}: a course needs a "title"`);
+  }
+  if (!COURSE_SHAPES.includes(parsed.shape)) {
+    throw new Error(
+      `content/course/${slug}/${COURSE_FILE}: "shape" is ${JSON.stringify(parsed.shape)} — ` +
+        `one of ${COURSE_SHAPES.join(", ")}. There is deliberately no default: "self-study" is ` +
+        `the most permissive shape, so a drip course whose shape went missing would open week ` +
+        `ten on day one.`,
+    );
+  }
+  if (!Array.isArray(parsed.planKeys) || parsed.planKeys.length === 0) {
+    throw new Error(
+      `content/course/${slug}/${COURSE_FILE}: "planKeys" is missing or empty — the course has ` +
+        `to be sold as something. A LIST, because one offering is one Digistore24 product per ` +
+        `billing interval: a course sold monthly and yearly names both keys, and holding ` +
+        `either one opens it.`,
+    );
+  }
+  if (parsed.planKeys.some((key) => typeof key !== "string" || !key)) {
+    throw new Error(
+      `content/course/${slug}/${COURSE_FILE}: every "planKeys" entry must be a non-empty string`,
+    );
+  }
+  const duplicate = parsed.planKeys.find((key, i) => parsed.planKeys.indexOf(key) !== i);
+  if (duplicate !== undefined) {
+    throw new Error(
+      `content/course/${slug}/${COURSE_FILE}: "planKeys" lists "${duplicate}" twice`,
+    );
+  }
+
+  return {
+    file: `${slug}/${COURSE_FILE}`,
+    slug,
+    title: parsed.title,
+    summary: typeof parsed.summary === "string" ? parsed.summary : null,
+    position: Number.isInteger(parsed.position) ? parsed.position : 0,
+    shape: parsed.shape,
+    planKeys: parsed.planKeys,
+  };
 }
 
 /**
@@ -71,24 +190,36 @@ function blockFiles(dir) {
  *
  * @param {string} [dir]
  */
-export function readBlocks(dir = CONTENT_DIR) {
+export function readCourseContent(dir = CONTENT_DIR) {
+  const courses = [];
   const blocks = [];
-  for (const name of blockFiles(dir)) {
-    let parsed;
-    try {
-      parsed = JSON.parse(readFileSync(join(dir, name), "utf8"));
-    } catch (error) {
-      throw new Error(`content/course/${name} is not valid JSON: ${error.message}`);
+  for (const courseSlug of courseDirs(dir)) {
+    courses.push(readCourseFile(dir, courseSlug));
+    for (const name of blockFiles(join(dir, courseSlug))) {
+      const rel = `${courseSlug}/${name}`;
+      let parsed;
+      try {
+        parsed = JSON.parse(readFileSync(join(dir, courseSlug, name), "utf8"));
+      } catch (error) {
+        throw new Error(`content/course/${rel} is not valid JSON: ${error.message}`);
+      }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error(`content/course/${rel} must be one block object`);
+      }
+      blocks.push({ file: rel, course: courseSlug, ...parsed });
     }
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new Error(`content/course/${name} must be one block object`);
-    }
-    blocks.push({ file: name, ...parsed });
   }
 
   // 🚨 Refuse a duplicate before writing anything. Half-applied content is
   // worse than none, and a duplicate slug would silently make one block
   // overwrite another on the way in — the run would report success.
+  //
+  // ⚠️ **Slug globally, position PER COURSE**, and the split is the whole point
+  // of this pass now. A slug reaching two courses is a real collision: the
+  // upsert's conflict target is the slug alone and learners' rows key on it
+  // (`../../schema.ts`). A POSITION reaching two courses is not a collision at
+  // all — every course orders its own blocks from 1, and the app-wide check
+  // this replaces would have refused the second course on its first day.
   const seenSlug = new Map();
   const seenPosition = new Map();
   for (const block of blocks) {
@@ -101,13 +232,14 @@ export function readBlocks(dir = CONTENT_DIR) {
       );
     }
     seenSlug.set(block.slug, block.file);
-    if (seenPosition.has(block.position)) {
+    const positionKey = `${block.course}\u0000${block.position}`;
+    if (seenPosition.has(positionKey)) {
       throw new Error(
-        `two blocks share position ${block.position}: ` +
-          `${seenPosition.get(block.position)} and ${block.file}`,
+        `two blocks of course "${block.course}" share position ${block.position}: ` +
+          `${seenPosition.get(positionKey)} and ${block.file}`,
       );
     }
-    seenPosition.set(block.position, block.file);
+    seenPosition.set(positionKey, block.file);
   }
 
   const seenUnit = new Map();
@@ -157,7 +289,19 @@ export function readBlocks(dir = CONTENT_DIR) {
     }
   }
 
-  return blocks;
+  return { courses, blocks };
+}
+
+/**
+ * The blocks alone — what every reader that predates the course level wants.
+ *
+ * Kept as its own export rather than making each caller destructure, because
+ * the two questions really are different: `readCourseContent()` is "what do the
+ * files say", `readBlocks()` is "what blocks are there". Each block now carries
+ * `course`, so a caller that needs the dimension has it without a second read.
+ */
+export function readBlocks(dir = CONTENT_DIR) {
+  return readCourseContent(dir).blocks;
 }
 
 /**
@@ -182,19 +326,28 @@ export function readBlocks(dir = CONTENT_DIR) {
  * @param {import("postgres").Sql} sql
  * @param {{ file: string, slug: string, units?: { slug: string }[] }[]} blocks
  */
-async function claimedSlugs(sql, blocks) {
+async function claimedSlugs(sql, { courses, blocks }) {
+  const courseFileFor = new Map();
   const blockFileFor = new Map();
   const unitFileFor = new Map();
+  for (const course of courses) courseFileFor.set(course.slug, course.file);
   for (const block of blocks) {
     blockFileFor.set(block.slug, block.file);
     for (const unit of block.units ?? []) unitFileFor.set(unit.slug, block.file);
   }
 
+  // The course table joins this pass for the same reason the other two are in
+  // it: an operator may create a course on the admin surface, and a content
+  // file claiming that slug would either be refused by the `where origin =
+  // 'content'` guard (leaving the file's blocks grafted onto a course no deploy
+  // carries) or, worse, read as applied. Three tables, one question.
+  const foreignCourses = await sql`select slug from courses_courses where origin <> 'content'`;
   const foreignBlocks = await sql`select slug from courses_blocks where origin <> 'content'`;
   const foreignUnits = await sql`select slug from courses_units where origin <> 'content'`;
 
   const clashes = [];
   for (const [rows, table, fileFor] of [
+    [foreignCourses, "courses_courses", courseFileFor],
     [foreignBlocks, "courses_blocks", blockFileFor],
     [foreignUnits, "courses_units", unitFileFor],
   ]) {
@@ -217,8 +370,8 @@ async function claimedSlugs(sql, blocks) {
  * @param {import("postgres").Sql} sql
  * @param {{ file: string, slug: string, units?: { slug: string }[] }[]} blocks
  */
-async function refuseClaimedSlugs(sql, blocks) {
-  const clashes = await claimedSlugs(sql, blocks);
+async function refuseClaimedSlugs(sql, content) {
+  const clashes = await claimedSlugs(sql, content);
   if (clashes.length === 0) return;
 
   throw new Error(
@@ -236,17 +389,45 @@ async function refuseClaimedSlugs(sql, blocks) {
  * @param {string} [contentDir] where the block files are — a test seam, see `readBlocks`
  */
 export async function apply(sql, { mediaIdFor }, contentDir = CONTENT_DIR) {
-  const blocks = readBlocks(contentDir);
+  const { courses, blocks } = readCourseContent(contentDir);
   let count = 0;
 
-  await refuseClaimedSlugs(sql, blocks);
+  await refuseClaimedSlugs(sql, { courses, blocks });
+
+  // 🚨 **Courses before blocks, in the same transaction.** A block names its
+  // course by foreign key, so the row has to be there — and doing it in a
+  // second applier file (which the convention would allow) would put the two
+  // in separate transactions, where a course that landed and blocks that did
+  // not leave a course with nothing in it. `scripts/content/apply.mjs` gives
+  // each applier its own transaction; this one keeps its own rollback whole.
+  const courseIdBySlug = new Map();
+  for (const course of courses) {
+    await sql`
+      insert into courses_courses (id, slug, origin, title, summary, position, shape, plan_keys)
+      values (${crypto.randomUUID()}, ${course.slug}, 'content', ${course.title},
+              ${course.summary}, ${course.position}, ${course.shape}, ${course.planKeys})
+      on conflict (slug) do update set
+        title = excluded.title,
+        summary = excluded.summary,
+        position = excluded.position,
+        shape = excluded.shape,
+        plan_keys = excluded.plan_keys
+      where courses_courses.origin = 'content'`;
+    count += 1;
+
+    const [row] = await sql`select id from courses_courses where slug = ${course.slug}`;
+    courseIdBySlug.set(course.slug, row.id);
+  }
 
   for (const block of blocks) {
+    const courseId = courseIdBySlug.get(block.course);
     await sql`
-      insert into courses_blocks (id, slug, origin, title, summary, position, release_after_days)
-      values (${crypto.randomUUID()}, ${block.slug}, 'content', ${block.title},
+      insert into courses_blocks (id, course_id, slug, origin, title, summary, position,
+                                  release_after_days)
+      values (${crypto.randomUUID()}, ${courseId}, ${block.slug}, 'content', ${block.title},
               ${block.summary ?? null}, ${block.position}, ${block.releaseAfterDays ?? 0})
       on conflict (slug) do update set
+        course_id = excluded.course_id,
         title = excluded.title,
         summary = excluded.summary,
         position = excluded.position,
@@ -316,17 +497,26 @@ export async function apply(sql, { mediaIdFor }, contentDir = CONTENT_DIR) {
  * @param {string} [contentDir] where the block files are — a test seam, see `readBlocks`
  */
 export async function plan(sql, contentDir = CONTENT_DIR) {
-  const blocks = readBlocks(contentDir);
+  const { courses, blocks } = readCourseContent(contentDir);
 
+  // Declaration order — each course, then its blocks with their lessons under
+  // them. That is the order a reader of the files already has in mind, and the
+  // course line is what tells them WHICH course the block lines belong to.
   const declared = [];
-  for (const block of blocks) {
-    declared.push({ table: "courses_blocks", slug: block.slug });
-    for (const unit of block.units ?? []) {
-      declared.push({ table: "courses_units", slug: unit.slug });
+  for (const course of courses) {
+    declared.push({ table: "courses_courses", slug: course.slug });
+    for (const block of blocks.filter((b) => b.course === course.slug)) {
+      declared.push({ table: "courses_blocks", slug: block.slug });
+      for (const unit of block.units ?? []) {
+        declared.push({ table: "courses_units", slug: unit.slug });
+      }
     }
   }
 
   const present = {
+    courses_courses: new Set(
+      (await sql`select slug from courses_courses where origin = 'content'`).map((row) => row.slug),
+    ),
     courses_blocks: new Set(
       (await sql`select slug from courses_blocks where origin = 'content'`).map((row) => row.slug),
     ),
@@ -349,7 +539,7 @@ export async function plan(sql, contentDir = CONTENT_DIR) {
     // which is the order a reader of the content files already has in mind. The
     // caller caps them; forty slugs in a tool answer is a payload nobody reads.
     subjects: declared.map((row) => row.slug),
-    problems: (await claimedSlugs(sql, blocks)).map(
+    problems: (await claimedSlugs(sql, { courses, blocks })).map(
       (clash) => `${clash} is held by a row this applier does not own — content-apply would refuse`,
     ),
   };

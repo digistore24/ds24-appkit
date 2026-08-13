@@ -15,14 +15,16 @@
 //     it names things by slug.
 //
 // Bare Node, like every other `run.mjs` command: no bundler, no TypeScript.
-import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import "../../scripts/lib/env.mjs";
 
+// The APPLIER's reader — see the note where it is used.
+import { readCourseContent } from "./content/appliers/course.mjs";
+
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
-const SHAPES = ["self-study", "drip", "workshop"];
 
 let failed = false;
 const ok = (line) => console.log(`  ✓ ${line}`);
@@ -49,104 +51,124 @@ if (!config) {
   if (config.enabled === true) ok("switched on");
   else warn("switched OFF — every course route answers 404 (this is the normal state until the content is written)");
 
-  if (config.shape === undefined) {
-    if (config.enabled === true) bad('"shape" is missing, and there is deliberately no default — the switch is on before the course was set up');
-  } else if (!SHAPES.includes(config.shape)) {
-    bad(`"shape" is ${JSON.stringify(config.shape)} — one of ${SHAPES.join(", ")}`);
-  } else {
-    ok(`shape: ${config.shape}`);
-  }
-
-  const products = readJson("config/digistore-products.json");
-  const keys = products && products.products ? Object.keys(products.products) : [];
-  if (typeof config.productKey !== "string" || !config.productKey) {
-    if (config.enabled === true) {
-      // ⚠️ Named as a SEQUENCE, not just as an absence. The commonest way to
-      // reach this line is not a broken app but an early switch: `module add
-      // courses` ships `enabled: false` and `productKey: null` on purpose, and
-      // an operator who flips the switch first sees a ✗ that reads like a
-      // defect in the module (reported 2026-08-12). `config/course.json` says
-      // this in its own `_comment`; the check used to make the reader go and
-      // find it.
+  // 🚨 **`shape` and `planKeys` are not read here any more, and a leftover one
+  // is a FINDING.** They moved onto the course row in Story 44.2, because an
+  // app may hold several courses and each is a different product. A value left
+  // in this file decides nothing — and a value nobody reads is one somebody
+  // believes they set, which is worse than one that is missing.
+  for (const key of ["shape", "productKey", "planKeys"]) {
+    if (config[key] !== undefined) {
       bad(
-        '"productKey" is missing — the course has to be sold as something. ' +
-          "If you have only just run `module add courses`: this is that window, " +
-          "not a fault. Switch `enabled` back off until the course is written and sold, " +
-          "or set the key now.",
+        `"${key}" in config/course.json does nothing since the app can hold several courses — ` +
+          `it belongs in content/course/<course-slug>/course.json, per course. Remove it here, ` +
+          `or the next reader will believe it is in force.`,
       );
     }
-    else warn("no productKey yet");
-  } else if (keys.length > 0 && !keys.includes(config.productKey)) {
-    // `hasPlan()` THROWS on an unknown key, so this is a 500 on the course
-    // page rather than a locked-out member — worth catching here.
-    bad(
-      `productKey "${config.productKey}" is not in config/digistore-products.json ` +
-        `(it has: ${keys.join(", ")}) — hasPlan() throws on an unknown key`,
-    );
-  } else {
-    ok(`sold as: ${config.productKey}`);
   }
 }
 
 console.log("\nThe content in this repo");
 
 const contentDir = join(ROOT, "content", "course");
-const files = existsSync(contentDir)
-  ? readdirSync(contentDir).filter((name) => name.endsWith(".json")).sort()
-  : [];
 
-if (files.length === 0) {
-  warn("no content/course/*.json yet — nothing to apply, so every page would be empty");
+// 🚨 **The APPLIER's own reader, not a second one.** This command used to walk
+// the directory itself and carry its own copy of the slug grammar — two parsers
+// over the operator's files, which is how the two start disagreeing about which
+// one is wrong. `readCourseContent()` is the writer's reader, so what it accepts
+// here is exactly what `content-apply` will accept.
+//
+// ⚠️ It THROWS on the first fault where this command collects. That is the right
+// trade at this door: it refuses whole-tree faults (a loose file from the old
+// layout, a missing `course.json`, a duplicate slug), and every one of them
+// stops a publish anyway — reporting three of them while the run cannot proceed
+// past the first is a longer message about the same standstill.
+let courses = [];
+let blocks = [];
+if (!existsSync(contentDir)) {
+  warn("no content/course/ yet — nothing to apply, so every page would be empty");
 } else {
-  const slugRe = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-  const seen = new Map();
-  let units = 0;
-  let withoutContent = [];
-  let withTask = [];
-
-  for (const name of files) {
-    let block;
-    try {
-      block = JSON.parse(readFileSync(join(contentDir, name), "utf8"));
-    } catch (error) {
-      bad(`content/course/${name}: not valid JSON — ${error.message}`);
-      continue;
-    }
-    for (const [what, slug] of [["block", block.slug], ...(block.units ?? []).map((u) => ["unit", u.slug])]) {
-      if (typeof slug !== "string" || !slugRe.test(slug)) {
-        bad(`content/course/${name}: ${what} slug ${JSON.stringify(slug)} is not a slug — lower-case ASCII, digits, single hyphens`);
-        continue;
-      }
-      if (seen.has(slug)) bad(`slug "${slug}" is used twice: ${seen.get(slug)} and ${name}`);
-      else seen.set(slug, name);
-    }
-    for (const unit of block.units ?? []) {
-      units += 1;
-      if (!unit.body && !unit.video) withoutContent.push(unit.slug);
-      // The field is `taskPrompt` here because that is what the applier reads
-      // out of a content file (`content/appliers/course.mjs`); it lands in the
-      // column `task_prompt`.
-      if (unit.taskPrompt) withTask.push(unit.slug);
-    }
+  try {
+    ({ courses, blocks } = readCourseContent(contentDir));
+  } catch (error) {
+    bad(error.message);
   }
+}
 
-  // ⚠️ Labelled rather than split, and the label is the whole of it. Blocks and
-  // lessons now have two origins (`origin` on both tables), but this command
-  // reads the REPO and has no database connection — nor should it get one: a
-  // developer's tool that needs a reachable database acquires an "I could not
-  // look" state, and `template/CLAUDE.md` is emphatic that it must never be
-  // confused with "there is nothing there". So this number is the content
-  // files' rows and says so; what an environment actually holds, of either
-  // origin, is `node run.mjs content-check`.
-  ok(`${files.length} block file(s), ${units} unit(s) — from the content files; rows authored on the course's admin surface live in one environment and are not counted here`);
-  if (withoutContent.length > 0) {
-    warn(
-      `${withoutContent.length} unit(s) have neither text nor video: ${withoutContent.join(", ")} — ` +
-        "those pages render a heading and nothing else",
+if (courses.length === 0 && existsSync(contentDir)) {
+  warn("no course directory under content/course/ yet — nothing to apply");
+}
+
+const products = readJson("config/digistore-products.json");
+const productKeys = products && products.products ? Object.keys(products.products) : [];
+
+/**
+ * 🚨 **Present is not the same as usable, and this command said otherwise until
+ * 2026-08-13.** A TOKEN package is in the registry, so a membership test passes
+ * it — and `hasPlan()` answers false for a balance for ever, so a course sold
+ * under one is a course NOBODY can open, including the buyer who paid. The app
+ * knows this (`lib/media/config.ts` → `planProblem()`, which `courseProblems()`
+ * calls), so the course would simply be invisible while this command printed
+ * "The course adds up".
+ *
+ * Found by hand, walking a field test: `planKeys: ["pro"]` was accepted here and
+ * refused by the app.
+ *
+ * ⚠️ A second READING of the registry, not a second rule: `planProblem()` is the
+ * authority and lives in TypeScript, which a bare-Node command cannot import.
+ * What is duplicated is one field lookup; what must not drift is the VERDICT,
+ * and `check.test.ts` holds this half against the registry the app ships.
+ */
+const tokenKeys = new Set(
+  Object.entries(products?.products ?? {})
+    .filter(([, def]) => def?.kind === "token")
+    .map(([key]) => key),
+);
+
+let units = 0;
+const withoutContent = [];
+
+for (const course of courses) {
+  const mine = blocks.filter((block) => block.course === course.slug);
+  const lessons = mine.reduce((sum, block) => sum + (block.units ?? []).length, 0);
+  units += lessons;
+
+  // The registry check the applier cannot make: it is bare Node with no view of
+  // `config/digistore-products.json`'s meaning, and `hasPlan()` THROWS on a key
+  // it does not know — so a typo here is a 500 on the course page rather than a
+  // locked-out member.
+  const unknown = productKeys.length > 0
+    ? course.planKeys.filter((key) => !productKeys.includes(key))
+    : [];
+  const balances = course.planKeys.filter((key) => tokenKeys.has(key));
+  if (unknown.length > 0) {
+    bad(
+      `${course.slug}: planKeys ${unknown.map((key) => `"${key}"`).join(", ")} not in ` +
+        `config/digistore-products.json (it has: ${productKeys.join(", ")}) — ` +
+        `hasPlan() throws on an unknown key`,
+    );
+  } else if (balances.length > 0) {
+    bad(
+      `${course.slug}: planKeys ${balances.map((key) => `"${key}"`).join(", ")} ` +
+        `${balances.length === 1 ? "is a token package" : "are token packages"} — a balance is ` +
+        `not an entitlement, so hasPlan() answers false for it for ever and NOBODY could open ` +
+        `this course, including the buyer who paid. Sell it under a subscription or a one-off.`,
+    );
+  } else {
+    ok(
+      `${course.slug} — ${course.shape}, sold as ${course.planKeys.join(", ")}, ` +
+        `${mine.length} block(s), ${lessons} lesson(s)`,
     );
   }
 
-  // 🚨 A hand-in prompt in a course that takes no hand-ins.
+  for (const block of mine) {
+    for (const unit of block.units ?? []) {
+      if (!unit.body && !unit.video) withoutContent.push(unit.slug);
+    }
+  }
+
+  // 🚨 A hand-in prompt in a course that takes no hand-ins — asked PER COURSE
+  // now, which is the whole reason it had to move: an app with a workshop and a
+  // self-study primer used to judge every prompt in the tree against one shape.
   //
   // A member never sees it: the lesson page renders the task only when the
   // shape is `workshop` AND the lesson carries a prompt. Without this line the
@@ -160,27 +182,45 @@ if (files.length === 0) {
   // — a workshop with no prompt anywhere — is deliberately NOT warned about: it
   // is the normal state on day one, the same argument `presence/check.ts` makes
   // about a lesson nobody has finished writing.
-  if (
-    config &&
-    SHAPES.includes(config.shape) &&
-    config.shape !== "workshop" &&
-    withTask.length > 0
-  ) {
+  if (course.shape !== "workshop") {
+    const withTask = mine.flatMap((block) =>
+      (block.units ?? []).filter((unit) => unit.taskPrompt).map((unit) => unit.slug),
+    );
+    if (withTask.length > 0) {
+      warn(
+        `${course.slug}: ${withTask.length} unit(s) ask for a hand-in (${withTask.join(", ")}) — ` +
+          `but this course's shape is "${course.shape}", and hand-ins exist under "workshop" ` +
+          `only. Nobody can answer them and no member ever sees the task. Either the shape in ` +
+          `content/course/${course.slug}/course.json is wrong or those prompts are.`,
+      );
+    }
+  }
+}
+
+if (courses.length > 0) {
+  // ⚠️ Labelled rather than split, and the label is the whole of it. This
+  // command reads the REPO and has no database connection — nor should it get
+  // one: a developer's tool that needs a reachable database acquires an "I
+  // could not look" state, and `template/CLAUDE.md` is emphatic that it must
+  // never be confused with "there is nothing there". What an environment
+  // actually holds, of either origin, is `node run.mjs content-check`.
+  ok(
+    `${courses.length} course(s), ${units} unit(s) — from the content files; rows authored on ` +
+      `the course's admin surface live in one environment and are not counted here`,
+  );
+  if (withoutContent.length > 0) {
     warn(
-      `${withTask.length} unit(s) ask for a hand-in: ${withTask.join(", ")} — but this course's ` +
-        `shape is "${config.shape}", and hand-ins exist under "workshop" only. Nobody can ` +
-        `answer them and no member ever sees the task. Either the shape in config/course.json ` +
-        `is wrong or those prompts are. (Read here from the content files only — a lesson ` +
-        `created on the course's admin surface lives in one environment and is not seen by this ` +
-        `command.)`,
+      `${withoutContent.length} unit(s) have neither text nor video: ${withoutContent.join(", ")} — ` +
+        "those pages render a heading and nothing else",
     );
   }
+}
 
+if (courses.length > 0) {
   const manifest = readJson("content/media-manifest.json");
   const declared = new Set((manifest?.entries ?? []).map((entry) => entry.path));
   const referenced = new Set();
-  for (const name of files) {
-    const block = readJson(join("content", "course", name)) ?? {};
+  for (const block of blocks) {
     for (const unit of block.units ?? []) {
       for (const path of [unit.cover, unit.video, unit.subtitle, unit.worksheet]) {
         if (path) referenced.add(path);

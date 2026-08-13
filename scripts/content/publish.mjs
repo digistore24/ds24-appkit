@@ -63,14 +63,12 @@ import {
 import { applyThroughSetup, callSetup, reportRefusal, resolveEnvName, toolRefusal } from "../setup/client.mjs";
 import { loadManifest, localFileFor } from "./_manifest.mjs";
 import "../lib/env.mjs";
+import { flagsFrom } from "../lib/args.mjs";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
 const argv = process.argv.slice(2);
-const flag = (name) => {
-  const i = argv.indexOf(`--${name}`);
-  return i === -1 ? null : (argv[i + 1] ?? null);
-};
+const flag = flagsFrom(argv);
 // Dry run by default — the `content-apply` / `content-media-sync` convention.
 // This one writes into a PRODUCTION database and a production bucket, so the
 // default is the one that cannot.

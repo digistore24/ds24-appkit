@@ -117,9 +117,11 @@ Per-domain scopes were considered and rejected for v1; the upgrade path is a
 
 ## The endpoints
 
-Every date is an ISO-8601 string. `accessUntil` stores the last millisecond
-of a day in UTC — render it pinned to `timeZone: "UTC"`, exactly like the
-dashboard, or every viewer east of Greenwich reads the next day.
+Every date is an ISO-8601 string. **`accessUntil` is rendered pinned to
+`timeZone: "UTC"`**, exactly like the dashboard — including on a mobile client,
+which is where a device's own zone is least predictable. Why, and what it costs
+when it is not: [`entitlements.md`](entitlements.md) → *`timeZone: "UTC"` is
+load-bearing*.
 
 | Endpoint | Method | What it answers |
 |---|---|---|

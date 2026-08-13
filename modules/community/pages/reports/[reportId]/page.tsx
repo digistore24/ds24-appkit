@@ -51,7 +51,7 @@ export default async function ReportDetailPage({
   if (!isCommunityEnabled()) notFound();
 
   const session = await requireActiveUser();
-  const actorId = session.user.id as string;
+  const actorId = session.user.id;
   const { reportId } = await params;
 
   // Both readers re-read the authority themselves (AD-63) and throw for

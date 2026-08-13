@@ -18,7 +18,7 @@ import {
   hashSecret,
   isValidToolName,
   looksLikeSetupKey,
-  mayAssignOwner,
+  mayAssignRole,
   mayRunDestructive,
   moduleToolNameProblem,
   needsConfirmation,
@@ -264,9 +264,29 @@ describe("the policies that are decisions", () => {
   // 🚨 AD-92. If this ever returns true for staging or production, the shortest
   // path from a prompt injection to an admin account is open again.
   it("refuses owner promotion outside DEV", () => {
-    expect(mayAssignOwner("development")).toBe(true);
-    expect(mayAssignOwner("staging")).toBe(false);
-    expect(mayAssignOwner("production")).toBe(false);
+    expect(mayAssignRole("development", "owner")).toBe(true);
+    expect(mayAssignRole("staging", "owner")).toBe(false);
+    expect(mayAssignRole("production", "owner")).toBe(false);
+  });
+
+  // 🚨 The half AD-92 was written without. A moderator is not an admin —
+  // `requireOwner()` refuses them exactly as it refuses a member — which is
+  // why the rule read as complete while naming only the owner. But a moderator
+  // sees `moderators`-visible rooms and removes other people's posts, and the
+  // injected sentence that asks for one costs the same as the one that asks
+  // for an owner.
+  it("refuses moderator promotion outside DEV too", () => {
+    expect(mayAssignRole("development", "moderator")).toBe(true);
+    expect(mayAssignRole("staging", "moderator")).toBe(false);
+    expect(mayAssignRole("production", "moderator")).toBe(false);
+  });
+
+  // The counter-proof: refusing everything would pass both tests above and
+  // take the tool's actual job with it.
+  it("lets a member be created in every environment", () => {
+    expect(mayAssignRole("development", "member")).toBe(true);
+    expect(mayAssignRole("staging", "member")).toBe(true);
+    expect(mayAssignRole("production", "member")).toBe(true);
   });
 
   it("demands a plan for a mutation outside DEV, and never for a read", () => {

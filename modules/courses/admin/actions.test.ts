@@ -16,9 +16,28 @@
 // and it is the second that a member's course depends on.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+/** The course every fixture writes into — hoisted, so the mock factory sees it. */
+const COURSE_ROW = {
+  id: "course-1",
+  slug: "kurs",
+  title: "Der Kurs",
+  summary: null,
+  position: 1,
+  shape: "drip" as string | null,
+  planKeys: ["basic_monthly"],
+  origin: "content",
+};
+
 vi.mock("../lib/config", () => ({
   isCourseEnabled: vi.fn(() => true),
-  courseShape: vi.fn(() => "drip"),
+}));
+
+// The shape and the sale live on the COURSE now. The admin surface reaches it
+// two ways and both are mocked: BY SLUG when a form names it (creating a
+// block), BY ID when a row already knows it (editing one).
+vi.mock("../lib/courses", () => ({
+  courseBySlugForOperator: vi.fn(async () => COURSE_ROW),
+  courseByIdForOperator: vi.fn(async () => COURSE_ROW),
 }));
 
 vi.mock("@/lib/authz", () => ({
@@ -51,6 +70,7 @@ vi.mock("../lib/manage", () => ({
 // registry catches that exactly as it catches a static one.
 vi.mock("../lib/content-files", () => ({
   contentFileIndex: vi.fn(() => ({
+    courses: new Map<string, string>(),
     blocks: new Map<string, string>(),
     units: new Map<string, string>(),
     unreadable: [] as string[],
@@ -85,7 +105,8 @@ vi.mock("next-intl/server", () => ({
 
 import { requireOwner } from "@/lib/authz";
 
-import { courseShape, isCourseEnabled } from "../lib/config";
+import { isCourseEnabled } from "../lib/config";
+import { courseByIdForOperator, courseBySlugForOperator } from "../lib/courses";
 import { contentFileIndex } from "../lib/content-files";
 import {
   blockById,
@@ -142,6 +163,7 @@ function form(fields: Record<string, string>): FormData {
 
 const OPERATOR_BLOCK = {
   id: "b-1",
+  courseId: "course-1",
   slug: "woche-1",
   origin: "operator",
   title: "Woche 1",
@@ -182,7 +204,7 @@ const ACTIONS = [
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(isCourseEnabled).mockReturnValue(true);
-  vi.mocked(courseShape).mockReturnValue("drip");
+  COURSE_ROW.shape = "drip";
   vi.mocked(requireOwner).mockResolvedValue({
     user: { id: "owner-1", role: "owner" },
   } as Awaited<ReturnType<typeof requireOwner>>);
@@ -194,6 +216,7 @@ beforeEach(() => {
   vi.mocked(blockSlugTaken).mockResolvedValue(false);
   vi.mocked(unitSlugTaken).mockResolvedValue(false);
   vi.mocked(contentFileIndex).mockReturnValue({
+    courses: new Map(),
     blocks: new Map(),
     units: new Map(),
     unreadable: [],
@@ -299,6 +322,7 @@ describe("🚨 AC 2 — a content row is unreachable from every write action", (
   it("names the file the row came from", async () => {
     vi.mocked(blockById).mockResolvedValue(CONTENT_BLOCK as never);
     vi.mocked(contentFileIndex).mockReturnValue({
+      courses: new Map(),
       blocks: new Map([["woche-2", "02-woche.json"]]),
       units: new Map(),
       unreadable: [],
@@ -333,6 +357,7 @@ describe("🚨 AC 3 — a slug a content file names is taken, applied or not", (
     // whole run over a slug nobody was warned about.
     vi.mocked(blockSlugTaken).mockResolvedValue(false);
     vi.mocked(contentFileIndex).mockReturnValue({
+      courses: new Map(),
       blocks: new Map([["woche-3", "03-woche.json"]]),
       units: new Map(),
       unreadable: [],
@@ -350,6 +375,7 @@ describe("🚨 AC 3 — a slug a content file names is taken, applied or not", (
   it("refuses a lesson slug the same way", async () => {
     vi.mocked(unitSlugTaken).mockResolvedValue(false);
     vi.mocked(contentFileIndex).mockReturnValue({
+      courses: new Map(),
       blocks: new Map(),
       units: new Map([["atmung", "02-woche.json"]]),
       unreadable: [],
@@ -407,7 +433,12 @@ describe("positions and emptiness", () => {
 
   it("leaves a row out of its own scope when moving it", async () => {
     await moveAction(EMPTY, form({ kind: "block", id: "b-1", position: "3" }));
-    expect(blockPositions).toHaveBeenCalledWith("b-1");
+    // 🚨 Two arguments now, and both matter: the positions are asked WITHIN the
+    // block's own course — an app-wide reading would refuse a move onto a
+    // position another course happens to occupy — and the block is still left
+    // out of its own scope, because re-saving a row where it already is is not
+    // a collision with itself.
+    expect(blockPositions).toHaveBeenCalledWith("course-1", "b-1");
     expect(setBlockPosition).toHaveBeenCalledWith("b-1", 3);
   });
 
@@ -428,7 +459,7 @@ describe("positions and emptiness", () => {
 
 describe("🚨 AC 5 — releaseAfterDays exists only in a drip course", () => {
   it("is read and kept in a drip course", async () => {
-    vi.mocked(courseShape).mockReturnValue("drip");
+    COURSE_ROW.shape = "drip";
     await createBlockAction(
       EMPTY,
       form({ slug: "woche-3", title: "X", position: "3", releaseAfterDays: "14" }),
@@ -443,7 +474,7 @@ describe("🚨 AC 5 — releaseAfterDays exists only in a drip course", () => {
       // The form does not render the field there — this is the other half:
       // a request that carries it anyway changes nothing, and there is
       // deliberately no error code for it. A field that is not there needs none.
-      vi.mocked(courseShape).mockReturnValue(shape);
+      COURSE_ROW.shape = shape;
       await createBlockAction(
         EMPTY,
         form({ slug: "woche-3", title: "X", position: "3", releaseAfterDays: "14" }),
@@ -463,6 +494,7 @@ describe("what a write reports back", () => {
       vi.mocked(blockById).mockResolvedValue(OPERATOR_BLOCK as never);
       vi.mocked(unitById).mockResolvedValue(OPERATOR_UNIT as never);
       vi.mocked(contentFileIndex).mockReturnValue({
+        courses: new Map(),
         blocks: new Map(),
         units: new Map(),
         unreadable: [],

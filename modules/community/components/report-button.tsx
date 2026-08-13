@@ -41,8 +41,8 @@ import { MAX_MODERATION_REASON_LENGTH } from "@/modules/community/lib/rules";
 
 import type { ActionState } from "@/modules/community/pages/actions";
 import { reportAction } from "@/modules/community/pages/reports/actions";
+import { EMPTY_ACTION_STATE } from "@/lib/action-state";
 
-const EMPTY: ActionState = { error: null, ok: null };
 
 export function ReportButton({
   postId,
@@ -67,7 +67,7 @@ export function ReportButton({
   const t = useTranslations("community");
   const tCommon = useTranslations("common");
   const [open, setOpen] = useState(false);
-  const [state, action] = useActionState(reportAction, EMPTY);
+  const [state, action] = useActionState(reportAction, EMPTY_ACTION_STATE);
   const [pending, start] = useTransition();
 
   useActionToast(state);

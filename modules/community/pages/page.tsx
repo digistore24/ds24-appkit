@@ -105,15 +105,15 @@ export default async function CommunityPage() {
   // ⚠️ And no member counts on these cards, ever. `db/schema-community.ts`
   // carries the argument; this is the surface where the idea arrives.
   const groups = await groupsFor({
-    memberId: session.user.id as string,
-    role: session.user.role as string,
+    memberId: session.user.id,
+    role: session.user.role,
   });
 
   // Which rooms hold something new. Existence per room, never a count: a
   // number here would start describing how busy a paid room is to somebody
   // who has not bought it, which is the roster rule arriving from a new angle.
   const unread = await unreadByGroup(
-    session.user.id as string,
+    session.user.id,
     groups.map((group) => group.id),
   );
 
@@ -125,7 +125,7 @@ export default async function CommunityPage() {
   // The moderation entry, for whoever the DATABASE says may moderate — never
   // the session's role. Cosmetics either way: the page re-reads it and answers
   // not-found to anybody else.
-  const authority = await moderationAuthority(session.user.id as string);
+  const authority = await moderationAuthority(session.user.id);
   const canModerate =
     authority !== null && mayModerate(authority, null, authority.duties) === null;
 

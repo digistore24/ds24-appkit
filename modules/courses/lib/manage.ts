@@ -27,7 +27,13 @@ import { users } from "@/db/schema-core";
 import { media } from "@/db/schema-media";
 import { escapeLikeFragment } from "@/lib/digistore/purchase-filter";
 
-import { coursesBlocks, coursesCompletions, coursesSubmissions, coursesUnits } from "../schema";
+import {
+  coursesBlocks,
+  coursesCompletions,
+  coursesCourses,
+  coursesSubmissions,
+  coursesUnits,
+} from "../schema";
 import type { CourseSlotId } from "../rules";
 
 /**
@@ -79,8 +85,18 @@ export interface BlockWithUnits {
  * big enough that a per-block query is an N+1 on the page every learner opens
  * first.
  */
-export async function courseOutline(): Promise<BlockWithUnits[]> {
-  const blocks = await db.select().from(coursesBlocks).orderBy(asc(coursesBlocks.position));
+export async function courseOutline(courseId: string): Promise<BlockWithUnits[]> {
+  // 🚨 **Scoped, and the parameter is required rather than optional.** It read
+  // the whole table until Story 44.2, which was correct while an app held one
+  // course and is the sharpest possible defect once it holds two: every page
+  // would serve every course's blocks to whoever got past ONE course's gate.
+  // An optional parameter would have let every existing call site keep the old
+  // meaning silently — the compiler finding them is the point.
+  const blocks = await db
+    .select()
+    .from(coursesBlocks)
+    .where(eq(coursesBlocks.courseId, courseId))
+    .orderBy(asc(coursesBlocks.position));
   if (blocks.length === 0) return [];
 
   const units = await db
@@ -146,6 +162,7 @@ export async function mediaKeysFor(ids: readonly (string | null)[]): Promise<Map
 
 /** One lesson's media slots, plus the release day of the block it sits in. */
 export interface UnitMediaRow {
+  readonly courseId: string;
   slug: string;
   title: string;
   /** From the BLOCK, exactly as `UnitSearchRow` carries it and for the same
@@ -174,9 +191,13 @@ export interface UnitMediaRow {
  * course's own (block, then position), the same as `courseOutline()`, so a
  * capped answer takes the same rows in the same order as the overview shows.
  */
-export async function unitsWithMedia(): Promise<UnitMediaRow[]> {
+export async function unitsWithMedia(courseIds: readonly string[]): Promise<UnitMediaRow[]> {
+  // Same rule as `searchUnits()`: scoped in the QUERY, and an empty scope
+  // answers nothing rather than everything.
+  if (courseIds.length === 0) return [];
   return db
     .select({
+      courseId: coursesBlocks.courseId,
       slug: coursesUnits.slug,
       title: coursesUnits.title,
       releaseAfterDays: coursesBlocks.releaseAfterDays,
@@ -188,14 +209,17 @@ export async function unitsWithMedia(): Promise<UnitMediaRow[]> {
     .from(coursesUnits)
     .innerJoin(coursesBlocks, eq(coursesUnits.blockId, coursesBlocks.id))
     .where(
-      or(
-        isNotNull(coursesUnits.coverMediaId),
-        isNotNull(coursesUnits.videoMediaId),
-        isNotNull(coursesUnits.subtitleMediaId),
-        isNotNull(coursesUnits.worksheetMediaId),
+      and(
+        inArray(coursesBlocks.courseId, [...courseIds]),
+        or(
+          isNotNull(coursesUnits.coverMediaId),
+          isNotNull(coursesUnits.videoMediaId),
+          isNotNull(coursesUnits.subtitleMediaId),
+          isNotNull(coursesUnits.worksheetMediaId),
+        ),
       ),
     )
-    .orderBy(asc(coursesBlocks.position), asc(coursesUnits.position));
+    .orderBy(asc(coursesBlocks.courseId), asc(coursesBlocks.position), asc(coursesUnits.position));
 }
 
 /** One unit by its slug, or `null`. */
@@ -206,6 +230,7 @@ export async function unitBySlug(slug: string) {
 
 /** One search candidate: a unit, plus the release day of the block it sits in. */
 export interface UnitSearchRow {
+  readonly courseId: string;
   slug: string;
   title: string;
   body: string | null;
@@ -235,8 +260,17 @@ export interface UnitSearchRow {
 export async function searchUnits(
   terms: readonly string[],
   limit: number,
+  courseIds: readonly string[],
 ): Promise<UnitSearchRow[]> {
   if (terms.length === 0) return [];
+  // 🚨 **Scoped to the courses the asker is IN, in the QUERY.** Filtering
+  // afterwards would work and is the wrong shape: the cap is applied by the
+  // database, so a member of the small course whose words all appear in the big
+  // one would get a page of rows that are then all thrown away, and the honest
+  // hits would be past the limit. An empty list is "no course", and the caller
+  // is expected not to ask — but the query answers nothing either way rather
+  // than everything.
+  if (courseIds.length === 0) return [];
   // `%`, `_` and `\` are LIKE syntax — an unescaped term from a member's
   // question would match a different set than the one they asked for.
   const patterns = terms.map((term) => `%${escapeLikeFragment(term)}%`);
@@ -246,18 +280,29 @@ export async function searchUnits(
       title: coursesUnits.title,
       body: coursesUnits.body,
       releaseAfterDays: coursesBlocks.releaseAfterDays,
+      // The hit has to say which course it is in — the url is composed from
+      // both slugs, and a hit that could not name its course would need a
+      // second lookup per row.
+      courseId: coursesBlocks.courseId,
     })
     .from(coursesUnits)
     .innerJoin(coursesBlocks, eq(coursesUnits.blockId, coursesBlocks.id))
     .where(
-      or(
-        ...patterns.flatMap((pattern) => [
-          ilike(coursesUnits.title, pattern),
-          ilike(coursesUnits.body, pattern),
-        ]),
+      and(
+        inArray(coursesBlocks.courseId, [...courseIds]),
+        or(
+          ...patterns.flatMap((pattern) => [
+            ilike(coursesUnits.title, pattern),
+            ilike(coursesUnits.body, pattern),
+          ]),
+        ),
       ),
     )
-    .orderBy(asc(coursesBlocks.position), asc(coursesUnits.position))
+    // 🚨 The course joins the tie-break, because block position is only unique
+    // WITHIN a course now — without it two courses' blocks at position 1 order
+    // by whatever the planner returns, and `rankRecords()` inherits a ranking
+    // that differs between machines.
+    .orderBy(asc(coursesBlocks.courseId), asc(coursesBlocks.position), asc(coursesUnits.position))
     .limit(limit);
 }
 
@@ -336,7 +381,15 @@ export interface OriginCounts {
  * an empty count and read as "asked and found none", which is the one thing
  * `content-check` may never confuse.
  */
-export async function countContent(): Promise<{ blocks: OriginCounts; units: OriginCounts }> {
+export async function countContent(): Promise<{
+  courses: OriginCounts;
+  blocks: OriginCounts;
+  units: OriginCounts;
+}> {
+  const courses = await db
+    .select({ origin: coursesCourses.origin, n: count() })
+    .from(coursesCourses)
+    .groupBy(coursesCourses.origin);
   const blocks = await db
     .select({ origin: coursesBlocks.origin, n: count() })
     .from(coursesBlocks)
@@ -345,7 +398,7 @@ export async function countContent(): Promise<{ blocks: OriginCounts; units: Ori
     .select({ origin: coursesUnits.origin, n: count() })
     .from(coursesUnits)
     .groupBy(coursesUnits.origin);
-  return { blocks: byOrigin(blocks), units: byOrigin(units) };
+  return { courses: byOrigin(courses), blocks: byOrigin(blocks), units: byOrigin(units) };
 }
 
 function byOrigin(rows: readonly { origin: string; n: number }[]): OriginCounts {
@@ -420,11 +473,17 @@ export async function unitCountFor(blockId: string): Promise<number> {
  * occupied; `exceptId` because re-saving a row at its own position is not a
  * collision with itself.
  */
-export async function blockPositions(exceptId?: string): Promise<number[]> {
+export async function blockPositions(courseId: string, exceptId?: string): Promise<number[]> {
+  // Per COURSE, not per app: every course orders its own blocks from 1, and the
+  // app-wide version of this question refused a second course's first block.
   const rows = await db
     .select({ position: coursesBlocks.position })
     .from(coursesBlocks)
-    .where(exceptId ? ne(coursesBlocks.id, exceptId) : undefined);
+    .where(
+      exceptId
+        ? and(eq(coursesBlocks.courseId, courseId), ne(coursesBlocks.id, exceptId))
+        : eq(coursesBlocks.courseId, courseId),
+    );
   return rows.map((row) => row.position);
 }
 
@@ -498,11 +557,12 @@ export interface UnitInput {
 
 /** Create a block of the operator's own. */
 export async function createBlock(
-  input: BlockInput & { slug: string; position: number },
+  input: BlockInput & { courseId: string; slug: string; position: number },
 ): Promise<{ id: string; slug: string }> {
   const [row] = await db
     .insert(coursesBlocks)
     .values({
+      courseId: input.courseId,
       slug: input.slug,
       origin: "operator",
       title: input.title,

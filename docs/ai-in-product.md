@@ -251,7 +251,7 @@ export const COMPANIONS: readonly Companion[] = [
     instruction:
       "You are a writing coach on a twelve-week course. Two short paragraphs, " +
       "warm but specific. Never rewrite their text for them.",
-    requiresPlan: "kurs_komplett",
+    requiresPlan: "course_complete",
     costsTokens: 0,
     maxInputChars: 12_000,
     load: loadDay,          // Recipe B
@@ -311,10 +311,14 @@ exist. Get this wrong and one customer's work is summarised back to another.
 One field:
 
 ```ts
-requiresPlan: "kurs_jahr",
+// ⚠️ ONE key, while `config/course.json` → `planKeys` is a list. A companion
+// inside a course sold monthly AND yearly must name a key every buyer holds —
+// or `null`, which means every signed-in member and leaves the decision to the
+// page's own gate. Picking one interval refuses the other half of the buyers.
+requiresPlan: "course_yearly",
 ```
 
-`hasPlan(memberId, "kurs_jahr")` does the rest inside the shipped action. The key
+`hasPlan(memberId, "course_yearly")` does the rest inside the shipped action. The key
 is a `kind: "subscription"` or `"one_time"` entry from
 `config/digistore-products.json`. **A token package cannot gate anything** — a
 balance is not an entitlement and `hasPlan()` answers `false` for one for ever,
@@ -368,7 +372,7 @@ const memberId = session.user.id as string; // the session type has `id?: string
 // 🚨 defect 2 above: these two are not in `serverExports` and are unreachable
 // from `app/`. Inside your own module they are fine.
 if (!isCompanionEnabled()) return { error: "companionUnavailable" };
-if (!(await hasPlan(memberId, "tool_jahr"))) return { error: "noAccess" };
+if (!(await hasPlan(memberId, "tool_yearly"))) return { error: "noAccess" };
 const account = await getTokenAccount(memberId);
 if (!hasSufficientBalance(account?.balance ?? 0, COST)) return { error: "insufficientBalance" };
 const checked = checkCompanionMessage(input, MAX_CHARS);

@@ -68,7 +68,8 @@ import type { MediaRow } from "@/db/schema-media";
 import { mayAccess } from "@/lib/media/manage";
 
 import { courseAccessFor, type CourseAccess } from "./lib/access";
-import { courseShape, isCourseEnabled } from "./lib/config";
+import { isCourseEnabled } from "./lib/config";
+import { usableCourses, type Course } from "./lib/courses";
 import { blockById, courseOutline, searchUnits, unitBySlug, unitsWithMedia } from "./lib/manage";
 import { mediaRowsFor } from "./lib/media";
 import { isUnlocked, unlockedAt } from "./rules";
@@ -87,14 +88,15 @@ const CANDIDATE_LIMIT = 200;
 /**
  * The ONE place a lesson's path is composed.
  *
- * `/dashboard/course/<slug>` is a real route
- * (`app/dashboard/course/[unit]/page.courses.tsx`), and the slug is spellable
+ * `/dashboard/course/<course>/<slug>` is a real route
+ * (`app/dashboard/course/[course]/[unit]/page.courses.tsx`), and both slugs are
+ * spellable
  * as a url because `slugProblem()` in `../rules.ts` refuses anything that is
  * not lower-case ASCII — which it does for exactly this reason. A second
  * helper beside this one is the two-arithmetics failure; there is not to be one.
  */
-function unitUrl(slug: string): string {
-  return `/dashboard/course/${slug}`;
+function unitUrl(courseSlug: string, slug: string): string {
+  return `/dashboard/course/${courseSlug}/${slug}`;
 }
 
 /**
@@ -129,13 +131,29 @@ function unitUrl(slug: string): string {
  * rather than a throw, which is why `isCourseEnabled()` comes before
  * `courseShape()`.
  */
-async function courseAccessForViewer(viewer: ContentViewer): Promise<CourseAccess | null> {
-  if (!isCourseEnabled()) return null;
-  if (viewer.memberId === null) return null;
+async function courseAccessForViewer(
+  viewer: ContentViewer,
+): Promise<{ course: Course; access: CourseAccess }[]> {
+  if (!isCourseEnabled()) return [];
+  if (viewer.memberId === null) return [];
+  const memberId = viewer.memberId;
+
+  // 🚨 **Every course this member is in, and only those.** An app may hold
+  // several, each sold on its own — a source that answered for "the" course
+  // would either serve one member material from a product they did not buy or
+  // hide one they did. Both are silent: the assistant simply says a different
+  // thing than the pages do.
+  //
   // 🚨 `null`, never the caller's role — header point 2. The operator preview
   // belongs to the PAGE, and this source cannot be talked into granting one.
-  const access = await courseAccessFor(viewer.memberId, null);
-  return access.entitled ? access : null;
+  const courses = await usableCourses();
+  const held = await Promise.all(
+    courses.map(async (course) => ({
+      course,
+      access: await courseAccessFor(memberId, null, course),
+    })),
+  );
+  return held.filter((row) => row.access.entitled);
 }
 
 /**
@@ -256,23 +274,29 @@ const coursesContentSource: ContentSource = {
   label: "this app's course — its blocks and the lessons the member has unlocked",
 
   async search(query, viewer, limit): Promise<ContentHit[]> {
-    const access = await courseAccessForViewer(viewer);
-    if (!access) return [];
+    const held = await courseAccessForViewer(viewer);
+    if (held.length === 0) return [];
 
     const terms = searchTerms(query);
     if (terms.length === 0) return [];
 
-    const shape = courseShape();
+    const byId = new Map(held.map((row) => [row.course.id, row]));
     const now = new Date();
-    const candidates = await searchUnits(terms, CANDIDATE_LIMIT);
+    const candidates = await searchUnits(terms, CANDIDATE_LIMIT, [...byId.keys()]);
 
     // 🚨 Locked lessons are dropped BEFORE the ranking, not filtered out of the
     // result: a drip course sells the pacing, and an answer on day three that
     // quotes week two gives away what was sold as timed. `list()` is the one
     // method allowed to name them, and it names them as locked.
-    const open = candidates.filter((row) =>
-      isUnlocked(row.releaseAfterDays, access.startedAt, shape, now),
-    );
+    // The unlock decision is per course: its own shape, and this member's own
+    // clock in it.
+    const open = candidates.filter((row) => {
+      const found = byId.get(row.courseId);
+      return (
+        found !== undefined &&
+        isUnlocked(row.releaseAfterDays, found.access.startedAt, found.course.shape!, now)
+      );
+    });
     const byRef = new Map(open.map((row) => [row.slug, row]));
 
     return rankRecords(
@@ -281,13 +305,16 @@ const coursesContentSource: ContentSource = {
       limit,
     ).map((record) => {
       const row = byRef.get(record.ref);
+      // The hit already knows its course — `searchUnits()` carries `courseId`
+      // precisely so the url can be composed without a second lookup per row.
+      const courseSlug = row ? (byId.get(row.courseId)?.course.slug ?? "") : "";
       return {
         sourceId: COURSES_SOURCE_ID,
         ref: record.ref,
         kind: "page" as const,
         title: record.title,
         snippet: snippetFor(record.body, terms),
-        url: unitUrl(record.ref),
+        url: unitUrl(courseSlug, record.ref),
         // The text card the page renders carries `id={slugifyAnchor(slug)}` —
         // and only when there IS a text. A lesson that is a video and nothing
         // else has no element with that id, so it gets no fragment.
@@ -297,18 +324,26 @@ const coursesContentSource: ContentSource = {
   },
 
   async get(ref, viewer): Promise<ContentDocument | null> {
-    const access = await courseAccessForViewer(viewer);
-    if (!access) return null;
+    const held = await courseAccessForViewer(viewer);
+    if (held.length === 0) return null;
 
     const unit = await unitBySlug(ref);
     if (!unit) return null;
     const block = await blockById(unit.blockId);
     // A unit whose block vanished cannot be placed, exactly as on the page.
     if (!block) return null;
+    // 🚨 The lesson's OWN course, and `null` when the asker is not in it. Unit
+    // slugs are unique app-wide, so without this line a member of the cheap
+    // course could name a lesson of the expensive one and be handed it — the
+    // source-side twin of the check `pages/unit/page.tsx` makes on the URL.
+    const found = held.find((row) => row.course.id === block.courseId);
+    if (!found) return null;
     // `null` for "no such lesson", "not entitled" and "not open yet" ALIKE —
     // `lib/content-source/types.ts` makes that indistinguishability the
     // contract, because anything else is an existence oracle.
-    if (!isUnlocked(block.releaseAfterDays, access.startedAt, courseShape(), new Date())) {
+    if (
+      !isUnlocked(block.releaseAfterDays, found.access.startedAt, found.course.shape!, new Date())
+    ) {
       return null;
     }
 
@@ -339,7 +374,7 @@ const coursesContentSource: ContentSource = {
       sourceId: COURSES_SOURCE_ID,
       ref: unit.slug,
       title: unit.title,
-      url: unitUrl(unit.slug),
+      url: unitUrl(found.course.slug, unit.slug),
       body,
       // The addressable headings the page really renders — which is the ONE
       // text card, under the unit's own slug. A lesson body is paragraphs, not
@@ -351,15 +386,16 @@ const coursesContentSource: ContentSource = {
   },
 
   async list(viewer): Promise<ContentTocEntry[]> {
-    const access = await courseAccessForViewer(viewer);
-    if (!access) return [];
+    const held = await courseAccessForViewer(viewer);
+    if (held.length === 0) return [];
 
-    const shape = courseShape();
     const now = new Date();
-    const blocks = await courseOutline();
     const entries: ContentTocEntry[] = [];
 
-    for (const block of blocks) {
+    for (const { course, access } of held) {
+      const shape = course.shape!;
+      const blocks = await courseOutline(course.id);
+      for (const block of blocks) {
       const opensAt = unlockedAt(block.releaseAfterDays, access.startedAt, shape);
       const locked = opensAt !== null && opensAt.getTime() > now.getTime();
       const where = block.summary ? `${block.title} — ${block.summary}` : block.title;
@@ -377,8 +413,11 @@ const coursesContentSource: ContentSource = {
           ref: unit.slug,
           title: unit.title,
           summary: locked ? lockedNote(opensAt, access.startedAt) : where,
-          url: locked ? null : unitUrl(unit.slug),
+          // The course's own summary leads, so a member in two courses can
+          // tell which is which from the entry alone.
+          url: locked ? null : unitUrl(course.slug, unit.slug),
         });
+      }
       }
     }
 
@@ -406,24 +445,29 @@ const coursesContentSource: ContentSource = {
    * asking first is the same answer at sixty times the cost.
    */
   async findMedia(query, viewer, limit): Promise<ContentHit[]> {
-    const access = await courseAccessForViewer(viewer);
-    if (!access) return [];
+    const held = await courseAccessForViewer(viewer);
+    if (held.length === 0) return [];
+    const byId = new Map(held.map((row) => [row.course.id, row]));
 
     const terms = searchTerms(query);
-    const shape = courseShape();
     const now = new Date();
     // Not `courseOutline()`: that is a `select()` of every column of every unit,
     // so it carries the whole course's lesson TEXTS — which this method never
     // reads. `unitsWithMedia()` brings the slots and the release day.
-    const units = await unitsWithMedia();
+    const units = await unitsWithMedia([...byId.keys()]);
 
     // Locked lessons are out here for the same reason they are out of
     // `search()`: a medium hit links the LESSON page, and that page redirects a
     // member who is early. A link that bounces is the one outcome worse than no
     // link.
-    const open = units.filter((unit) =>
-      isUnlocked(unit.releaseAfterDays, access.startedAt, shape, now),
-    );
+    // Per course: its own shape, and this member's own clock in it.
+    const open = units.filter((unit) => {
+      const found = byId.get(unit.courseId);
+      return (
+        found !== undefined &&
+        isUnlocked(unit.releaseAfterDays, found.access.startedAt, found.course.shape!, now)
+      );
+    });
 
     // 🚨 `findableSlotsOf()`, never `slotsOf()` — the page renders no element
     // for a subtitle, so a hit on one is a file the member can neither see nor
@@ -458,7 +502,7 @@ const coursesContentSource: ContentSource = {
           // 🚨 The PAGE that shows it, never `mediaUrlFor(row)`. A signed URL
           // expires under the model's feet and bypasses `mayAccess()` — that is
           // how a paid file becomes a public one.
-          url: unitUrl(unit.slug),
+          url: unitUrl(byId.get(unit.courseId)?.course.slug ?? "", unit.slug),
           anchor: pageAnchorFor(slot, row.storageKey),
           media: { path: row.storageKey, kind: row.kind, alt: row.alt },
         });

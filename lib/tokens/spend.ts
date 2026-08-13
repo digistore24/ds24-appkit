@@ -132,7 +132,7 @@ export async function spendTokens(args: {
   // First line, and the whole authorisation: signed out → /login, blocked →
   // /login. Nothing downstream re-derives who this is.
   const session = await requireActiveUser();
-  const memberId = session.user.id as string;
+  const memberId = session.user.id;
 
   // ── The one carve-out to "an impersonated session IS the member" ──────────
   // An Operator signed in as a customer can do everything that customer can,

@@ -60,7 +60,7 @@ export async function GET(): Promise<Response> {
     return Response.json({ error: "unauthenticated" }, { status: 401 });
   }
 
-  const memberId = user.session.user.id as string;
+  const memberId = user.session.user.id;
 
   if (isLimited(BUCKET, memberId, LIMIT)) {
     return Response.json({ error: "rateLimited" }, { status: 429 });

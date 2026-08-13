@@ -58,7 +58,7 @@ bound to. `node run.mjs ai-check` says both things in one screen.
   key and the chat becomes part of that plan:
 
   ```ts
-  if (await hasPlan(memberId, "basis_monatlich")) { /* the chat is open */ }
+  if (await hasPlan(memberId, "basic_monthly")) { /* the chat is open */ }
   ```
 
   It must be a `kind: "subscription"` or `"one_time"` product. A token package

@@ -42,7 +42,7 @@ import type { ActionState } from "../actions";
 async function actor(): Promise<string> {
   if (!isCommunityEnabled()) notFound();
   const session = await requireActiveUser();
-  return session.user.id as string;
+  return session.user.id;
 }
 
 async function toState(error: unknown): Promise<ActionState> {
