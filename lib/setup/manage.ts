@@ -10,7 +10,8 @@
 // but was not recorded" is not a reachable state.
 
 import { randomBytes } from "node:crypto";
-import { and, desc, eq, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import { newSetupKey, setupKeyPrefixOf } from "./key.mjs";
+import { and, desc, eq, gt, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { setupAudit, setupConfirmations, setupKeys, users } from "@/db/schema";
 import type { AppEnv } from "@/lib/env-guard";
@@ -18,14 +19,13 @@ import {
   CONFIRMATION_TTL_MS,
   SETUP_KEY_BYTES,
   SETUP_KEY_PREFIX,
-  canonicalInputHash,
+  canonicalCallHash,
   hashSecret,
   looksLikeSetupKey,
 } from "./rules";
 import type { SetupErrorCode } from "./rules";
 
 /** How much of a key is shown in a list so a row can be told apart. */
-const PREFIX_SHOWN = SETUP_KEY_PREFIX.length + 4;
 
 export interface SetupKeyRow {
   id: string;
@@ -56,14 +56,17 @@ export async function mintKey(input: {
   name: string;
   expiresAt?: Date | null;
 }): Promise<{ row: SetupKeyRow; secret: string }> {
-  const secret = SETUP_KEY_PREFIX + randomBytes(SETUP_KEY_BYTES).toString("base64url");
+  // The SAME arithmetic the two command-line minters use — `lib/setup/key.mjs`,
+  // never a fourth spelling of it here. This line was the last copy, and it is
+  // the one the app itself runs.
+  const secret = newSetupKey();
   const [row] = await db
     .insert(setupKeys)
     .values({
       ownerId: input.ownerId,
       name: input.name.trim(),
       tokenHash: hashSecret(secret),
-      prefix: secret.slice(0, PREFIX_SHOWN),
+      prefix: setupKeyPrefixOf(secret),
       expiresAt: input.expiresAt ?? null,
     })
     .returning(KEY_COLUMNS);
@@ -144,15 +147,20 @@ export async function touchKey(keyId: string): Promise<void> {
 /**
  * Mints the token a `plan` hands back.
  *
- * Bound to four things, so it cannot be carried anywhere: this key, this tool,
- * this exact input (through the ONE canonical hash — see `rules.ts`), and this
- * environment.
+ * Bound to five things, so it cannot be carried anywhere: this key, this tool,
+ * this exact input, this environment — and, where the call carries a payload,
+ * THOSE BYTES. The last one is A79: at `/api/setup/media` the input is a label
+ * and the act is the file, so an input-only binding confirmed the label. Both
+ * halves go through the ONE canonical hash — see `canonicalCallHash()` in
+ * `rules.ts`; `payloadSha` is null for every call that has no bytes, and the
+ * hash of such a call is exactly what it was before.
  */
 export async function issueConfirmation(input: {
   keyId: string;
   tool: string;
   appEnv: AppEnv;
   toolInput: Record<string, unknown>;
+  payloadSha?: string | null;
   now?: Date;
 }): Promise<string> {
   const now = input.now ?? new Date();
@@ -161,7 +169,7 @@ export async function issueConfirmation(input: {
     tokenHash: hashSecret(token),
     keyId: input.keyId,
     tool: input.tool,
-    inputHash: canonicalInputHash(input.toolInput),
+    inputHash: canonicalCallHash(input.toolInput, input.payloadSha),
     appEnv: input.appEnv,
     expiresAt: new Date(now.getTime() + CONFIRMATION_TTL_MS),
   });
@@ -183,6 +191,8 @@ export async function spendConfirmation(input: {
   tool: string;
   appEnv: AppEnv;
   toolInput: Record<string, unknown>;
+  /** The digest of the bytes THIS call carries, or null where it carries none. */
+  payloadSha?: string | null;
   now?: Date;
 }): Promise<SetupErrorCode | null> {
   const now = input.now ?? new Date();
@@ -195,20 +205,75 @@ export async function spendConfirmation(input: {
         eq(setupConfirmations.keyId, input.keyId),
         eq(setupConfirmations.tool, input.tool),
         eq(setupConfirmations.appEnv, input.appEnv),
-        eq(setupConfirmations.inputHash, canonicalInputHash(input.toolInput)),
+        // 🚨 The bytes are in here (A79), and NOT as a second column. A caller
+        // able to tell "wrong input" from "wrong file" apart could probe what a
+        // token was minted for — the same reason the return below is one code
+        // for every way this can fail. A mismatch matches no row, so the token
+        // is REFUSED and not SPENT: a mistyped upload must not cost the
+        // operator the plan they made.
+        eq(setupConfirmations.inputHash, canonicalCallHash(input.toolInput, input.payloadSha)),
         isNull(setupConfirmations.spentAt),
-        sql`${setupConfirmations.expiresAt} > ${now}`,
+        // 🚨 `gt()` and not a raw `sql` template, and this is the WRITE side of
+        // the rule `db/sql-cast.test.ts` states for reads: **a raw expression
+        // carries no mapper in either direction.** `gt()` knows the column, so
+        // the `Date` leaves through `PgTimestamp.mapToDriverValue` as the ISO
+        // string this project stores; a raw `${now}` hands the driver the `Date`
+        // object itself and the bind step throws
+        // `TypeError: The "string" argument must be … Received an instance of
+        // Date` — measured against Postgres 16 with Node 22.22.1, postgres
+        // 3.4.9 and drizzle-orm 0.45.2.
+        //
+        // ⚠️ A `types:` mapping on the client in `db/index.ts` cannot save this
+        // — there is none there for that very reason (story A74) — and it is
+        // worth knowing why: `drizzle(client)` OVERWRITES the driver's handler
+        // for every date OID with `(val) => val` (`postgres-js/driver.js` →
+        // `construct`), because drizzle intends to convert at the column. So on
+        // a drizzle connection a `Date` that reaches the driver is passed
+        // through unchanged into a function that wants a string — and the only
+        // thing that converts it is the column the raw template does not have.
+        //
+        // It threw BEFORE the tool ran, so outside DEV — the only place this
+        // function is reached, because `needsConfirmation()` is false in DEV —
+        // every `mode: "apply"` of every mutating tool answered 500. The two-act
+        // protocol `docs/setup-mcp.md` prescribes for STAGING and PROD could not
+        // complete its second act at all. `db/sql-date-param.test.ts` is the
+        // guard that keeps this shape out.
+        gt(setupConfirmations.expiresAt, now),
       ),
     )
     .returning({ tokenHash: setupConfirmations.tokenHash });
 
-  // One refusal for every way it could fail — wrong token, wrong input, wrong
-  // environment, already spent, expired. Telling them apart would let a caller
-  // probe what a token was minted for.
+  // One refusal for every way it could fail — wrong token, wrong input, a
+  // different FILE, wrong environment, already spent, expired. Telling them
+  // apart would let a caller probe what a token was minted for.
   return spent.length === 1 ? null : "confirmationInvalid";
 }
 
 // ── the record ──────────────────────────────────────────────────────────────
+
+/**
+ * The account behind an address, or null — for `setup_audit.subject_member_id`.
+ *
+ * 🚨 The one place the trail turns an ADDRESS into an ID, and it is here rather
+ * than in `dispatch.ts` because that file reaches the database through this one
+ * on purpose (see its header). `null` covers both "no such account" and "not an
+ * address", and the caller records it as an honest empty column: the row's
+ * `target` still holds what was asked for.
+ *
+ * ⚠️ Lower-cased and trimmed, the way `user_upsert` and `grant_by_hand` key
+ * their own lookups — an address that reached one of them as `A@b.de` must not
+ * fail to slice because the trail asked a different question.
+ */
+export async function memberIdForEmail(email: string): Promise<string | null> {
+  const address = email.trim().toLowerCase();
+  if (address === "") return null;
+  const [row] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.email, address))
+    .limit(1);
+  return row?.id ?? null;
+}
 
 export interface AuditEntry {
   keyId: string | null;

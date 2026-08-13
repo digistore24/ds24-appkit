@@ -137,6 +137,62 @@ dashboard, or every viewer east of Greenwich reads the next day.
 
 ✎ = needs a `write`-scope key.
 
+### What a MODULE adds to this surface
+
+The rows above are the core's, and they are there whenever the `api` module is.
+Two modules contribute rows of their own, and **their endpoints exist exactly
+while THEY are installed** — the declaration files under `app/api/v1/` are named
+`route.courses.ts` and `route.community.ts`, so the same switch a module's pages
+ride on decides these too.
+
+Both modules therefore declare `"requires": ["api"]`: a course or a community
+is installable only in an app that also has the API. `node run.mjs module add
+courses` in an app without it is refused by name, and `node run.mjs module
+check` says the dependency out loud on every run. That is a real cost — the
+`api_keys` table and the App-keys card arrive with it — and it is the price of
+the module owning its own handlers instead of the core learning about courses.
+
+| Endpoint | Method | What it answers | Module |
+|---|---|---|---|
+| `/api/v1/courses` | GET | the course's shape: blocks, lessons, what has opened, what this member ticked off. **Structure only** — no lesson text and no media ids, exactly as the overview page resolves no media | `courses` |
+| `/api/v1/courses/units/{slug}` | GET | one lesson: text, task prompt, media **ids**, this member's own hand-in. `403` while the block has not opened | `courses` |
+| `/api/v1/courses/units/{slug}/completion` | POST ✎ | `{ "done": true \| false }` — tick a lesson off, idempotent both ways | `courses` |
+| `/api/v1/courses/units/{slug}/submission` | POST ✎ | `{ "body": "…" }` — hand work in, for the accompanied workshop | `courses` |
+| `/api/v1/community/groups` | GET | the rooms this member may enter. A room they may not is **absent**, never a locked entry — presence in a plan-gated room is purchase information | `community` |
+| `/api/v1/community/discussions/{id}` | GET | one thread and a page of its posts (`?page=` a number or `last`, the default) | `community` |
+| `/api/v1/community/live` | POST | the cursor endpoint's bearer twin — `{ "scopes": [ … ] }`, the same answer shape the web app polls | `community` |
+| `/api/v1/community/discussions/{id}/posts` | POST ✎ | `{ "content": "…" }` — write into a room. Text only | `community` |
+
+🚨 **Media never travel as an address.** A lesson hands back `coverId`,
+`videoId`, `subtitleId`, `worksheetId`, and the client fetches
+`/api/v1/media/{id}` for each — which asks `mayAccess()` for that viewer and
+answers 404 for missing and forbidden alike. A signed URL returned from a list
+would expire *and* bypass that check, which is how a paid worksheet becomes a
+public one.
+
+⚠️ **The surface carries no private messages, and the `conversation` scope is
+refused by name** rather than left out. On the web app's own cookie-based twin
+of this endpoint, a conversation the viewer is not in comes back in the same
+neutral scope state every other refusal uses — deliberately indistinguishable
+from one that does not exist, because there the question is about one member's
+correspondence and any distinction is an oracle. Here the question is what this
+API carries at all, which is nobody's private information, so it is answered
+plainly. Nothing under `/api/v1` reads, writes, lists or counts a direct
+message.
+
+**Absent on purpose, on the same reasoning:** every authoring and moderation
+surface. No endpoint creates a block, a lesson, a room or a moderation act — a
+mobile companion is a viewer and a participant, and content is set up in the web
+app (`docs/mobile.md`).
+
+**A module's refusals are MAPPED, never forwarded.** `COURSES_ERROR_CODES` and
+`COMMUNITY_ERROR_CODES` are i18n keys a page turns into a German or English
+sentence for a person; this surface answers a program from the closed English
+vocabulary above, with the cause in `detail`. So "the hand-in is empty" is a
+`badRequest` and "this discussion is locked" is a `forbidden`. A module code
+with no mapping answers `internal` and names it — a refusal nobody planned,
+dressed as "your request was bad", sends the reader the wrong way.
+
 **There is deliberately no token-spend endpoint.** The price of an operation
 is computed in code (`spendTokens`, CLAUDE.md) — an endpoint taking an amount
 from the wire would hand the price to the caller. Paid API operations charge

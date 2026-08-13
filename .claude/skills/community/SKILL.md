@@ -117,7 +117,15 @@ it is asked once, before the pages, not again on every page afterwards.
 
 Five steps, in this order.
 
-**a. Install the module.** `node run.mjs module add community`, then
+**a. Install the module.** `node run.mjs module add api` **first** — the
+community serves endpoints on the HTTP API's surface and declares
+`requires: ["api"]`, so adding it on its own is refused by name and changes
+nothing. Say that to the user as a cost rather than a footnote: the `api_keys`
+table and the App-keys card on `/dashboard/account` arrive with it, and the API
+itself stays switched off in `config/api.json` until somebody decides otherwise
+([`docs/api.md`](../../../docs/api.md)).
+
+Then `node run.mjs module add community` and
 `node run.mjs db-migrate` — it brings twelve tables on its own migration chain,
 and they are not there until that second command has run. Skip it and every
 step below acts on a feature the app does not have: the routes do not exist,

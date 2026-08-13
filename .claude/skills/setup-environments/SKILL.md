@@ -73,6 +73,21 @@ It creates the first owner and one short-lived key, writes the key into `.env`
 without printing it — so it never reaches this transcript — and refuses once an
 owner exists. Mint a proper key on the page straight after.
 
+⚠️ **No browser here?** Then that refusal used to be the end of the road, and
+`content-check` with it. On a machine that already has `DATABASE_URL` — a local
+install, most often — mint one from the command line instead:
+
+```bash
+node run.mjs setup-key --apply          # dry run without --apply
+```
+
+It mints for an owner who already **exists** (creating the first one stays the
+bootstrap's job), writes it into `.env` and prints nothing. `--email` picks the
+owner when there is more than one; it refuses to guess. It hands you no
+privilege you did not have: whoever holds the connection string can already do
+everything this surface does. On a deployed environment you do not hold it, and
+the admin page is still the way. (Needs template 0.27.0.)
+
 ## Step 3 — do the work
 
 Ask for what you need in plain words. The tools are enumerated: if something is
@@ -178,9 +193,16 @@ database — then apply it with the token the plan returned.
 > Two more things the word "confirmation" invites people to believe and which it
 > does not carry: it does not mean a **human** agreed, and it does not mean the
 > plan you showed them a minute ago is **still true**. The token is spent on
-> entry and binds this input at this moment — so a publish that takes four
+> entry and binds this call at this moment — so a publish that takes four
 > minutes is fine, and an agent that thinks for three minutes between the plan
 > and the apply is correctly refused.
+>
+> 🚨 **"This call" includes the FILE at `media_upload`**, which is the one tool
+> whose act is the payload rather than something its input names: its `path`
+> points at a file on the user's machine that the app never opens. So a plan and
+> an apply carrying different bytes under the same `path` is refused — it used
+> to store the second file and report success. If the user edits the picture
+> between the two steps, plan again; the refusal does not spend the token.
 
 ## Step 4 — say what you did
 

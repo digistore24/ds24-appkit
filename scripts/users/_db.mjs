@@ -6,7 +6,7 @@
 // Access to the same Postgres as the app — connection via DATABASE_URL
 // (see db/index.ts). No need to import the TypeScript DB layer; the
 // users table is stable (id, email, name, role).
-import postgres from "postgres";
+import { connectUtc } from "../lib/pg-utc.mjs";
 import "../lib/env.mjs";
 
 /** Minimal flag parser: --key value  and  --flag (boolean). */
@@ -69,5 +69,5 @@ export function requireDatabaseUrl() {
 
 /** Opens a short-lived Postgres connection (max 1) for a script. */
 export function connect() {
-  return postgres(requireDatabaseUrl(), { max: 1 });
+  return connectUtc(requireDatabaseUrl(), { max: 1 });
 }

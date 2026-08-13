@@ -22,10 +22,12 @@
     "coursesSlotNotAttachable": "This slot takes {types} — this file is something else.",
     "coursesUploadTicketMismatch": "This upload was not created for this course and is not accepted here. Choose the file again in the video field.",
     "coursesReplyEmpty": "A reply with no text cannot be saved. Leave the hand-in open instead.",
-    "coursesReplyTooLong": "This reply is too long. At most {max, number} characters."
+    "coursesReplyTooLong": "This reply is too long. At most {max, number} characters.",
+    "coursesUnitTextTooLong": "That text is too long for one lesson. Shorten it, or split the lesson."
   },
   "courses": {
     "title": "Course",
+    "lessonTitle": "Lesson",
     "accountExportNote": "Your download contains which lessons you completed and what you handed in, together with the answer you were given.",
     "accountDeletionNote": "Deleting your account removes everything from the course: your progress, your hand-ins and the replies to them.",
     "brokenTitle": "The course is switched on, but its settings do not add up",
@@ -34,7 +36,7 @@
     "emptyBody": "The blocks and lessons live in content/course/*.json and reach this environment with `node run.mjs content-apply`. Rows do not travel with a deploy.",
     "progressTitle": "Your progress",
     "progressCount": "{done} of {total} lessons",
-    "nextStep": "Next up: {title}",
+    "nextStep": "Next up: <lesson>{title}</lesson>",
     "nothingOpen": "Nothing is open right now.",
     "locked": "not open yet",
     "done": "done",
@@ -53,7 +55,8 @@
     "submissionRepliedOn": "Answered on {date}.",
     "submissionYourText": "What you handed in",
     "submissionFrozen": "This hand-in has been answered — the text stays as it is now, because the answer refers to it.",
-    "submissionSaved": "Your hand-in arrived."
+    "submissionSaved": "Your hand-in arrived.",
+    "errors": {}
   },
   "coursesAdmin": {
     "title": "Course structure",
@@ -189,7 +192,6 @@
     "submissionSendConfirm": "Send",
     "submissionRewriteConfirm": "Rewrite",
     "submissionSaved": "Reply saved.",
-
     "digestSubject": "{count, plural, one {One hand-in is waiting for an answer} other {# hand-ins are waiting for an answer}}",
     "digestHeading": "{count, plural, one {One hand-in is waiting} other {# hand-ins are waiting}}",
     "digestBody": "{count, plural, one {One hand-in in your course is waiting to be read and answered.} other {# hand-ins in your course are waiting to be read and answered.}} This mail deliberately names nobody — who handed in what is in the app.",

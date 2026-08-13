@@ -75,15 +75,29 @@ that is all.
 
 What it answers carries, per block, its `unitCount`, and per lesson a
 `fingerprint`: 64 hex characters over that lesson's own content — slug, title,
-body, task prompt and which of the four media slots are filled — so an agent
+body, task prompt and, per media slot, **which file sits in it** — so an agent
 preparing a publish can see **which** lesson differs from its files without
 downloading the course. Same content in two environments, same string; a changed
-body moves exactly that lesson's. It is a comparison key and never a secret, and
-no lesson text goes over this surface either way. ⚠️ One thing it deliberately
-does not catch: swapping one video for **another** video in the same slot reads
-as unchanged, because what is hashed is the slot's occupancy and not the media
-id — an id exists once, in one database, so hashing it would make DEV and PROD
-disagree about a lesson that is identical in both.
+body moves exactly that lesson's, and so does a video swapped for another video.
+It is a comparison key and never a secret, and no lesson text goes over this
+surface either way.
+
+⚠️ **What identifies the file is its storage key, not its media id.** A media id
+exists once, in one database, so hashing one would make DEV and PROD disagree
+about a lesson that is identical in both. The key
+`content/<topic>/<file>.<ext>` is what `content-apply` looked the row up under,
+so the repo composes it from its own manifest path and the environment reads it
+off the row — two sides, one string, and neither of them sends it: what travels
+is the digest.
+
+🚨 **The payload also says which version of the fingerprint it computed**
+(`fingerprintVersion`), and that matters exactly once: right after a template
+update, when this repo has moved and the environment has not. The two versions
+are not comparable, so every lesson reads as differing — `courses-diff` says so
+in its own paragraph above the lists instead of letting you read it as a course
+that changed overnight. Deploy the environment and the report goes quiet again.
+Publishing in that state is not wrong; the applier upserts by slug and writes
+the same rows either way.
 
 ### Before you publish: what would actually change
 
@@ -639,13 +653,36 @@ list goes unused. Waiting and answered are therefore two statements, joined in
 JS, each an ordered index scan. Whoever "simplifies" them into one has removed
 the index, not a query.
 
-**Text a member typed is never rendered as markup.** One renderer,
+**Text a member typed is never rendered as markup.** Its renderer is
 `modules/courses/components/member-text.tsx` — paragraphs and line breaks, and
 deliberately not the community's post renderer, which also turns `http(s)` runs
 into anchors: a clickable foreign link written by a member on the screen of the
 one account that may do everything is a phishing surface.
+
+**A lesson body is the OPERATOR's text, and it does get markdown** — a small
+subset: `#` headings, `- ` bullet lists, `**bold**`, `*italic*` and markdown
+links, whose target must be `http(s)`, `mailto:`, `tel:` or a path inside the
+app — anything else keeps its text and loses its link. It goes
+through the core's `lib/legal/markdown.ts` and `components/legal-body.tsx`, the
+same pair the legal pages use, because both parse to DATA and never to a string
+of markup — there is no `dangerouslySetInnerHTML` on either path and therefore
+no sanitiser to keep current. Two writers reach that column and both are the
+operator: the admin form behind `requireOwner()`, and a repo content file
+applied with a `SETUP_KEY`. A third would re-open the question of whether links
+belong here.
+
+⚠️ **The two are not interchangeable, and the difference is who typed the
+text.** Whoever adds a text surface to this module decides that first:
+member-written prose gets `member-text.tsx`, operator-written prose gets the
+markdown pair. Reaching for the wrong one is how a member's link ends up
+clickable on an owner's screen.
+
+Two scanners hold the line, and neither covers the other's ground:
 `modules/courses/lib/render-safety.test.ts` fails the build on the raw-HTML
-escape hatch anywhere in this module's rendering tree.
+escape hatch anywhere in this module's three rendering directories, and
+`modules/courses/pages/guard.test.ts` claim 3 additionally scans the two CORE
+files by name — a scan of this module alone would keep saying "no markup here"
+while the file actually rendering the lesson sat one import away and unread.
 
 **The responding path is a person, first-class.** Build the human path at
 full length: submissions listed, read, replied to, the reply reaching the
@@ -764,6 +801,46 @@ Key from becoming a door, and the transport are in
 [`docs/community.md`](community.md) → ***3. Access is derived at read time, and
 stored nowhere***. (It needs the community switched on; that is one line in
 `config/community.json` and a deploy.)
+
+---
+
+## Over the API — the course, for a member's own program
+
+A mobile companion reads the course through `/api/v1`
+([`docs/api.md`](api.md)), on a per-member bearer key rather than a cookie: the
+outline, one lesson, ticking a lesson off, handing work in.
+
+Because the module contributes routes to that surface, it declares
+`"requires": ["api"]` — **a course is installable only in an app that also has
+the API module.**
+
+Three properties are the whole design, and each is a failure prevented:
+
+- **The outline carries structure and no content.** Block and lesson titles, the
+  order, what has opened, what this member ticked off — and no lesson text, no
+  media ids, not even the task prompt. One request that returned bodies would
+  hand week ten to somebody in week one, past every check the lesson endpoint
+  makes.
+- 🚨 **The unlock rule is re-applied at every lesson door**, exactly as it is in
+  every Server Action. The outline saying a block is shut tells a *separate* HTTP
+  request nothing, and a rule enforced in one of two places is enforced nowhere.
+  A locked lesson answers `403`; a member with no entitlement at all answers
+  `404`, because they must not learn the course exists.
+- **Media travel as IDS.** A lesson hands back `coverId`, `videoId`,
+  `subtitleId`, `worksheetId`; the client fetches `/api/v1/media/{id}`, which
+  asks `mayAccess()` for that viewer. A signed URL in the lesson's own answer
+  would expire and would bypass that check — the failure `lib/media.ts` is
+  written around.
+
+**`rules.ts` already travelled**, and now it has a matching transport: this
+module's `coreExport` copies the pure arithmetic into a companion repo
+(`docs/mobile.md`), so the app and the companion compute the same unlock and
+progress answers from the same code rather than from two implementations that
+agree today.
+
+**No authoring over the API.** Blocks, lessons, media slots and the operator's
+reply queue have no endpoints and are not getting any: content is set up in the
+web app, and a companion is a viewer and a participant.
 
 ---
 

@@ -12,11 +12,11 @@
 
 import { after } from "next/server";
 import { guardSetup, type SetupRequestBody } from "./guard";
-import { issueConfirmation, recordAct, touchKey } from "./manage";
+import { issueConfirmation, memberIdForEmail, recordAct, touchKey } from "./manage";
 import { callerKey, needsConfirmation, setupError, type SetupErrorCode } from "./rules";
 import { toolsByName } from "./registry";
 import { isSetupEnabled } from "./config";
-import type { SetupContext, SetupTool } from "./types";
+import type { SetupContext, SetupResult, SetupTool } from "./types";
 
 // `callerKey()` moved to ./rules — it is pure and a second reader
 // (`lib/diagnostics/guard.ts`) must not reach the database through this file.
@@ -81,6 +81,89 @@ function targetFromInput(tool: SetupTool, input: Record<string, unknown>): strin
   return trimmed === "" ? null : trimmed;
 }
 
+/**
+ * 🚨 The two named exceptions to *identifiers and numbers, never payload* —
+ * `role` and `reason` — on **every** path that has validated input.
+ *
+ * ⚠️ **This is a data-protection decision and not a formatting one, so it is
+ * written down.** Both columns are argued by name in
+ * `docs/data-protection.md` → *The setup surface* and in `docs/setup-mcp.md` →
+ * *The record*: the role IS the security question the trail exists to answer,
+ * and a written reason IS the accountability. Until now both were recorded only
+ * where the act SUCCEEDED — so a refused `grant_revoke` kept no reason at all,
+ * although the tool demanded one before it would run. That left the trail
+ * thinnest at exactly the acts somebody later demands an account of: the two
+ * tools that carry a reason are the two that touch a person's access, one of
+ * them irreversibly.
+ *
+ * What makes recording it on a refusal defensible rather than merely useful:
+ *
+ * · it is the SAME value, not a wider class. Here `input` is
+ *   `validateInput()`'s output, so `reason` is the tool's own declared string
+ *   bounded by its schema (`minLength: 3`, `maxLength: 500`) and `role` is one
+ *   of three literals from an enum. Nothing a caller can widen.
+ * · it belongs to the member and reaches them. The row is sliceable per person
+ *   (`subject_member_id`), so it is in BOTH Art. 15 exports.
+ * · it goes when they go: `deleteAccountRow()` empties `setup_audit.reason` for
+ *   that member in the same transaction as the delete. The ACT stays and the
+ *   prose does not — the sentence `docs/data-protection.md` § 14g makes about
+ *   every other reason in this app.
+ *
+ * 🚨 **The guard's refusal branch does NOT call this, and that line stays.** It
+ * runs before `validateInput()` has judged anything: there may be no tool at
+ * all, and `body.input` is whatever a stranger posted — unbounded, untyped, and
+ * chosen by somebody who need not even hold a key. Writing that into a trail
+ * whose rule is "identifiers and numbers" would let an unauthenticated caller
+ * choose what these columns say.
+ */
+function accountability(input: Record<string, unknown>): {
+  role: string | null;
+  reason: string | null;
+} {
+  return {
+    role: typeof input.role === "string" ? input.role : null,
+    reason: typeof input.reason === "string" ? input.reason : null,
+  };
+}
+
+/**
+ * 🚨 WHO the act was about, as a `users.id` — the column both Art. 15 exports
+ * slice on.
+ *
+ * The same two-source shape `target` has, and for the same reason: what an act
+ * DID beats what it was asked to do. A tool that learns the member by acting
+ * hands it back in its result (`grant_revoke` reads it off the grant row); every
+ * other one declares the input field that carries the ADDRESS, and the lookup
+ * happens here — once, on every path, including the refusals where the tool
+ * itself never looked.
+ *
+ * ⚠️ `null` is written for an address that matches no account, and that is not
+ * the same statement as a tool with no subject at all: the declaration says
+ * which of the two a row is, and `target` still holds the address that matched
+ * nobody. Never a guess, and never the address itself — the column is a foreign
+ * key, and a row pointing at an account that does not exist is worse than an
+ * empty one.
+ *
+ * ⚠️ It never throws. A lookup that failed must not turn an act — least of all
+ * a refusal — into a 500; the trail loses one column and says nothing untrue.
+ */
+async function subjectMemberIdFor(
+  tool: SetupTool,
+  input: Record<string, unknown>,
+  result?: SetupResult,
+): Promise<string | null> {
+  if (result?.subjectMemberId) return result.subjectMemberId;
+  if (tool.subjectEmailField === null) return null;
+  const value = input[tool.subjectEmailField];
+  if (typeof value !== "string") return null;
+  try {
+    return await memberIdForEmail(value);
+  } catch (error) {
+    console.error("[setup] could not resolve the subject of an act", tool.name, error);
+    return null;
+  }
+}
+
 export async function runSetupCall(args: {
   request: Request;
   body: SetupRequestBody;
@@ -94,6 +177,10 @@ export async function runSetupCall(args: {
     body,
     tools: toolsByName(),
     callerKey: callerKey(request),
+    // 🚨 The bytes reach the guard, not only the tool (A79). A confirmation at
+    // the multipart door is bound to the payload as well as to the input, and
+    // the guard is where both acts of the protocol meet — see step 12 there.
+    file,
   });
 
   if (!guard.ok) {
@@ -137,20 +224,36 @@ export async function runSetupCall(args: {
     return guard.response;
   }
 
-  const { tool, mode, input, appEnv, keyId, ownerId } = guard;
+  const { tool, mode, input, appEnv, keyId, ownerId, payloadSha } = guard;
 
   try {
     const result = await tool.run({ appEnv, ownerId, mode, file }, input);
 
     // A non-DEV plan of a mutating tool hands back the token its apply needs.
+    //
+    // ⚠️ Not for a plan that REFUSED, and that clause is the same signal read
+    // once. A token is a capability with two minutes on it
+    // (`CONFIRMATION_TTL_MS`); minting one for an act the tool has just
+    // declined offers a second act that will decline identically, and puts the
+    // capability in a transcript for nothing. Measured before it was written: a
+    // `user_upsert` refused for owner promotion in production handed back a
+    // confirmation, and the apply that spent it was refused again. An operator
+    // whose refusal has since been resolved plans again — which is what re-reads
+    // the state anyway.
+    //
+    // 🚨 `payloadSha` comes off the GUARD and is not computed again here: it is
+    // what the `apply` will be checked against, so a second spelling of it would
+    // be a plan and an apply that can disagree about the same file (A79).
     const confirmation =
-      mode === "plan" && needsConfirmation(appEnv, tool.mutates)
-        ? await issueConfirmation({ keyId, tool: tool.name, appEnv, toolInput: input })
+      mode === "plan" && !result.refused && needsConfirmation(appEnv, tool.mutates)
+        ? await issueConfirmation({ keyId, tool: tool.name, appEnv, toolInput: input, payloadSha })
         : undefined;
 
     await recordAct({
       keyId,
       ownerId,
+      // WHO it was about, so the member's own Art. 15 export can find it.
+      subjectMemberId: await subjectMemberIdFor(tool, input, result),
       appEnv,
       tool: tool.name,
       // Derived from the result rather than invented per tool — which is the
@@ -161,16 +264,34 @@ export async function runSetupCall(args: {
       // them. Written this way so one invariant holds on every path: a tool that
       // declares a target field always records one.
       target: result.subjects[0] ?? targetFromInput(tool, input),
-      role: typeof input.role === "string" ? input.role : null,
-      reason: typeof input.reason === "string" ? input.reason : null,
-      outcome: mode === "apply" ? "applied" : "planned",
-      // 🚨 A refinement of the outcome on the SUCCESS path, and the reason it is
-      // here rather than a fourth enum value: `setup_outcome` has three, an enum
-      // value is a migration, and the one state that could not otherwise be told
-      // from this row is a publish that got through half its appliers. `applied`
-      // with a plausible number and no code would say the act succeeded.
-      // An identifier, never a sentence — `SetupResult.code` says so.
-      code: (result.code ?? null) as SetupErrorCode | null,
+      // One spelling of the two named exceptions, so the success path and the
+      // refusal paths cannot drift into recording different things.
+      ...accountability(input),
+      // 🚨 A tool that REFUSED by answering is recorded as a refusal, and this
+      // is the whole of A75. Five branches — `ownerPromotionRefused`,
+      // `notFound`, `badRequest`, `noUploadAddress`, `appliersUnreadable` —
+      // hand back a `SetupResult` rather than throwing, so this path is the one
+      // that runs and it used to write `applied`/`planned` with `code: null`.
+      // Measured against a real database, all five. `docs/setup-mcp.md`'s
+      // four-state table has always said a refusal before any write is
+      // `refused` carrying the refusal's code; this makes the trail say it.
+      //
+      // ⚠️ Read off `SetupResult.refused`, a DECLARED field, and never guessed.
+      // `created === 0` is also what an honest no-op success looks like — a
+      // `user_upsert` of somebody who already has that role is `applied` with
+      // no rows — and a `detail` beginning "refused:" is prose. A53 settled the
+      // same question for `target`: the tool says, this file does not read tea
+      // leaves.
+      outcome: result.refused ? "refused" : mode === "apply" ? "applied" : "planned",
+      // 🚨 Two things in one column, and they cannot collide: `refused` REPLACES
+      // the outcome, `code` REFINES it. The refinement is here rather than as a
+      // fourth enum value because `setup_outcome` has three, an enum value is a
+      // migration, and the one state that could not otherwise be told from this
+      // row is a publish that got through half its appliers — `applied` with a
+      // plausible number and no code would say the act succeeded. A refusal
+      // never has a partial to report, so the `??` is an ordering and not a
+      // choice. An identifier, never a sentence — `SetupResult` says so of both.
+      code: (result.refused ?? result.code ?? null) as SetupErrorCode | null,
       rows: result.created + result.changed,
     });
 
@@ -205,12 +326,14 @@ export async function runSetupCall(args: {
       await recordAct({
         keyId,
         ownerId,
+        subjectMemberId: await subjectMemberIdFor(tool, input),
         appEnv,
         tool: tool.name,
         // 🚨 WHAT it was refused ABOUT. Without this the row said
         // `contentMediaLengthMismatch` and not which of forty files — see
         // `targetFromInput()`.
         target: targetFromInput(tool, input),
+        ...accountability(input),
         outcome: "refused",
         // The audit's `code` column is text, and a domain code is what actually
         // happened. Widening SETUP_ERROR_CODES to hold every domain's
@@ -247,9 +370,11 @@ export async function runSetupCall(args: {
     await recordAct({
       keyId,
       ownerId,
+      subjectMemberId: await subjectMemberIdFor(tool, input),
       appEnv,
       tool: tool.name,
       target: targetFromInput(tool, input),
+      ...accountability(input),
       outcome: "refused",
       code: "internal",
     }).catch(() => {});

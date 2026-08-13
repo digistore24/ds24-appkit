@@ -2,6 +2,8 @@
   "community": {
     "title": "Community",
     "subtitle": "Meet the other members of this app.",
+    "groupTitle": "Group",
+    "discussionTitle": "Discussion",
     "brokenTitle": "The community is switched on, but the configuration does not hold",
     "brokenIntro": "config/community.json has problems — while they persist, the community stays invisible to members:",
     "emptyTitle": "No groups yet",

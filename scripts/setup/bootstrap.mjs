@@ -40,13 +40,17 @@
 //   node run.mjs setup-bootstrap                     # dry run
 //   node run.mjs setup-bootstrap --email … --apply
 //   node run.mjs setup-bootstrap --env prod --apply  # writes SETUP_KEY_PROD
-import { randomBytes, createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import "../lib/env.mjs";
 import { setEnvValue } from "../lib/env-write.mjs";
+import { hashSetupKey, newSetupKey, setupKeyPrefixOf } from "../../lib/setup/key.mjs";
 import { connect } from "../users/_db.mjs";
 
 const ENV_FILE = ".env";
-const KEY_PREFIX = "ds24setup_";
+// ⚠️ The key arithmetic is IMPORTED, not spelled here. It used to be a copy of
+// `lib/setup/rules.ts`'s — the prefix, the byte count and the sha256, all
+// correct and all separately maintainable. `lib/setup/key.mjs` says why one
+// implementation is the point.
 /** Short on purpose: the first act after this is to mint a proper one. */
 const BOOTSTRAP_DAYS = 7;
 
@@ -102,12 +106,19 @@ try {
     process.exit(0);
   }
 
-  const secret = KEY_PREFIX + randomBytes(32).toString("base64url");
-  const hash = createHash("sha256").update(secret, "utf8").digest("hex");
+  const secret = newSetupKey();
+  const hash = hashSetupKey(secret);
   const expiresAt = new Date(Date.now() + BOOTSTRAP_DAYS * 86_400_000);
 
   // One transaction: an owner without a key, or a key without an owner, are
   // both states somebody would have to clean up by hand.
+  //
+  // ⚠️ The expiry goes in as `sql.typed.utcTimestamp(...)`. A bare `${expiresAt}`
+  // is typed timestamptz on the wire while `setup_keys.expires_at` is
+  // `timestamp`, so Postgres converts it in the database session's zone — the
+  // key's life would be off by the SERVER's offset, in the direction that makes
+  // it longer on a database east of UTC. `scripts/lib/pg-utc.mjs` refuses the
+  // bare form; this is the shape that passes.
   const ownerId = await sql.begin(async (tx) => {
     const [owner] = await tx`
       insert into users (id, email, role)
@@ -118,7 +129,8 @@ try {
     await tx`
       insert into setup_keys (id, owner_id, name, token_hash, prefix, expires_at)
       values (${randomUUID()}, ${owner.id}, ${"bootstrap"}, ${hash},
-              ${secret.slice(0, KEY_PREFIX.length + 4)}, ${expiresAt})
+              ${setupKeyPrefixOf(secret)},
+              ${sql.typed.utcTimestamp(expiresAt)})
     `;
     return owner.id;
   });

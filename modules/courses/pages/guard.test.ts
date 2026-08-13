@@ -51,6 +51,27 @@ const FILES = [...sourceFiles(DIR)].map((file) => ({
 }));
 
 /**
+ * The renderers this tree hands prose to, wherever they live.
+ *
+ * 🚨 **Claim 3 is about what reaches the member's screen, not about a
+ * directory.** Since 2026-08-12 a lesson body goes through the CORE's markdown
+ * subset (`lib/legal/markdown.ts` → `components/legal-body.tsx`) rather than a
+ * hand-rolled split inside `pages/`, and a scan of `pages/` alone would have
+ * kept saying "no markup here" while the file actually doing the rendering sat
+ * one import away and unread. `lib/render-safety.test.ts` scans this module's
+ * three directories and would miss it for the same reason.
+ *
+ * So the imported renderer is scanned too. It is deliberately a SHORT list of
+ * named files rather than a walk of the import graph: what this claim protects
+ * is prose becoming markup, and there are two files in the template that turn
+ * prose into elements.
+ */
+const RENDERERS = ["components/legal-body.tsx", "lib/legal/markdown.ts"].map((file) => ({
+  file,
+  source: blankComments(readFileSync(join(ROOT, file), "utf8")),
+}));
+
+/**
  * The `"use server"` files, found rather than listed.
  *
  * There is one today. A list kept by hand is one a second file joins late —
@@ -135,11 +156,17 @@ describe("nothing under the course's member pages renders text as markup", () =>
         `if it reads nothing, which is the failure mode of every grep-the-tree test.`,
     ).toContain(join(DIR, "unit", "ui.tsx"));
     expect(FILES.length).toBeGreaterThanOrEqual(4);
+
+    // The imported renderer is a file on disk too, and a wrong path here would
+    // make the scan below read an empty string and pass about nothing.
+    for (const { file, source } of RENDERERS) {
+      expect(source.length, `${file} read as empty — the renderer moved`).toBeGreaterThan(200);
+    }
   });
 
-  it(`🚨 nothing under pages/ renders member text as markup`, () => {
+  it(`🚨 neither this tree nor the renderer it imports turns prose into markup`, () => {
     const offenders: string[] = [];
-    for (const { file, source } of FILES) {
+    for (const { file, source } of [...FILES, ...RENDERERS]) {
       source.split(/\r?\n/).forEach((line, index) => {
         if (line.includes(NEEDLE)) offenders.push(`${file}:${index + 1}`);
       });
@@ -147,11 +174,16 @@ describe("nothing under the course's member pages renders text as markup", () =>
 
     expect(
       offenders,
-      `this tree renders a member's own hand-in and, once 6.2 lands, an answer written about ` +
-        `it — so raw HTML must not be rendered anywhere in it. Prose becomes paragraphs through ` +
-        `React text children (unit/page.tsx → Paragraphs), which escape by construction. If a ` +
-        `renderer that emits HTML ever becomes the right answer, the sanitiser, its allow-list ` +
-        `and its tests come first, and the reasoning goes in this comment.`,
+      `this tree renders a member's own hand-in and an answer written about it — so raw HTML ` +
+        `must not be rendered anywhere in it. Prose becomes React elements through parsers that ` +
+        `hand back DATA and never a string of markup: a member's text through ` +
+        `components/member-text.tsx (paragraphs, deliberately no markdown at all — a clickable ` +
+        `foreign link written by a member is a phishing surface), the operator's lesson body ` +
+        `through lib/legal/markdown.ts + LegalBody, which are scanned here BY NAME because they ` +
+        `live outside this module. Both escape by construction, and neither has a sanitiser to ` +
+        `keep current because neither produces HTML. If a renderer that emits HTML ever becomes ` +
+        `the right answer, the sanitiser, its allow-list and its tests come first, and the ` +
+        `reasoning goes in this comment.`,
     ).toEqual([]);
   });
 });

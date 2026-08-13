@@ -6,6 +6,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isYes, parseArgs } from "./_client.mjs";
+import { blankComments } from "../lib/source-text.mjs";
 
 describe("isYes", () => {
   // Digistore24 answers boolean fields with the STRINGS "Y" and "N". Both are
@@ -70,7 +71,9 @@ describe("no Y/N field is compared as a boolean", () => {
   it.each(YN_FIELDS)("never compares .%s against true/false", (field) => {
     const bad = new RegExp(`\\.${field}\\s*[!=]==\\s*(true|false)`);
     const offenders = scripts
-      .map((file) => ({ file, src: readFileSync(join(dir, file), "utf8") }))
+      // Comments blanked: a script may WRITE DOWN the comparison it must not
+      // make without being reported for making it.
+      .map((file) => ({ file, src: blankComments(readFileSync(join(dir, file), "utf8")) }))
       .filter(({ src }) => bad.test(src))
       .map(({ file }) => file);
 

@@ -11,7 +11,9 @@ reference underneath is
 
 ```
 https://YOUR-DOMAIN/api/healthz      → {"status":"ok"}
-https://YOUR-DOMAIN/api/readyz       → {"status":"ready"}
+https://YOUR-DOMAIN/api/readyz       → {"status":"ready"}   (503
+                                       {"status":"not-ready"} when the database
+                                       does not answer)
 ```
 
 `readyz` talks to the database and answers **503** `{"status":"not-ready"}` when it
@@ -20,6 +22,14 @@ check watches — `setup-monitoring` step 4. 🚨 Whoever configures such a chec
 to the **status code** and matches the body only as `"status":"ready"` **with the
 quotes**: the bare word `ready` is a substring of `not-ready`, and a check written on
 it stays green while the database is unreachable.
+
+🚨 **Say which way round that keyword rule points, in the same breath.** The alarm
+fires when `"status":"ready"` is **ABSENT**, never when it is present — and the
+providers name that polarity opposite ways (UptimeRobot's `keyword_type` wants its
+*not exists* value; Better Stack's plain `keyword` type is already the right one and
+its `keyword_absence` type is the inverse). Read the field's own wording instead of
+copying a value: the wrong way round is a check that is green exactly while the app
+is down. Per provider: `setup-monitoring` → `references/providers.md`.
 
 `node run.mjs health --url https://YOUR-DOMAIN` asks these two plus the database, the
 jobs, the media store and the last payment notification, and gives one verdict.

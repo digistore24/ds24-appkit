@@ -65,7 +65,7 @@
 // with ERR_MODULE_NOT_FOUND before its first line, and nothing said so, because
 // nothing imports a command. `scripts/imports.test.ts` walks this tree now.
 import "../../../scripts/lib/env.mjs";
-import postgres from "postgres";
+import { connectUtc } from "../../../scripts/lib/pg-utc.mjs";
 
 import config from "../../../config/community.json" with { type: "json" };
 
@@ -118,7 +118,18 @@ if (!url) {
 // is computed in the database's own calendar arithmetic instead of guessed in
 // JavaScript. The house rule about `startToday - n × 86_400_000` is the same
 // rule one unit up.
-const sql = postgres(url, { max: 1 });
+//
+// 🚨 **Coming back out of the database does not make the boundary safe.**
+// `now() - interval` is a `timestamptz`, so it arrives here as a correct `Date`
+// — and going back IN as a bare `${cutoff}` it is typed timestamptz again,
+// while `created_at` is `timestamp`. Postgres resolves that by casting the
+// COLUMN into the database session's zone, which moves this window by the
+// server's offset: measured on a Postgres at `timezone='Europe/Berlin'`, the
+// sibling `db-prune-ipn` deleted rows 30 and 90 minutes INSIDE its window.
+// Every boundary below therefore travels as `sql.typed.utcTimestamp(...)`, and
+// `scripts/lib/pg-utc.mjs` refuses the bare form rather than deleting private
+// correspondence that was still inside the operator's own retention window.
+const sql = connectUtc(url, { max: 1 });
 
 try {
   // ── The private messages ──────────────────────────────────────────────────
@@ -138,7 +149,7 @@ try {
       const [row] = await sql`
         select count(*)::int as rows
         from community_messages
-        where created_at < ${cutoff}`;
+        where created_at < ${sql.typed.utcTimestamp(cutoff)}`;
       console.log(
         `Private messages: ${row.rows} older than ${months} month(s) would go ` +
           `(before ${day}).`,
@@ -151,7 +162,7 @@ try {
       // shown an empty shell.
       const deleted = await sql`
         delete from community_messages
-        where created_at < ${cutoff}
+        where created_at < ${sql.typed.utcTimestamp(cutoff)}
         returning id`;
       console.log(
         `✓ ${deleted.length} private message(s) older than ${months} month(s) deleted.`,
@@ -182,7 +193,7 @@ try {
     const [row] = await sql`
       select count(*)::int as rows
       from community_spam_reports
-      where consumed_at is not null and created_at < ${auditCutoff}`;
+      where consumed_at is not null and created_at < ${sql.typed.utcTimestamp(auditCutoff)}`;
     const [open] = await sql`
       select count(*)::int as rows
       from community_spam_reports where consumed_at is null`;
@@ -194,7 +205,7 @@ try {
   } else {
     const deleted = await sql`
       delete from community_spam_reports
-      where consumed_at is not null and created_at < ${auditCutoff}
+      where consumed_at is not null and created_at < ${sql.typed.utcTimestamp(auditCutoff)}
       returning id`;
     console.log(
       `✓ ${deleted.length} handled report(s) older than ${auditDays} days deleted.`,
@@ -207,7 +218,7 @@ try {
       select count(*)::int as rows,
              min(created_at) as oldest, max(created_at) as newest
       from community_moderation_audit
-      where created_at < ${auditCutoff}`;
+      where created_at < ${sql.typed.utcTimestamp(auditCutoff)}`;
     console.log(
       `Moderation trail: ${row.rows} row(s) older than ${auditDays} days would ` +
         `go (before ${auditDay})` +
@@ -220,7 +231,7 @@ try {
   } else {
     const deleted = await sql`
       delete from community_moderation_audit
-      where created_at < ${auditCutoff}
+      where created_at < ${sql.typed.utcTimestamp(auditCutoff)}
       returning id`;
     console.log(
       `✓ ${deleted.length} moderation-trail row(s) older than ${auditDays} days deleted.`,

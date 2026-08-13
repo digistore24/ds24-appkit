@@ -166,3 +166,78 @@ describe("cli.mjs prints them", () => {
     expect(cli).toContain("step.why");
   });
 });
+
+describe("the render step — a module that brings a panel and no page", () => {
+  // 🚨 Reported 2026-08-12: somebody did every printed step for `companion` and
+  // reasonably concluded the module system was broken. The closing line said
+  // `set "enabled": true, then restart`, as though something would appear.
+  it("names the component, because that is the thing that has to be rendered", () => {
+    const steps = afterInstall({ components: { CompanionPanel: "x.tsx" }, docs: "docs/a.md" });
+    expect(steps).toEqual([
+      { kind: "render", components: ["CompanionPanel"], docs: "docs/a.md" },
+    ]);
+  });
+
+  // 🚨 `activity` really has this shape. "Render <useActivity>" would be telling
+  // somebody to write something that is not an element.
+  it("names what can be rendered and leaves the hook out", () => {
+    const steps = afterInstall({ components: { ActivityPanel: "a.tsx", useActivity: "b.ts" } });
+    expect(steps[0]).toMatchObject({ components: ["ActivityPanel"], docs: null });
+  });
+
+  it("says nothing to a module whose seam is hooks only", () => {
+    expect(afterInstall({ components: { useThing: "t.ts" } })).toEqual([]);
+  });
+
+  // The counter-tests. A module with a page of its own IS visible once it is
+  // switched on, and telling its installer to render something would send them
+  // looking for work that is not there.
+  it("says nothing to a module that brings routes", () => {
+    const steps = afterInstall({ app: ["dashboard/x"], components: { Thing: "t.tsx" } });
+    expect(steps.some((s) => s.kind === "render")).toBe(false);
+  });
+
+  it("says nothing to a module that brings a menu", () => {
+    const steps = afterInstall({ nav: "nav.ts", components: { Thing: "t.tsx" } });
+    expect(steps.some((s) => s.kind === "render")).toBe(false);
+  });
+
+  it("says nothing to a module that brings no component at all", () => {
+    expect(afterInstall({ tables: ["t"] }).some((s) => s.kind === "render")).toBe(false);
+  });
+
+  it("comes last — render what exists, after it exists", () => {
+    const steps = afterInstall({
+      tables: ["t"],
+      config: "config/x.json",
+      components: { Panel: "p.tsx" },
+    });
+    expect(steps.map((s) => s.kind)).toEqual(["migrate", "switch", "render"]);
+  });
+});
+
+describe("the render step against the modules really in this tree", () => {
+  // ⚠️ Derived from the manifest, never declared in it — so the assertion is
+  // about the DERIVATION and not about a list kept here. A fifth module that is
+  // a seam gets the step the day it lands.
+  const ROOT = fileURLToPath(new URL("../../", import.meta.url));
+  const ids = readdirSync(join(ROOT, "modules"), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+
+  it("finds the modules at all", () => {
+    expect(ids.length).toBeGreaterThan(2);
+  });
+
+  it("tells exactly the module with a component and no page of its own", () => {
+    for (const id of ids) {
+      const manifest = JSON.parse(readFileSync(join(ROOT, "modules", id, "module.json"), "utf8"));
+      const seam =
+        Object.keys(manifest.components ?? {}).length > 0 &&
+        !(Array.isArray(manifest.app) && manifest.app.length > 0) &&
+        typeof manifest.nav !== "string";
+      const told = afterInstall(manifest).some((step) => step.kind === "render");
+      expect(told, `${id}: told=${told}, seam=${seam}`).toBe(seam);
+    }
+  });
+});

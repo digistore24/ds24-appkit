@@ -501,7 +501,12 @@
     "blocked_notSynced": "Not created at Digistore24 yet",
     "blocked_notConnected": "Digistore24 is not connected yet",
     "blocked_error": "Checkout is currently unavailable. Please try again shortly.",
-    "autoReloadLabel": "Keep my balance topped up automatically — when it runs low, this package is purchased again at the same price and charged to the payment details from this purchase. You can turn it off at any time under Billing."
+    "autoReloadLabel": "Keep my balance topped up automatically",
+    "previewTitle": "Preview — nothing can be bought here",
+    "previewBody": "This page shows the buy forms as a visitor would see them once the products exist at Digistore24. Nothing was asked of Digistore24, and none of these buttons leads to a checkout: “Buy” lands on the same error message it otherwise would. This preview exists only on your own machine (APP_ENV=development and localhost) — a published app does not have it. For a real checkout: node run.mjs ds24-connect and node run.mjs ds24-sync.",
+    "previewOffer": "No Digistore24 products yet — you can still look at the buy forms:",
+    "previewOfferLink": "Open the preview",
+    "autoReloadHint": "When it runs low, this package is purchased again at the same price and charged to the payment details from this purchase. You can turn it off at any time under Billing."
   },
   "optin": {
     "title": "Thanks for your purchase!",

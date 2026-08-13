@@ -24,6 +24,7 @@ import { and, asc, count, desc, eq, ilike, isNotNull, isNull, inArray, ne, or, s
 
 import { db } from "@/db";
 import { users } from "@/db/schema-core";
+import { media } from "@/db/schema-media";
 import { escapeLikeFragment } from "@/lib/digistore/purchase-filter";
 
 import { coursesBlocks, coursesCompletions, coursesSubmissions, coursesUnits } from "../schema";
@@ -102,6 +103,45 @@ export async function courseOutline(): Promise<BlockWithUnits[]> {
       .filter((unit) => unit.blockId === block.id)
       .map(({ blockId: _blockId, createdAt: _createdAt, ...unit }) => unit),
   }));
+}
+
+/**
+ * 🚨 The join `courseOutline()` deliberately does not make: media id → storage key.
+ *
+ * It exists so `unitFingerprint()` can hash the value that TRAVELS. A media id
+ * exists once, in one database; the storage key `content/<topic>/<file>.<ext>`
+ * is what `mediaIdFor()` looked the row up under, so the repo can derive the
+ * same string from its own manifest path. Without it, the four slots could only
+ * be hashed as a boolean, and a lesson whose video was swapped for another read
+ * as untouched in `node run.mjs courses-diff` — measured, and the reason this
+ * function exists at all (`./fingerprint.mjs` carries the numbers).
+ *
+ * ⚠️ **A door of its own rather than a third query inside `courseOutline()`,
+ * and that is the whole decision.** `courseOutline()` is read by the member's
+ * overview and by the admin page, and the overview *deliberately resolves no
+ * media at all* (`./media.ts` says so and gives the reason). Folding this in
+ * would put an extra query on the page every learner opens first, to compute a
+ * value only the setup surface reads. So the tool asks for it and nobody else
+ * pays — the same split `unitsWithMedia()` already made in this file.
+ *
+ * ONE query, ids de-duplicated first: four slots across sixty lessons is a
+ * handful of distinct rows, and a course legitimately reuses one cover.
+ *
+ * A key MISSING from the answer is not this function's to judge — it hands back
+ * what it found, and `unitFingerprint()` refuses an occupied slot with no key
+ * with a sentence naming the lesson. The FK is `set null`, so a non-null id has
+ * a row and this cannot happen from the database side.
+ */
+export async function mediaKeysFor(ids: readonly (string | null)[]): Promise<Map<string, string>> {
+  const wanted = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  if (wanted.length === 0) return new Map();
+
+  const rows = await db
+    .select({ id: media.id, storageKey: media.storageKey })
+    .from(media)
+    .where(inArray(media.id, wanted));
+
+  return new Map(rows.map((row) => [row.id, row.storageKey]));
 }
 
 /** One lesson's media slots, plus the release day of the block it sits in. */

@@ -30,8 +30,25 @@ describe("the migrator runs core first, then one chain per module", () => {
   });
 
   it("applies every installed module's own folder", () => {
-    expect(migrate).toContain("for (const mod of modules)");
-    expect(migrate).toMatch(/migrationsFolder: `\$\{mod\.dir\}\/\$\{folder\}`/);
+    expect(migrate).toContain("for (const mod of chains)");
+    expect(migrate).toMatch(/migrationsFolder: `\$\{mod\.dir\}\/\$\{mod\.manifest\.migrations\}`/);
+  });
+
+  it("🚨 closes with the number of chains it RAN, not the number installed", () => {
+    // Reported by a developer using the template, 2026-08-12: with all five
+    // modules installed the migrator announced four chains and then said five,
+    // because `companion` declares no tables and the summary counted
+    // `modules.length`. One line in a deploy log, contradicting the four above
+    // it.
+    //
+    // Comments blanked: the file EXPLAINS the defect right where it fixed it,
+    // and a scanner that cannot tell code from the sentence about the code
+    // makes the explanation impossible to write (`template/CLAUDE.md` →
+    // *A checker that reads source as TEXT*).
+    const code = blankComments(migrate);
+    expect(code).toContain('from "./migration-plan.mjs"');
+    expect(code).toMatch(/chainSummary\(chains\.length\)/);
+    expect(code, "the closing line counts the installed list again").not.toMatch(/modules\.length/);
   });
 
   it("🚨 gives each module its own journal table", () => {
@@ -45,7 +62,7 @@ describe("the migrator runs core first, then one chain per module", () => {
     // A module's tables carry foreign keys to `users` and `media`; those must
     // exist before the constraint is created.
     const core = migrate.indexOf('migrationsFolder: "drizzle"');
-    const loop = migrate.indexOf("for (const mod of modules)");
+    const loop = migrate.indexOf("for (const mod of chains)");
     expect(core).toBeGreaterThan(0);
     expect(loop).toBeGreaterThan(core);
   });

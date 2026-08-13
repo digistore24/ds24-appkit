@@ -156,8 +156,9 @@ Four things worth knowing before you point it at production:
   real content page with a real slug.
 
 🚨 **What the confirmation token does NOT buy.** It proves the server was
-consulted with *this* input at *this* moment, and nothing else. It does **not**
-prove a human agreed — an agent calls plan and apply in a row, which is what an
+consulted with *this* call at *this* moment — the input, and at the media door
+the bytes as well (see *the two-act rule* below) — and nothing else. It does
+**not** prove a human agreed — an agent calls plan and apply in a row, which is what an
 agent does — and it does **not** prove the plan's report is still true. The
 shell path (`node run.mjs content-apply`) stays and is not deprecated: an
 operator whose setup surface is switched off still has it, and a surface that
@@ -228,6 +229,27 @@ In **staging and production**, changing anything takes two steps:
 
 In **development** a change applies in one step.
 
+**What the token is bound to:** your key, the tool, the environment, the exact
+input the plan was made with — and, at the door that carries a file, **that
+file**. Change any of them and the apply is refused; the token is not spent, so
+the answer is simply to plan again.
+
+🚨 **The file half is not symmetry, it is the point of the rule at the one door
+where the input is a label.** `media_upload` takes a `path` on *your* machine
+which the app never opens; what actually lands in the store arrives beside it as
+bytes. Bound to the input alone, the second act confirmed the label: a plan
+reading *"hero.png (70 bytes) would be stored as public"* could be applied, with
+its own token and the same `path`, carrying a completely different file — and the
+app stored that one, `200 created: 1`. Measured, and closed. ⚠️ One
+consequence you may meet: your agent reads the file once for the plan and again
+for the apply, so a file that **changes on disk in between** is now refused
+rather than uploaded. That is the rule working; plan again.
+
+> ⚠️ **A token minted for an upload cannot be used on the plain `/api/setup`
+> door.** It never worked there — that door carries no bytes, so `media_upload`
+> refused it anyway — but it used to *spend* the token first, which cost you the
+> plan. Now it is refused before anything is spent.
+
 > ⚠️ **What the two-act rule is and is not.** It stops a stale plan and a
 > mistyped flag. It does **not** stop an agent that simply calls both steps in a
 > row, because that is what an autonomous agent does. If you want a human in the
@@ -269,6 +291,33 @@ It creates the first owner and one short-lived key, writes the key straight into
 `.env` without printing it — so it never reaches your agent's transcript — and
 **refuses once an owner exists**. Mint a proper key on the page straight
 afterwards.
+
+⚠️ **Once an owner exists, that refusal used to leave exactly one way on: the
+admin page, in a browser.** An agent working without one stopped there — and so
+did `node run.mjs content-check`, which `CLAUDE.md` makes the exit condition for
+content. `node run.mjs smoke` walks straight into it, because it recommends
+`user-create --role owner` for its signed-in pass. The other half of the path:
+
+```bash
+node run.mjs setup-key                    # dry run: says what it would do
+node run.mjs setup-key --apply            # mints, writes .env, prints nothing
+```
+
+Needs template 0.27.0.
+
+It mints for an owner who **already exists** and never creates one — creating
+the first owner stays the bootstrap's act, with the bootstrap's guard. Same two
+conditions otherwise: the secret is written with `setEnvValue()` and never
+printed, and the key is recorded against a named owner. `--email` picks which
+owner when there is more than one (it refuses to guess), `--name` labels the row
+on `/dashboard/admin/setup-audit`, `--days` shortens the default 30.
+
+🚨 **It needs `DATABASE_URL`, and that is the point rather than a limitation.**
+Whoever holds a connection string does not need a setup key at all — the surface
+exists so an agent can change an environment *without* one in a shell. So this
+command hands nobody a new privilege; it removes a detour on the one machine
+where the detour cannot be walked. On a deployed environment nothing changes:
+you do not have that database, and the admin page is still the way in.
 
 ## Where the wiring lives
 
@@ -324,6 +373,26 @@ because the role IS the security question this trail exists to answer, and
 `reason` on the two grant tools, because a written reason is the accountability
 and a trail of unexplained grants is a list rather than a record.
 
+🚨 **Both are kept on a REFUSED act too.** A refused `grant_revoke` used to hold
+no reason at all, although the tool would not run without one — so the trail was
+thinnest at the irreversible act somebody is most likely to be asked about
+later. By the time a tool refuses, its input has been through `validateInput()`:
+the reason is the tool's own declared string, bounded by its own schema. ⚠️ The
+guard's refusal keeps writing neither, for the same reason it writes no
+`target`: nothing there has been validated, and a stranger does not get to
+choose what these columns say.
+
+🚨 **Every act also records WHO it was about**, as a member id and not as an
+address — `subject_member_id`, the column both Art. 15 exports slice the
+`setupActs` section with. Each tool declares whether it acts on a member and
+which of its own fields carries the address (`subjectEmailField`), the app looks
+the id up on every path including the refusals, and a tool that has not decided
+does not compile. `grant_revoke` is the one that names a GRANT rather than a
+person: the member is read out of that grant's row, in `plan` as well as in
+`apply`. An empty column is therefore an answer — *this tool is about no
+person*, or *we looked and nobody has that address*, and `target` still holds
+what was asked for.
+
 🚨 **A refused act names its target too, and that is the row that most needs
 one.** A refusal reaches `dispatch.ts` as a thrown error rather than as a result,
 so it used to record WHAT happened and never to WHICH thing —
@@ -336,6 +405,17 @@ identifier, and a tool that has not decided does not compile. ⚠️ The one bra
 that deliberately writes none is a refusal by the **guard**: it happens before
 the input has been validated, and what a stranger posted is not something this
 trail will repeat.
+
+⚠️ **The upload's checksum is deliberately NOT in the trail, and that is a
+judgement rather than an omission.** A SHA-256 is an identifier and not payload
+content, so the rule above would allow it. Two things settle it the other way:
+the digest of the stored object is already on that file's `media` row, so a
+second copy in the audit would be a second truth to keep in step — and the two
+are not even the same number (the media row hashes what was *stored*, after the
+EXIF and PNG text chunks came off; the confirmation binds what *arrived*). What
+the trail owes is which act happened to which thing, and `target` — the manifest
+path — says that. Adding a column would also be a migration on the one table
+that has no update path by construction.
 
 🚨 **`dispatch.ts` is the trail's only writer.** A tool never calls `recordAct()`
 itself — a tool that recorded its own act could record a different one, or none.
@@ -370,6 +450,45 @@ succeeded. The `code` column is the one that carries it — an identifier, never
 sentence and never a path — because `outcome` is a three-value database enum and a fourth value
 would be a schema migration for a refinement of `applied` rather than a peer
 of it.
+
+🚨 **A refusal a tool ANSWERS with is a refusal, and the tool has to say so.**
+Most refusals arrive here as a thrown error carrying a code. Five do not: a tool
+may hand back an ordinary result instead, because a refusal that is an *answer*
+can carry things an exception cannot — which file it was about, and a payload
+the caller acts on. `content_media_url` is the clearest: told the driver cannot
+mint an address, it names the two ways forward, and `node run.mjs
+content-publish` branches on that rather than on an error.
+
+For a while those five were recorded as **successes** — `applied` or `planned`,
+no code, no rows — because the trail could not tell an answer that refused from
+one that worked:
+
+| tool | refuses when |
+|---|---|
+| `user_upsert` | `ownerPromotionRefused` — an owner is not made through this surface outside DEV |
+| `grant_by_hand` | `notFound` — no account has that address here |
+| `media_upload` | `badRequest` — the call came through the door that carries no bytes |
+| `content_media_url` | `noUploadAddress` — this environment's media driver cannot mint one |
+| `content_publish` | `appliersUnreadable` — the appliers could not be enumerated, which is *"I could not look"* and never *"there is nothing there"* |
+
+What fixed it is a **declaration and not a guess**: a refusing tool sets
+`SetupResult.refused` to its code, and `dispatch.ts` writes `outcome: refused`
+with that code. It is deliberately not inferred from `created === 0` — a
+`user_upsert` of somebody who already holds that role changes nothing either,
+and it is an honest `applied`. ⚠️ A plan that refused also hands back **no
+confirmation token**: a token is a capability with two minutes on it, and minting
+one for an act the tool has just declined offers a second act that will decline
+identically.
+
+⚠️ **What the rows written before that say now.** Nothing was rewritten and
+nothing can be. In an app that has been running, a row from one of those five
+tools reading `applied`/`planned` with no code and `rows: 0` is *either* a
+refusal *or* an honest act that changed nothing — the row does not hold the
+difference, and a migration that picked one would replace a known gap with an
+invented answer. So the reading is one-directional and worth knowing: for those
+five tools, before this change, **refusals were under-counted and successes
+over-counted**, and only among rows with `rows: 0`. Every other tool, and every
+row since, is exact.
 
 **It is kept 24 months**, then the daily `prune-setup-audit` job removes what is
 older — longer than anything else this app keeps, because it is the only record

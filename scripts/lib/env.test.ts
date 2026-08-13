@@ -34,8 +34,28 @@
 // `lib/env.mjs` — it imports `./_db.mjs`, which does. That is correct, and a
 // direct-import check would have called it a bug and been argued with until
 // somebody weakened it. So the closure is walked, not the file.
+//
+// ── Why the walk is the whole TREE, not `scripts/` ─────────────────────────
+// It was `scripts/` and nothing else, while `CLAUDE.md` said this file asks the
+// question "of every script in the tree". That sentence was the interesting
+// part and it was not true: **every module command lives outside `scripts/`** —
+// `modules/courses/check.mjs`, `modules/courses/courses-diff.mjs`,
+// `modules/api/check.mjs`, `modules/community/scripts/prune.mjs` — and a module
+// command is exactly the kind of file this rule exists for. It is a `node
+// run.mjs <command>` entry point, it reaches the database, and it was written by
+// whoever built the module rather than by whoever remembered the convention.
+//
+// The narrower run was also self-defeating: the failure that created this rule
+// was `scripts/modules/cli.mjs`, the file that INSTALLS modules — so the rule was
+// derived from the module system and then pointed away from it.
+//
+// Measured when the walk was widened (2026-08-12): 142 `.mjs` under `scripts/`,
+// 38 outside it, and **zero** new offenders — all four module commands already
+// load the `.env`, three of them directly and `modules/api/check.mjs` through
+// `scripts/users/_db.mjs`. So this widening bought a guard rather than a fix,
+// and the honest way to say that is with the numbers rather than with silence.
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -45,9 +65,19 @@ const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const SCRIPTS = join(ROOT, "scripts");
 const ENV_MODULE = join(SCRIPTS, "lib", "env.mjs");
 
+/**
+ * Directories the walk never enters.
+ *
+ * `node_modules` and `.next` are somebody else's code and build output;
+ * `.dev`, `.data` and `.git` are machine-local. Everything else in the tree is
+ * this app's, and a `.mjs` in it that reaches the database is in scope by
+ * definition — there is no folder where forgetting the `.env` is fine.
+ */
+const SKIP = new Set(["node_modules", ".next", ".git", ".dev", ".data"]);
+
 function* mjsFiles(dir: string): Generator<string> {
   for (const entry of readdirSync(dir)) {
-    if (entry === "node_modules") continue;
+    if (SKIP.has(entry)) continue;
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) yield* mjsFiles(full);
     else if (entry.endsWith(".mjs")) yield full;
@@ -100,14 +130,45 @@ function loadsEnv(entry: string, seen = new Set<string>()): boolean {
   return false;
 }
 
-const ALL = [...mjsFiles(SCRIPTS)];
+const ALL = [...mjsFiles(ROOT)];
+const rel = (file: string) => relative(ROOT, file).split(sep).join("/");
+
+/**
+ * The module commands, by path — the files the narrow walk could not see.
+ *
+ * Named literally rather than derived from the manifests, and that is the point:
+ * a derived list would go quiet the day a manifest key is renamed, which is the
+ * same silence `scripts/deploy-test.mjs`'s hand-kept command list had. These four
+ * are `node run.mjs <command>` entry points today; if one moves, this test says
+ * so instead of shrinking.
+ */
+const MODULE_COMMANDS = [
+  "modules/api/check.mjs",
+  "modules/community/scripts/prune.mjs",
+  "modules/courses/check.mjs",
+  "modules/courses/courses-diff.mjs",
+];
 
 describe("every script that needs the database loads the .env", () => {
   it("found scripts to check", () => {
     // Non-vacuity: an empty walk would make the assertion below pass loudly, and
     // this rule's whole history is a check that was never asked of one file.
     expect(ALL.length).toBeGreaterThan(40);
-    expect(ALL.map((f) => relative(SCRIPTS, f))).toContain(join("db", "migrate.mjs"));
+    expect(ALL.map(rel)).toContain("scripts/db/migrate.mjs");
+  });
+
+  it("🚨 reaches OUTSIDE scripts/ — every module command is in the walk", () => {
+    // The count guard for the widening itself. `scripts/` alone was the run for
+    // as long as this file existed, and a walk that quietly went back to it
+    // would pass every assertion below while asking nothing of the four files
+    // the rule was most likely to be forgotten in.
+    const outside = ALL.map(rel).filter((f) => !f.startsWith("scripts/"));
+    expect(outside.length, "no .mjs outside scripts/ — the walk narrowed again").toBeGreaterThan(
+      10,
+    );
+    for (const command of MODULE_COMMANDS) {
+      expect(ALL.map(rel), `${command} is a module command and must be walked`).toContain(command);
+    }
   });
 
   it("recognises a script that does load it", () => {
@@ -138,13 +199,13 @@ describe("every script that needs the database loads the .env", () => {
       // value at all (`db/generate-module.mjs` emits a drizzle config).
       if (/dbCredentials/.test(source)) continue;
 
-      if (!loadsEnv(file)) offenders.push(relative(SCRIPTS, file));
+      if (!loadsEnv(file)) offenders.push(rel(file));
     }
 
     expect(
       offenders,
       "these scripts read process.env.DATABASE_URL and nothing puts the .env there:\n" +
-        offenders.map((f) => `  scripts/${f}`).join("\n") +
+        offenders.map((f) => `  ${f}`).join("\n") +
         "\n\nAdd `import \"../lib/env.mjs\";` — for the side effect, the way every other\n" +
         "database-touching script does. The failure mode is not an error: a command\n" +
         "that guards its database work with `if (process.env.DATABASE_URL)` SKIPS it\n" +

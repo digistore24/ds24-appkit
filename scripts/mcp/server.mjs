@@ -119,9 +119,15 @@ async function callApp(envName, body, file) {
     if (body.mode) form.set("mode", body.mode);
     if (body.confirmation) form.set("confirmation", body.confirmation);
     // The SAME input object the JSON door would carry. The confirmation token
-    // is bound to the canonical hash of the validated input, so both doors must
-    // hash the same thing — loose form fields would arrive as strings and a
-    // plan made at one door could never be applied at the other.
+    // is bound to the canonical hash of the validated input, so a plan and its
+    // apply must hash the same thing — loose form fields would arrive as
+    // strings and a plan could never be applied.
+    //
+    // 🚨 The token is bound to the FILE too (A79), and this is where that has a
+    // consequence for the operator: `readFile()` above runs once per call, so
+    // the plan and the apply read the path a few seconds apart. A file that
+    // changed in between is refused as `confirmationInvalid` rather than
+    // uploaded — which is the point, and the answer is to plan again.
     form.set("input", JSON.stringify(body.input ?? {}));
     form.set("file", new Blob([file.bytes]), file.name);
     payload = form;

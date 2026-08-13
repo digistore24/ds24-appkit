@@ -868,14 +868,66 @@ it, so a retrofit is not forbidden — but it is a rebuild of the
 hardest-to-get-right code in the template, owned by whoever does it, and the
 tests that make the invariants hold are part of what has to come across.
 
+## Over the API — the rooms, for a member's own program
+
+A mobile companion reads and writes the rooms through `/api/v1`
+([`docs/api.md`](api.md)), on a per-member bearer key rather than a cookie.
+Four endpoints: the room list, one thread with a page of its posts, the cursor
+endpoint's bearer twin, and writing a post.
+
+Because the module contributes routes to that surface, it declares
+`"requires": ["api"]` — **a community is installable only in an app that also
+has the API module.** `node run.mjs module check` says so on every run.
+
+Four things about it are decisions rather than details:
+
+- **One `liveAnswerFor()` behind two doors.** The browser polls
+  `/api/community/live` with its cookie; the companion posts to
+  `/api/v1/community/live` with its key. What differs is the two lines of
+  authentication and nothing else — a second implementation of the answer would
+  be a second opinion about who may read a room, which is the one thing this
+  module cannot afford two of.
+- 🚨 **No private messages, and the refusal is by NAME.** The bearer twin
+  refuses a `conversation` scope with a sentence saying so. On the cookie twin
+  the same scope answers `unavailable`, indistinguishable from "no such
+  conversation", and that difference is deliberate: there the question is about
+  one member's correspondence and any distinction is an oracle; here the
+  question is what the API carries at all, which is nobody's private
+  information. The allowlist in `lib/dm-guard.test.ts` did not grow for this
+  surface — nothing under `/api/v1` may so much as name a DM table.
+- **The cursor stays opaque.** Store it, echo it, never parse or construct one.
+  That holds for a companion exactly as it holds for the web client (AD-70).
+- **No moderation, no room creation, no roster.** The API is a member's door.
+  An operator's acts stay in the web app, and the absent member list is absent
+  here too, for the reason it is absent everywhere: presence in a plan-gated
+  room is purchase information.
+
+**There is deliberately no `coreExport` for this module.** The shared core
+(`node run.mjs export-core`) carries pure decision code so a companion computes
+the same answers as the app — and the community has nothing a companion needs to
+compute. The cursor is opaque by design, and access is re-derived on the server
+for every single answer, never cached or predicted by a client. A pure copy of
+`lib/rules.ts` in a companion repo would be a file with no job, kept in step for
+nothing. If a companion ever needs to render something before the server
+answers, that is the moment to revisit this — not before.
+
+---
+
 ## What this file refuses to promise
 
 - **No operator read-access to private messages.** Not as a recipe, not as a
   support tool, not "just for diagnostics" — ever. The guard test exists to
   refuse the code that would provide it, and refusing it is the point.
-- **No public or SEO-visible community.** Nothing here is ever session-less. A
+- **No public or SEO-visible community.** Nothing here is ever ANONYMOUS. A
   discussion indexed by a search engine is a member's words republished by an
   app they trusted with them.
+  ⚠️ That sentence used to read *"never session-less"*, and it had to be made
+  more precise rather than deleted when the bearer surface arrived: `/api/v1`
+  has no cookie session and cannot have one, and it is still not a way in
+  without an account — a per-member API key is the same member, proven
+  differently. What has not moved an inch is the rule underneath: every answer
+  is derived for ONE named viewer, and there is no reader anywhere that answers
+  without one.
 - **No websocket server.** Polling ships, SSE is the deferred upgrade above,
   and a long-lived connection with its own auth lifetime is not something this
   template will grow quietly.

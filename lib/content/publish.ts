@@ -80,6 +80,40 @@ import { normalisePlan, readOnlyTransaction, type PlanSql } from "./applier-plan
  * is the app stopping before the proxy does, and 25 seconds is chosen to sit
  * under the shortest plausible cut rather than derived from one.
  *
+ * 🚨 **What the four hosts DOCUMENT is a THIRD state, and it is not a
+ * measurement either.** *"Nobody looked"*, *"there is no value"* and *"the
+ * provider claims X"* are three different sentences and this comment says all
+ * three. Read on **2026-08-12**, in the providers' own documentation only:
+ *
+ * - **Railway — 5 min.** An HTTP request *"can run for up to 15 minutes if data
+ *   keeps transferring … and [is] otherwise closed after 5 minutes with no data
+ *   transferred"*.
+ *   `https://docs.railway.com/networking/public-networking/specs-and-limits`
+ * - **Render — 100 min.** *"Render web services allow HTTP responses to take up
+ *   to 100 minutes."* `https://render.com/docs/render-vs-vercel-comparison`
+ * - **Fly — NO VALUE DOCUMENTED.** The `fly.toml` reference has
+ *   `http_service.http_options.idle_timeout` and gives `600` as an EXAMPLE, with
+ *   neither a default nor a maximum stated anywhere in the docs; the 60 s
+ *   everyone quotes comes from forum answers, not from documentation.
+ *   `https://fly.io/docs/reference/configuration/#http_service-http_options-idle_timeout`
+ * - **DigitalOcean — NO VALUE DOCUMENTED for a request.** The App Platform
+ *   limits page states no request timeout at all (only *"File uploads to apps
+ *   timeout after 600 seconds"*).
+ *   `https://docs.digitalocean.com/products/app-platform/details/limits/`
+ *   The single number on that docs domain is **30 s**, and it is in a **PHP**
+ *   support article — *"By default, App Platform allows your app 30 seconds to
+ *   execute a request before timing out"*, raised via PHP's own
+ *   `max_execution_time` to at most 100 s. That is a PHP-FPM knob, so it says
+ *   nothing certain about the Node process this app is.
+ *   `https://docs.digitalocean.com/support/my-php-app-is-timing-out-and-throwing-5xx-errors/`
+ *
+ * Nothing documented sits under 25 s, so the budget is not known to be broken
+ * anywhere. ⚠️ But the smallest number found is 30 s, and the margin is thinner
+ * than the five seconds suggest: the budget is checked BETWEEN appliers, so a
+ * publish may legitimately run 25 s PLUS however long the last applier it
+ * started takes. Whoever raises this number needs the measurement A51 asks for
+ * — and so does whoever lowers it.
+ *
  * Checked between appliers and NEVER inside one: half an applier is exactly what
  * the per-applier transaction exists to prevent. A retry is safe — every applier
  * upserts by slug, so running it again asserts rather than duplicates.

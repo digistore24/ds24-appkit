@@ -23,12 +23,18 @@ function runs(parts: Inline[]) {
             key={index}
             href={part.href}
             className="text-primary underline underline-offset-4"
-            // Only for links that leave the app. `rel` matters on those and is
-            // noise on an internal one, and `/impressum` linking to
+            // Only for links that leave the app in a BROWSER. `rel` matters on
+            // those and is noise on an internal one, and `/impressum` linking to
             // `/datenschutz` should stay in the tab the reader is in.
-            {...(part.href.startsWith("/")
-              ? {}
-              : { target: "_blank", rel: "noopener noreferrer" })}
+            //
+            // ⚠️ It used to ask "does it start with `/`", which made every
+            // `mailto:` and `tel:` external — and those open a mail client or a
+            // dialler and leave an empty browser tab standing. `SAFE_HREF` in
+            // `lib/legal/markdown.ts` admits four schemes, so the question is
+            // which of them a NEW TAB is right for, and that is http(s) alone.
+            {...(/^https?:\/\//i.test(part.href)
+              ? { target: "_blank", rel: "noopener noreferrer" }
+              : {})}
           >
             {part.text}
           </a>
@@ -40,15 +46,30 @@ function runs(parts: Inline[]) {
 }
 
 export function LegalBody({ blocks }: { blocks: Block[] }) {
+  // The shallowest heading this text has — 1 when it has none, so the arithmetic
+  // below is the identity and a text without headings is untouched.
+  const top = blocks.reduce(
+    (shallowest, block) =>
+      block.kind === "heading" ? Math.min(shallowest, block.level) : shallowest,
+    3,
+  );
+
   return (
     <div className="flex flex-col gap-4">
       {blocks.map((block, index) => {
         if (block.kind === "heading") {
-          // h1 is the page title, rendered by PageHeader — so a `#` in the file
-          // becomes an h2 and the outline stays legal rather than doubling the
-          // top level. h3/h4 follow from there.
-          const Tag = (["h2", "h3", "h4"] as const)[block.level - 1];
-          const size = ["text-xl", "text-lg", "text-base"][block.level - 1];
+          // h1 is the page title, rendered by PageHeader — so the text's own top
+          // level becomes an h2 and the outline stays legal rather than doubling
+          // the top level. h3/h4 follow from there.
+          //
+          // 🚨 **Relative to the SHALLOWEST heading the text actually has, not
+          // to `#`.** A body that opens with `## Überblick` — an ordinary way to
+          // write, and the operator has no way to know this file starts counting
+          // at `#` — produced h1 followed by h3, a heading-order failure
+          // (WCAG 1.3.1) on a page every paying member reads. `ux-check` has no
+          // rule about document outline, so nothing said so.
+          const Tag = (["h2", "h3", "h4"] as const)[block.level - top];
+          const size = ["text-xl", "text-lg", "text-base"][block.level - top];
           return (
             <Tag key={index} className={`${size} mt-4 font-semibold first:mt-0`}>
               {block.text}

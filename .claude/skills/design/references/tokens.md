@@ -169,6 +169,13 @@ identical declaration and say WHICH of the two steps they mean; turning a bare
 size word into one of them is how such a finding is answered without taking the
 shadow off.
 
+🚨 **Those two names, and no third.** The same syntax will take any variable, and
+a shadow class naming one this app invented is the fifth elevation step §8 says
+an app does not get to open — it looks exactly like the sanctioned form to a
+reader, and only the name tells them apart. `ux-check` reports every other
+variable on that utility and names the elevation dial when it does, so the
+recommendation above has a floor under it rather than a convention.
+
 **Write it plain — never with a `!`, wherever it goes.** On something that
 already has a shadow — a `<Card>`, a variant that ships one — it wins by itself:
 `cn()` (`lib/utils.ts`) resolves the conflict and drops the base step, exactly

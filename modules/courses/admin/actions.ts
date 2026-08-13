@@ -57,6 +57,7 @@ import {
   rowWritable,
   slugAvailability,
   type CoursesErrorCode,
+  unitTextProblem,
 } from "../rules";
 import { guard } from "./authz";
 import { claims, fileFor } from "./content-claims";
@@ -260,14 +261,18 @@ export async function createUnitAction(
     const taken = positionAvailability(position, await unitPositions(block.id));
     if (taken) return refuse(taken, { position });
 
-    const unit = await createUnit({
-      blockId: block.id,
-      slug,
-      position,
+    const fields = {
       title: text(formData, "title"),
       body: optional(formData, "body"),
       taskPrompt: optional(formData, "taskPrompt"),
-    });
+    };
+    // The ceiling the member's hand-in has had since it was built. A body is
+    // turned into React elements on every request, so the operator's own text
+    // is the one served more often.
+    const tooLong = unitTextProblem(fields);
+    if (tooLong) return refuse(tooLong);
+
+    const unit = await createUnit({ blockId: block.id, slug, position, ...fields });
     revalidate([unit.slug]);
     const t = await getTranslations("coursesAdmin");
     return { error: null, ok: t("unitCreated", { slug: unit.slug }) };
@@ -291,11 +296,15 @@ export async function updateUnitAction(
       return refuse(locked, { file: await fileFor(index, "units", unit.slug) });
     }
 
-    await updateUnit(unit.id, {
+    const fields = {
       title: text(formData, "title"),
       body: optional(formData, "body"),
       taskPrompt: optional(formData, "taskPrompt"),
-    });
+    };
+    const tooLong = unitTextProblem(fields);
+    if (tooLong) return refuse(tooLong);
+
+    await updateUnit(unit.id, fields);
     revalidate([unit.slug]);
     const t = await getTranslations("coursesAdmin");
     return { error: null, ok: t("unitSaved", { slug: unit.slug }) };

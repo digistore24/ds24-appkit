@@ -16,10 +16,12 @@
 // that agree today.
 //
 // Everything the fingerprint is, is not, hashes and deliberately does not hash —
-// including the known video-swap limit — is argued in that file's header, once.
-// What stays here is the argument about the PAYLOAD: the leak refusal, the key
-// set, and `unitCount`.
-import { unitFingerprint } from "./fingerprint.mjs";
+// including why each media slot is hashed as its STORAGE KEY, which is what
+// makes a swapped video visible — is argued in that file's header, once. What
+// stays here is the argument about the PAYLOAD: the leak refusal, the key set,
+// `unitCount`, and the one field that is not about the course at all
+// (`fingerprintVersion`).
+import { FINGERPRINT_VERSION, unitFingerprint } from "./fingerprint.mjs";
 import type { BlockWithUnits } from "./manage";
 
 /**
@@ -81,7 +83,38 @@ export interface OutlineBlock {
 }
 
 /**
+ * Every media id the four slots of every lesson hold — what `mediaKeysFor()` is
+ * asked for.
+ *
+ * Pure and here rather than spelled out at the call site: the tool would
+ * otherwise carry a four-name list that has to stay in step with the one
+ * `unitFingerprint()` hashes, in a file whose job is neither. A fifth slot is
+ * then one edit in this file and none in `setup/tools.ts`.
+ */
+export function mediaIdsIn(blocks: readonly BlockWithUnits[]): (string | null)[] {
+  return blocks.flatMap((block) =>
+    block.units.flatMap((unit) => [
+      unit.coverMediaId,
+      unit.videoMediaId,
+      unit.subtitleMediaId,
+      unit.worksheetMediaId,
+    ]),
+  );
+}
+
+/**
  * The whole `data` payload of `courses_outline`, from rows already loaded.
+ *
+ * 🚨 **`mediaKeys` is REQUIRED, and its absence must never be spellable.** It
+ * maps each of `mediaIdsIn(blocks)` to that row's `media.storageKey`, which is
+ * what the fingerprint hashes per slot. An optional parameter defaulting to an
+ * empty map would make "the caller forgot the join" and "this course has no
+ * media" the same input — and the second is ordinary, so the mistake would ship
+ * looking like the ordinary case: every lesson's fingerprint computed as though
+ * its slots were empty, agreeing with nothing, reported as `untouched`
+ * everywhere. That is precisely the defect the storage key was introduced to
+ * remove. `unitFingerprint()` throws on an occupied slot with no key, so a map
+ * that is merely INCOMPLETE fails loudly too.
  *
  * 🚨 **This mapping is the only thing keeping the lesson prose off the setup
  * surface.** `courseOutline()` is a `select()` — every column of every unit,
@@ -95,8 +128,20 @@ export interface OutlineBlock {
  * `unitFingerprint()` on a `content/course/*.json` unit, so there is one
  * definition of what "changed" means rather than two that agree today.
  */
-export function outlinePayload(blocks: readonly BlockWithUnits[]): { blocks: OutlineBlock[] } {
+export function outlinePayload(
+  blocks: readonly BlockWithUnits[],
+  mediaKeys: ReadonlyMap<string, string>,
+): { fingerprintVersion: string; blocks: OutlineBlock[] } {
+  const keyOf = (id: string | null): string | null => (id === null ? null : (mediaKeys.get(id) ?? null));
+
   return {
+    // 🚨 The one field on this payload that is not about the course. It is what
+    // lets `compareCourse()` tell "these lessons differ" apart from "that app
+    // computes a different fingerprint version, so nothing was comparable" —
+    // and the second is the ORDINARY state right after a template update, when
+    // the repo has moved and the environment has not. Without it every lesson
+    // reads as changed and nothing anywhere says why (NFR-60).
+    fingerprintVersion: FINGERPRINT_VERSION,
     blocks: blocks.map((block) => ({
       slug: block.slug,
       title: block.title,
@@ -125,7 +170,17 @@ export function outlinePayload(blocks: readonly BlockWithUnits[]): { blocks: Out
         hasVideo: Boolean(unit.videoMediaId),
         hasWorksheet: Boolean(unit.worksheetMediaId),
         asksForSubmission: Boolean(unit.taskPrompt),
-        fingerprint: unitFingerprint(unit),
+        // The row plus its four resolved keys. ⚠️ The `*MediaId` fields travel
+        // INTO the hash function and are not hashed — they are what its guard
+        // reads to tell an empty slot from an unresolved one. Nothing of either
+        // reaches the payload: the key set above is asserted in `outline.test.ts`.
+        fingerprint: unitFingerprint({
+          ...unit,
+          coverKey: keyOf(unit.coverMediaId),
+          videoKey: keyOf(unit.videoMediaId),
+          subtitleKey: keyOf(unit.subtitleMediaId),
+          worksheetKey: keyOf(unit.worksheetMediaId),
+        }),
       })),
     })),
   };

@@ -50,6 +50,8 @@ const groupUpsert: SetupTool = {
   // upsert names the room a successful one would have named. Never
   // `description`: that is prose, and `target` is an identifier column.
   targetField: "name",
+  // A room, not a person.
+  subjectEmailField: null,
   mutates: true,
   inputSchema: {
     type: "object",
@@ -117,6 +119,7 @@ const groupList: SetupTool = {
   description: "The community rooms this environment has, and how each is gated.",
   // A read of every room; there is no one room to name.
   targetField: null,
+  subjectEmailField: null,
   mutates: false,
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
   async run(context): Promise<SetupResult> {

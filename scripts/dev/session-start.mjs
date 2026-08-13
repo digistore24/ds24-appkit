@@ -32,6 +32,7 @@ import { blockers, inspect } from "./doctor.mjs";
 import { describeUnwritten, readNotes, unwrittenItems } from "./app-notes.mjs";
 import { JOB_IDS } from "../../lib/cron/ids.mjs";
 import { canOpenBrowser } from "../lib/proc.mjs";
+import { blankComments } from "../lib/source-text.mjs";
 import { PHASES, journeyFacts, journeyState } from "./journey.mjs";
 import { describeJourneyLine } from "./journey-render.mjs";
 import { describeOperations, operationalFacts } from "./operations.mjs";
@@ -258,13 +259,20 @@ try {
   /* no app/ folder — then this is not the app we think it is */
 }
 
-/** Tables of their own. Read as text: importing db/ would pull in the driver. */
+/**
+ * Tables of their own. Read as text: importing db/ would pull in the driver.
+ *
+ * Comments blanked first (`blankComments()`, CLAUDE.md's rule for any checker
+ * that reads source as TEXT) — a `pgTable("…")` written in a comment, or one
+ * commented out while a migration is prepared, would otherwise be announced to
+ * the customer every session as a table their app has.
+ */
 let ownTables = [];
 try {
   const found = new Set();
   for (const file of readdirSync("db")) {
     if (!file.startsWith("schema") || !file.endsWith(".ts") || file.includes(".test.")) continue;
-    const source = readFileSync(`db/${file}`, "utf8");
+    const source = blankComments(readFileSync(`db/${file}`, "utf8"));
     // The name as Postgres knows it, which is also the name a migration and a
     // raw query use — `pgTable(\n  "verificationTokens",` counts too.
     for (const match of source.matchAll(/pgTable\(\s*"([A-Za-z0-9_]+)"/g)) found.add(match[1]);

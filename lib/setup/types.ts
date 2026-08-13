@@ -104,6 +104,58 @@ export interface SetupResult {
    * `dispatch.ts` is what carries it to the row. A tool never writes one.
    */
   readonly code?: string;
+  /**
+   * 🚨 The code this act was REFUSED with — for a tool that refuses by
+   * ANSWERING rather than by throwing.
+   *
+   * Set, the trail records `outcome: refused` and this as its `code`; absent, it
+   * records `applied` or `planned` as the mode says. It is the ONLY thing that
+   * tells the two apart on this path, and it is a declared field for the same
+   * reason `targetField` is one: the alternative is `dispatch.ts` guessing — off
+   * `created === 0`, which is also a perfectly honest no-op success, or off a
+   * `detail` beginning "refused:", which is prose.
+   *
+   * 🚨 **It exists because five branches were being recorded as successes.**
+   * `user_upsert` refusing an owner promotion, `grant_by_hand` finding no such
+   * member, `media_upload` reached through the door that carries no bytes,
+   * `content_media_url` on a driver that cannot mint one, and `content_publish`
+   * unable to enumerate its own appliers all hand back a `SetupResult` instead
+   * of throwing — so `dispatch.ts` read them as successes and wrote
+   * `applied`/`planned`, `code: null`, `rows: 0`. Measured against a real
+   * database, all five. `docs/setup-mcp.md`'s four-state table has always said a
+   * refusal before any write is `refused` with the refusal's code; the code
+   * disagreed with it at five places, in the sharpest column the trail has.
+   *
+   * ⚠️ **Returning rather than throwing is the right shape and stays.** A
+   * refusal that is an ANSWER carries what an exception cannot: `subjects`, so
+   * the row names what it was about; and a payload the caller acts on —
+   * `content_media_url` hands back the two ways forward by name, and
+   * `scripts/content/publish.mjs` branches on it. What was wrong was never the
+   * tools' shape but that the trail could not see it.
+   *
+   * ⚠️ An identifier, never a sentence — the same rule `code` above carries, and
+   * for the same reason: it lands in a text column an operator reads and it
+   * lives 24 months. It is also NOT the wire signal: `data.refused` is what
+   * `scripts/setup/client.mjs` → `toolRefusal()` reads, this is what the trail
+   * reads, and a tool that refuses sets both where it already set one.
+   */
+  readonly refused?: string;
+  /**
+   * The MEMBER this act was about, as a `users.id` — for a tool that learns the
+   * id only by ACTING.
+   *
+   * 🚨 The result-side half of `SetupTool.subjectEmailField`, and the reason
+   * both exist: `setup_audit.subject_member_id` is a foreign key on `users.id`,
+   * while a tool's input names a person by ADDRESS or not at all. `grant_revoke`
+   * is the case that needs this one — its input is a grant id, and which member
+   * that grant belongs to is a property of the row, read while the act runs.
+   *
+   * ⚠️ An id this app issued, never anything a caller sent. `dispatch.ts`
+   * prefers it over the declared field for the same reason it prefers
+   * `subjects[0]` over `targetField`: what an act DID is a better answer than
+   * what it was asked to do.
+   */
+  readonly subjectMemberId?: string;
   /** A tool's own payload, when it has one. Nothing else interprets this. */
   readonly data?: unknown;
 }
@@ -175,6 +227,42 @@ export interface SetupTool {
    * field that could carry what somebody wrote.
    */
   readonly targetField: string | null;
+  /**
+   * 🚨 WHICH of this tool's own input fields names the MEMBER an act is about,
+   * **as an email address**. `null` says this tool never acts on one person.
+   *
+   * It is a second declaration and not a synonym for `targetField`, because the
+   * two answer different questions and are different KINDS of value. `target` is
+   * a natural key an operator reads — an address, a slug, a path, a grant id.
+   * `setup_audit.subject_member_id` is a foreign key on `users.id`, and it is
+   * what makes the trail sliceable per person: `lib/privacy/export.ts` and
+   * `scripts/privacy/export-data.mjs` both cut the `setupActs` section with
+   * `where subject_member_id = <memberId>`. `docs/data-protection.md` calls that
+   * column "what makes the section sliceable per person" — and until this
+   * declaration existed nothing wrote it, so that section was EMPTY in both
+   * Art. 15 exports of every app while rows about the person sat in the table.
+   *
+   * ⚠️ **An address is not an id**, which is why this names a field rather than
+   * carrying one: the id is known only after somebody has looked, and
+   * `dispatch.ts` does that lookup once, on every path — including the refusals,
+   * where the tool may not have looked at all.
+   *
+   * ⚠️ **Required, and `null` is an answer.** The same design `targetField`
+   * carries: `content_publish` acts on a repo, `list_modules` on an
+   * environment, and a tool that has not decided does not compile. So an empty
+   * `subject_member_id` is never "somebody forgot".
+   *
+   * 🚨 **A null column has two readings and the row tells them apart.** A tool
+   * that declares `null` here can never name a member — `describeTools()`
+   * carries the declaration, so the surface says so without running anything.
+   * A tool that declares a field and still records `null` LOOKED and found
+   * nobody: its `target` holds the address that matched no account. Both are
+   * honest, and neither is silence.
+   *
+   * A tool that learns the member by acting fills `SetupResult.subjectMemberId`
+   * instead — `grant_revoke`, whose input names a grant.
+   */
+  readonly subjectEmailField: string | null;
   /**
    * False for a read tool. A mutating tool needs plan → confirmation → apply
    * outside DEV (AD-78).

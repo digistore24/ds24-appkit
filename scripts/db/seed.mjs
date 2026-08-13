@@ -15,7 +15,7 @@
 // (docs/content.md).
 import { randomUUID } from "node:crypto";
 import "../lib/env.mjs";
-import postgres from "postgres";
+import { connectUtc } from "../lib/pg-utc.mjs";
 
 const url = process.env.DATABASE_URL;
 if (!url) {
@@ -32,7 +32,7 @@ const memberEmail = (process.env.SEED_MEMBER_EMAIL ?? "customer@example.com")
   .trim()
   .toLowerCase();
 
-const sql = postgres(url, { max: 1 });
+const sql = connectUtc(url, { max: 1 });
 try {
   for (const [email, role] of [
     [ownerEmail, "owner"],

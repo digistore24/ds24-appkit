@@ -79,6 +79,65 @@ export function blankComments(source) {
 }
 
 /**
+ * Does the match at `index` sit inside a string LITERAL rather than in code?
+ *
+ * 🚨 **For the checkers whose needle is a piece of CODE that a string may
+ * legitimately quote.** `lib/ai/providers/leak-guard.test.ts` hunts
+ * `process.env.OPENAI_API_KEY`; an assertion message or a test fixture that
+ * NAMES that read — and this tree has eight such lines in six files today, with
+ * other variables (three in `scripts/lib/env.test.ts` alone, one in
+ * `scripts/security/rungs.test.ts`) — is a mention, not a read. Blanking the
+ * comments is not enough for those.
+ *
+ * ⚠️ **This exists instead of a `blankStrings()`, and the reason is a measured
+ * one: blanking strings would make that guard SILENT.** The dynamic form
+ * `process.env["OPENAI_API_KEY"]` is a real read whose variable NAME lives
+ * inside a string, and every checker that hunts an env read covers it. Blank
+ * the string and the read disappears; ask instead where the match STARTS and
+ * the two separate cleanly, because a real read starts at `process`, outside
+ * the quote, and a quoted mention starts inside it.
+ *
+ * Two properties on purpose:
+ *
+ *  · **It answers per LINE.** A `'` or `"` cannot span one, and a template
+ *    literal that does is answered `false` — reported rather than excused.
+ *  · **The quote has to CLOSE after the match on the same line.** A regex
+ *    literal such as `` /["']/ `` opens a quote that never closes; without
+ *    this, everything after it on that line would count as string and a real
+ *    read there would go unseen. Both rules push the doubtful case towards
+ *    REPORTING, which is the direction a guard may fail in.
+ *
+ * Comments are not its job — run `blankComments()` first.
+ *
+ * @param {string} source
+ * @param {number} index offset of the match inside `source`
+ * @returns {boolean} true when the match is a mention inside a string literal
+ */
+export function isQuotedMention(source, index) {
+  const lineStart = source.lastIndexOf("\n", index - 1) + 1;
+
+  let quote = null;
+  for (let i = lineStart; i < index; i += 1) {
+    const char = source[i];
+    if (quote) {
+      if (char === "\\") i += 1;
+      else if (char === quote) quote = null;
+    } else if (char === '"' || char === "'" || char === "`") {
+      quote = char;
+    }
+  }
+  if (quote === null) return false;
+
+  const lineEnd = source.indexOf("\n", index);
+  const rest = source.slice(index, lineEnd === -1 ? source.length : lineEnd);
+  for (let i = 0; i < rest.length; i += 1) {
+    if (rest[i] === "\\") i += 1;
+    else if (rest[i] === quote) return true;
+  }
+  return false;
+}
+
+/**
  * The source with comments AND emitted-source strings blanked.
  *
  * 🚨 For checkers that walk files which GENERATE code. `scripts/modules/generate.mjs`

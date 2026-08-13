@@ -28,9 +28,10 @@
 import "../lib/env.mjs";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
-import postgres from "postgres";
+import { connectUtc } from "../lib/pg-utc.mjs";
 
 import { diagnose, rootCause } from "./migrate-report.mjs";
+import { chainSummary, migrationChains } from "./migration-plan.mjs";
 import { loadModules } from "../modules/registry.mjs";
 
 const url = process.env.DATABASE_URL;
@@ -50,7 +51,7 @@ if (!url) {
 // where the pool this app normally opens (10) may be a noticeable share of the
 // plan's connection limit while a release command runs alongside the old
 // version of the app.
-const sql = postgres(url, { max: 1, onnotice: () => {} });
+const sql = connectUtc(url, { max: 1, onnotice: () => {} });
 
 /**
  * What the database looked like when the migration hit the wall.
@@ -106,22 +107,22 @@ try {
   //
   // Core first is not cosmetic either: a module's tables carry foreign keys to
   // `users` and `media`, and those must exist before the constraint is created.
-  const modules = loadModules();
-  for (const mod of modules) {
-    const folder = mod.manifest.migrations;
-    if (typeof folder !== "string") continue;
+  //
+  // ⚠️ Not every installed module brings a chain — only one that declares
+  // `migrations`, which `scripts/modules/manifest.mjs` ties to having tables of
+  // its own. So the list is narrowed ONCE, here, and the closing line counts
+  // the same array the loop walked; counting `loadModules()` instead reported
+  // five chains over four `>> Migrating module` lines. See `migration-plan.mjs`.
+  const chains = migrationChains(loadModules());
+  for (const mod of chains) {
     console.log(`>> Migrating module "${mod.id}"`);
     await migrate(db, {
-      migrationsFolder: `${mod.dir}/${folder}`,
+      migrationsFolder: `${mod.dir}/${mod.manifest.migrations}`,
       migrationsTable: mod.manifest.migrationsTable,
     });
   }
 
-  console.log(
-    modules.length > 0
-      ? `✓ Database is up to date (core + ${modules.length} module chain(s)).`
-      : "✓ Database is up to date.",
-  );
+  console.log(chainSummary(chains.length));
 } catch (error) {
   // The message matters more than the stack here: this runs in a deploy log
   // that somebody reads once, in a hurry, without the repository in front of

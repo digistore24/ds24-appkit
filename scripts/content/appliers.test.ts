@@ -29,6 +29,7 @@ import {
   mergeTracingIncludes,
   moduleTracingIncludes,
 } from "../modules/inventory.mjs";
+import { withRequires } from "@/scripts/modules/registry.mjs";
 import { applierSources } from "./_appliers.mjs";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -391,7 +392,11 @@ describe("🚨 the content machinery is traced into a standalone image", () => {
     // here, and the length is what says so.
     const composed = mergeTracingIncludes(
       CORE_TRACING_INCLUDES,
-      moduleTracingIncludes(ROOT, ["courses"]),
+      // `withRequires()`, not the bare id: `courses` declares `requires:
+      // ["api"]`, and `moduleTracingIncludes()` swallows `loadModules()`'s
+      // refusal of an unclosed list into an empty map — so `["courses"]` would
+      // quietly contribute nothing and this assertion would blame the seam.
+      moduleTracingIncludes(ROOT, withRequires(["courses"], ROOT)),
     );
     expect(composed[SETUP_TRACING_ROUTE]).toEqual([
       ...Object.keys(REQUIRED),

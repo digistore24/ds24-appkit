@@ -497,6 +497,15 @@ Five properties, four of them inherited from the command above:
   appliers and never inside one (half an applier is what the per-applier
   transaction exists to prevent). A stopped run **names the appliers it never
   reached**; a retry is safe because every applier upserts.
+  ⚠️ **That 25 is a bound, not a measurement**, and it is worth knowing which:
+  nobody has yet timed how long Railway, Render, Fly or DigitalOcean actually
+  let one request run. What they *document* (read 2026-08-12) is a third thing
+  again — Railway closes a request after 5 min without data, Render allows
+  100 min, **Fly and DigitalOcean document no value at all** for it; the only
+  number under a minute anywhere is DigitalOcean's 30 s, and it stands in a
+  **PHP** support article about `max_execution_time`. So nothing documented is
+  below 25 s, and none of it has been measured against this app. The sources
+  and the dates are on `PUBLISH_BUDGET_MS` in `lib/content/publish.ts`.
 - **One append-only audit row**, and a *partial* publish says so in it rather
   than reporting the number it managed as a success.
 - ⚠️ **The staged leg is not carried by the tool itself.** Files under
@@ -578,7 +587,9 @@ Three more properties worth knowing:
   `content_media_url` answers with the reason and the two ways on: fill this
   machine's own store with `content-media-sync`, or give the app an S3 driver
   ([`visuals.md`](visuals.md)). Never an empty answer that reads like "nothing
-  to do".
+  to do" — and the audit row says the same thing, `refused` with the code
+  `noUploadAddress`, rather than the `applied` it once read
+  ([`setup-mcp.md`](setup-mcp.md) → *The record*).
 
 **The shell path stays and is not deprecated.** The setup surface ships switched
 off, and a surface that ships off cannot be the only way to fill an environment.

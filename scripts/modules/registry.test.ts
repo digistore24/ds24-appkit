@@ -13,7 +13,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { availableModules, loadModules, readModule } from "./registry.mjs";
+import {
+  availableModules,
+  dependantsOf,
+  loadModules,
+  missingRequires,
+  readModule,
+} from "./registry.mjs";
 
 let root: string;
 const roots: string[] = [];
@@ -201,5 +207,69 @@ describe("readModule on its own", () => {
     // `module add` needs this: it validates a module BEFORE putting it in the list.
     const dir = app([], { chat: tiny("chat") });
     expect(readModule("chat", dir).id).toBe("chat");
+  });
+});
+
+// ── the two decisions `module add` / `module remove` make BEFORE writing ─────
+//
+// 🚨 Extracted from `cli.mjs` because the command used to make the first one
+// too late. `add()` wrote `config/modules.json` and only then reached
+// `writeGenerated()`, where `loadModules()`'s refusal lives — so it printed an
+// error, exited 1, and left the module IN the list with no generated file
+// rewritten; `module list` reported it as installed. Measured on 2026-08-12,
+// the day `courses` first declared `requires`. Pure functions here, so the
+// refusal can be checked one case at a time instead of by spawning a CLI.
+
+describe("missingRequires", () => {
+  it("is empty for a module that declares nothing", () => {
+    expect(missingRequires(tiny("a"), [])).toEqual([]);
+  });
+
+  it("is empty once the dependency is installed", () => {
+    expect(missingRequires(tiny("b", { requires: ["a"] }), ["a"])).toEqual([]);
+  });
+
+  it("names what is missing, in the manifest's order", () => {
+    expect(missingRequires(tiny("c", { requires: ["a", "b"] }), ["b"])).toEqual(["a"]);
+    expect(missingRequires(tiny("c", { requires: ["a", "b"] }), [])).toEqual(["a", "b"]);
+  });
+
+  it("treats a malformed `requires` as none rather than throwing", () => {
+    // The manifest validator already refuses this shape; a reader reached with
+    // it anyway must not take the command down on its way to saying so.
+    expect(missingRequires(tiny("d", { requires: "a" }), [])).toEqual([]);
+  });
+});
+
+describe("dependantsOf", () => {
+  it("is empty when nobody depends on it", () => {
+    const dir = app(["a", "b"], { a: tiny("a"), b: tiny("b") });
+    expect(dependantsOf("a", ["a", "b"], dir)).toEqual([]);
+  });
+
+  it("names the installed module that would break", () => {
+    const dir = app(["a", "b"], { a: tiny("a"), b: tiny("b", { requires: ["a"] }) });
+    expect(dependantsOf("a", ["a", "b"], dir)).toEqual(["b"]);
+  });
+
+  it("ignores a dependant that is NOT installed", () => {
+    // Present in the tree and not part of this app: removing `a` breaks nothing
+    // that is running, and refusing on it would make a module impossible to
+    // remove because of one somebody never installed.
+    const dir = app(["a"], { a: tiny("a"), b: tiny("b", { requires: ["a"] }) });
+    expect(dependantsOf("a", ["a"], dir)).toEqual([]);
+  });
+
+  it("never reports the module as its own dependant", () => {
+    const dir = app(["a"], { a: tiny("a", { requires: ["a"] }) });
+    expect(dependantsOf("a", ["a"], dir)).toEqual([]);
+  });
+
+  it("🚨 counts a manifest it cannot READ as a dependant", () => {
+    // "I could not look" and "it does not depend on this" must not be the same
+    // answer. Of the two ways to be wrong, refusing to remove is the one that
+    // can be undone.
+    const dir = app(["a", "broken"], { a: tiny("a"), broken: null });
+    expect(dependantsOf("a", ["a", "broken"], dir)).toEqual(["broken"]);
   });
 });

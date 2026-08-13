@@ -475,3 +475,49 @@ describe("the cursor advance loop — the channel that used to stop for ever", (
     }
   });
 });
+
+// ── and the third restatement: what the predicate BINDS ──────────────────────
+//
+// 🚨 The two halves above compare arithmetic against arithmetic. This one asks
+// what leaves the process, and it is a different failure: `CHANGED_AT` is a
+// `greatest(…)` expression, so there is no column on the value's side of the
+// comparison — and `drizzle()` replaces the driver's own date serialisers with
+// `(val) => val` (`postgres-js/driver.js` → `construct`) because it means to
+// convert at the column. A `Date` interpolated raw therefore travels to
+// `Buffer.byteLength()` as an OBJECT and the query throws
+// `TypeError: The "string" argument must be … Received an instance of Date` —
+// measured on Postgres 16, Node 22.22.1, postgres 3.4.9, drizzle-orm 0.45.2.
+// `changedAtParam()` borrows `editedAt`'s converter, which is the write-side
+// twin of the `.mapWith()` idiom `db/sql-cast.test.ts` prescribes for reads.
+//
+// ⚠️ Deliberately narrow: it asks about `CHANGED_AT` and nothing else. A rule
+// over every interpolation in every `sql` template cannot be written honestly —
+// what is dangerous is a VALUE's type and source text has none — and measured
+// against this tree it names nine strings and numbers that are correct as they
+// stand. `db/sql-date-param.test.ts` carries the general half of the question,
+// by building the real query and looking at the parameters.
+describe("CHANGED_AT is never compared against a raw value", () => {
+  it("binds every comparison through changedAtParam()", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { blankComments } = await import("@/scripts/lib/source-text.mjs");
+
+    const source = blankComments(
+      readFileSync(new URL("./manage.ts", import.meta.url), "utf8"),
+    );
+    // `${CHANGED_AT} <op> ${…}` — the whole family, comparisons only. An
+    // `ORDER BY ${CHANGED_AT} asc` has no value on either side and is not one.
+    const comparisons = [
+      ...source.matchAll(/\$\{CHANGED_AT\}\s*(?:>=|<=|<>|>|<|=)\s*\$\{([^}]*)\}/g),
+    ];
+
+    // 🚨 A count guard. Zero comparisons means the constant was renamed or the
+    // halves were rewritten — never that the file is clean.
+    expect(comparisons.length).toBeGreaterThan(0);
+
+    const raw = comparisons
+      .map((match) => match[1].trim())
+      .filter((bound) => !/^(?:changedAtParam|sql\.param)\s*\(/.test(bound));
+
+    expect(raw).toEqual([]);
+  });
+});

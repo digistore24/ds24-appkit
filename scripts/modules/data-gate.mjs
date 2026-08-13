@@ -21,7 +21,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import postgres from "postgres";
+import { connectUtc } from "../lib/pg-utc.mjs";
 
 /**
  * How many rows each of a module's tables holds.
@@ -33,7 +33,7 @@ import postgres from "postgres";
 export async function countModuleRows(url, tables) {
   // `max: 1` and a short timeout: this runs in front of a destructive command
   // and must not sit on a connection.
-  const sql = postgres(url, { max: 1, onnotice: () => {}, connect_timeout: 10 });
+  const sql = connectUtc(url, { max: 1, onnotice: () => {}, connect_timeout: 10 });
   try {
     const counts = {};
     let total = 0;
@@ -73,7 +73,7 @@ export async function countModuleRows(url, tables) {
  * @param {string} journal
  */
 export async function dropModuleTables(url, tables, journal, types = []) {
-  const sql = postgres(url, { max: 1, onnotice: () => {}, connect_timeout: 10 });
+  const sql = connectUtc(url, { max: 1, onnotice: () => {}, connect_timeout: 10 });
   try {
     // One transaction: half-dropped is a state nobody can reason about.
     await sql.begin(async (tx) => {
@@ -148,7 +148,7 @@ export async function orphanTables(url, installedPrefixes, knownPrefixes) {
   const dormant = knownPrefixes.filter((p) => !installedPrefixes.includes(p));
   if (dormant.length === 0) return [];
 
-  const sql = postgres(url, { max: 1, onnotice: () => {}, connect_timeout: 10 });
+  const sql = connectUtc(url, { max: 1, onnotice: () => {}, connect_timeout: 10 });
   try {
     const rows = await sql`
       select table_name from information_schema.tables where table_schema = 'public'

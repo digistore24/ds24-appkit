@@ -7,6 +7,12 @@
 #
 # Syntax is .gitignore syntax. Only files that match AND are gitignored are
 # copied, so nothing that is in the repo anyway gets duplicated.
+#
+# 🚨 Nobody loads this file here, and that is known. It is read by the agent
+# program when it opens a worktree, and there is no way to ask that program
+# whether it accepted what is below — so nothing in this repository verifies it.
+# Said out loud on purpose: an unchecked file WITHOUT that sentence is a trap,
+# which is what `.gitleaks.toml` was for a year (`scripts/foreign-config.test.ts`).
 
 .env
 .env.local

@@ -105,8 +105,9 @@ const FAILURE_MEMO_MS = 5 * 60 * 1000;
 function parseDs24Timestamp(raw: string | undefined): number | null {
   const s = (raw ?? "").trim();
   if (!s) return null;
-  // No zone marker → read as UTC (never the host's zone — see db/index.ts for
-  // why V8's local-time default is the bug, not the fix).
+  // No zone marker → read as UTC (never the host's zone — `docs/conventions.md`
+  // → *A type on a query is a claim* for why V8's local-time default is the bug
+  // and not the fix).
   const iso = /[zZ]$|[+-]\d\d:?\d\d$/.test(s) ? s : `${s.replace(" ", "T")}Z`;
   const t = Date.parse(iso);
   return Number.isNaN(t) ? null : t;

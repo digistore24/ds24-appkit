@@ -110,6 +110,12 @@ export const SOURCE = "working tree";
  */
 
 /** 32 bytes as base64url is 43 characters, unpadded — `modules/api/keys/rules.ts`. */
+// ⚠️ The same number as `SETUP_KEY_BODY_CHARS` in `lib/setup/key.mjs`, and NOT
+// imported from it: this pattern covers two key families (`ds24api_` and
+// `ds24setup_`) whose byte counts are each their own module's business, and a
+// scanner that followed one of them would silently stop recognising the other.
+// So it is written out and coupled by an assertion instead —
+// `lib/setup/rules.test.ts` fails if the setup key outgrows this.
 const APP_KEY_BODY = 43;
 
 /**

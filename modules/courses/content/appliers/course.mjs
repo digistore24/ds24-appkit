@@ -46,6 +46,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { MAX_UNIT_BODY_CHARS, MAX_UNIT_TITLE_CHARS, slugProblem } from "../../slug.mjs";
+
 // modules/courses/content/appliers/ → the app root.
 const ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 const CONTENT_DIR = join(ROOT, "content", "course");
@@ -113,6 +115,36 @@ export function readBlocks(dir = CONTENT_DIR) {
     for (const unit of block.units ?? []) {
       if (typeof unit.slug !== "string" || !unit.slug) {
         throw new Error(`content/course/${block.file}: a unit needs a slug`);
+      }
+      // 🚨 The GRAMMAR, not merely non-empty. `slugProblem()`'s own docstring
+      // has always said the applier refuses a bad one here — "a sentence
+      // somebody can act on, rather than a page that scrolls nowhere" — and
+      // until 2026-08-13 it did not. A content file could write `Übung 1`, and
+      // then one address had three spellings: the course overview
+      // percent-encodes it, `content-source.ts` builds it raw for the
+      // assistant's deep link, and `pages/actions.ts` revalidates the raw path.
+      // Exactly one of the three reaches the page.
+      const problem = slugProblem(unit.slug);
+      if (problem) {
+        throw new Error(
+          `content/course/${block.file}: ${problem}. A unit's slug is its route AND its ` +
+            `Subject Key, so it has to survive being a URL.`,
+        );
+      }
+      // The same two ceilings the admin form applies. A content file is the
+      // other writer, and a limit only one of them keeps is not a limit.
+      if (typeof unit.title === "string" && unit.title.length > MAX_UNIT_TITLE_CHARS) {
+        throw new Error(
+          `content/course/${block.file}: the title of "${unit.slug}" is longer than ` +
+            `${MAX_UNIT_TITLE_CHARS} characters`,
+        );
+      }
+      if (typeof unit.body === "string" && unit.body.length > MAX_UNIT_BODY_CHARS) {
+        throw new Error(
+          `content/course/${block.file}: the body of "${unit.slug}" is longer than ` +
+            `${MAX_UNIT_BODY_CHARS} characters. It is turned into elements on every ` +
+            `request — split the lesson.`,
+        );
       }
       if (seenUnit.has(unit.slug)) {
         throw new Error(

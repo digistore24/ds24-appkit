@@ -82,10 +82,18 @@ down**, and `rm -rf .next` needed because Turbopack keeps the broken rule across
 a restart.
 
 Say what the form is in words instead — `app/login/ui.tsx` is the shipped example
-of doing that on purpose. `scripts/tailwind-raw-text.test.ts` is the guard, it is
+of doing that on purpose. The guard is `scripts/ux/tailwind-raw-text.mjs`, it is
 the one checker here that deliberately does NOT blank comments (that is where the
 needle is), and it has **no exemption marker**: there is no safe way to write
 these, including to warn about them.
+
+**Two callers, one implementation.** `scripts/tailwind-raw-text.test.ts` runs it
+under `npm run test` and holds every measurement it was built from;
+`node run.mjs ux-check` runs it as well, because the failure's only symptom is a
+500 on every page and that is the command a person reaches for afterwards. Both
+report *what was measured* — the two readers above — and never completeness: a
+third reader has not been ruled out, and a check that claimed otherwise would be
+the one lie this whole rule's history warns about.
 
 ## A type on a query is a claim, and raw SQL does not keep it
 
@@ -102,6 +110,27 @@ line:
 - ``sql`…`.mapWith(grants.createdAt)`` — borrow the column's mapper
 - `sql<string>` + `to_char(…)` — make it honestly a string
 - select the column and aggregate in JS
+
+**What does the converting is drizzle's COLUMN mapper**, not a driver setting —
+`db/index.ts` deliberately carries no `types:` option, because `drizzle(client)`
+overwrites every date handler on the client it is given. `db/timestamp-utc.test.ts`
+is the guard on that, and `applierSql` is that same mutated client: it hands out
+strings for date columns and throws on a bound `Date`.
+
+## A script's own client is not drizzle's
+
+Everything under `scripts/` and `modules/*/` is bare Node with a bare postgres.js
+client, and there postgres.js's defaults are wrong in both directions: it reads
+a `timestamp` in the **process's** zone, and it types a bound `Date` as
+`timestamptz`, which makes Postgres convert the **column** in the **database
+session's** zone. The second one moved a retention boundary far enough to delete
+rows that were still inside it (measured, `troubleshooting.md`).
+
+- **Open every client with `connectUtc()`** (`scripts/lib/pg-utc.mjs`), never
+  `postgres()` — `scripts/lib/pg-utc.test.ts` refuses a second way in. Reading is
+  then right with nothing else to remember.
+- **A date going INTO raw SQL is `sql.typed.utcTimestamp(value)`**, always. The
+  bare `${date}` is refused at bind time with the fix in the message.
 
 ## Dates that stop being dates
 

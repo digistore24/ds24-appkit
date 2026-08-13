@@ -53,7 +53,8 @@ export async function generateMetadata() {
  * ⛔ `timeZone: "UTC"` is LOAD-BEARING, not decoration, and it is the third
  * place in this repo that has had to say so. `access_until` is a `timestamp`
  * WITHOUT time zone holding the LAST MILLISECOND of the day the Operator picked,
- * in UTC (db/index.ts pins OID 1114 to UTC in both directions). Rendered in the
+ * in UTC (drizzle's `timestamp` column mapper converts both ways —
+ * `db/timestamp-utc.test.ts`). Rendered in the
  * viewer's zone, a grant issued "through 1 August" reads **2 August** for
  * everybody ahead of UTC — and on New Year's Eve it is off by a day AND a year.
  * The Operator's own page (app/dashboard/admin/users/[id]/ui.tsx) and story

@@ -59,6 +59,102 @@ export function availableModules(root = ROOT) {
 }
 
 /**
+ * `ids` plus everything they require, transitively — the smallest arrangement
+ * containing them that `loadModules()` will actually load.
+ *
+ * 🚨 **This exists because the failure it prevents is SILENT.** `loadModules()`
+ * refuses a list that names a module without its dependency, which is right;
+ * but `scripts/modules/inventory.mjs` wraps it in `safeModules()` and swallows
+ * that refusal into an empty list, deliberately, so that a broken manifest can
+ * never be the reason a session has no greeting. The two together mean a caller
+ * passing `["courses"]` gets **nothing back and no error** — no globs, no cron
+ * jobs, no sections — and every assertion over the result then passes by being
+ * vacuous. Measured on 2026-08-12, the day `courses` first declared `requires`:
+ * two assertions in `scripts/modules/inventory.test.ts` flipped to reading an
+ * empty map, and only one of them happened to compare against a non-empty
+ * expectation.
+ *
+ * So whoever asks a question ABOUT a module rather than about this app closes
+ * the list here first. Cycles are impossible (`manifestProblems()` refuses a
+ * module that requires itself, `readModule()` refuses a dependency that is not
+ * in the tree), and the `seen` set is what makes that a property of this
+ * function rather than a hope about the data.
+ *
+ * @param {string[]} ids
+ * @param {string} [root]
+ * @returns {string[]} sorted, deduplicated
+ */
+export function withRequires(ids, root = ROOT) {
+  const seen = new Set();
+  const visit = (id) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    const { manifest } = readModule(id, root);
+    const requires = Array.isArray(manifest.requires) ? manifest.requires : [];
+    for (const dep of requires) visit(dep);
+  };
+  for (const id of ids) visit(id);
+  return [...seen].sort();
+}
+
+/**
+ * What `module add <id>` is missing — the dependencies not already installed.
+ *
+ * 🚨 **A decision, extracted, because the command that used to make it made it
+ * TOO LATE.** `add()` wrote `config/modules.json` and only then called
+ * `writeGenerated()`, which is where `loadModules()`'s refusal lived — so the
+ * command printed an error and exited 1 having already put the module in the
+ * list, with no generated file rewritten. `module list` then reported it as
+ * installed. Measured on 2026-08-12, the day `courses` first declared
+ * `requires`. A refusal that leaves the app half-changed is worse than no
+ * refusal: the operator reads an error, believes nothing happened, and every
+ * later command answers for an arrangement that does not exist.
+ *
+ * Empty means "go ahead". Order follows the manifest's, so the message names
+ * them in the order somebody should install them.
+ *
+ * @param {Record<string, unknown>} manifest
+ * @param {string[]} installed
+ * @returns {string[]}
+ */
+export function missingRequires(manifest, installed) {
+  const requires = Array.isArray(manifest.requires) ? manifest.requires : [];
+  return requires.filter((dep) => !installed.includes(dep));
+}
+
+/**
+ * Which INSTALLED modules would break if `id` were removed.
+ *
+ * The mirror of the above and the more dangerous direction: taking `api` out
+ * from under an installed `courses` leaves an arrangement `loadModules()`
+ * refuses — which is every command in the app, including `module list`,
+ * including the one that would explain it.
+ *
+ * ⚠️ **A manifest that cannot be READ counts as a dependant.** "I could not
+ * look" and "it does not depend on this" must not be the same answer, and of
+ * the two directions to be wrong in, refusing to remove is the recoverable one.
+ * `module check` is where a broken manifest gets diagnosed.
+ *
+ * @param {string} id
+ * @param {string[]} installed
+ * @param {string} [root]
+ * @returns {string[]}
+ */
+export function dependantsOf(id, installed, root = ROOT) {
+  return installed
+    .filter((other) => other !== id)
+    .filter((other) => {
+      try {
+        const { manifest } = readModule(other, root);
+        const requires = Array.isArray(manifest.requires) ? manifest.requires : [];
+        return requires.includes(id);
+      } catch {
+        return true;
+      }
+    });
+}
+
+/**
  * Read and validate one module's manifest.
  *
  * @param {string} id

@@ -76,8 +76,12 @@ export interface Entitlement {
  * is `timestamp` WITHOUT time zone and `now()` returns `timestamptz`; Postgres
  * resolves `timestamp > timestamptz` by casting the LEFT side using the session
  * `TimeZone`, which nothing in this project sets — db/index.ts passes only
- * `{ max, types }` and docker-compose.yml sets no `TZ`. Meanwhile the column
- * MEANS UTC: db/index.ts pins OID 1114 to it in both directions. Left alone,
+ * `{ max }` and docker-compose.yml sets no `TZ`. ⚠️ Nothing STOPS an operator's
+ * managed Postgres from being set to one, either, which is what makes this a
+ * property of the query rather than of our luck (story A76 measured a retention
+ * boundary deleting the wrong rows on a database at `timezone='Europe/Berlin'`).
+ * Meanwhile the column MEANS UTC — drizzle's `timestamp` column mapper converts
+ * both ways, `db/timestamp-utc.test.ts`. Left alone,
  * two zones meet in one comparison and a host at UTC+2 hands two extra hours of
  * access to every dated grant — or takes two away, depending which way the
  * session leans.
@@ -525,9 +529,11 @@ export async function grantByHand(args: {
       // and disappears with the Operator's account rather than blocking it.
       issuedBy: args.actor.id,
       note,
-      // A JS Date, NEVER sql`…`. db/index.ts serialises `timestamp` (OID 1114)
-      // as `toISOString()` and parses it back as UTC, so the value that comes
-      // out is the instant that went in. `sql\`now()\`` would store the
+      // A JS Date, NEVER sql`…`. Drizzle's `timestamp` column mapper writes
+      // `toISOString()` and reads it back as UTC, so the value that comes out
+      // is the instant that went in — and a raw template has no column on the
+      // value's side, which is the whole of `db/sql-date-param.test.ts`.
+      // `sql\`now()\`` would store the
       // SESSION's wall-clock digits instead — the bug endGrant/suspendGrant
       // still carry.
       accessUntil: args.accessUntil,
@@ -613,6 +619,29 @@ export interface RevokedGrant {
  *   `alreadyEnded` when a concurrent write closed the grant between the read
  *   and the UPDATE.
  */
+/**
+ * Whose grant this is, or null — for the setup trail's `subject_member_id`.
+ *
+ * 🚨 A read of ONE column, and it lives here rather than in `lib/setup/tools.ts`
+ * because that file is a thin caller of a domain and this is the domain that
+ * owns `grants`. It exists for the half of `grant_revoke` that has not written
+ * anything yet: a PLAN names a grant, the trail has to name the person, and
+ * `revokeGrantByHand()` — which reads the member out of the row it closed — has
+ * not run. Without it the first act of the two-act protocol would be the one act
+ * missing from that member's Art. 15 export.
+ *
+ * `grants.id` is `text`, so an unknown or malformed id matches nothing and
+ * answers null rather than raising a 22P02.
+ */
+export async function memberOfGrant(grantId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ memberId: grants.memberId })
+    .from(grants)
+    .where(eq(grants.id, grantId))
+    .limit(1);
+  return row?.memberId ?? null;
+}
+
 export async function revokeGrantByHand(args: {
   /** The Operator. Re-checked in canRevokeGrant — actions are endpoints. */
   actor: Actor;
@@ -818,7 +847,7 @@ async function endGrant(
       // now() too, and a clock-skewed app server must not be able to record an
       // end that precedes the grant's own creation.
       // `(now() at time zone 'utc')`, not `now()`. The column is `timestamp`
-      // WITHOUT zone and db/index.ts reads it back as UTC, so a bare now()
+      // WITHOUT zone and drizzle's column mapper reads it back as UTC, so a bare now()
       // stores session-local wall-clock digits that are then interpreted as
       // UTC — and story 3.4 puts those digits on screen under a "UTC" label.
       // Invisible here only because this machine's session zone is Etc/UTC.

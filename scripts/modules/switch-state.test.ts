@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { blankComments } from "../lib/source-text.mjs";
-import { switchLine, switchStateFrom } from "./switch-state.mjs";
+import { noSwitchLine, switchLine, switchStateFrom } from "./switch-state.mjs";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -142,6 +142,41 @@ describe("the switch files really in this tree", () => {
   });
 });
 
+describe("a module with no switch says so", () => {
+  // 🚨 The state that used to be printed as SILENCE. Every module that declares
+  // a `config` gets a `switch:` line, the guidance says "set the switch" after
+  // each `module add`, and against that background the one module without a
+  // line reads as an unfinished manifest rather than as a decision — which is
+  // how it was read (reported 2026-08-12).
+  it("names the state rather than leaving a gap", () => {
+    expect(noSwitchLine()).toMatch(/no switch/);
+    // And says what that MEANS, because "no switch" alone is the same gap in
+    // words: the reader's next question is whether the module is doing anything.
+    expect(noSwitchLine()).toMatch(/installed/);
+  });
+
+  it("is a state some module in this tree really is in", () => {
+    // The non-vacuity guard, and the thing that would change the answer: if
+    // every module grew a `config`, this line would be unreachable and the
+    // sentence above would be describing nothing. `activity` is the one today —
+    // it contributes components INTO a lesson somebody else gates, so it has no
+    // route of its own to answer 404 with.
+    const without = readdirSync(join(ROOT, "modules"), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .filter((id) => {
+        const manifest = JSON.parse(
+          readFileSync(join(ROOT, "modules", id, "module.json"), "utf8"),
+        );
+        return typeof manifest.config !== "string";
+      });
+    expect(
+      without.length,
+      "every module now declares a switch, so noSwitchLine() is dead code",
+    ).toBeGreaterThan(0);
+  });
+});
+
 describe("cli.mjs reports it", () => {
   // Source read as TEXT, so through `blankComments()` — `cli.mjs` now carries a
   // paragraph ABOUT the weak/strong distinction, and a checker that counted
@@ -158,6 +193,13 @@ describe("cli.mjs reports it", () => {
     // different question than the one the column heading asks.
     expect(cli).toMatch(/pointers\(manifest, installed\)|installed\s*\n?\s*\?/);
     expect(cli).toContain("pointers(manifest, withParts)");
+  });
+
+  it("prints the no-switch state through that file too, not in its own words", () => {
+    // Same rule as `switchLine` above, and the same reason: a second wording at
+    // the call site is a second answer to drift apart from this one.
+    expect(cli).toMatch(/import \{[^}]*noSwitchLine[^}]*\} from "\.\/switch-state\.mjs"/);
+    expect(cli).toContain("noSwitchLine()");
   });
 
   it("keeps no `.enabled` peek of its own", () => {

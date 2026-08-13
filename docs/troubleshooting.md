@@ -186,14 +186,64 @@ a line that genuinely has to say it is exempted with `sql-cast-ok`.
 
 **Do not "fix" it with `new Date(value)`.** Postgres hands over
 `2026-07-25 11:29:17.552095` with no zone marker, so V8 reads it in the *host's*
-zone and the timestamp silently moves by the host's offset — the very bug
-`db/index.ts` exists to prevent. Instead, one of:
+zone and the timestamp silently moves by the host's offset — the very thing
+drizzle's `timestamp` column mapper prevents wherever there IS a column, and a
+raw expression is precisely where there is not one. Instead, one of:
 
 ```ts
 sql`min(${grants.createdAt})`.mapWith(grants.createdAt)   // borrow the column's mapper
 sql<string>`to_char(min(${grants.createdAt}), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`
 // or: select the column and do the min() in JS
 ```
+
+**Which mechanism does the UTC work — and it is not the one people expect.**
+`db/index.ts` used to carry a `types: { 1114: … }` mapper for exactly this, with
+a long comment. Measured 2026-08-12: it never ran. `drizzle(client)` calls
+`construct()`, whose first act is to overwrite the driver's parser **and**
+serializer for every date OID with `(val) => val` — drizzle converts at the
+COLUMN instead (`mapToDriverValue` = `toISOString()`, `mapFromDriverValue` =
+`new Date(value + "+0000")`). The behaviour was right the whole time and the
+explanation was not; `db/timestamp-utc.test.ts` is now the guard that goes red
+if either half stops. Two consequences worth knowing:
+
+- **`construct()` MUTATES the client — it does not wrap it.** `applierSql` is
+  that same object, so the raw applier handle hands out *strings* for date
+  columns and **throws** on a bound `Date`.
+- **A bare script's client is a different world.** Nothing has touched it, and
+  postgres.js's own defaults are wrong here in both directions — see the section
+  below.
+
+## A retention boundary that travels as the wrong TYPE
+
+Every script under `scripts/` and `modules/*/` opens its own postgres.js client,
+where there is no column to convert at. Two defaults bite:
+
+- **Reading**, the driver hands `"2026-08-11 09:13:47.14"` to `new Date(...)`,
+  which V8 reads in the **process's** zone. Measured: the Art. 15 export
+  (`node run.mjs data-export`) reported a consent stored at 12:00 UTC as
+  `10:00Z` under `TZ=Europe/Berlin` and `00:00Z` under `TZ=Pacific/Auckland`.
+- **Writing**, `inferType()` types a `Date` as OID **1184** (`timestamptz`),
+  while every date column here is `timestamp`. Postgres resolves
+  `timestamp < timestamptz` by casting the **column** into the **database
+  session's** zone — so the boundary moves by the *server's* offset, and the
+  process's `TZ` shows nothing at all. Measured on Postgres 16 with the database
+  at `timezone='Europe/Berlin'`: `node run.mjs db-prune-ipn --days 1` deleted
+  **4 of 4** seeded rows where 2 were outside the window; on a database west of
+  UTC the same boundary spares rows that should have gone.
+
+Both are answered in one place, `scripts/lib/pg-utc.mjs`, and every client in
+the tree is opened through its `connectUtc()` (a test refuses a second way in).
+Reading is then correct with no call site knowing. **Writing has to say it:**
+
+```js
+where received_at < ${sql.typed.utcTimestamp(cutoff)}   // ✅
+where received_at < ${cutoff}                           // ✗ refused at bind time
+```
+
+The bare form throws with the fix in the message rather than deleting the wrong
+rows — there is no `timestamptz` column anywhere in this tree, so a 1184
+parameter is always a mistake, and refusing is the safe direction for a command
+whose mistake cannot be undone.
 
 Two more ways a `Date` stops being one, both of which keep their type:
 
@@ -500,3 +550,58 @@ The fix is the content mechanism, never a workaround:
   in the production database. Green there, plus one real content page opened
   live, is what "the content is there" actually means. It is a named go-live
   step, not an optional extra.
+
+## A scheduled job failed and nothing said so
+
+The symptom: something that should happen nightly has stopped happening —
+rows nobody pruned, a top-up nobody chased, a report that never went out.
+Every page answers 200, `node run.mjs smoke` is green, and until recently
+`node run.mjs errors` was green too.
+
+**A job has no status code to hide behind.** That is what makes this class
+different from a broken page: a page at least answers something a checker can
+look at, and a job answers nobody. Its only signal is the line it writes:
+
+```
+[cron] prune-ipn-log FAILED after 12ms: Error: connect ECONNREFUSED 127.0.0.1:5432
+    at Object.run (lib/cron/jobs.ts:140:13)
+```
+
+`node run.mjs errors` reads that line now, locally and with `--url` against a
+deployed app — and so does every other line this app writes in the same shape,
+`[media]`, `[ipn]`, `[chat]`, `[ops]` and the rest.
+
+🚨 **It did not always.** The parser anchored on lines that BEGIN with an
+error, and this one begins with `[cron]` — so an app cloned before this
+paragraph existed answers `✓ No errors in the log` over a scheduler that has
+been down for a week. Check your own copy before you trust a green answer:
+`lib/diagnostics/parse.mjs` names `PREFIXED_ERROR` if it has the fix.
+`node run.mjs update` cannot bring it — that command moves guidance, never
+code — so it is a fresh clone or the four lines by hand.
+
+**Two limits worth knowing before you read a green answer as health:**
+
+- **The window is bounded and it empties on every restart.** `--url` reads a
+  500-line in-memory ring, so a job that failed before the last redeploy is
+  not in it, and behind a load balancer you are asking one instance. The
+  answer always names the window it looked at; read that line rather than the
+  tick.
+- **A failure that never produced an error object is still invisible.** The
+  parser needs the error shape — `[ops] media store misconfigured: 3
+  problem(s)` is a `console.error` and reads as ordinary output. That is
+  deliberate: `console.log` wears the same prefix as `console.error` once both
+  are in one stream, so "it starts with a bracket" would flag the nine
+  perfectly healthy `[cron] … ok in 2ms` lines every app writes every night.
+
+**So the direct question about jobs is not `errors` — it is `cron`:**
+
+```bash
+node run.mjs cron --list                       # this machine
+node run.mjs cron --list --url https://your-app  # the deployed app
+```
+
+That one reads `cron_runs` rather than a log: when each job last ran, what it
+said, and how often it has failed. It is the answer that survives a restart,
+and it is what `node run.mjs health --url …` asks on your behalf. Use `errors`
+to find out **what** broke; use `cron --list` to find out **that** something
+did.

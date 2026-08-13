@@ -26,6 +26,8 @@ import {
   runModuleSmoke,
 } from "./inventory.mjs";
 import { manifestProblems } from "./manifest.mjs";
+import { withRequires } from "./registry.mjs";
+import { installedModules } from "./installed.mjs";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const roots: string[] = [];
@@ -222,9 +224,16 @@ describe("what a module traces into a standalone build", () => {
     // declares `"appliers": "content/appliers"`, so this is the assertion that
     // notices if that field is renamed or the derivation stops firing. A
     // fixture-only version of this test would pass over a dead seam.
-    expect(moduleTracingIncludes(ROOT, ["courses"])[SETUP_TRACING_ROUTE]).toEqual([
-      "./modules/courses/content/appliers/**/*",
-    ]);
+    //
+    // ⚠️ `withRequires()` and not the bare id. `courses` declares `requires:
+    // ["api"]`, and `moduleTracingIncludes()` goes through `safeModules()`,
+    // which swallows `loadModules()`'s refusal of an unclosed list into an
+    // empty one — so `["courses"]` would answer `undefined` here and this
+    // assertion would fail while claiming the seam was dead. `api` declares no
+    // appliers, so the expected value is unchanged by carrying it.
+    expect(
+      moduleTracingIncludes(ROOT, withRequires(["courses"], ROOT))[SETUP_TRACING_ROUTE],
+    ).toEqual(["./modules/courses/content/appliers/**/*"]);
   });
 
   it("the derived glob stays inside modules/<id>/, the bar a declared one clears", () => {
@@ -238,7 +247,8 @@ describe("what a module traces into a standalone build", () => {
     // contain the module's folder name and still point at the core's tree.
     // Two copies of a rule drift; one of them is the copy nobody updates.
     for (const id of ["courses"]) {
-      const globs = moduleTracingIncludes(ROOT, [id])[SETUP_TRACING_ROUTE] ?? [];
+      const globs =
+        moduleTracingIncludes(ROOT, withRequires([id], ROOT))[SETUP_TRACING_ROUTE] ?? [];
       expect(globs.length, id).toBeGreaterThan(0);
       const problems = manifestProblems(
         {
@@ -326,18 +336,30 @@ describe("what a module traces into a standalone build", () => {
 });
 
 describe("🚨 the shipped app's tracing map is exactly the core's", () => {
-  // The no-op claim of this change, made as a MEASUREMENT rather than as a
-  // tautology: `config/modules.json` ships `{ "installed": [] }`, so composing
-  // the config must produce the core's entries and nothing else.
-  //
   // ⚠️ The literal below is written out on purpose and gets EDITED when what a
   // shipped app traces changes — as Story 34.1 edited it to add `/api/setup`.
   // That is the point: a change to what every customer's image carries is a
   // change somebody makes deliberately. Do NOT loosen it into "contains at
   // least these" to avoid the edit.
-  it("composes the core's map and nothing else with no module installed", () => {
-    expect(nextConfig.outputFileTracingIncludes).toEqual(CORE_TRACING_INCLUDES);
-    expect(nextConfig.outputFileTracingIncludes).toEqual({
+  //
+  // 🚨 **It pins `CORE_TRACING_INCLUDES`, not `nextConfig`, and that distinction
+  // is the whole repair.** It used to read the LIVE composed value —
+  // `nextConfig.outputFileTracingIncludes`, which is
+  // `mergeTracingIncludes(CORE_TRACING_INCLUDES, moduleTracingIncludes())` —
+  // and hold it against the core's literal. In this tree the two agree, because
+  // `config/modules.json` ships `{ "installed": [] }`; in a customer's app they
+  // agree only until the first `module add`. `courses` declares `appliers`, so
+  // its `./modules/courses/content/appliers/**/*` joins `/api/setup` exactly as
+  // designed — and the test that exists to catch an UNDELIBERATE change called
+  // that a defect (reported 2026-08-12, on an app with five modules).
+  //
+  // So the claim is split by what each half can honestly say. The core's map is
+  // pinned here and edited by hand. What a composed app adds is asserted below
+  // as a SHAPE — the core's globs survive at the head of their key, and every
+  // added glob belongs to a module that is really installed — which stays true
+  // in every app and still refuses the two things that would hurt.
+  it("pins the core's own map, a literal that gets edited rather than loosened", () => {
+    expect(CORE_TRACING_INCLUDES).toEqual({
       "/api/chat": ["./content/knowledge/**/*"],
       "/dashboard/chat": ["./content/knowledge/**/*"],
       "/api/knowledge-media/\\[\\.\\.\\.path\\]": ["./content/knowledge-media/**/*"],
@@ -365,13 +387,37 @@ describe("🚨 the shipped app's tracing map is exactly the core's", () => {
         "./lib/diagnostics/parse.mjs",
       ],
     });
-    expect(Object.keys(nextConfig.outputFileTracingIncludes ?? {})).toEqual([
+    expect(Object.keys(CORE_TRACING_INCLUDES)).toEqual([
       "/api/chat",
       "/dashboard/chat",
       "/api/knowledge-media/\\[\\.\\.\\.path\\]",
       "/api/setup",
       "/api/cron",
     ]);
+  });
+
+  it("is what THIS app's next.config.ts actually carries", () => {
+    // The live value still gets read — a `next.config.ts` that stopped composing
+    // from `CORE_TRACING_INCLUDES`, or composed against the wrong root, would
+    // leave the pin above green over an image that traces something else. What
+    // it may NOT do is hold the live value against the core's literal: that is
+    // true only while nothing is installed, and it is the whole defect this
+    // describe was rewritten for.
+    //
+    // ⚠️ Two claims this deliberately does NOT make, because
+    // `scripts/modules/profiles.test.ts` § 6 already makes both over every
+    // profile of this tree — the shipped one, each module with its requires,
+    // and all of them together: that no profile LOSES a core glob (the object
+    // spread that once dropped the handbook from a standalone image), and that
+    // the shipped profile is the core's map unchanged. It also carries the
+    // needle that a real profile collides on a core key at all, which is what
+    // keeps that loop from proving `{...core}` equals `core`.
+    expect(nextConfig.outputFileTracingIncludes).toEqual(
+      mergeTracingIncludes(
+        CORE_TRACING_INCLUDES,
+        moduleTracingIncludes(ROOT, withRequires(installedModules(ROOT), ROOT)),
+      ),
+    );
   });
 });
 

@@ -82,8 +82,26 @@ export function whileOff(manifest) {
  * A caller renders whichever its layout has room for; neither has to know the
  * wording.
  *
+ * 🚨 The third step is the one nobody could have guessed from the other two.
+ * A module that brings COMPONENTS and no route of its own is installed,
+ * migrated, switched on — and still shows nothing, because the thing it
+ * contributes is a panel that one of YOUR pages has to render. Reported
+ * 2026-08-12 by somebody who did every printed step for `companion` and
+ * reasonably concluded the module system was broken: the closing line said
+ * *"set `enabled`: true, then restart"*, as though something would appear.
+ * (`activity` was worse: no `config` at all, so it printed no switch step
+ * either — two numbered steps, both done, nothing on screen.)
+ *
+ * ⚠️ Derived, never declared. `manifest.components` with neither `app` nor
+ * `nav` is exactly the shape — measured across all five modules on the day it
+ * was written: `api`, `courses` and `community` bring routes and no
+ * components, `activity` and `companion` the reverse. A free-text field in the
+ * manifest would have been the obvious answer and is the one this repo already
+ * refused: `guidance` was removed on 2026-08-08 as "a promise with no
+ * executor", and `manifest.mjs` rejects an unknown key rather than ignoring it.
+ *
  * @param {Manifest} manifest
- * @returns {({ kind: "migrate", tables: number } | { kind: "switch", file: string, why: string, whileOff: string })[]}
+ * @returns {({ kind: "migrate", tables: number } | { kind: "switch", file: string, why: string, whileOff: string } | { kind: "render", components: string[], docs: string | null })[]}
  */
 export function afterInstall(manifest) {
   const steps = [];
@@ -97,6 +115,28 @@ export function afterInstall(manifest) {
       file: manifest.config,
       why: INSTALLING_IS_NOT_SWITCHING_ON,
       whileOff: whileOff(manifest),
+    });
+  }
+
+  // ⚠️ Capitalised names only. `manifest.components` is the module's whole
+  // component seam and `activity` puts a HOOK in it (`useActivity`) — a step
+  // that said "render <useActivity>" would be telling somebody to write
+  // something that is not an element. React's own convention is the filter, and
+  // it is the right one here because this step is about rendering.
+  const components = Object.keys(manifest.components ?? {}).filter((name) => /^[A-Z]/.test(name));
+  const routes = Array.isArray(manifest.app) && manifest.app.length > 0;
+  const menu = typeof manifest.nav === "string";
+  // ⚠️ `slots` too: a slot component is mounted by the CORE, so a module that
+  // fills one is visible without anybody writing a line. No module has both
+  // today — `api` and `community` declare slots and no components, `activity`
+  // and `companion` the reverse — but the exclusion belongs in the derivation
+  // rather than in the luck of the current tree.
+  const slotted = manifest.slots !== undefined && manifest.slots !== null;
+  if (components.length > 0 && !routes && !menu && !slotted) {
+    steps.push({
+      kind: "render",
+      components,
+      docs: typeof manifest.docs === "string" ? manifest.docs : null,
     });
   }
 

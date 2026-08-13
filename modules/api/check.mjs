@@ -123,6 +123,13 @@ try {
   // written straight to the table rather than through the UI so this stays one
   // command; it is a real key for its lifetime and the guard cannot tell the
   // difference — which is the point.
+  //
+  // ⚠️ The five minutes are `sql.typed.utcTimestamp(...)` and not a bare
+  // `${date}`: a `Date` is typed timestamptz on the wire and `expires_at` is
+  // `timestamp`, so Postgres would convert it in the database session's zone —
+  // on a server at UTC+2 the "five minute" key would live two hours and five
+  // minutes, and on one west of UTC it would be born expired and this check
+  // would report a 401 as if the route were broken. `scripts/lib/pg-utc.mjs`.
   const secret = KEY_PREFIX + randomBytes(32).toString("base64url");
   const keyId = randomUUID();
   await sql`
@@ -131,7 +138,7 @@ try {
       ${keyId}, ${member.id}, ${"api-check (temporary)"},
       ${createHash("sha256").update(secret, "utf8").digest("hex")},
       ${secret.slice(0, KEY_PREFIX.length + 4)}, ${"read"}, ${"api"},
-      ${new Date(Date.now() + 5 * 60_000)}
+      ${sql.typed.utcTimestamp(new Date(Date.now() + 5 * 60_000))}
     )`;
 
   console.log(`\nCalling ${base}/me as ${member.email} …`);

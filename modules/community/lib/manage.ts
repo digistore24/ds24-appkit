@@ -2232,6 +2232,24 @@ export type LiveScope =
 const CHANGED_AT = sql`greatest(coalesce(${communityPosts.deletedAt}, 'epoch'), coalesce(${communityPosts.editedAt}, 'epoch'))`;
 
 /**
+ * A `Date` bound against {@link CHANGED_AT}, carrying a column's own converter.
+ *
+ * 🚨 The WRITE side of the rule the comment above states for reads, and it is
+ * not symmetry for its own sake: a raw `sql\`${CHANGED_AT} > ${someDate}\``
+ * hands postgres.js the `Date` OBJECT — there is no column on that side of the
+ * comparison to convert it, and `drizzle()` has replaced the driver's own date
+ * serialisers with `(val) => val` because it means to convert at the column —
+ * so the object travels straight into a function that wants a string and throws
+ * `TypeError: The "string" argument must be … Received an instance of Date`.
+ * Measured on Postgres 16 with Node 22.22.1, postgres 3.4.9, drizzle-orm 0.45.2:
+ * the same shape that took the setup surface's two-act apply down (A71).
+ * `CHANGED_AT` is `greatest(deletedAt, editedAt)`, so `editedAt` is the column
+ * whose converter is the right one to borrow — the same trick `.mapWith()` is
+ * for reads. `db/sql-date-param.test.ts` keeps the raw shape out.
+ */
+const changedAtParam = (at: Date) => sql.param(at, communityPosts.editedAt);
+
+/**
  * The JS twin of {@link CHANGED_AT}. Timezone-innocent: it compares `Date`
  * values handed in and never reads a clock.
  */
@@ -2508,9 +2526,9 @@ export async function liveAnswerFor(
         and(
           eq(communityPosts.discussionId, discussion.id),
           or(
-            sql`${CHANGED_AT} > ${cursor.changed.at}`,
+            sql`${CHANGED_AT} > ${changedAtParam(cursor.changed.at)}`,
             and(
-              sql`${CHANGED_AT} = ${cursor.changed.at}`,
+              sql`${CHANGED_AT} = ${changedAtParam(cursor.changed.at)}`,
               gt(communityPosts.id, cursor.changed.id),
             ),
           ),
@@ -4650,7 +4668,7 @@ export async function feedSince(
         // Only what this reader could already be holding — a change to
         // something created after their cursor arrives as a normal item.
         lte(communityPosts.createdAt, cursor.at),
-        sql`${CHANGED_AT} > ${changedCursor.at}`,
+        sql`${CHANGED_AT} > ${changedAtParam(changedCursor.at)}`,
       ),
     )
     .orderBy(sql`${CHANGED_AT} desc`)

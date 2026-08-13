@@ -49,6 +49,19 @@ import { mayModerate } from "@/modules/community/lib/rules";
 //   on        → the section shell. Groups and discussions arrive with
 //               stories 19.5/19.6; until then an EmptyState says where the
 //               rooms come from.
+
+// The browser tab. This page IS the section, so `title` is right here — the two
+// pages under it get their own, because four routes sharing one tab is how a
+// member with three rooms open loses track of which is which.
+//
+// ⚠️ The `app/` wrapper has to re-export it or the route never sees it; that
+// omission is what 2026-08-12 reported for this page and the two below it, and
+// `modules/boundary.test.ts` §1b has refused it since the same day.
+export async function generateMetadata() {
+  const t = await getTranslations("community");
+  return { title: t("title") };
+}
+
 export default async function CommunityPage() {
   if (communityOffReason() === "disabledInConfig") {
     notFound();

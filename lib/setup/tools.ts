@@ -15,7 +15,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { MODULE_GATES } from "@/lib/modules/gate-registry";
 import { installedModules } from "@/lib/modules/installed";
-import { grantByHand, revokeGrantByHand } from "@/lib/entitlements/manage";
+import { grantByHand, memberOfGrant, revokeGrantByHand } from "@/lib/entitlements/manage";
 import { createUser, listUsers } from "@/lib/users/manage";
 import { acceptUpload } from "@/lib/media/manage";
 import { guardUploadEntry } from "@/lib/media/upload-endpoint";
@@ -48,6 +48,8 @@ const listModules: SetupTool = {
   // Nothing to name: the act is about this environment, not about a thing in
   // it. Declared rather than left out — see `SetupTool.targetField`.
   targetField: null,
+  // Nothing about a person: this act is about the environment.
+  subjectEmailField: null,
   mutates: false,
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
   async run(context) {
@@ -87,6 +89,7 @@ const listEnvironment: SetupTool = {
   description: "Which environment this is, and what it is running.",
   // The environment is the subject, and `app_env` is already its own column.
   targetField: null,
+  subjectEmailField: null,
   mutates: false,
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
   async run(context) {
@@ -109,6 +112,9 @@ const userList: SetupTool = {
   // over everybody, not the thing the act is about — and it already has its own
   // audit column. A target here would name a set as if it were a subject.
   targetField: null,
+  // ⚠️ A filter over everybody is not a subject — the same reason
+  // `targetField` is null here. A set is not a person.
+  subjectEmailField: null,
   mutates: false,
   inputSchema: {
     type: "object",
@@ -138,6 +144,10 @@ const userUpsert: SetupTool = {
   // The natural key this tool is keyed by, and what `subjects` carries when it
   // gets that far.
   targetField: "email",
+  // 🚨 The address IS the person this act is about, and the id behind it is
+  // resolved by `dispatch.ts` AFTER the act — so a user this call created is
+  // found rather than recorded as an empty column.
+  subjectEmailField: "email",
   mutates: true,
   inputSchema: {
     type: "object",
@@ -169,6 +179,12 @@ const userUpsert: SetupTool = {
         detail:
           `refused: an operator is not made through this surface in ${context.appEnv}. ` +
           "Do it on /dashboard/admin/users, signed in as an owner.",
+        // 🚨 The trail's half of the same word. `data.refused` is the WIRE
+        // signal (`scripts/setup/client.mjs` → `toolRefusal()`); this is what
+        // makes `dispatch.ts` write `outcome: refused` rather than `applied`.
+        // Without it the row for the sharpest refusal this surface makes — an
+        // attempted owner promotion — read as a successful act with no rows.
+        refused: "ownerPromotionRefused",
         data: { refused: "ownerPromotionRefused" },
       };
     }
@@ -221,6 +237,9 @@ const grantPlan: SetupTool = {
   // access did not happen. (`productKey` travels in `detail` on the paths that
   // produce one.)
   targetField: "email",
+  // Whose access this is. A refused grant is a question about a person, so
+  // the lookup happens on that path too.
+  subjectEmailField: "email",
   mutates: true,
   inputSchema: {
     type: "object",
@@ -250,6 +269,10 @@ const grantPlan: SetupTool = {
         changed: 0,
         subjects: [email],
         detail: `refused: no member with the address ${email} in ${context.appEnv}`,
+        // The trail's half — see `user_upsert` above. This one also carries a
+        // written `reason`, which A72 put on the refusal paths: a grant that did
+        // not happen and the reason it was asked for belong on one row.
+        refused: "notFound",
         data: { refused: "notFound" },
       };
     }
@@ -308,16 +331,34 @@ const grantRevoke: SetupTool = {
   // its own column and its own named exception in docs/data-protection.md, and
   // a sentence in `target` would put payload content in the identifier column.
   targetField: "grantId",
+  // 🚨 Null although this act is entirely ABOUT a member: the input names a
+  // GRANT, and which member it belongs to is a property of the row. That is
+  // read while the act runs and handed back as `SetupResult.subjectMemberId` —
+  // the result-side half of this declaration. Declaring "grantId" here would be
+  // a foreign key pointed at the wrong table.
+  subjectEmailField: null,
   async run(context, input) {
     const grantId = String(input.grantId);
 
     if (context.mode === "plan") {
+      // 🚨 A read, in a mode that is a read — and the only way a PLANNED
+      // revocation can name the member it is about. `subjectEmailField` is null
+      // here because the input names a grant; whose grant it is lives in the
+      // row. Without this the first half of the two-act protocol would be the
+      // one act missing from that member's Art. 15 export. The domain answers
+      // it, not a query in this file.
+      const memberId = await memberOfGrant(grantId);
+
       return {
         mode: "plan",
         created: 0,
         found: 1,
         changed: 1,
         subjects: [grantId],
+        // An id this app issued, never anything the caller sent. An unknown
+        // grant id simply names nobody, and the row still carries the id as its
+        // `target`.
+        ...(memberId ? { subjectMemberId: memberId } : {}),
         detail: `grant ${grantId} would be ended — this cannot be undone`,
       };
     }
@@ -326,7 +367,7 @@ const grantRevoke: SetupTool = {
     // constant REVOKED — it does NOT ask for a reason. So the TOOL asks, and
     // the answer lands in `setup_audit.reason`. Do not "simplify" the reason
     // away on the grounds that the domain function does not want it.
-    await revokeGrantByHand({
+    const revoked = await revokeGrantByHand({
       actor: { id: context.ownerId, role: "owner" },
       grantId,
     });
@@ -337,6 +378,11 @@ const grantRevoke: SetupTool = {
       found: 1,
       changed: 1,
       subjects: [grantId],
+      // Read OUT OF THE ROW that was closed, never off the input — the same
+      // reasoning `revokeGrantByHand()` gives for deciding which page to
+      // revalidate. This is what puts an irreversible act in the Art. 15 export
+      // of the person whose access it ended.
+      subjectMemberId: revoked.memberId,
       detail: `grant ${grantId} ended`,
     };
   },
@@ -354,6 +400,7 @@ const listActs: SetupTool = {
     "What the setup surface has done in this environment lately — who, which tool, which target, and how it ended.",
   // A read of the trail itself. `limit` is a page size, not a subject.
   targetField: null,
+  subjectEmailField: null,
   mutates: false,
   inputSchema: {
     type: "object",
@@ -403,6 +450,8 @@ const contentPresence: SetupTool = {
   // The whole environment is the subject; there is no input and no one thing to
   // name. Its `subjects` are empty on the success path for the same reason.
   targetField: null,
+  // A read of the trail. It is about no member in particular, whoever is in it.
+  subjectEmailField: null,
   mutates: false,
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
   async run(context): Promise<SetupResult> {
@@ -533,6 +582,7 @@ const contentPublish: SetupTool = {
   // the applier LABELS, which exist only once something has run: that is why an
   // empty target here is an answer and not a loss.
   targetField: null,
+  subjectEmailField: null,
   async run(context): Promise<SetupResult> {
     // 🚨 The apply branch is a THIN CALLER of `lib/content/publish.ts`, and it
     // lives there rather than here for a mechanical reason: this file is the
@@ -570,6 +620,10 @@ const contentPublish: SetupTool = {
         changed: 0,
         subjects: [],
         detail,
+        // The trail's half. "I could not look" and "there is nothing there" stay
+        // different answers in the row as well as in the payload — recorded as
+        // `planned` with no code, this one said a plan had run and found no work.
+        refused: "appliersUnreadable",
         data: { refused: "appliersUnreadable", detail, appEnv: context.appEnv },
       };
     }
@@ -647,6 +701,8 @@ const mediaUpload: SetupTool = {
   // a filesystem path here (`SetupContext.file` carries the bytes) — and it is
   // exactly what a refused upload has to say: WHICH file did not land.
   targetField: "path",
+  // A file, not a person. It is uploaded BY the operator, about nobody.
+  subjectEmailField: null,
   mutates: true,
   inputSchema: {
     type: "object",
@@ -687,6 +743,10 @@ const mediaUpload: SetupTool = {
         detail:
           "refused: a file has to be uploaded to /api/setup/media, not /api/setup. " +
           "The MCP server does this for you — call the tool through it.",
+        // The trail's half. `badRequest` rather than a media vocabulary of its
+        // own on purpose: nothing about the file was judged here — the call
+        // arrived at the wrong window — and that is the surface's own word.
+        refused: "badRequest",
         data: { refused: "badRequest" },
       };
     }
@@ -885,6 +945,7 @@ const contentMediaUrl: SetupTool = {
   // pair's rows carry, now on the refusal paths too. Every one of
   // `declaredEntry()`'s four refusals is about this one file.
   targetField: "path",
+  subjectEmailField: null,
   // One hand-out of a writable capability is a mutation, whatever it writes
   // itself: outside DEV it therefore takes a plan and a confirmation, like
   // every other act that changes what an environment holds.
@@ -972,6 +1033,15 @@ const contentMediaUrl: SetupTool = {
         changed: 0,
         subjects: [path],
         detail: `no address for ${path}: ${reason}`,
+        // 🚨 The trail's half, and the one of the five that had no name at all —
+        // this branch sets no `data.refused` either, because
+        // `scripts/content/publish.mjs` branches on `data.upload` and
+        // `data.reason` here rather than through `toolRefusal()`. That wire
+        // shape is left exactly as it is; the trail gets the word it was
+        // missing. An act that minted nothing is a refusal, whatever it reads
+        // like from the caller's side — `applied` with no rows said the address
+        // had been handed out.
+        refused: "noUploadAddress",
         data: { path, key, found: false, upload: null, reason },
       };
     }
@@ -1010,6 +1080,7 @@ const contentMediaConfirm: SetupTool = {
   // reaches `dispatch.ts` without a result. This is where that row gets its
   // name back.
   targetField: "path",
+  subjectEmailField: null,
   mutates: true,
   inputSchema: {
     type: "object",

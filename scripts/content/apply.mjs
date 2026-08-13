@@ -180,8 +180,12 @@ async function main() {
       console.log("");
       process.exit(1);
     }
-    const { default: postgres } = await import("postgres");
-    sql = postgres(dbUrl, { max: 1 });
+    // Lazily, so a dry run in a fresh clone never resolves the driver — and via
+    // `connectUtc`, so an applier reads a `timestamp` as UTC rather than in this
+    // machine's zone, and is refused loudly if it binds a bare `Date`
+    // (`scripts/lib/pg-utc.mjs`).
+    const { connectUtc } = await import("../lib/pg-utc.mjs");
+    sql = connectUtc(dbUrl, { max: 1 });
   }
 
   try {

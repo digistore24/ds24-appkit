@@ -300,6 +300,17 @@ DATABASE_URL="postgres://…" node run.mjs smoke-account --apply    # once
 node run.mjs smoke --url https://YOUR-DOMAIN
 ```
 
+🚨 **These two are also what an uptime checker gets pointed at later, and the
+obvious way to configure one is wrong.** Bind such a check to the **status code**,
+and where a body match is offered as well, match `"status":"ready"` **with its
+quotes and its colon** — never the bare word `ready`, which is a substring of
+`not-ready` and therefore matches the failure body too, for ever and in silence.
+Say which way round the rule points, too: the alarm fires when `"status":"ready"`
+is **ABSENT**, and the providers name that polarity opposite ways (UptimeRobot's
+`keyword_type` wants *not exists*; Better Stack's plain `keyword` type is already
+right and its `keyword_absence` is the inverse). Setting it up is
+`setup-monitoring` step 4, not this skill — copy nothing from memory.
+
 `smoke-account` runs against the production `DATABASE_URL` exactly like
 `user-create` in step 8 — it provisions the member account smoke signs in as
 on the live app (the development login does not exist there) and writes its

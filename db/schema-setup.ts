@@ -104,9 +104,19 @@ export const setupConfirmations = pgTable(
       .notNull()
       .references(() => setupKeys.id, { onDelete: "cascade" }),
     tool: text("tool").notNull(),
-    // The canonical hash of the schema-applied input, so a token minted for one
-    // input cannot apply another. `canonicalInputHash()` in lib/setup/rules.ts
-    // is the ONE spelling of it — plan and apply both call that helper.
+    // 🚨 The canonical hash of the CALL — the schema-applied input and, at the
+    // one door that carries a payload, the sha256 of those bytes. So a token
+    // minted for one input cannot apply another, and a token minted for one
+    // FILE cannot apply a different one (A79: the input at `/api/setup/media`
+    // is a `path` this app never opens, so an input-only binding confirmed a
+    // label while the bytes were free to change). `canonicalCallHash()` in
+    // lib/setup/rules.ts is the ONE spelling of it — plan and apply both call
+    // that helper.
+    //
+    // ⚠️ The COLUMN keeps its name. Renaming it is a migration for a word, on a
+    // table whose rows live two minutes; the comment is where the truth is, and
+    // the value is one hash rather than two columns so that a caller cannot tell
+    // "wrong input" from "wrong file" apart (see `spendConfirmation()`).
     inputHash: text("input_hash").notNull(),
     appEnv: setupEnvEnum("app_env").notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),

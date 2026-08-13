@@ -35,22 +35,35 @@
 // checked-in file rewritten, no database. The whole matrix is milliseconds.
 //
 // ── Why k+2 profiles and not 2^k ───────────────────────────────────────────
-// Six profiles: none, each module alone, and all four together — not the fifteen
-// non-empty subsets. Two invariants license that, and if either is ever dropped
-// this number has to be revisited:
+// k+2 profiles: none, each module with what it REQUIRES, and all of them
+// together — not the 2^k−1 non-empty subsets. Two invariants license that, and
+// if either is ever dropped this number has to be revisited:
 //
 //  1. `modules/boundary.test.ts` §3 — no module imports another it has not
 //     declared in `requires`. So there is no code path that exists only for a
-//     particular pair.
+//     particular pair — **except a declared one, and that is what the closure
+//     below carries.**
 //  2. Every interaction checked below is over a SET: a collision is a duplicate
 //     key anywhere in the profile, and the message fold is a reduction over all
-//     of them. The all-four profile therefore contains every pair's interaction
-//     — a namespace one module deletes from another is deleted in all-four too.
+//     of them. The all-modules profile therefore contains every pair's
+//     interaction — a namespace one module deletes from another is deleted
+//     there too.
 //
-// What all-four does NOT subsume is a module PAIR that only breaks when a third
-// is absent, and nothing in the design can produce that. The singles are here
-// for the opposite reason: they are the profiles a customer actually runs, and
-// they are what proves a module works without the others present.
+// What all-together does NOT subsume is a module PAIR that only breaks when a
+// third is absent, and nothing in the design can produce that. The singles are
+// here for the opposite reason: they are the profiles a customer actually runs,
+// and they are what proves a module works without the others present.
+//
+// 🚨 **"Each module ALONE" stopped being the right list the day a module
+// declared `requires`.** `courses` and `community` serve `/api/v1` and name
+// `api` in their manifests, so `[courses]` is not a profile a customer can
+// install at all — `registry.mjs` refuses to load it, by design, and a list
+// still saying "alone" would have turned that refusal into a red suite about a
+// state nobody can reach. So a single is now a module TOGETHER WITH the
+// transitive closure of what it requires: still k+2, still the profiles a
+// customer runs, and `loadModules()` is what decides which ones those are
+// rather than a sentence here. The dependency is not free and is not pretended
+// to be — `node run.mjs module check` says it out loud on every run.
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -63,7 +76,7 @@ import { SHARED_NAMESPACES, mergeModuleMessages } from "@/lib/modules/messages-m
 import { blankComments } from "@/scripts/lib/source-text.mjs";
 import { expectedGenerated } from "./generate.mjs";
 import { mergeTracingIncludes, moduleTracingIncludes } from "./inventory.mjs";
-import { availableModules, loadModules } from "./registry.mjs";
+import { availableModules, loadModules, readModule, withRequires } from "./registry.mjs";
 import de from "@/messages/de.json";
 import en from "@/messages/en.json";
 
@@ -75,8 +88,13 @@ const ALL = availableModules(ROOT);
 /**
  * The profiles. `[]` first because it is the shipped state and its assertions
  * are the ones that must keep passing unchanged.
+ *
+ * A "single" is a module together with the transitive closure of what it
+ * requires — `withRequires()` in `registry.mjs`, imported rather than re-typed,
+ * because the same closure is what every caller asking about a module rather
+ * than about this app now needs.
  */
-const PROFILES: string[][] = [[], ...ALL.map((id) => [id]), [...ALL]];
+const PROFILES: string[][] = [[], ...ALL.map((id) => withRequires([id], ROOT)), [...ALL]];
 
 const label = (ids: string[]) => (ids.length ? ids.join("+") : "the core alone");
 
@@ -102,6 +120,40 @@ describe("the matrix has real modules to combine", () => {
     // green-by-vacuity it exists to remove.
     expect(ALL).toEqual(["activity", "api", "community", "companion", "courses"]);
     expect(PROFILES).toHaveLength(ALL.length + 2);
+  });
+
+  it("every profile is closed under `requires` — the property, not the count", () => {
+    // 🚨 The count above cannot see this. A profile carrying a module without
+    // what it requires is one `loadModules()` refuses, so the whole file would
+    // fail on an arrangement no customer can install — which is exactly how a
+    // real refusal gets read as a broken test and then softened away.
+    for (const ids of PROFILES) {
+      const present = new Set(ids);
+      for (const id of ids) {
+        const { manifest } = readModule(id, ROOT) as { manifest: { requires?: string[] } };
+        for (const dep of manifest.requires ?? []) {
+          expect(
+            present.has(dep),
+            `profile "${label(ids)}" carries "${id}", which requires "${dep}" — ` +
+              `not an installable arrangement`,
+          ).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("at least one module declares a dependency, so the closure is measured", () => {
+    // Non-vacuity for the two above. While no manifest declares `requires`,
+    // `withRequires()` is the identity and this file cannot tell a working
+    // closure from a broken one. `courses` and `community` name `api` because
+    // they serve `/api/v1`; if that ever stops being true, the closure needs a
+    // fixture instead of a shipped module to keep meaning something.
+    const declared = ALL.flatMap((id) => {
+      const { manifest } = readModule(id, ROOT) as { manifest: { requires?: string[] } };
+      return (manifest.requires ?? []).map((dep) => `${id}->${dep}`);
+    });
+    expect(declared).toContain("courses->api");
+    expect(declared).toContain("community->api");
   });
 
   it("reads them off the real tree, not a fixture", () => {

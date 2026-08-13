@@ -96,12 +96,35 @@ companion needs something to accompany.
    `"requiresPlan"` to a Product Key from `config/digistore-products.json`
    (never a token package).
 3. Walk the endpoint table in the doc against what the companion will show.
-   The shipped surface mirrors the dashboard (me, entitlements, tokens,
-   billing, chat, media). If a screen the user describes needs something that
-   is not there, follow *Adding an endpoint* in the doc — logic into
-   `lib/<domain>/`, a thin `guardApi()`-first handler in `modules/api/routes/`
-   plus its one-line `route.api.ts` declaration under `app/api/v1/`, colocated
-   test.
+   The core's surface mirrors the dashboard (me, entitlements, tokens,
+   billing, chat, media). **Run `node run.mjs module list` before you say what
+   is reachable**: a `courses` module adds the outline, one lesson, ticking a
+   lesson off and handing work in; a `community` module adds the room list, a
+   thread, the cursor endpoint's bearer twin and posting. Those endpoints exist
+   exactly while their module is installed, so the surface of THIS app is not
+   the surface of the doc's table.
+
+   Three answers the user may need before you build anything:
+
+   - **"Can the app post to the group chat?"** Yes, rooms. **Private messages,
+     no** — nothing under `/api/v1` reads, writes or counts one, and the
+     `conversation` scope is refused by name. That is a decision, not a gap to
+     fill.
+   - **"Can they edit the course in the app?"** No. There are no authoring or
+     moderation endpoints: content is set up in the web app, and the companion
+     is a viewer and a participant.
+   - **"Why did `module add courses` want the API too?"** Because `courses` and
+     `community` declare `requires: ["api"]` — they serve endpoints on its
+     surface. Say it as a cost, not as a footnote: the `api_keys` table and the
+     App-keys card come with it.
+
+   If a screen the user describes needs something that is still not there,
+   follow *Adding an endpoint* in the doc — logic into `lib/<domain>/` (or the
+   module's own `lib/`), a thin `guardApi()`-first handler beside the module's
+   other routes, plus its one-line declaration under `app/api/v1/`, colocated
+   test. 🚨 The handler calls `guardApi()` ITSELF, first line: the test that
+   enforces it reads each handler's own source, and `app/route-protection.test.ts`
+   deliberately skips `app/api/v1` — there is no second net.
 4. `node run.mjs test`, then `node run.mjs start` and
    `node run.mjs api-check --live` — it mints a temporary key, really calls
    `/api/v1/me` and revokes; report its output. Only a green `--live` proves

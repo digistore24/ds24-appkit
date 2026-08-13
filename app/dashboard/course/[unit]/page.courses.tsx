@@ -7,3 +7,4 @@
 // open a real unit slug by hand after changing it. `docs/courses.md` step 7 says
 // so, and it is the gap that makes a green smoke run not a green lesson page.
 export { default } from "@/modules/courses/pages/unit/page";
+export { generateMetadata } from "@/modules/courses/pages/unit/page";

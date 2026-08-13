@@ -34,6 +34,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
+import { blankComments } from "@/scripts/lib/source-text.mjs";
+
 import de from "../messages/de.json";
 import en from "../messages/en.json";
 
@@ -141,9 +143,10 @@ describe("the delivery layer adds no detail of its own", () => {
   // cause were ever to be told apart above the core, this is where it would
   // happen — a branch on the code, a second translation call, a field added to
   // one answer.
-  const actions = readFileSync(
-    join(ROOT, "modules/community/pages/messages/actions.ts"),
-    "utf8",
+  // Comments blanked (CLAUDE.md: a checker reading source as TEXT does). The
+  // slices below still line up — `blankComments()` keeps every offset.
+  const actions = blankComments(
+    readFileSync(join(ROOT, "modules/community/pages/messages/actions.ts"), "utf8"),
   );
 
   it("translates the code without branching on it", () => {

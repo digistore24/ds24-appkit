@@ -1293,7 +1293,7 @@ has not switched it on, which is the shipped state.
 | Table | What it holds | Kept |
 |---|---|---|
 | `setup_keys` | one row per key an operator minted: their id, the name they gave it, a SHA-256 of the secret and its first characters. **Never the secret** — it is shown once and is unrecoverable. Personal data because the name is theirs and the row names its owner | until revoked and deleted; a revoked key keeps its row so "which one did I revoke" has an answer |
-| `setup_confirmations` | a nonce per planned change: a token hash, which tool, a hash of the input. No content, no identifiers of members | expires in ~2 minutes; safe to prune at any age past that |
+| `setup_confirmations` | a nonce per planned change: a token hash, which tool, and one hash of the call — the input, plus the SHA-256 of the uploaded bytes where the call carried a file. No content, no identifiers of members | expires in ~2 minutes; safe to prune at any age past that |
 | `setup_audit` | one append-only row per act: which key, which operator, which environment, which tool, which target, how many rows | **24 months**, by the daily job `prune-setup-audit` |
 
 **`setup_audit` is the one to read carefully.** It records **identifiers and
@@ -1309,9 +1309,37 @@ exceptions, both deliberate:
 - **`reason`**, when a tool demanded one — a written reason IS the
   accountability, and it belongs on the act.
 
+**Both are recorded on a REFUSED act as well**, and that is a decision rather
+than a side effect. The two tools that demand a reason are the two that touch a
+person's access, one of them irreversibly — so a trail that kept the reason only
+where the act succeeded was thinnest at exactly the acts somebody later demands
+an account of. What makes it defensible: it is the same value and not a wider
+class (the tool's own schema has already bounded it — `reason` at 500
+characters, `role` at three literals), it reaches the member through both
+exports, and it goes when they go. ⚠️ **The one branch that still records
+neither is a refusal by the guard**: that happens before the input has been
+validated at all, and what an unauthenticated stranger posted is not something
+this trail repeats.
+
 `subjectMemberId` names the member an act was ABOUT, which is what makes the
 section sliceable per person: it appears in **both** Art. 15 exports as
 `setupActs` — the member's own download and `node run.mjs data-export`.
+
+**Empty means one of two things, and the row says which.** Every tool declares
+whether an act of it is about a member at all (`subjectEmailField` in
+`lib/setup/types.ts`; a tool that has not decided does not compile), and that
+declaration is part of what `list_environment` reports. So a blank column on a
+tool that declares one means *we looked and found nobody* — the address is still
+there in `target` — and on a tool that declares none it means *this act was never
+about a person*. Neither is silence.
+
+🚨 **`reason` is emptied when that member deletes their account, and the ACT
+stays** — the same rule § 14g states for a removal reason and a spam report:
+prose somebody wrote about a member goes with them, while who did what and when
+remains, its subject link set to `null`. It happens in the same transaction as
+the delete. `target` is deliberately left as it stands: an address in a record
+that outlives the account is the footing `orders.buyer_email` already keeps, and
+a trail that says an act happened to nobody is not a trail.
 
 **Twenty-four months, where everything else here keeps twelve**, and the
 difference is the argument rather than an oversight: this is the only record of

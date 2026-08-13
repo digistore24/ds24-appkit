@@ -261,7 +261,7 @@ export function findPaletteClasses(source) {
 // ── The dials, and anything written past one ─────────────────────────────────
 
 /**
- * The five ways a page can write a VALUE where the design system has a dial.
+ * The six ways a page can write a VALUE where the design system has a dial.
  *
  * docs/design-system.md §8 says the app has a short, closed list of things that
  * are configurable — the accent, the type, the radius, the elevation — and that
@@ -326,6 +326,47 @@ export const DIAL_BYPASSES = [
     // maps none of them, so they are not this dial either.
     pattern: /(?<![\w-])shadow-(?:2xs|2xl|xs|sm|md|lg|xl)(?![\w-])/g,
     why: "The elevation dial has two steps, named after the role they play.",
+  },
+  {
+    id: "shadowVariable",
+    dial: "elevation",
+    // 🚨 The sixth form, and the one this list was OPEN on until Story A65.
+    //
+    // Tailwind v4's parenthesised custom-property shorthand on the shadow
+    // utility. Two spellings of it are the doctrine's own sanctioned answer to
+    // a `shadow-lg` finding — the two elevation ROLE names, and nothing else —
+    // so those two are the exception written into the pattern and every other
+    // variable is reported. `docs/design-system.md` §8 named this opening for
+    // two stories and closed neither; the reason it could not stay open is that
+    // the sanctioned form and a page inventing its own fifth elevation step are
+    // the SAME SHAPE to a reader, and only the variable's name tells them apart.
+    //
+    // ⚠️ It became a real bypass rather than a theoretical one on the day
+    // `lib/utils.ts` grew its `extendTailwindMerge`. Before that, stock
+    // tailwind-merge did not know the shorthand at all, so such a class lost to
+    // whatever shadow was already there — a silent no-op. Measured after the
+    // repair: cn() with a base step and an invented variable now returns the
+    // invented one ALONE. The fix that made the sanctioned form work made the
+    // unsanctioned one work too, which is precisely why the guard belongs here.
+    //
+    // The pattern demands a `--` name inside (with or without Tailwind's
+    // `type:` hint) rather than accepting any parenthesised text: the shorthand
+    // takes nothing else, so a class with anything else in it emits no CSS rule
+    // at all, and reporting a typo as an elevation bypass is the kind of
+    // confident false finding that gets a checker ignored.
+    //
+    // The lookbehind carries the same load it carries above — an inset, drop or
+    // text shadow is a different property that app/globals.css maps nowhere, so
+    // it is not this dial either.
+    //
+    // 🚨 What this entry does NOT claim: the same shorthand exists for the
+    // radius and the colour utilities, and neither is in this list. That is not
+    // an oversight — the list has never been "every value past a dial" (a plain
+    // arbitrary radius and a non-hex arbitrary colour are both uncaught by
+    // design), it is a list of NAMED forms, each carrying the reason it is
+    // named. This one is named because the doctrine RECOMMENDS its neighbour.
+    pattern: /(?<![\w-])shadow-\((?!--elevation-(?:raised|overlay)\))(?:[a-z-]+:)?--[^()\s]*\)/g,
+    why: "The elevation dial has two role names; any other variable is a fifth step nobody chose.",
   },
   {
     id: "hexArbitrary",
@@ -479,6 +520,48 @@ export function findUnpairedTokens(css) {
  *            segmented control has no kit counterpart at all (no ToggleGroup).
  *            Reported so they stay visible, never failed.
  */
+/**
+ * A JSX opening tag, from its `<` to the `>` that really ends it.
+ *
+ * 🚨 **`[^>]*>` is not that, and the difference is a wrong VERDICT rather than a
+ * missed one.** A JSX attribute may hold an expression, and an expression may
+ * hold a `>` — an arrow function is the everyday case:
+ *
+ *     <button ref={(node) => …} role="radio">
+ *
+ * A lazy match ends at the arrow's own `>`, so `role` falls outside the tag, the
+ * element is classified as the thing its tag name says, and a segmented control
+ * is reported as a raw `<button>` the kit already covers. Measured 2026-08-13 on
+ * `components/theme-toggle.tsx` while adding its keyboard handling: `ux-check`
+ * went from a warning to a FAILURE, exit 1, over a `ref` that changed nothing
+ * about the element.
+ *
+ * So the end is found by scanning, counting braces and skipping quoted strings.
+ * It is not a JSX parser and does not need to be: it stops at the first `>` that
+ * is not inside `{…}` or a string, which is where the tag ends.
+ *
+ * @param {string} source
+ * @param {number} start index of the `<`
+ * @returns {string} the tag text, or the rest of the source if it never closes
+ */
+function tagAt(source, start) {
+  let depth = 0;
+  let quote = null;
+  for (let i = start; i < source.length; i += 1) {
+    const char = source[i];
+    if (quote !== null) {
+      if (char === "\\") i += 1;
+      else if (char === quote) quote = null;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === "`") quote = char;
+    else if (char === "{") depth += 1;
+    else if (char === "}") depth = Math.max(0, depth - 1);
+    else if (char === ">" && depth === 0) return source.slice(start, i + 1);
+  }
+  return source.slice(start);
+}
+
 export function findRawElements(source) {
   source = blankComments(source);
   const hits = [];
@@ -491,14 +574,14 @@ export function findRawElements(source) {
   const composed = (index) =>
     /asChild[^<>]*>\s*$/.test(source.slice(Math.max(0, index - 200), index));
 
-  // `[^>]` matches newlines, so a tag spread over several lines is one match.
-  const pattern = new RegExp(`<(${RAW_ELEMENTS.join("|")})\\b[^>]*>`, "g");
+  const pattern = new RegExp(`<(${RAW_ELEMENTS.join("|")})\\b`, "g");
   for (const m of source.matchAll(pattern)) {
     if (composed(m.index)) continue;
+    const tag = tagAt(source, m.index);
     // An element carrying an explicit `role` is deliberately NOT the thing its
     // tag name says — `<button role="radio">` is one cell of a segmented
     // control, and the kit ships no ToggleGroup to build that from.
-    const role = /\brole=["']([a-z]+)["']/.exec(m[0])?.[1];
+    const role = /\brole=["']([a-z]+)["']/.exec(tag)?.[1];
     const soft = role !== undefined && role !== "button";
     hits.push({
       line: lineAt(source, m.index),
@@ -507,8 +590,9 @@ export function findRawElements(source) {
     });
   }
 
-  for (const m of source.matchAll(/<input\b[^>]*>/g)) {
-    const type = /type=["']([a-z]+)["']/.exec(m[0])?.[1] ?? "text";
+  for (const m of source.matchAll(/<input\b/g)) {
+    const tag = tagAt(source, m.index);
+    const type = /type=["']([a-z]+)["']/.exec(tag)?.[1] ?? "text";
     // Not an interface element at all: it carries form data and nobody ever
     // sees it. Skipped rather than excused.
     if (type === "hidden") continue;
@@ -620,4 +704,242 @@ export function navHrefs(appShellSource) {
   if (!found) return null;
   const body = appShellSource.slice(found.index);
   return [...body.matchAll(/href:\s*["']([^"']+)["']/g)].map((m) => m[1]);
+}
+
+/** What a path segment is replaced by once it is known to be a parameter. */
+const PARAM = "[param]";
+
+/**
+ * A path in the one shape both sides of the navigation check can be compared in.
+ *
+ * 🚨 **The whole point is that it is applied to BOTH sides.** A route on disk
+ * spells its parameter `[groupId]`; the link that leads there spells it
+ * `${encodeURIComponent(group.id)}`. Those two strings are never equal, so a
+ * navigation check that dropped the "skip dynamic routes" rule without this
+ * would report every dynamic route in the app as unreachable on the same day —
+ * a wall of confident false findings, which is how a check gets switched off.
+ *
+ * ⚠️ Why the routes were skipped until 2026-08-12, and what it cost: the rule
+ * read "a [id] page is opened from somewhere else with a real record", which is
+ * true and does not follow. Measured on a real installation — the course's
+ * lesson pages were finished and reachable ONLY by typing the URL, because
+ * nothing in the whole tree linked to `/dashboard/course/[unit]`. This check
+ * skipped it by construction and `node run.mjs smoke` skips `[param]` routes
+ * too, so the app's two navigation gates were both blind to the same page.
+ *
+ * A segment counts as a parameter only when it is a parameter WHOLE:
+ *
+ * | in | out |
+ * |---|---|
+ * | `/dashboard/account` | unchanged — nothing here is dynamic |
+ * | `/dashboard/community/groups/[groupId]` | `/dashboard/community/groups/[param]` |
+ * | `` `/dashboard/community/groups/${encodeURIComponent(id)}` `` | the same |
+ * | `` `/a/${x}/b/${y}` `` | `/a/[param]/b/[param]` — every segment, not the first |
+ * | `` `/a/pre-${x}` `` | unchanged. A partly dynamic segment is not the route `/a/[x]` |
+ * | `` `/a/${id}?page=${n}` `` | `/a/[param]` — the query is not part of the route |
+ *
+ * That last-but-one row is the one worth keeping: matching a partial segment
+ * would let `/a/pre-${x}` count as a link to `/a/[x]`, and then a real orphan
+ * hides behind a link that never leads to it.
+ *
+ * @param {string} path a route from the file tree, or the literal inside an `href`
+ * @returns {string} the same path with every whole dynamic segment as `[param]`
+ */
+export function routeShape(path) {
+  if (typeof path !== "string") return "";
+
+  // ⚠️ **One depth-aware pass, not `split("/")` and a query strip.** Both of the
+  // obvious shortcuts are wrong on real input, and both were measured here
+  // before this loop existed: an interpolation may contain a `?` (a ternary,
+  // `${a ? b : c}`) and it may contain a `/` (a string inside a call), so
+  // cutting the query first or splitting on every slash tears the expression in
+  // half and leaves a fragment that matches nothing.
+  const segments = [];
+  let current = "";
+  let depth = 0;
+  for (let i = 0; i < path.length; i += 1) {
+    const char = path[i];
+    if (char === "{") depth += 1;
+    else if (char === "}") depth = Math.max(0, depth - 1);
+
+    if (depth === 0) {
+      // The query and the fragment are not part of a route, and everything
+      // after the first one of them is gone.
+      if (char === "?" || char === "#") break;
+      if (char === "/") {
+        segments.push(current);
+        current = "";
+        continue;
+      }
+    }
+    current += char;
+  }
+  segments.push(current);
+
+  return segments
+    .filter((segment) => {
+      // 🚨 Segments that organise the FILE TREE and are not in the URL: a route
+      // group `(marketing)`, a parallel route `@modal`, an intercepting route
+      // `(.)photo`. Next serves `/dashboard/reports/x` for
+      // `app/dashboard/(marketing)/reports/[id]`, so leaving the group in would
+      // compare a path no browser ever asks for.
+      //
+      // ⚠️ This is the one place where keeping dynamic routes made something
+      // WORSE before it made it better: a grouped route used to be skipped for
+      // containing a `[`, so nobody noticed. Compared without this filter, every
+      // page under a route group is a confident false finding — and route groups
+      // are the ordinary App Router way to divide a dashboard.
+      if (/^\(.*\)$/.test(segment)) return false;
+      if (segment.startsWith("@")) return false;
+      return true;
+    })
+    .map((segment) => {
+      // `[groupId]`, `[...slug]`, `[[...slug]]` — a route file's spelling.
+      //
+      // ⚠️ A catch-all collapses to ONE `[param]`, so a link that fills it with
+      // several segments (`/a/${x}/${y}`) does not match its own route. There is
+      // no catch-all in this template; a customer who adds one gets a false
+      // finding, and the honest fix then is to teach this function the shape
+      // rather than to skip the route.
+      if (/^\[+[^[\]]+\]+$/.test(segment)) return PARAM;
+      // `${…}` — a template literal's, with whatever expression inside it.
+      // Counted rather than matched lazily, because `${encodeURIComponent(x)}`
+      // closes a brace before its own end.
+      if (segment.startsWith("${") && segment.endsWith("}")) {
+        let inner = 0;
+        for (let i = 0; i < segment.length; i += 1) {
+          if (segment[i] === "{") inner += 1;
+          else if (segment[i] === "}") {
+            inner -= 1;
+            // A brace closing before the end means the segment is `${a}-${b}`
+            // or `${a}x`: dynamic in part, and therefore not this route.
+            if (inner === 0 && i !== segment.length - 1) return segment;
+          }
+        }
+        return inner === 0 ? PARAM : segment;
+      }
+      return segment;
+    })
+    .join("/");
+}
+
+/**
+ * Hand-built controls this template has looked at and accepted — a SET with
+ * prose, never a count.
+ *
+ * The argument is `MODE_SINGLE_TOKENS`' above and `scripts/security/accepted.mjs`'
+ * in full: a check that simply allowed "the known findings" goes green on the day
+ * a new, real one appears. So what is accepted is a set of named places, each
+ * carrying the reason, and anything outside the set is reported however small.
+ *
+ * ⚠️ **Nothing in this project may assert how many entries are in here.** An
+ * entry that stops matching costs nothing and is good news.
+ *
+ * ⚠️ It accepts a `soft` finding only — an element the kit has no answer for, or
+ * a native input in a form that must work without JavaScript. A raw `<button>`,
+ * `<select>`, `<textarea>`, `<table>` or text `<input>` is `hard` and cannot be
+ * accepted here at all.
+ *
+ * 🚨 **The test for "must work without JavaScript" is the form's own shape, not
+ * a feeling about it.** `<form action={serverAction}>` with NO `onSubmit` is
+ * progressively enhanced by Next and really does post without JS — there a
+ * native input is the correct element. A form with `onSubmit` +
+ * `preventDefault()`, or one inside a dialog that only JavaScript can open,
+ * never runs without JS and has no claim to the exception at all.
+ *
+ * That test was written after it removed two of this list's own first four
+ * entries (2026-08-12). Both had reasons that sounded right and were not:
+ * `report-button.tsx` cancels its native submit inside a Radix dialog, and
+ * `theme-toggle.tsx` hand-builds the pattern `components/ui/radio-group.tsx`
+ * already ships — without the arrow-key navigation Radix would have brought,
+ * so accepting it would have silenced a keyboard defect inside a check whose
+ * own section is called *Keyboard and screen reader*. Both are reported, and
+ * that is what this list is worth: an entry has to survive the question.
+ *
+ * ⚠️ **One entry covers every hit of that ELEMENT in that file**, not one
+ * occurrence. `found` is the element's class (`<input type="checkbox">`), so a
+ * second checkbox in an accepted file is accepted too — while a *different*
+ * hand-built control there is still reported. Said plainly because the shape
+ * invites the other reading: if you need one checkbox in a file judged and the
+ * next one seen, this list is the wrong instrument.
+ *
+ * Why this exists (reported 2026-08-12): all four entries below were reported on
+ * every run of every fresh app, for ever. The advice text names the exception
+ * itself and points at the file that documents it — and could not accept it. A
+ * reader who checks "2 things worth looking at", finds only template code and
+ * stops looking is a reader who will miss the fifth, real one.
+ *
+ * @typedef {object} AcceptedControl
+ * @property {string} found   the finding's own wording, matched exactly
+ * @property {string} reason  why, in prose. `true` would read as an arbitrary
+ *                            exemption to whoever finds it next.
+ */
+
+/**
+ * ⚠️ Annotated as a Record and not left to inference, so that the type is "a
+ * list of these" rather than "exactly today's four". Inferred, every caller
+ * would have to pass all four entries — which broke the tests the first time,
+ * and would have made the list unextendable by the customer it is for.
+ *
+ * @type {Record<string, AcceptedControl>}
+ */
+export const RAW_ELEMENT_EXCEPTIONS = {
+  "app/plans/page.tsx": {
+    found: '<input type="checkbox">',
+    reason:
+      "The auto-top-up consent. It authorises a recurring card charge, and that " +
+      "consent must not depend on JavaScript having loaded — shadcn's <Checkbox> " +
+      "is a Radix button with no form value and reaches FormData only through a " +
+      "hidden input beside it. The file carries this reasoning above the element " +
+      "itself, which is where a reader meets it.",
+  },
+  "components/theme-toggle.tsx": {
+    found: '<button role="radio">',
+    reason:
+      "A segmented control — three visible switches rather than one button that " +
+      "cycles, so it can be seen at a glance which applies. The kit has no " +
+      "counterpart: there is no ToggleGroup in components/ui/, and the template " +
+      "deliberately does not ship one (the advice text above tells an app that " +
+      "needs one to run `npx shadcn@latest add toggle-group`). " +
+      "⚠️ Accepted only since 2026-08-13, and only because the KEYBOARD was " +
+      "fixed first. It was refused for a day: `role=radiogroup` is a promise " +
+      "that arrow keys move the choice and the group is one tab stop, and this " +
+      "control kept neither — three tab stops, arrow keys dead, markup saying " +
+      "radiogroup. An exception for a hand-built control is a statement that it " +
+      "does the work the kit component would have done.",
+  },
+  "modules/community/components/profile-ui.tsx": {
+    found: '<input type="checkbox">',
+    reason:
+      "Remove-my-picture, in the profile form. Same reason as app/plans: the " +
+      "server reads it as `formData.get('removeAvatar') === 'on'`, which is the " +
+      "native checkbox's own wire format, and a Radix control posts nothing " +
+      "without a hidden input to carry it.",
+  },
+};
+
+/**
+ * Split `soft` findings into the open ones and the ones already judged.
+ *
+ * `hard` findings pass through untouched — they are not acceptable here, and
+ * routing them past this function at all would be the first step to making them
+ * so. A file in the list whose element has changed comes out as OPEN.
+ *
+ * @param {Array<{file: string, line: number, found: string, kind: string}>} hits
+ * @param {Record<string, AcceptedControl>} [exceptions]
+ * @returns {{open: Array<object>, accepted: Array<object>}}
+ */
+export function partitionAcceptedControls(hits, exceptions = RAW_ELEMENT_EXCEPTIONS) {
+  const open = [];
+  const accepted = [];
+  for (const hit of hits ?? []) {
+    // `hasOwnProperty`, not a bare read: an inherited key is not an entry
+    // somebody wrote. `findUnpairedTokens` guards its own list the same way.
+    const listed =
+      hit?.kind === "soft" && Object.prototype.hasOwnProperty.call(exceptions, hit.file);
+    const entry = listed ? exceptions[hit.file] : undefined;
+    if (entry && entry.found === hit.found) accepted.push(hit);
+    else open.push(hit);
+  }
+  return { open, accepted };
 }

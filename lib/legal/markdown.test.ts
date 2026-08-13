@@ -116,3 +116,70 @@ describe("parse", () => {
     expect(parse("#### Tief")[0].kind).toBe("paragraph");
   });
 });
+
+describe("emphasis begins and ends on a non-space", () => {
+  // 🚨 Measured 2026-08-13: `Preis: 5 * 3 * 2 Euro` rendered as
+  // `Preis: 5 3 2 Euro` with a silently italic " 3 ". There is no escape in this
+  // subset and no code span to hide in, so the characters simply disappeared.
+  // Harmless while this parser served only the legal pages; since 2026-08-12 it
+  // also renders LESSON BODIES, where arithmetic and footnote asterisks occur.
+  it("leaves an arithmetic asterisk alone", () => {
+    expect(parseInline("Preis: 5 * 3 * 2 Euro")).toEqual([
+      { kind: "text", text: "Preis: 5 * 3 * 2 Euro" },
+    ]);
+  });
+
+  it("leaves a footnote asterisk alone", () => {
+    expect(parseInline("Fussnote* und *noch")).toEqual([
+      { kind: "text", text: "Fussnote* und *noch" },
+    ]);
+  });
+
+  it("leaves a lone asterisk alone", () => {
+    expect(parseInline("5 * 3")).toEqual([{ kind: "text", text: "5 * 3" }]);
+  });
+
+  // The counter-tests. A rule that stopped emphasis working would pass every
+  // case above and be a worse defect than the one it replaced.
+  it("still emphasises what somebody meant to emphasise", () => {
+    expect(parseInline("*x*")).toEqual([{ kind: "em", text: "x" }]);
+    expect(parseInline("*mehrere Woerter*")).toEqual([
+      { kind: "em", text: "mehrere Woerter" },
+    ]);
+    expect(parseInline("**fett**")).toEqual([{ kind: "strong", text: "fett" }]);
+  });
+
+  it("still handles both in one line, in the right order", () => {
+    expect(parseInline("**fett** und *kursiv*")).toEqual([
+      { kind: "strong", text: "fett" },
+      { kind: "text", text: " und " },
+      { kind: "em", text: "kursiv" },
+    ]);
+  });
+
+  it("leaves an unpaired marker as the characters it is", () => {
+    expect(parseInline("**unpaarig")).toEqual([{ kind: "text", text: "**unpaarig" }]);
+  });
+});
+
+describe("every line ending, not two of the three", () => {
+  // ⚠️ `\r?\n` covers a browser's CRLF and a Unix `\n` and misses a lone `\r` —
+  // what a paste out of an old Mac tool still carries. The whole text then
+  // collapses into one line, which is the bug this parser was brought into the
+  // course module to fix, one ending earlier.
+  it.each([
+    ["unix", "a\nb"],
+    ["windows", "a\r\nb"],
+    ["old mac", "a\rb"],
+  ])("splits %s line endings the same way", (_case, text) => {
+    expect(parse(text)).toEqual([
+      { kind: "paragraph", lines: [[{ kind: "text", text: "a" }], [{ kind: "text", text: "b" }]] },
+    ]);
+  });
+
+  it("still sees a blank line as a paragraph break in all three", () => {
+    for (const text of ["a\n\nb", "a\r\n\r\nb", "a\r\rb"]) {
+      expect(parse(text), text).toHaveLength(2);
+    }
+  });
+});

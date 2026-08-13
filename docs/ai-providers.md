@@ -29,7 +29,7 @@ the first time anybody learns what the app is doing.
 | Who runs what | `config/ai-models.json` |
 | What it costs | `config/ai-prices.json` |
 | Declared tasks | `lib/ai/task-rules.mjs` → `TASKS` |
-| Check it | `node run.mjs ai-check` |
+| Check it | `node run.mjs ai-check` — and `--live` to make one real call |
 | Spend ceiling | **There is none.** See "Money" below. |
 
 ---
@@ -760,6 +760,71 @@ quote the prompt back, and the prompt is theirs.
 
 ---
 
+## Does a call actually go through — `ai-check --live`
+
+Everything above is read off files, and a file cannot tell a key that **works**
+from a key that is merely **there**. A revoked key, a model id the provider
+retired last month, an account with no quota and a firewall that eats outbound
+HTTPS all look identical to `node run.mjs ai-check`.
+
+```bash
+node run.mjs ai-check --live                     # one real call per binding
+node run.mjs ai-check --live --task chat         # just that one
+node run.mjs ai-check --live --url https://…     # a DEPLOYED app, its keys
+```
+
+**It costs money and it is never a gate.** It is not in `make check`, not in
+`npm run test` and not in a deploy — a paid, network-dependent step in the chain
+everybody runs is a brake, and a brake is what somebody eventually takes out.
+
+**What it calls, and what that costs.** One call per distinct provider+model,
+not one per task: two tasks bound to the same model would bill twice for one
+answer, and the tasks sharing a binding are named on the line. The probe is a
+fixed one — `lib/ai/probe.mjs`, ~32 tokens in and at most 16 out — and the
+command **prints the price before it causes it**, at the prices in
+`config/ai-prices.json`. On the shipped bindings that is a single call of about
+**0.0001 USD**. 🚨 **An image task is never probed**: a picture is billed per
+picture, so it is listed with the reason instead.
+
+**It asks the RUNNING APP to make the call, and that is the point.** No call
+site in this app may name a provider, build a client or read a key — so the
+command talks to `POST /api/diagnostics/ai` (bearer `DIAGNOSTICS_SECRET`), and
+the app calls `runTask()`. Two things follow. A live check exercises the exact
+path a customer's question takes, rather than a second implementation that
+agrees with it until somebody changes a header. And **the call is recorded like
+any other**: one `ai_usage` row with task, provider, model, tokens, latency and
+outcome, no member, visible on **KI-Kosten** with everything else. The cost of
+that choice is that the app has to be up; the command says so, by name, when it
+is not.
+
+**Every ending has its own sentence and its own next move.** These are the
+answers, and no two of them read alike:
+
+| What comes back | Means |
+|---|---|
+| `✓ … answered` | the whole path works: key, model, account, network |
+| `✗ the provider rejected the key` | `noCredential` — present in the `.env`, refused by the account |
+| `✗ the provider does not serve this model` | `unknownModel` — the key is fine, the id is not |
+| `! the provider refused for now` | `providerRefused` — rate limit or overload; clears by itself |
+| `! no answer at all` | `providerUnreachable` — the network **where the app runs**, not yours |
+| `⏭ NOT CHECKED` | nothing was called: no key, the app is not up, or the door is closed |
+
+⚠️ **A run that could not look exits 1, not 0.** That is deliberately unlike a
+skipped security rung: `--live` is a request to MEASURE, typed by hand, and a
+green that measured nothing is exactly the confusion this flag exists to end.
+The marker keeps the other half of the distinction — `⏭ NOT CHECKED` is never
+`✗`, so "could not look" and "looked and found something" never read alike
+either. A rate limit does **not** fail the command: it is a real answer saying
+nothing is wrong with the configuration.
+
+**For a deployed app the keys are the host's**, so `--url` does not resolve
+`"auto"` from your `.env` — it names the binding as declared and lets the answer
+say which company actually ran. The secret is the one configured for that host
+(`DIAGNOSTICS_SECRET_PROD` / `_STAGING`), and it is never sent to a host it was
+not configured for.
+
+---
+
 ## Adding a sixth provider
 
 Two answers, and the registry hides the difference from every call site.
@@ -786,6 +851,9 @@ site, not a task, not the usage schema, not the cost page.
 | File | What it is |
 |---|---|
 | `lib/ai/run.ts` | **The entry point.** `runTask` / `streamTask`. |
+| `lib/ai/probe.mjs` | The one call `ai-check --live` makes: its words, its ceiling, the tokens its price is quoted for. `.mjs` because the route sends it and the script prices it. |
+| `app/api/diagnostics/ai/route.ts` | The door `--live` knocks on. Bearer `DIAGNOSTICS_SECRET`, then `runTask()`. |
+| `scripts/ai/live.mjs` | The `--live` half of the check: the plan, the price, one sentence per ending. |
 | `lib/ai/customer-text.ts` | **The fence that makes customer text content.** `buildFencedRequest()`, the `<customer-text …>` markers and the standing rule that names them. Core, and the import for any caller — a `grade()` as much as a companion. |
 | `modules/companion/companion.ts` | The shape a product-side call takes — `askCompanion()`, this module's binding to the `companion` task id. |
 | `modules/companion/companions.ts` | **The list your app edits.** One entry per companion; ships empty. |

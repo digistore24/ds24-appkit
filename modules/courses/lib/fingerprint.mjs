@@ -65,7 +65,9 @@
 // The leading `v` tag makes the shape self-describing. Changing the field list
 // later moves every fingerprint in every environment; that is acceptable and
 // legible **because the tag is there to bump**. Silent re-keying is what it
-// prevents.
+// prevents — and it has been bumped once, from `v1` to `v2`, when the four
+// media slots stopped being hashed as a boolean (see below). Since that bump
+// the tag also TRAVELS: `FINGERPRINT_VERSION` says what that buys.
 //
 // ── What is hashed: exactly what the applier writes ────────────────────────
 // `content/appliers/course.mjs` upserts `courses_units` by slug and sets, on
@@ -84,14 +86,12 @@
 //     content would disagree, which is the exact failure this exists to prevent.
 //   * `blockId`, `createdAt` — same reason, and already excluded for us:
 //     `courseOutline()` strips both off each unit on the way out.
-//   * 🚨 the four media **ids** — the sharpest one. `schema.ts` says it outright:
-//     an applier resolves a slot from the manifest PATH, never from an id,
-//     because a media id exists once, in one database. Hashing one would make
-//     DEV and PROD disagree about a lesson that is byte-identical in both. The
-//     **occupancy boolean** is the portable half, and it is what gets hashed —
-//     and it is also what makes `localUnitRow()` below possible at all: the
-//     repo names a medium by PATH and the database by ID, and `Boolean(...)` of
-//     either is the same value on both sides.
+//   * 🚨 the four media **ids** — the sharpest one, and the reason the four
+//     slots are hashed as STORAGE KEYS below rather than as ids. `schema.ts`
+//     says it outright: an applier resolves a slot from the manifest PATH,
+//     never from an id, because a media id exists once, in one database.
+//     Hashing one would make DEV and PROD disagree about a lesson that is
+//     byte-identical in both.
 //   * `origin` — it says which WRITER owns the row, not what the lesson says.
 //     🚨 It is on the payload since Story 35.2 and must stay OUT of the
 //     canonical string: adding it would move every fingerprint in every
@@ -104,39 +104,106 @@
 //     explicitly instead, by `./diff.mjs`, because a block the operator renamed
 //     is still a change a publish would make.
 //
-// ── The known limit — named, not papered over ──────────────────────────────
-// **Swapping one video for another in the same slot does not move the
-// fingerprint.** The occupancy boolean is what is hashed, so `video → another
-// video` reads as unchanged. The media id cannot be used (above). The portable
-// value that WOULD catch it is the deterministic storage key
-// `content/<topic-slug>/<file>.<ext>` (`CLAUDE.md` → *Content that must exist in
-// PROD*), derivable from the repo path on both sides — reaching it needs a join
-// from `courses_units` to `media` that `courseOutline()` does not make today.
-// That is the escape hatch, recorded so a later story starts from the answer
-// rather than rediscovering the problem; it is deliberately not built here.
+// ── The four slots: the STORAGE KEY, which is neither the id nor the path ──
+// 🚨 What is hashed per slot is `media.storageKey` — `content/<topic-slug>/<file>.<ext>`
+// — and this is the one field whose two sides are derived rather than sent.
 //
-// Similarly, a lesson MOVED between blocks does not move its fingerprint
-// (`blockId` is excluded). It stays fully visible anyway, because the payload
-// nests units under their block.
+// The problem it solves: until this was built, the slots were hashed as an
+// **occupancy boolean**, so swapping one video for another in the same slot read
+// as UNTOUCHED in `node run.mjs courses-diff`. Measured before it was fixed: a
+// lesson whose content file was moved from `kurs/knoten.mp4` to
+// `kurs/palomar.mp4`, against a target still holding the first, answered
+// `0 would change · 2 untouched`, both sides on the identical digest
+// `ee126f2e…`. An operator swaps a recording, previews the publish, and the
+// preview says there is nothing to publish.
+//
+// Why a key works where an id cannot. The two sides hold different values for
+// the same medium and neither knows the other's:
+//
+//   | | what it holds | what it derives |
+//   |---|---|---|
+//   | the repo | the manifest PATH, `"kurs/knoten.mp4"` | `CONTENT_MEDIA_BUCKET_PREFIX + path` |
+//   | the database | the media ID, `"04d96df1-…"` | that row's `storage_key` |
+//
+// and both derivations land on the same string, `content/kurs/knoten.mp4`,
+// because `mediaIdFor()` — the applier's only way to fill a slot, in
+// `scripts/content/apply.mjs` and `lib/content/publish.ts` alike — looks a row
+// up BY that key. So the value is portable in the way an id is not (identical in
+// DEV and PROD for identical content) and specific in the way a boolean is not
+// (it names the file). The database half is the join `courseOutline()` does not
+// make: `mediaKeysFor()` in `./manage.ts`, one query, called by the setup tool
+// and by nothing on a member's page.
+//
+// ⚠️ Two consequences, both deliberate:
+//
+//   * **A slot filled by the ADMIN surface hashes an environment-local key.**
+//     An upload's key is `<namespace>/<category>/<YYYY>/<MM>/<id>.<ext>` —
+//     it carries a UUID, so two environments would disagree. That is sound
+//     because such a row is `origin = 'operator'`, and `rowWritable()` in
+//     `../admin/media-actions.ts` refuses to attach media to a `content` row at
+//     all: an operator-owned lesson exists in ONE environment and is never
+//     fingerprint-compared — `compareCourse()` puts it in `refused` before it
+//     looks at content. Nothing compares it, so nothing disagrees.
+//   * **This moved every fingerprint in every environment once**, which is what
+//     the `v` tag is for and why it now reads `courses-unit-v2`. What that costs
+//     an operator is `FINGERPRINT_VERSION` below.
+//
+// A lesson MOVED between blocks still does not move its fingerprint (`blockId`
+// is excluded). It stays fully visible anyway, because the payload nests units
+// under their block.
 import { createHash } from "node:crypto";
+
+import { CONTENT_MEDIA_BUCKET_PREFIX } from "../../../lib/content-media/rules.mjs";
+
+/**
+ * The `v` tag of the canonical string — **and the value that travels.**
+ *
+ * 🚨 The tag was always in the hash; what is new is that `outlinePayload()` also
+ * puts it on the wire and `compareCourse()` reads it. Both halves are needed and
+ * the second is not decoration:
+ *
+ *   * in the HASH it makes the shape self-describing, so a changed field list
+ *     moves every fingerprint legibly instead of re-keying in silence;
+ *   * on the WIRE it is the difference between *"34 lessons differ"* and *"that
+ *     app computes v1, this repo computes v2, so nothing below was comparable"*.
+ *     A target running an older deploy is the ORDINARY state during a release —
+ *     the repo is updated before the environment is — and without the tag every
+ *     lesson reads as changed with nothing anywhere saying why. That is NFR-60's
+ *     shape exactly: *I could not compare* rendered as a verdict.
+ *
+ * ⚠️ **Bumping it is not free and is not a formality.** The first
+ * `courses-diff` after this template lands reads EVERY lesson of an
+ * un-deployed environment as differing — correctly, because the two sides are
+ * not comparable, and the command says so in its own paragraph. A publish at
+ * that moment writes the same rows it would have written anyway (the applier
+ * upserts by slug), so the cost is a loud report and not a wrong write. Deploy
+ * the target and the report goes quiet again.
+ */
+export const FINGERPRINT_VERSION = "courses-unit-v2";
 
 /**
  * One lesson, as either side of the comparison hands it over.
  *
- * The database side is `courseOutline()`'s row (which carries `id`, `position`
- * and `origin` besides these — extra properties are simply not read); the repo
- * side is what `localUnitRow()` below builds out of a `content/course/*.json`
- * unit. Naming only the hashed fields is what makes those two the same input.
+ * The database side is `courseOutline()`'s row with the four keys resolved onto
+ * it (which carries `id`, `position`, `origin` and the four media IDS besides
+ * these — extra properties are not hashed, but the ids are READ, see the guard
+ * in `unitFingerprint()`); the repo side is what `localUnitRow()` below builds
+ * out of a `content/course/*.json` unit. Naming only the hashed fields is what
+ * makes those two the same input.
  *
  * @typedef {object} FingerprintUnit
  * @property {string} slug
  * @property {string} title
  * @property {string | null} body
  * @property {string | null} taskPrompt
- * @property {string | null} coverMediaId
- * @property {string | null} videoMediaId
- * @property {string | null} subtitleMediaId
- * @property {string | null} worksheetMediaId
+ * @property {string | null} coverKey       `media.storageKey`, or null for an empty slot
+ * @property {string | null} videoKey
+ * @property {string | null} subtitleKey
+ * @property {string | null} worksheetKey
+ * @property {string | null} [coverMediaId] the DATABASE side only — read by the guard, never hashed
+ * @property {string | null} [videoMediaId]
+ * @property {string | null} [subtitleMediaId]
+ * @property {string | null} [worksheetMediaId]
  */
 
 /**
@@ -177,25 +244,74 @@ import { createHash } from "node:crypto";
 const normalise = (text) => (text === null ? null : text.replace(/\r\n?/g, "\n"));
 
 /**
+ * 🚨 One slot's key, and the refusal that keeps an UNRESOLVED slot from hashing
+ * as an empty one.
+ *
+ * The failure this exists for is a silent one and it is a single forgotten line:
+ * whoever hands this function a raw `courseOutline()` row — the shape it took
+ * until this change — passes four `*MediaId` fields and no `*Key` at all. Read
+ * as `null`, a lesson with a video would hash exactly like a lesson with none,
+ * in every environment, and every diff would report `untouched`. That is the
+ * defect this whole file was just rewritten to remove, arriving through the back
+ * door, and nothing downstream could tell it apart from a genuinely empty slot.
+ *
+ * So the id is READ although it is never hashed: it is the one value that says
+ * whether the slot is occupied, and an occupied slot with no key is *I could not
+ * look* rather than *there is nothing there*. A throw, not a marker value — this
+ * is a programming error inside one process, not a state of the world. The
+ * database cannot produce it (the FK is `set null`, so a non-null id has a row),
+ * and `localUnitRow()` carries no `*MediaId` property at all, which is what
+ * makes the guard silent on the repo side rather than a special case there.
+ *
+ * @param {FingerprintUnit} unit
+ * @param {"cover"|"video"|"subtitle"|"worksheet"} slot
+ * @returns {string | null}
+ */
+function slotKey(unit, slot) {
+  const key = unit[`${slot}Key`] ?? null;
+  if (key !== null && typeof key !== "string") {
+    throw new Error(
+      `unitFingerprint("${unit.slug}"): ${slot}Key is ${typeof key}, not a storage key or null`,
+    );
+  }
+  const idField = `${slot}MediaId`;
+  if (Object.hasOwn(unit, idField) && unit[idField] && key === null) {
+    throw new Error(
+      `unitFingerprint("${unit.slug}"): the ${slot} slot holds media id "${unit[idField]}" and no ` +
+        `${slot}Key was resolved for it. The fingerprint hashes the storage key, not the id — ` +
+        `resolve the row's key through mediaKeysFor() (modules/courses/lib/manage.ts) before ` +
+        `hashing. Hashing it as an empty slot would make a lesson WITH a video read exactly like ` +
+        `one without, in every environment.`,
+    );
+  }
+  return key;
+}
+
+/**
  * One lesson's content, as 64 lowercase hex characters.
  *
  * Same content in two environments → same string. A changed body, title, task
- * prompt or media occupancy → a different one, and **only** for that lesson.
+ * prompt, or a slot that was emptied, filled **or swapped for another file** → a
+ * different one, and **only** for that lesson.
  *
  * @param {FingerprintUnit} unit
  * @returns {string}
  */
 export function unitFingerprint(unit) {
   const canonical = JSON.stringify({
-    v: "courses-unit-v1",
+    v: FINGERPRINT_VERSION,
     slug: unit.slug,
     title: unit.title,
     body: normalise(unit.body),
     taskPrompt: normalise(unit.taskPrompt),
-    hasCover: Boolean(unit.coverMediaId),
-    hasVideo: Boolean(unit.videoMediaId),
-    hasSubtitle: Boolean(unit.subtitleMediaId),
-    hasWorksheet: Boolean(unit.worksheetMediaId),
+    // 🚨 Written out one by one rather than folded from `SLOTS`: the canonical
+    // string's field ORDER is the hash, so it has to be visible in the file that
+    // is the definition of it. A loop would put the order in a constant above,
+    // where a reorder is a one-line edit nobody reads as re-keying every app.
+    coverKey: slotKey(unit, "cover"),
+    videoKey: slotKey(unit, "video"),
+    subtitleKey: slotKey(unit, "subtitle"),
+    worksheetKey: slotKey(unit, "worksheet"),
   });
   return createHash("sha256").update(canonical, "utf8").digest("hex");
 }
@@ -209,12 +325,26 @@ export function unitFingerprint(unit) {
  * compare a lesson against a version of itself the target could never hold.
  *
  * The four media slots are the reason this function exists rather than a spread:
- * a content file names a medium by **path** (`"knoten/palomar.mp4"`) and the
+ * a content file names a medium by **path** (`"kurs/palomar.mp4"`) and the
  * database by **id** (`"med-7f3…"`), and neither value is available on the other
- * side. What both sides agree on is whether the slot is **occupied**, and that
- * is the whole of what is hashed — so `"local"` here is a marker for *there is
- * something in this slot*, never an identifier, and it never leaves this
- * function.
+ * side. What both sides can DERIVE is the storage key, and that is what is
+ * hashed — here by prefixing, over there by reading the row `mediaIdFor()`
+ * looked up under exactly this string.
+ *
+ * 🚨 `CONTENT_MEDIA_BUCKET_PREFIX + path`, never a literal `"content/"`. It is
+ * the spelling `lib/content/media-presence.ts` already uses and the one
+ * `lib/content/writers.test.ts` pins at its source; a second spelling of the
+ * prefix would resolve a lesson to a media row through one and leave the object
+ * under the other. ⚠️ Not `keyFor()` from `scripts/content/_manifest.mjs`, which
+ * is the same composition — that file reads a manifest off the disk with
+ * `node:fs`, and this one is bundled into the app through `./outline.ts`. The
+ * constant is pure and its own header says it is meant to be imported by bare
+ * `node`, by vitest and by the app alike.
+ *
+ * ⚠️ A path this function cannot recognise is not this function's to refuse:
+ * `readBlocks()` has already read the file, and a path that names no manifest
+ * entry fails `content-apply` at `mediaIdFor()` with the entry's own name. A
+ * second refusal here would be a second opinion about what a valid reference is.
  *
  * ⚠️ **`?? null`, never `?? ""`.** `body: null` (the applier wrote no body) and
  * `body: ""` (it wrote an empty one) are different rows and must fingerprint
@@ -235,14 +365,15 @@ export function unitFingerprint(unit) {
  * @returns {FingerprintUnit}
  */
 export function localUnitRow(unit) {
+  const key = (path) => (path ? CONTENT_MEDIA_BUCKET_PREFIX + path : null);
   return {
     slug: unit.slug,
     title: unit.title,
     body: unit.body ?? null,
     taskPrompt: unit.taskPrompt ?? null,
-    coverMediaId: unit.cover ? "local" : null,
-    videoMediaId: unit.video ? "local" : null,
-    subtitleMediaId: unit.subtitle ? "local" : null,
-    worksheetMediaId: unit.worksheet ? "local" : null,
+    coverKey: key(unit.cover),
+    videoKey: key(unit.video),
+    subtitleKey: key(unit.subtitle),
+    worksheetKey: key(unit.worksheet),
   };
 }

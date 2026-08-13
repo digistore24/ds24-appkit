@@ -27,6 +27,9 @@ import {
   slotUploadProblem,
   mayOperatorWrite,
   nextUnit,
+  unitTextProblem,
+  MAX_UNIT_BODY_CHARS,
+  MAX_UNIT_TITLE_CHARS,
   positionAvailability,
   progress,
   rowWritable,
@@ -115,8 +118,17 @@ describe("progress", () => {
 });
 
 describe("the next step", () => {
-  const unit = (slug: string, block: number, pos: number, unlocked = true): UnitRef => ({
+  // The title defaults off the slug, so the ordering tests below stay about
+  // ordering. Where the title itself is the subject, it is passed in.
+  const unit = (
+    slug: string,
+    block: number,
+    pos: number,
+    unlocked = true,
+    title = `Titel ${slug}`,
+  ): UnitRef => ({
     slug,
+    title,
     blockPosition: block,
     position: pos,
     unlocked,
@@ -146,6 +158,19 @@ describe("the next step", () => {
     // `releaseAfterDays: 7`.
     expect(nextUnit([unit("a", 1, 1, false)], new Set())).toBeNull();
     expect(nextUnit([], new Set())).toBeNull();
+  });
+
+  // 🚨 The answer is SHOWN, not only followed. Reported 2026-08-12: the card
+  // read "Weiter geht es mit: was-dich-erwartet" — the placeholder is called
+  // `{title}` and was fed the slug. Asserting on `.slug` alone, as every test
+  // above does, cannot see that.
+  it("carries the lesson's title, not only its address", () => {
+    const units = [
+      unit("was-dich-erwartet", 1, 1, true, "Was dich erwartet"),
+      unit("die-erste-kennzahl", 1, 2, true, "Die erste Kennzahl"),
+    ];
+    expect(nextUnit(units, new Set())?.title).toBe("Was dich erwartet");
+    expect(nextUnit(units, new Set(["was-dich-erwartet"]))?.title).toBe("Die erste Kennzahl");
   });
 
   it("does not reorder the caller's array", () => {
@@ -725,5 +750,36 @@ describe("digestKey", () => {
     const key = digestKey(new Date("2026-12-31T23:59:59Z"));
     expect(key).toMatch(/^[a-z0-9][a-z0-9-]*(:[a-z0-9-]+)*$/);
     expect(key.length).toBeLessThanOrEqual(120);
+  });
+});
+
+describe("unitTextProblem — the operator's own text has a ceiling too", () => {
+  // ⚠️ There was none until 2026-08-13. `courses_units.body` is an unbounded
+  // `text` and the admin form only trimmed, while the member's hand-in on the
+  // other side of the same lesson has had `MAX_SUBMISSION_CHARS` since it was
+  // built — the wrong way round, because a body is turned into React elements on
+  // EVERY request and a hand-in is read once.
+  it("passes ordinary text", () => {
+    expect(unitTextProblem({ title: "Was dich erwartet", body: "Ein Absatz." })).toBeNull();
+    expect(unitTextProblem({ title: "Ohne Text", body: null })).toBeNull();
+  });
+
+  it("refuses a body past the ceiling", () => {
+    expect(unitTextProblem({ title: "x", body: "a".repeat(MAX_UNIT_BODY_CHARS + 1) })).toBe(
+      "coursesUnitTextTooLong",
+    );
+  });
+
+  it("refuses a title past the ceiling", () => {
+    expect(unitTextProblem({ title: "a".repeat(MAX_UNIT_TITLE_CHARS + 1) })).toBe(
+      "coursesUnitTextTooLong",
+    );
+  });
+
+  // Exactly the ceiling goes through — the number the form shows is the number
+  // it accepts, the same boundary `submissionProblem()` keeps.
+  it("lets exactly the ceiling through", () => {
+    expect(unitTextProblem({ title: "x", body: "a".repeat(MAX_UNIT_BODY_CHARS) })).toBeNull();
+    expect(unitTextProblem({ title: "a".repeat(MAX_UNIT_TITLE_CHARS) })).toBeNull();
   });
 });

@@ -18,6 +18,7 @@ import Link from "next/link";
 import { getFormatter, getTranslations } from "next-intl/server";
 import { ArrowLeft } from "lucide-react";
 
+import { LegalBody } from "@/components/legal-body";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
@@ -26,6 +27,10 @@ import { Figure } from "@/components/ui/figure";
 import { MediaDownload } from "@/components/ui/media-download";
 import { MediaPlayer } from "@/components/ui/media-player";
 import { requireActiveUser } from "@/lib/authz";
+// The core's markdown subset, shared with the legal pages rather than copied.
+// It returns DATA — see the body's own comment below for why that is the whole
+// security story here.
+import { parse } from "@/lib/legal/markdown";
 // 🚨 The SAME arithmetic the content source uses, from the same string — the
 // medium's bucket path and the unit's slug. Both sides compute the fragment
 // with these two functions and neither slugifies by hand, which is the only
@@ -50,6 +55,15 @@ import { CompletionToggle, TaskForm } from "./ui";
 // same texts, and a second copy of the split is a second rendering policy: the
 // `\r?\n` in it was a measured bug fix, and the copy that would have missed it
 // is the one nobody edits.
+
+// "Lesson", not the lesson's own name — see the note on the course overview's
+// `generateMetadata`. Taking the title off `unitBySlug()` would load the row a
+// second time to fill a tab; saying "Course" here would make this tab and the
+// overview's indistinguishable.
+export async function generateMetadata() {
+  const t = await getTranslations("courses");
+  return { title: t("lessonTitle") };
+}
 
 export default async function CourseUnitPage({
   params,
@@ -108,6 +122,12 @@ export default async function CourseUnitPage({
   ]);
 
   const format = await getFormatter();
+
+  // ⚠️ Parsed BEFORE the card decides to exist. A body that is only whitespace —
+  // which a content file can carry and the admin textarea can produce — is
+  // truthy but yields no blocks, and the card would then be an empty bordered
+  // box between the video and the worksheet.
+  const bodyBlocks = unit.body ? parse(unit.body) : [];
 
   return (
     <>
@@ -196,18 +216,40 @@ export default async function CourseUnitPage({
           )
         ) : null}
 
-        {unit.body ? (
+        {bodyBlocks.length > 0 ? (
           <Card id={slugifyAnchor(unit.slug)} className="scroll-mt-20">
-            <CardContent className="flex flex-col gap-3 pt-6">
-              {/* Paragraphs, not HTML. Nothing here goes through
-                  `dangerouslySetInnerHTML` — a lesson body is text the operator
-                  wrote, and the moment it renders markup it is a place to put
-                  script. */}
-              {unit.body.split(/\n{2,}/).map((paragraph, index) => (
-                <p key={index} className="text-sm leading-relaxed">
-                  {paragraph}
-                </p>
-              ))}
+            {/* No flex column here — `<LegalBody>` brings its own, and two
+                nested ones only mean the outer `gap` never applies. */}
+            <CardContent className="pt-6">
+              {/* DATA, not HTML. `parse()` hands back blocks and `<LegalBody>`
+                  turns them into React elements — nothing here goes through
+                  `dangerouslySetInnerHTML`, so there is no sanitiser to keep
+                  current. That is the same security story the legal pages have,
+                  and it is why the promise in `schema.ts` ("Markdown-ish,
+                  rendered through the template's own subset parser") can be kept
+                  without opening a place to put script.
+
+                  ⚠️ It is the CORE's parser, not a second one in this module.
+                  `components/member-text.tsx` next door deliberately renders no
+                  markdown at all and must stay that way — it shows text a MEMBER
+                  typed, where a clickable foreign link is a phishing surface.
+
+                  ⚠️ A lesson body has TWO writers, and links are allowed here
+                  because both are the operator's: the admin form behind
+                  `requireOwner()`, and a repo content file applied by
+                  `content-apply` / `content-publish` with a `SETUP_KEY`
+                  (`content/appliers/course.mjs`). Neither is a stranger. A third
+                  writer would have to re-open this question.
+
+                  ⚠️ Reported 2026-08-12: this was a hand-rolled paragraph split,
+                  which broke twice over. It rendered `- **Quelle** — …` verbatim,
+                  asterisks and all; and because the admin form is a `<textarea>`,
+                  a blank line arrives as CRLF and holds no two consecutive
+                  newlines at all — so every lesson written in a browser was ONE
+                  paragraph. `member-text.tsx:26-30` carries that same measurement
+                  for the same bug in the same module. `parse()` splits on
+                  `/\r?\n/` and has its own test for it. */}
+              <LegalBody blocks={bodyBlocks} />
             </CardContent>
           </Card>
         ) : null}

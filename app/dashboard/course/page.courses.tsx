@@ -11,3 +11,4 @@
 //
 // It delegates and holds no logic; `modules/boundary.test.ts` §1b enforces that.
 export { default } from "@/modules/courses/pages/page";
+export { generateMetadata } from "@/modules/courses/pages/page";

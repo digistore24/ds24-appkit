@@ -18,7 +18,8 @@
 import { describe, expect, it } from "vitest";
 
 import { compareCourse, diffCounts, sameSubject, sameSubjectPairs } from "./diff.mjs";
-import { localUnitRow, unitFingerprint } from "./fingerprint.mjs";
+import { FINGERPRINT_VERSION, localUnitRow, unitFingerprint } from "./fingerprint.mjs";
+import { CONTENT_MEDIA_BUCKET_PREFIX } from "@/lib/content-media/rules.mjs";
 
 /** One lesson as a `content/course/*.json` file spells it. */
 type LocalUnit = {
@@ -81,13 +82,23 @@ function localCourse(): LocalBlock[] {
  * What the target would hold if this repo had already been published into it.
  *
  * 🚨 The media ids are DELIBERATELY not the local paths: a media id exists once,
- * in one database, and this is the side that has them. If the local row were
- * built from ids instead of from occupancy, this fixture alone would turn every
- * lesson with a medium into "would change".
+ * in one database, and this is the side that has them. What the two sides DO
+ * share is the storage key `content/<path>` — the string `mediaIdFor()` looked
+ * the row up under — so this fixture mints a foreign id for every slot and
+ * resolves it to the key the repo's own path composes. If the comparison read
+ * ids, this fixture alone would turn every lesson with a medium into "would
+ * change"; if it read occupancy, no fixture here could tell one video from
+ * another.
  */
-function published(blocks: LocalBlock[]): { blocks: object[] } {
+function published(blocks: LocalBlock[]): { fingerprintVersion: string; blocks: object[] } {
   let media = 0;
+  const slot = (path: string | null | undefined) =>
+    path ? { id: `med-${(media += 1)}`, key: `content/${path}` } : { id: null, key: null };
+
   return {
+    // What the deploy over there computes. Sent since the storage key moved
+    // every fingerprint; `predatesVersionTag()` below is the other case.
+    fingerprintVersion: FINGERPRINT_VERSION,
     blocks: blocks.map((block) => ({
       slug: block.slug,
       title: block.title,
@@ -105,17 +116,28 @@ function published(blocks: LocalBlock[]): { blocks: object[] } {
         hasWorksheet: Boolean(unit.worksheet),
         asksForSubmission: Boolean(unit.taskPrompt),
         origin: "content",
-        fingerprint: unitFingerprint({
-          slug: unit.slug,
-          title: unit.title,
-          body: unit.body ?? null,
-          taskPrompt: unit.taskPrompt ?? null,
-          // Ids the target minted for itself — nothing the repo could know.
-          coverMediaId: unit.cover ? `med-${(media += 1)}` : null,
-          videoMediaId: unit.video ? `med-${(media += 1)}` : null,
-          subtitleMediaId: unit.subtitle ? `med-${(media += 1)}` : null,
-          worksheetMediaId: unit.worksheet ? `med-${(media += 1)}` : null,
-        }),
+        fingerprint: (() => {
+          // Ids the target minted for itself — nothing the repo could know —
+          // each with the key its own `media` row was written under.
+          const cover = slot(unit.cover);
+          const video = slot(unit.video);
+          const subtitle = slot(unit.subtitle);
+          const worksheet = slot(unit.worksheet);
+          return unitFingerprint({
+            slug: unit.slug,
+            title: unit.title,
+            body: unit.body ?? null,
+            taskPrompt: unit.taskPrompt ?? null,
+            coverMediaId: cover.id,
+            videoMediaId: video.id,
+            subtitleMediaId: subtitle.id,
+            worksheetMediaId: worksheet.id,
+            coverKey: cover.key,
+            videoKey: video.key,
+            subtitleKey: subtitle.key,
+            worksheetKey: worksheet.key,
+          });
+        })(),
       })),
     })),
   };
@@ -292,13 +314,117 @@ describe("AC2 — two different inputs, two visibly different answers", () => {
 
   it("🚨 the same medium under a different id is NOT a change", () => {
     // The portability claim: the repo names media by PATH, the target by ID, and
-    // the fingerprint hashes the occupancy of the slot. `published()` mints ids
-    // the repo has never seen; if the local row were built from ids, lektion-1
-    // (which has a video) would read as "would change" here.
+    // both DERIVE the storage key `content/<path>`. `published()` mints ids the
+    // repo has never seen; if the comparison read ids, lektion-1 (which has a
+    // video) would read as "would change" here.
     const withMedia = (baseline().units.untouched as Entry[]).find((e) => e.slug === "lektion-1");
     expect(withMedia, "the fixture has no lesson with a medium").toBeDefined();
     // Non-vacuity: the fixture really does carry a medium on that lesson.
     expect(localCourse()[0].units[0].video).toBeTruthy();
+  });
+
+  // ── 🚨 A49, at the level a `courses-diff` reader sees ─────────────────────
+  // The gap this design closed. The repo's content file names a different video
+  // file; the target still holds the old one; every other field is identical.
+  // Measured against a real Postgres before the fix, this state printed
+  // `0 would change · 2 untouched`.
+  it("🚨 a lesson whose video was SWAPPED for another file moves to changed", () => {
+    expect(localCourse()[0].units[0].video, "the fixture's lesson has no video").toBe(
+      "knoten/palomar.mp4",
+    );
+    movesOnly(
+      (local) => {
+        local[0].units[0].video = "knoten/achtknoten.mp4";
+      },
+      "units:lektion-1",
+      "untouched",
+      "changed",
+    );
+  });
+
+  it("🚨 and the same holds for all FOUR slots, one at a time", () => {
+    // A54's shape: a repair that only touched the video would move the gap
+    // rather than close it. Each slot is filled on both sides, then the repo's
+    // side is pointed at another file.
+    let measured = 0;
+    for (const slot of ["cover", "video", "subtitle", "worksheet"] as const) {
+      const filled = () => {
+        const blocks = localCourse();
+        blocks[1].units[0][slot] = "knoten/eins.mp4";
+        return blocks;
+      };
+      const target = published(filled());
+      const swapped = filled();
+      swapped[1].units[0][slot] = "knoten/zwei.mp4";
+
+      expect(
+        placement(compareCourse(filled(), target))["units:lektion-3"],
+        `the ${slot} slot did not start out untouched`,
+      ).toBe("untouched");
+      expect(
+        placement(compareCourse(swapped, target))["units:lektion-3"],
+        `the ${slot} slot was swapped for another file and the lesson still reads as untouched`,
+      ).toBe("changed");
+      measured += 1;
+    }
+    // Count guard: four slots compared, not zero and not one.
+    expect(measured, "no slot was compared").toBe(4);
+  });
+});
+
+describe("🚨 a target computing a DIFFERENT fingerprint version is not a difference", () => {
+  /** The same payload as `published()`, from a deploy that predates the tag. */
+  function predatesVersionTag(blocks: LocalBlock[]) {
+    const { fingerprintVersion: _dropped, ...rest } = published(blocks);
+    return rest;
+  }
+
+  it("agreeing versions report no mismatch at all", () => {
+    const report = baseline();
+    expect(report.fingerprintMismatch).toBeNull();
+    // Count guard: fingerprints really were compared, so `null` means "they
+    // agree" and not "nothing was looked at".
+    expect(report.units.untouched.length + report.units.changed.length).toBe(3);
+  });
+
+  it("a payload with no version at all is named, with `there: null`", () => {
+    const report = compareCourse(localCourse(), predatesVersionTag(localCourse()));
+    expect(report.fingerprintMismatch).toEqual({ here: FINGERPRINT_VERSION, there: null });
+  });
+
+  it("a payload from another version is named with the value it sent", () => {
+    const target = { ...published(localCourse()), fingerprintVersion: "courses-unit-v1" };
+    expect(compareCourse(localCourse(), target).fingerprintMismatch).toEqual({
+      here: FINGERPRINT_VERSION,
+      there: "courses-unit-v1",
+    });
+  });
+
+  it("it is its OWN field and never an entry in notCompared", () => {
+    // The two sentences are different sentences: `notCompared` means *that app
+    // does not send this field*, and this is *it sends a value from another
+    // version*. A reader told the first about the second goes looking for an
+    // old deploy's missing column.
+    const report = compareCourse(localCourse(), predatesVersionTag(localCourse()));
+    expect(report.notCompared).toEqual([]);
+  });
+
+  it("⚠️ says nothing when no fingerprint was compared at all", () => {
+    // A target holding a course this repo shares no slug with compares no
+    // digests, so a version disagreement there is a warning about nothing.
+    const foreign = predatesVersionTag(
+      localCourse().map((b) => ({
+        ...b,
+        slug: `${b.slug}-anders`,
+        units: b.units.map((u) => ({ ...u, slug: `${u.slug}-anders` })),
+      })),
+    );
+    const report = compareCourse(localCourse(), foreign);
+    expect(report.units.untouched.length + report.units.changed.length).toBe(0);
+    expect(report.fingerprintMismatch).toBeNull();
+    // Non-vacuity: the comparison really did run and really did find rows.
+    expect(report.units.new).toHaveLength(3);
+    expect(report.units.targetOnly).toHaveLength(3);
   });
 });
 
@@ -792,7 +918,7 @@ describe("localUnitRow — the repo's side of the comparison", () => {
     );
   });
 
-  it("maps the four media slots as OCCUPANCY, never as a value", () => {
+  it("🚨 maps the four media slots to the STORAGE KEY the target holds", () => {
     const row = localUnitRow({
       slug: "s",
       title: "T",
@@ -801,20 +927,59 @@ describe("localUnitRow — the repo's side of the comparison", () => {
       subtitle: "a/film.vtt",
       worksheet: "a/blatt.pdf",
     });
-    // Not the path — a path is meaningless to the side that holds ids.
-    expect(JSON.stringify(row)).not.toContain("a/cover.png");
-    expect(Boolean(row.coverMediaId)).toBe(true);
-    expect(Boolean(row.videoMediaId)).toBe(true);
-    // And a different medium in the same slot hashes the same, which is the
-    // known limit `fingerprint.mjs` records rather than papers over.
-    expect(unitFingerprint(localUnitRow({ slug: "s", title: "T", video: "a.mp4" }))).toBe(
-      unitFingerprint(localUnitRow({ slug: "s", title: "T", video: "b.mp4" })),
+    // 🚨 This assertion used to read `not.toContain`, and that was the defect:
+    // a path was said to be "meaningless to the side that holds ids", so the
+    // slots were hashed as a boolean and a swapped video was invisible. What
+    // the other side holds is neither the path nor the id — it is the key
+    // `mediaIdFor()` looked the row up under, which is this string.
+    expect(row.coverKey).toBe("content/a/cover.png");
+    expect(row.videoKey).toBe("content/a/film.mp4");
+    expect(row.subtitleKey).toBe("content/a/film.vtt");
+    expect(row.worksheetKey).toBe("content/a/blatt.pdf");
+    // Count guard: four slots asked, four slots answered. A row that mapped
+    // three of them would pass any single assertion above.
+    expect(
+      [row.coverKey, row.videoKey, row.subtitleKey, row.worksheetKey].filter(Boolean),
+    ).toHaveLength(4);
+    // No id, on any slot — there is nothing here that could be one.
+    expect(JSON.stringify(row)).not.toContain("MediaId");
+
+    // And a DIFFERENT medium in the same slot now hashes differently. This is
+    // A49: it read `toBe` here, and the sentence next to it called the sameness
+    // "the known limit `fingerprint.mjs` records rather than papers over".
+    expect(unitFingerprint(localUnitRow({ slug: "s", title: "T", video: "a/eins.mp4" }))).not.toBe(
+      unitFingerprint(localUnitRow({ slug: "s", title: "T", video: "a/zwei.mp4" })),
     );
+  });
+
+  it("all four slots, swapped one at a time", () => {
+    // The A54 shape: a repair that only touched the video would move the gap
+    // rather than close it. Each slot gets its own measurement.
+    const base = { slug: "s", title: "T" } as const;
+    let measured = 0;
+    for (const slot of ["cover", "video", "subtitle", "worksheet"] as const) {
+      const one = unitFingerprint(localUnitRow({ ...base, [slot]: "a/eins.mp4" }));
+      const two = unitFingerprint(localUnitRow({ ...base, [slot]: "a/zwei.mp4" }));
+      expect(one, `the ${slot} slot ignores WHICH file sits in it`).not.toBe(two);
+      measured += 1;
+    }
+    // Count guard: four slots compared, not zero and not one.
+    expect(measured, "no slot was measured").toBe(4);
   });
 
   it("an empty slot and a filled one are different rows", () => {
     expect(unitFingerprint(localUnitRow({ slug: "s", title: "T" }))).not.toBe(
       unitFingerprint(localUnitRow({ slug: "s", title: "T", video: "a.mp4" })),
+    );
+  });
+
+  it("composes the key on the shared prefix, not on a second spelling of it", () => {
+    // `CONTENT_MEDIA_BUCKET_PREFIX + path` is what `lib/content/media-presence.ts`
+    // uses and what `mediaIdFor()` resolves through `keyFor()`. A literal here
+    // that drifted from it would resolve a lesson to a media row through one
+    // spelling while the object sat under the other.
+    expect(localUnitRow({ slug: "s", title: "T", video: "kurs/x.mp4" }).videoKey).toBe(
+      CONTENT_MEDIA_BUCKET_PREFIX + "kurs/x.mp4",
     );
   });
 });

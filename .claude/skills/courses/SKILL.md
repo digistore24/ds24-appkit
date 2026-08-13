@@ -42,9 +42,17 @@ hand over to the Membership archetype.
 ## 2. Install it
 
 ```bash
+node run.mjs module add api        # the course serves endpoints on its surface
 node run.mjs module add courses
 node run.mjs db-migrate
 ```
+
+**The first line is not optional and not a formality.** `courses` declares
+`requires: ["api"]`, so adding it alone is refused by name and changes nothing.
+Say the cost out loud: the `api_keys` table and the App-keys card on
+`/dashboard/account` come with it. The API itself stays **off** in
+`config/api.json` — a course does not need it switched on; a mobile companion
+does ([`docs/api.md`](../../../docs/api.md)).
 
 Then `config/course.json`: `shape`, and `productKey` once step 3 has created it.
 **Leave `enabled` at `false`.** It ships off on purpose — a course whose pages
@@ -90,6 +98,11 @@ writes; a lesson typed in through a tool would be overwritten by the next apply.
 - **`slug` is the route AND the Subject Key** — the same string a
   `<CompanionPanel>` or an `<ActivityPanel>` on that lesson uses. Lower-case
   ASCII, digits, single hyphens. Unique across the whole app.
+- **`body` is the lesson's text, and it takes a small markdown subset** —
+  `#` headings, `- ` bullet lists, `**bold**`, `*italic*` and links. Write it
+  that way: prose typed as one wall renders as one wall. (Needs template 0.27.0.
+  Before that the characters appeared on screen verbatim.) A `body` may be
+  omitted entirely — a lesson that is only a video is a lesson.
 - **`releaseAfterDays`** is shape 2's whole mechanism: days after the learner's
   access started. `0` everywhere is a self-study course.
 - **`taskPrompt`** on a unit makes it a hand-in — shape 3 only.

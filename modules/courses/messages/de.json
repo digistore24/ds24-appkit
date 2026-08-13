@@ -22,10 +22,12 @@
     "coursesSlotNotAttachable": "Dieser Platz nimmt {types} — diese Datei ist etwas anderes.",
     "coursesUploadTicketMismatch": "Dieser Upload wurde nicht für diesen Kurs angelegt und wird hier nicht angenommen. Wähle die Datei im Video-Feld noch einmal aus.",
     "coursesReplyEmpty": "Eine Antwort ohne Text kann nicht gespeichert werden. Wer nichts schreiben will, lässt die Abgabe offen.",
-    "coursesReplyTooLong": "Diese Antwort ist zu lang. Höchstens {max, number} Zeichen."
+    "coursesReplyTooLong": "Diese Antwort ist zu lang. Höchstens {max, number} Zeichen.",
+    "coursesUnitTextTooLong": "Der Text ist zu lang für eine Lektion. Kürze ihn oder teile die Lektion."
   },
   "courses": {
     "title": "Kurs",
+    "lessonTitle": "Lektion",
     "accountExportNote": "Dein Download enthält, welche Lektionen du abgeschlossen hast und was du eingereicht hast — samt der Antwort darauf.",
     "accountDeletionNote": "Mit deinem Konto verschwindet alles aus dem Kurs: dein Fortschritt, deine Abgaben und die Antworten darauf.",
     "brokenTitle": "Der Kurs ist eingeschaltet, aber die Einstellungen stimmen nicht",
@@ -34,7 +36,7 @@
     "emptyBody": "Die Blöcke und Lektionen stehen in content/course/*.json und kommen mit `node run.mjs content-apply` in diese Umgebung. Zeilen reisen nicht mit dem Deploy.",
     "progressTitle": "Dein Fortschritt",
     "progressCount": "{done} von {total} Lektionen",
-    "nextStep": "Weiter geht es mit: {title}",
+    "nextStep": "Weiter geht es mit: <lesson>{title}</lesson>",
     "nothingOpen": "Im Moment ist nichts freigeschaltet.",
     "locked": "noch nicht freigeschaltet",
     "done": "erledigt",
@@ -53,7 +55,8 @@
     "submissionRepliedOn": "Geantwortet am {date}.",
     "submissionYourText": "Was du abgegeben hast",
     "submissionFrozen": "Auf diese Abgabe wurde geantwortet — der Text bleibt jetzt so stehen, denn die Antwort bezieht sich darauf.",
-    "submissionSaved": "Deine Abgabe ist angekommen."
+    "submissionSaved": "Deine Abgabe ist angekommen.",
+    "errors": {}
   },
   "coursesAdmin": {
     "title": "Kursaufbau",
@@ -189,7 +192,6 @@
     "submissionSendConfirm": "Senden",
     "submissionRewriteConfirm": "Umschreiben",
     "submissionSaved": "Antwort gespeichert.",
-
     "digestSubject": "{count, plural, one {Eine Abgabe wartet auf eine Antwort} other {# Abgaben warten auf eine Antwort}}",
     "digestHeading": "{count, plural, one {Eine Abgabe wartet} other {# Abgaben warten}}",
     "digestBody": "{count, plural, one {In deinem Kurs wartet eine Abgabe darauf, gelesen und beantwortet zu werden.} other {In deinem Kurs warten # Abgaben darauf, gelesen und beantwortet zu werden.}} Diese Mail nennt bewusst niemanden — wer etwas abgegeben hat und wozu, steht in der App.",

@@ -156,6 +156,49 @@
 // day the warnings stop, and a customer's suite going red because upstream
 // improved is noise they cannot act on. Then this block is stale prose, and
 // deleting it is the whole job.
+//
+// ── 5. The app's own IDENTITY, which the lockfile carries a copy of ────────
+// The one block here that is not about a dependency at all. It lives in this
+// file because this is where the two JSON files are already read as a PAIR, and
+// a second reader of them would be a second place to keep in step. It is not an
+// `overrides` reason and the posture rung is not looking for it.
+//
+// `package.json` says what this app is CALLED and what version it is.
+// `package-lock.json` repeats each of those **twice** — once at the top level
+// and once in `packages[""]` — and npm writes those four copies only when npm
+// itself runs. So a field changed by hand, or by anything that is not an
+// install, leaves a lockfile describing the app before last. It happened twice
+// in a row here for `version` (0.22.0 through 0.23.0 to 0.24.0) and was
+// straightened out in passing rather than caught.
+//
+// **Nothing else in this product can catch either of them**, which is why the
+// assertion is worth its lines. Measured 2026-08-12, in a throwaway project
+// outside this repo, for `version` and `name` alike and for each of the four
+// sites separately:
+//
+//     npm ci --dry-run   exit 0, silent  (npm 9.2.0 and npm 11.19.0 alike)
+//     npm install        exit 0, silent — and it REWRITES the field in place
+//
+// The first is what `make deploy-local-check` asks, so the release gate whose
+// job is "do these two files still agree" does not consider this a
+// disagreement; npm's in-sync check is about dependencies (a package missing
+// from the lockfile does exit 1 there — the control ran, both times). The second
+// is worse than silent: the deploy folder repairs its own copy on the way, so
+// the shipped file stays wrong and every install after it looks healthy.
+//
+// 🚨 **`name` is checked too, and it is NOT the same defect wearing another
+// field.** The reason it was left out when `version` went in was a good one —
+// nobody renames an app in the release rhythm, so the stale-copy story does not
+// apply — and that is exactly what makes the assertion cheap and the FAILURE
+// worth reading: a lockfile whose name is not this app's was almost certainly
+// not written for this app at all. This template is COPIED, wholesale, into
+// every customer's repo; a lockfile carried in from another project, or restored
+// from the wrong backup, is a resolved dependency tree for a different
+// `package.json`, and the two silences above mean nothing anywhere would say so.
+// The two fields therefore share one list and one count guard, and nothing else:
+// their messages differ, because "run npm install and commit the lockfile with
+// the bump" is the right advice for one of them and the wrong advice for the
+// other.
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -195,6 +238,57 @@ const DEPRECATED_TRANSITIVES = ["@esbuild-kit/esm-loader", "@esbuild-kit/core-ut
 
 /** The only package that may ask for them (esm-loader asks for core-utils itself). */
 const DEPRECATED_VIA = "drizzle-kit";
+
+/**
+ * The FOUR places `package-lock.json` keeps a copy of this app's own identity —
+ * its `name` and its `version`, each written twice.
+ *
+ * All four, deliberately: npm writes them together, so a reader that knows about
+ * some of them is this same omission again in a year. They are read through
+ * closures rather than by path strings so that a lockfile without `packages[""]`
+ * at all answers `undefined` instead of throwing — that state has its own
+ * message below, and it is a failure rather than a silence.
+ *
+ * `field` is what each site is compared against in `package.json`, and it also
+ * picks which sentence a failure gets: a stale `version` is a forgotten
+ * `npm install` after a bump, and a wrong `name` is a lockfile from somewhere
+ * else. Same mechanism, same silence from npm, different thing to go and do.
+ */
+const LOCK_IDENTITY_SITES: {
+  field: "name" | "version";
+  where: string;
+  read: () => unknown;
+}[] = [
+  { field: "version", where: `the top-level "version"`, read: () => lock.version },
+  {
+    field: "version",
+    where: `packages[""].version`,
+    read: () => (lock.packages as Record<string, { version?: unknown }> | undefined)?.[""]?.version,
+  },
+  { field: "name", where: `the top-level "name"`, read: () => lock.name },
+  {
+    field: "name",
+    where: `packages[""].name`,
+    read: () => (lock.packages as Record<string, { name?: unknown }> | undefined)?.[""]?.name,
+  },
+];
+
+/** What a mismatch at one site means, and what to do about it. */
+const IDENTITY_ADVICE: Record<"name" | "version", string> = {
+  version:
+    `A version bump does not travel into the lockfile by itself — npm copies it there ` +
+    `the next time npm runs, and nothing else does. Run "npm install" in template/ ` +
+    `(no arguments — with the tree already installed it re-resolves nothing) and commit ` +
+    `package-lock.json together with the bump. It writes both places, so editing one by ` +
+    `hand is this same defect again.`,
+  name:
+    `Nobody renames an app in the release rhythm, so this is the less likely reading and ` +
+    `the more serious one: a lockfile whose name is not this app's is a resolved ` +
+    `dependency tree for a DIFFERENT package.json — one copied in from another project, ` +
+    `or restored from the wrong backup. Do not fix it by editing the field. Check where ` +
+    `this lockfile came from, and if the answer is "this app", regenerate it with ` +
+    `"npm install" in template/ and read the diff.`,
+};
 
 /** `1.2.3` → `[1, 2, 3]`. Every version here is a plain triple. */
 function triple(version: string): [number, number, number] {
@@ -369,6 +463,70 @@ describe("the deprecation warnings a first install prints", () => {
 // `found 0 vulnerabilities`, and section 3 of the header already says so. The
 // assertion is unchanged; only the sentence describing it moved. 🚨 No fixed
 // count of advisories belongs anywhere here, in code or in prose.
+// Section 5 of the header: not a dependency decision, but the same pair of files.
+describe("the app's own name and version, and the lockfile's two copies of each", () => {
+  it("is a plain version and a name in package.json to begin with", () => {
+    // Non-vacuity for the comparisons below: an absent or exotic field would
+    // make "the lockfile matches it" a statement about `undefined`.
+    expect(
+      typeof pkg.version,
+      `package.json has no "version". Everything below compares the lockfile against it.`,
+    ).toBe("string");
+    expect(() => triple(pkg.version), `package.json's version is "${pkg.version}"`).not.toThrow();
+    expect(
+      typeof pkg.name === "string" && pkg.name.length > 0,
+      `package.json has no "name". Everything below compares the lockfile against it.`,
+    ).toBe(true);
+  });
+
+  it("is written in ALL FOUR places npm writes it — finding none is a failure, not a pass", () => {
+    // The count guard. Without it an emptied LOCK_IDENTITY_SITES, or a lockfile
+    // whose shape moved, would make the comparisons below pass by having nothing
+    // to compare — green for the one reason that must never read as green.
+    const missing = LOCK_IDENTITY_SITES.filter(({ read }) => typeof read() !== "string");
+    expect(
+      missing.map(({ where }) => where),
+      `package-lock.json carries nothing at that path. npm writes the name and the ` +
+        `version in both places each; a lockfile missing one was written by something ` +
+        `else, and the comparison below cannot be made. Regenerate it with ` +
+        `"npm install" in template/.`,
+    ).toEqual([]);
+
+    const found = LOCK_IDENTITY_SITES.filter(({ read }) => typeof read() === "string");
+    expect(
+      found.length,
+      `nothing here read an identity field at all, so nothing was compared. Four are ` +
+        `expected — "name" and "version", each at the top level and in packages[""].`,
+    ).toBe(4);
+
+    // …and that the four are really two of each, so a list that lost a field
+    // entirely cannot reach the count by carrying the other one twice more.
+    expect(
+      found.filter(({ field }) => field === "version").length,
+      `no "version" site is left in the list, so a stale version would go unnoticed ` +
+        `while the count guard above stayed green.`,
+    ).toBe(2);
+    expect(
+      found.filter(({ field }) => field === "name").length,
+      `no "name" site is left in the list, so a lockfile belonging to a different ` +
+        `project would go unnoticed while the count guard above stayed green.`,
+    ).toBe(2);
+  });
+
+  it("says the same thing in the lockfile as in package.json", () => {
+    for (const { field, where, read } of LOCK_IDENTITY_SITES) {
+      expect(
+        read(),
+        `package-lock.json says ${JSON.stringify(read())} at ${where}, package.json says ` +
+          `${JSON.stringify(pkg[field])}. ${IDENTITY_ADVICE[field]} ` +
+          `Measured: "npm ci" and "npm install" both exit 0 without a word about this, ` +
+          `and a fresh install QUIETLY REWRITES the field — so no install anywhere will ` +
+          `tell you, and the file that ships stays wrong.`,
+      ).toBe(pkg[field]);
+    }
+  });
+});
+
 describe("the two packages that may never be overridden", () => {
   it("is not silenced with an override that breaks the linter", () => {
     for (const name of NEVER_OVERRIDE) {

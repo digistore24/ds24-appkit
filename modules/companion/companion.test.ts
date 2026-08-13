@@ -18,6 +18,8 @@ import { describe, expect, it, beforeEach, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { blankComments } from "@/scripts/lib/source-text.mjs";
+
 import { askCompanion, type CompanionInput } from "./companion";
 import { parseFocus } from "@/lib/ai/report";
 import { rowFor, type UsageRecord } from "@/lib/ai/usage";
@@ -64,7 +66,11 @@ describe("the module cannot fetch on its own behalf", () => {
   // AC 5's "never a member id it resolves for itself" is a property of the FILE.
   // A property nobody can remember is one something has to read the tree for —
   // the same argument `providers/leak-guard.test.ts` makes.
-  const source = readFileSync(fileURLToPath(new URL("./companion.ts", import.meta.url)), "utf8");
+  // Comments blanked (CLAUDE.md: a checker reading source as TEXT does), so an
+  // import quoted in prose is not read as one the file makes.
+  const source = blankComments(
+    readFileSync(fileURLToPath(new URL("./companion.ts", import.meta.url)), "utf8"),
+  );
   const imports = [...source.matchAll(/^import[\s\S]*?from\s+"([^"]+)";/gm)].map((m) => m[1]);
 
   it("imports no database, no entitlement and no token module", () => {
@@ -130,9 +136,8 @@ describe("ai-check's hint is a note and never a failure", () => {
   // effects and no harness, and lifting one comparison into its own module ahead
   // of Story 13.2's `companionConfigFrom()` would create the second source of
   // truth 13.2 then has to reconcile. So the shape is read off the file.
-  const check = readFileSync(
-    fileURLToPath(new URL("../../scripts/ai/check.mjs", import.meta.url)),
-    "utf8",
+  const check = blankComments(
+    readFileSync(fileURLToPath(new URL("../../scripts/ai/check.mjs", import.meta.url)), "utf8"),
   );
 
   it("keys on a SWITCH, not on a scan of the tree", () => {

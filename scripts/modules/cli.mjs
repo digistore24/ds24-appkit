@@ -40,7 +40,7 @@
 // Safe for the import-graph rule below: `lib/env.mjs` imports `node:fs` alone.
 import "../lib/env.mjs";
 
-import { availableModules, loadModules, readModule } from "./registry.mjs";
+import { availableModules, dependantsOf, loadModules, missingRequires, readModule } from "./registry.mjs";
 import { installedModules } from "./installed.mjs";
 import { writeGenerated } from "./generate.mjs";
 // What still has to happen before an installed module does anything — one
@@ -50,7 +50,7 @@ import { afterInstall } from "./next-steps.mjs";
 // Which way each installed module's switch points — the weak, certain half of
 // the question its own reader answers in full. See that file's header for why
 // a weaker claim is allowed here where a copy of `isCommunityEnabled()` is not.
-import { switchLine, switchStateFrom } from "./switch-state.mjs";
+import { noSwitchLine, switchLine, switchStateFrom } from "./switch-state.mjs";
 // 🚨 NOT a static import, and the reason is a fresh clone.
 //
 // `data-gate.mjs` imports `postgres` — it exists to look in the database. A
@@ -154,6 +154,16 @@ function pointers(manifest, installed) {
         ? switchLine(manifest.config, switchStateFrom(readSwitch(manifest.config)))
         : `switch: ${manifest.config}`,
     );
+  } else if (installed) {
+    // ⚠️ **Silence here reads as an omission, and it is a state.** A module
+    // with no `config` has nothing to switch: `activity` contributes components
+    // INTO a lesson somebody else gates, so there is no route of its own to
+    // answer 404 and no position for an operator to hold. Every other module
+    // prints a `switch:` line, and the guidance says "set the switch" after
+    // every `module add` — so the one module that has none looked like a
+    // manifest somebody forgot to finish (reported 2026-08-12). Saying it is
+    // cheaper than the question it saves.
+    parts.push(noSwitchLine());
   }
   if (typeof manifest.docs === "string") parts.push(manifest.docs);
   if (typeof manifest.skill === "string") parts.push(`skill: ${manifest.skill}`);
@@ -270,6 +280,20 @@ function howToChange(installed, dormant) {
         const brings =
           step.tables === 1 ? "1 table, which is not there yet" : `${step.tables} tables, which are not there yet`;
         console.log(`  node run.mjs db-migrate         ${addId} brings ${brings}`);
+      } else if (step.kind === "render") {
+        // The command column again — the INVARIANT half only, like the switch
+        // line below it. There is no command to type here, which is the whole
+        // point of the step, so the left column names the file the reader has
+        // to open instead.
+        //
+        // 🚨 This branch is why `module list` fell over the day the step was
+        // added: it was an `if (migrate) … else <switch>`, and a third kind
+        // reached the else and asked for a `file` it does not have. `module add`
+        // had been taught the new step and this printer had not — two printers,
+        // one source, and only one of them updated.
+        const names = step.components.map((name) => `<${name}>`).join(" and ");
+        console.log(`  ${(step.docs ?? "a page of yours").padEnd(29)} render ${names} — ` +
+          `${addId} has no page of its own`);
       } else {
         // The step people leave out, and the reason the first question after an
         // install is "why is nothing there?". The INVARIANT half only — this is
@@ -521,6 +545,30 @@ async function add() {
   // fail, including the one that explains what is wrong.
   const { manifest } = readModule(id);
 
+  // 🚨 And the dependency is checked before the write for the SAME reason,
+  // which is not the same as trusting `loadModules()` to refuse later.
+  // Measured on 2026-08-12, the day `courses` first declared `requires`:
+  // `writeInstalled()` ran first, `writeGenerated()` then threw the registry's
+  // refusal — and the command exited 1 having ALREADY put "courses" in
+  // `config/modules.json` with no generated file rewritten. `module list` then
+  // reported it as installed. A refusal that leaves the app half-changed is
+  // worse than no refusal: the operator reads an error, believes nothing
+  // happened, and every later command answers for an arrangement that does not
+  // exist.
+  const missing = missingRequires(manifest, installed);
+  if (missing.length > 0) {
+    const list = missing.map((dep) => `"${dep}"`).join(", ");
+    console.error(
+      `✗ "${id}" requires ${list}, which ${missing.length === 1 ? "is" : "are"} not installed.\n\n` +
+        `  Nothing has been changed. Add ${missing.length === 1 ? "it" : "them"} first:\n\n` +
+        missing.map((dep) => `    node run.mjs module add ${dep}`).join("\n") +
+        `\n    node run.mjs module add ${id}\n\n` +
+        `  This is not a formality — a module declares a dependency because it\n` +
+        `  uses the other one's code. See docs/modules.md → *What a module joins by declaring itself*.`,
+    );
+    return 1;
+  }
+
   writeInstalled([...installed, id]);
   const changed = writeGenerated();
 
@@ -553,6 +601,18 @@ async function add() {
     if (step.kind === "migrate") {
       const tables = step.tables === 1 ? "its 1 table is" : `its ${step.tables} tables are`;
       console.log(`  ${n}. node run.mjs db-migrate — ${tables} not there yet.`);
+    } else if (step.kind === "render") {
+      // 🚨 The step that turns "I did everything and nothing happened" into a
+      // sentence. This module has no page of its own; what it brings is a
+      // component one of YOUR pages renders, and until then it is installed and
+      // invisible. Said with the component's real name so the next search finds
+      // something.
+      const names = step.components.map((name) => `<${name}>`).join(" and ");
+      console.log(`  ${n}. Render ${names} on a page of your own — this module has no page.`);
+      const said =
+        `Until then it is installed and does nothing you can see, which is not a fault. ` +
+        (step.docs ? `The worked example is ${step.docs}.` : "");
+      for (const line of wrapWords(said, 5)) console.log(`     ${line}`);
     } else {
       console.log(`  ${n}. ${step.file} — set "enabled": true, then restart.`);
       const said = `${step.why[0].toUpperCase()}${step.why.slice(1)}: while it is off ${step.whileOff}.`;
@@ -574,6 +634,26 @@ async function remove() {
   if (!installed.includes(id)) {
     console.log(`"${id}" is not installed. Nothing to do.`);
     return 0;
+  }
+
+  // 🚨 The mirror of the check in `add()`, and the more dangerous direction:
+  // taking `api` out from under an installed `courses` leaves an arrangement
+  // `loadModules()` refuses — which is every command in the app, including
+  // `module list`, including the one that would explain it. Refused BEFORE the
+  // database is touched, so the answer costs nothing and cannot half-happen.
+  const dependants = dependantsOf(id, installed);
+  if (dependants.length > 0) {
+    const list = dependants.map((other) => `"${other}"`).join(", ");
+    console.error(
+      `✗ ${list} require${dependants.length === 1 ? "s" : ""} "${id}", so it cannot be removed.\n\n` +
+        `  Nothing has been changed. Remove the module${dependants.length === 1 ? "" : "s"} that ` +
+        `need${dependants.length === 1 ? "s" : ""} it first:\n\n` +
+        dependants.map((other) => `    node run.mjs module remove ${other}`).join("\n") +
+        `\n    node run.mjs module remove ${id}\n\n` +
+        `  ⚠️ That first step has its own refusal: a module holding rows is not\n` +
+        `  removed until those rows are gone. See docs/modules.md.`,
+    );
+    return 1;
   }
 
   const { dir, manifest } = readModule(id);

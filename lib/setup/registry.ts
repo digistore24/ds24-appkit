@@ -46,13 +46,27 @@ export function describeTools(): {
   description: string;
   mutates: boolean;
   destructive: boolean;
+  /**
+   * Whether an act of this tool is about a MEMBER, and which field says so.
+   *
+   * 🚨 Not decoration and not for choosing a tool: it is what makes an empty
+   * `setup_audit.subject_member_id` readable. A blank column on a tool that
+   * declares a field means *somebody looked and found nobody* — the address is
+   * in `target` — while on a tool that declares `null` it means the act was
+   * never about a person. Without the declaration travelling with the surface,
+   * those two are one silence.
+   */
+  subjectEmailField: string | null;
   inputSchema: SetupTool["inputSchema"];
 }[] {
-  return ALL_SETUP_TOOLS.map(({ name, description, mutates, destructive, inputSchema }) => ({
-    name,
-    description,
-    mutates,
-    destructive: destructive === true,
-    inputSchema,
-  }));
+  return ALL_SETUP_TOOLS.map(
+    ({ name, description, mutates, destructive, subjectEmailField, inputSchema }) => ({
+      name,
+      description,
+      mutates,
+      destructive: destructive === true,
+      subjectEmailField,
+      inputSchema,
+    }),
+  );
 }

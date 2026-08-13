@@ -164,8 +164,8 @@ export async function localUp() {
 async function accepts(port, user, password, database) {
   if (!(await portInUse(port))) return false;
   try {
-    const { default: postgres } = await import("postgres");
-    const sql = postgres(`postgresql://${user}:${password}@localhost:${port}/${database}`, {
+    const { connectUtc } = await import("../lib/pg-utc.mjs");
+    const sql = connectUtc(`postgresql://${user}:${password}@localhost:${port}/${database}`, {
       max: 1,
       connect_timeout: 3,
       onnotice: () => {},

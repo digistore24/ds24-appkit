@@ -6,12 +6,17 @@
 // so every rule that matters can be tested without a running app.
 //
 // What lives here is the part of the surface that is a DECISION rather than a
-// query: which refusals exist, what an environment claim may say, how an input
-// is hashed so plan and apply cannot disagree, what a tool's name may be, and
-// what a schema accepts. `manage.ts` does the writing; `guard.ts` asks these
+// query: which refusals exist, what an environment claim may say, how a CALL is
+// hashed so plan and apply cannot disagree — its input and, at the one door that
+// carries a payload, those bytes — what a tool's name may be, and what a schema
+// accepts. `manage.ts` does the writing; `guard.ts` asks these
 // questions in order.
 
+// Still here for `payloadDigest()` and `canonicalCallHash()` below, which hash
+// a call rather than a key — a different question with a different reason to
+// change, and deliberately not moved into `key.mjs`.
 import { createHash } from "node:crypto";
+import { SETUP_KEY_BODY_CHARS, SETUP_KEY_PREFIX as KEY_PREFIX, hashSetupKey } from "./key.mjs";
 import type { AppEnv } from "@/lib/env-guard";
 import type { SchemaProperty, ToolSchema } from "./types";
 
@@ -167,20 +172,32 @@ export function isDev(env: AppEnv): boolean {
  * surface gets a prefix of its own rather than reusing the API module's
  * `ds24api_`. The prefix is checked before any query, so a key wearing a
  * foreign marker never becomes a database round trip.
+ *
+ * ⚠️ **Re-exported from `./key.mjs`, not declared here.** Two command-line
+ * scripts mint keys and neither can import a `.ts`, so the arithmetic lives in
+ * a `.mjs` both sides read — the `lib/ai/task-rules.mjs` ↔ `lib/ai/tasks.ts`
+ * split, for the reason that file states: one implementation, not two that
+ * agree today. Changing the prefix or the byte count in one copy used to mint
+ * keys that verify against that reader and are refused by the other, with no
+ * error anybody could trace back.
  */
-export const SETUP_KEY_PREFIX = "ds24setup_";
-export const SETUP_KEY_BYTES = 32;
+export { SETUP_KEY_PREFIX, SETUP_KEY_BYTES } from "./key.mjs";
 
-const KEY_BODY = /^[A-Za-z0-9_-]{43}$/;
+// 🚨 Built from `SETUP_KEY_BODY_CHARS`, never written out. The length of a key
+// body is a CONSEQUENCE of `SETUP_KEY_BYTES`, and a literal here is how raising
+// the byte count in the one place the refactor created makes this guard refuse
+// every key the app mints — the whole surface answering unauthorized, with
+// nothing red until somebody tries it.
+const KEY_BODY = new RegExp(`^[A-Za-z0-9_-]{${SETUP_KEY_BODY_CHARS}}$`);
 
 export function looksLikeSetupKey(value: unknown): boolean {
-  if (typeof value !== "string" || !value.startsWith(SETUP_KEY_PREFIX)) return false;
-  return KEY_BODY.test(value.slice(SETUP_KEY_PREFIX.length));
+  if (typeof value !== "string" || !value.startsWith(KEY_PREFIX)) return false;
+  return KEY_BODY.test(value.slice(KEY_PREFIX.length));
 }
 
 /** The stored form. The secret itself is shown once and never written down. */
 export function hashSecret(secret: string): string {
-  return createHash("sha256").update(secret, "utf8").digest("hex");
+  return hashSetupKey(secret);
 }
 
 /** `Authorization: Bearer …` → the token, or null. Case-insensitive scheme. */
@@ -212,7 +229,7 @@ export function callerKey(request: Request): string {
   return forwarded?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
 }
 
-// ── the confirmation token's input hash ─────────────────────────────────────
+// ── what a confirmation token is bound to ───────────────────────────────────
 
 /**
  * The canonical form an input is hashed in (AD-78).
@@ -235,8 +252,71 @@ export function canonicalJson(value: unknown): string {
   return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(",")}}`;
 }
 
-export function canonicalInputHash(input: Record<string, unknown>): string {
-  return createHash("sha256").update(canonicalJson(input), "utf8").digest("hex");
+/**
+ * 🚨 The digest of a payload the CALL CARRIES — the multipart door's bytes.
+ *
+ * Why this exists at all (A79, measured against a real STAGING app): everywhere
+ * else the validated input names what will happen — an address, a room's name,
+ * a manifest path a tool looks up. At `/api/setup/media` it does not. The input
+ * is a `path` this app never opens, an identifier for a file on the operator's
+ * own machine, and the thing that actually lands in the bucket arrives beside it
+ * as bytes. So a token bound to the input alone confirmed a LABEL: a plan
+ * answering `two-act.png (70 bytes) would be stored as public` was applied with
+ * its own token and 584 different bytes and the app answered
+ * `200 {"created":1,"detail":"stored 584 bytes as image"}`. Changing the `path`
+ * invalidated the token; changing the file did not.
+ *
+ * ⚠️ **It is NOT `media.sha256`, and that is not a second truth of the same
+ * thing.** The column on the media row is the digest of the STORED object —
+ * `acceptUpload()` hashes `stripMetadata()`'s output, after the EXIF and the
+ * PNG text chunks have been taken off. This is the digest of what ARRIVED at
+ * the door, before any of that, and it has to be: the guard runs before the
+ * tool, and the plan reported the length of exactly these bytes.
+ *
+ * That difference is not theoretical — measured, not argued: two PNGs differing
+ * only by a `tEXt` chunk have different lengths and different sha256s, and
+ * `stripMetadata()` reduces both to the SAME object with the same
+ * `media.sha256`. A binding built on the media row could not have told those two
+ * uploads apart. Same algorithm, different subject, different moment.
+ *
+ * `sha256Hex()` in `lib/media/sigv4.mjs` is the other sha256 over bytes in this
+ * tree and is deliberately not borrowed: that file is the AWS signing algorithm,
+ * pinned to frozen vectors, and its reason to change is Amazon's. What this
+ * surface binds a token to belongs to this surface.
+ */
+export function payloadDigest(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+/**
+ * What a confirmation is bound to: the validated input, and — at the one door
+ * that carries a payload — the digest of that payload.
+ *
+ * 🚨 **The payload contributes only when there IS one**, and that clause is a
+ * decision rather than an optimisation. Mixing a constant in for the doorless
+ * case would change the canonical hash of EVERY tool, so every confirmation
+ * outstanding at the moment of a deploy would stop matching its own apply. As
+ * written, a call with no bytes hashes exactly what it hashed before this
+ * existed, and the only tokens the change can invalidate are ones minted at the
+ * multipart door inside the same two minutes (`CONFIRMATION_TTL_MS`).
+ *
+ * ⚠️ One hash and not a second column, for the reason `spendConfirmation()`
+ * gives about its single refusal code: a caller who could tell "wrong input"
+ * from "wrong file" apart could probe what a token was minted for. The nonce
+ * row keeps its `input_hash` column and the comment there says what is in it —
+ * renaming a column of a table that lives two minutes is a migration for a word.
+ *
+ * The separator is a literal newline, which `canonicalJson()` can never emit:
+ * `JSON.stringify()` escapes one inside a string as `\n`, two characters.
+ */
+export function canonicalCallHash(
+  input: Record<string, unknown>,
+  payloadSha?: string | null,
+): string {
+  const canonical = canonicalJson(input);
+  return createHash("sha256")
+    .update(payloadSha ? `${canonical}\n${payloadSha}` : canonical, "utf8")
+    .digest("hex");
 }
 
 /** How long a plan stays applicable. Short on purpose — see AD-78. */

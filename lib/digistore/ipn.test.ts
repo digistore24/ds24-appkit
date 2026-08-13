@@ -28,7 +28,7 @@ const vectors = vectorsJson as unknown as {
 };
 
 // The frozen vectors. This same file ships in the Digistore24 Skill Pack
-// (github.com/digistore-io/ds24-skills), where a Node, a Web-Crypto and a
+// (github.com/digistore24/ds24-skills), where a Node, a Web-Crypto and a
 // Python implementation are measured against it — so an IPN that verifies here
 // verifies there and the other way round. That is the whole point of having it
 // as data rather than as assertions written twice.

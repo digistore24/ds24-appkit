@@ -38,7 +38,7 @@
 //  3. **Skipping is said out loud, never assumed silently.** Every way out of
 //     here returns a reason, and smoke prints it. A sweep that quietly stopped
 //     being signed in would report green while checking nothing.
-import postgres from "postgres";
+import { connectUtc } from "../lib/pg-utc.mjs";
 import "../lib/env.mjs";
 
 import { matchHostScope } from "../lib/host-env.mjs";
@@ -132,7 +132,7 @@ async function callbackSignIn(baseUrl, providerId, fields) {
  */
 async function oldestOwner() {
   if (!process.env.DATABASE_URL) return { error: "DATABASE_URL is not set" };
-  const sql = postgres(process.env.DATABASE_URL, { max: 1, idle_timeout: 2, connect_timeout: 5 });
+  const sql = connectUtc(process.env.DATABASE_URL, { max: 1, idle_timeout: 2, connect_timeout: 5 });
   try {
     // The column names are quoted because db/schema.ts declares them camelCase
     // ("createdAt", not created_at) — unquoted, Postgres would fold them to

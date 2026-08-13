@@ -288,6 +288,110 @@ describe("a module's route files under app/ stay thin and stay their own", () =>
     }
   });
 
+  // 🚨 **A title defined in the module and not re-exported here is a title the
+  // route does not have.** `export { default } from …` carries the component and
+  // nothing else — `generateMetadata` is a separate named export and has to be
+  // named separately, which is exactly the sort of thing nobody remembers.
+  //
+  // Reported 2026-08-12: five module pages whose browser tab said only "Your
+  // App" while every core page carried its own name, among them both landing
+  // pages a member has open most. Half of that defect is invisible even to a
+  // reader of the module — the page HAS its `generateMetadata`, and the omission
+  // is one line away in a file nobody opens. It was invisible to every check
+  // here too: on the day this was written, deleting only a re-export left the
+  // whole suite green.
+  //
+  // Mechanical, and therefore safe where a textual rule would not be: it asks
+  // what the wrapper already delegates to and whether that file exports a title
+  // at all. Measured at **0 findings over 17 page wrappers** on the day it was
+  // armed — the guard's own loop, not a hand count.
+  //
+  // ⚠️ **What it does NOT catch, said plainly: a module page with no title at
+  // all.** That was the other half of the same report. It is out of scope here
+  // because a page that wants no title is a legitimate page, and this file is
+  // about the seam between a module and the core's tree, not about what a page
+  // owes its reader. 🚨 And it is owned by NOTHING else either — `ux-check` has
+  // no page-title rule and no doc states a house form. Whoever wants that
+  // covered writes it there; do not read this paragraph as a hand-off.
+  it("re-exports the title of the page it delegates to", () => {
+    // Only PAGE wrappers. Roughly half of `MODULE_ROUTE_FILES` are
+    // `route.<id>.ts` handlers, which have no default re-export and no title —
+    // for them "did not match" is the expected state, and lumping them in would
+    // let a page wrapper that stopped matching hide inside a set that is half
+    // expected misses anyway.
+    const pageWrappers = MODULE_ROUTE_FILES.filter((file) => /page\.[^.]+\.tsx$/.test(file));
+    let withTitle = 0;
+
+    for (const file of pageWrappers) {
+      const source = withoutComments(read(file));
+      const target = /export\s*\{[^}]*\bdefault\b[^}]*\}\s*from\s*["'`]@\/([^"'`]+)["'`]/.exec(
+        source,
+      )?.[1];
+
+      // Every page wrapper delegates — §1b's whole claim. One that does not is
+      // a finding about the walk, not a file to skip quietly.
+      expect(
+        target,
+        `${file} has no \`export { default } from "@/…"\` — either it stopped delegating, ` +
+          `or the pattern here no longer matches how this template writes it, and then the ` +
+          `title check below silently passes over this file.`,
+      ).toBeTruthy();
+      if (!target) continue;
+
+      // 🚨 Through `blankComments()` on BOTH sides. A page whose comment explains
+      // why it has no title would otherwise be read as defining one — the
+      // failure `scripts/lib/source-text.mjs` was written for.
+      const page = `${target}.tsx`;
+      let pageSource: string;
+      try {
+        pageSource = withoutComments(read(page));
+      } catch {
+        // A delegation that resolves through another extension or an index file
+        // is a finding about this check, never a crash inside it.
+        expect.fail(`${file} delegates to "@/${target}", and ${page} is not readable.`);
+      }
+
+      // Next accepts either spelling, and the wrapper has to re-export the SAME
+      // name — `export { generateMetadata }` for a page that wrote `const
+      // metadata` fails the build with "does not provide an export named".
+      const exported = /export\s+(?:async\s+)?function\s+generateMetadata\b/.test(pageSource)
+        ? "generateMetadata"
+        : /export\s+const\s+metadata\b/.test(pageSource)
+          ? "metadata"
+          : null;
+      if (exported === null) continue;
+
+      withTitle += 1;
+      // Any `generateMetadata` of its own counts too: a wrapper that wants
+      // `params` in the tab writes one locally, and that is delegation's
+      // legitimate other shape rather than a missing line.
+      const carried =
+        new RegExp(`export\\s*\\{[^}]*\\b${exported}\\b[^}]*\\}`).test(source) ||
+        new RegExp(`export\\s+(?:async\\s+)?function\\s+${exported}\\b`).test(source) ||
+        new RegExp(`export\\s+const\\s+${exported}\\b`).test(source);
+
+      expect(
+        carried,
+        `${page} defines a title as \`${exported}\` and ${file} neither re-exports nor ` +
+          `defines one, so the route has none — the browser tab falls back to the app's ` +
+          `own name. Add:\n\n    export { ${exported} } from "@/${target}";`,
+      ).toBe(true);
+    }
+
+    // Non-vacuity: the loop filters twice more after the wrapper list, and
+    // either filter going blind would make it pass over an empty set. Zero is
+    // only a legitimate answer for a tree whose modules bring no page at all.
+    if (pageWrappers.length > 0) {
+      expect(
+        withTitle,
+        `${pageWrappers.length} module page wrapper(s) exist and not one of them delegates ` +
+          `to a page that defines a title. Either every module page lost it, or the two ` +
+          `patterns above no longer match how this template writes one — and then this ` +
+          `check guards nothing.`,
+      ).toBeGreaterThan(0);
+    }
+  });
+
   it("delegates rather than implements", () => {
     // The claim this file's NAME makes is "I am that module's". A handler with
     // the logic in it would be a module's code that the module's own tests do
@@ -351,8 +455,10 @@ describe("a module's switch may live in the core's config/, and says why", () =>
     .filter((entry): entry is { id: string; path: string } => entry !== null);
 
   it("found the module switches to judge", () => {
-    // Non-vacuity: three of the four modules carry one. Without this the two
-    // assertions below pass on an empty list.
+    // Non-vacuity: most modules in the tree carry one. Without this the two
+    // assertions below pass on an empty list. The floor is a floor rather than
+    // the count of the day — a module that declares no switch (`activity`) is a
+    // decision, not a regression, so this may not be read as "there are four".
     expect(declared.length).toBeGreaterThanOrEqual(3);
   });
 

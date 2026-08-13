@@ -20,6 +20,7 @@
 //             (this is the only surface where an off-reason becomes a sentence),
 //             everyone else gets notFound().
 //   on      → the gate, then the course.
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
@@ -34,6 +35,24 @@ import { courseAccessFor } from "../lib/access";
 import { courseConfigProblems, courseOffReason, courseShape } from "../lib/config";
 import { courseOutline, completedSlugsFor } from "../lib/manage";
 import { isUnlocked, nextUnit, progress } from "../rules";
+
+// The browser tab, which is not the page's heading.
+//
+// **Static and parameterless, and specific to the PAGE rather than the section.**
+// That is the majority form here — `messagesTitle`, `reportDetailTitle`,
+// `submissionDetailTitle` — and the reason is that a tab is how somebody tells
+// two open windows apart. A title read off the RECORD would be nicer still and
+// is deliberately not done: it means loading the row a second time to fill a
+// tab, and on the community's pages that second load is viewer-dependent too.
+//
+// ⚠️ The `app/` wrapper has to re-export this or the route never sees it. That
+// omission is what 2026-08-12 reported: five module pages whose tab said only
+// "Your App" while every core page carried its name. Since the same day
+// `modules/boundary.test.ts` §1b refuses a wrapper that drops it.
+export async function generateMetadata() {
+  const t = await getTranslations("courses");
+  return { title: t("title") };
+}
 
 export default async function CoursePage() {
   if (courseOffReason() === "disabledInConfig") {
@@ -83,6 +102,7 @@ export default async function CoursePage() {
   const units = blocks.flatMap((block) =>
     block.units.map((unit) => ({
       slug: unit.slug,
+      title: unit.title,
       blockPosition: block.position,
       position: unit.position,
       unlocked: isUnlocked(block.releaseAfterDays, startedAt, shape, now),
@@ -124,7 +144,25 @@ export default async function CoursePage() {
                 {t("progressCount", { done, total: units.length })}
               </p>
               {next ? (
-                <p className="text-sm">{t("nextStep", { title: next.slug })}</p>
+                // The most prominent answer to "where do I go now?" is also the
+                // shortest way there. `nextUnit()` filters on `unlocked`, so its
+                // answer can never be a locked lesson — the href needs no second
+                // gate. Only the TITLE is the link, not the label in front of
+                // it, which is why the sentence carries a `<lesson>` tag rather
+                // than being wrapped whole.
+                <p className="text-sm">
+                  {t.rich("nextStep", {
+                    title: next.title,
+                    lesson: (chunks) => (
+                      <Link
+                        href={`/dashboard/course/${encodeURIComponent(next.slug)}`}
+                        className="text-primary underline underline-offset-4"
+                      >
+                        {chunks}
+                      </Link>
+                    ),
+                  })}
+                </p>
               ) : (
                 <p className="text-sm text-muted-foreground">{t("nothingOpen")}</p>
               )}
@@ -143,12 +181,47 @@ export default async function CoursePage() {
                     <p className="mb-3 text-sm text-muted-foreground">{block.summary}</p>
                   ) : null}
                   {/* 🚨 A locked block shows its lessons' TITLES and never their
-                      content — that is the whole of shape 2's promise. */}
+                      content — that is the whole of shape 2's promise.
+
+                      So the title is a LINK exactly while the block is open. A
+                      locked one stays plain text on purpose: `unit/page.tsx`
+                      redirects it back here (a lesson somebody owns and is
+                      merely early for is not a 404), and a link that returns you
+                      wordlessly to the page you clicked on is worse than none.
+
+                      ⚠️ Reported 2026-08-12: there was no link at all, in either
+                      direction. The lesson pages were finished and reachable
+                      only by typing the URL, and nothing saw it — `ux-check`'s
+                      navigation rule SKIPPED `[param]` routes and `smoke` skips
+                      them still. The first half of that is closed: the rule
+                      compares dynamic routes now, and taking these two links out
+                      again makes it red. The `done` marker stays OUTSIDE the
+                      anchor: it is a state, not part of the lesson's name.
+
+                      ⚠️ It is UNDERLINED, not merely underlined-on-hover. A
+                      course is read on a phone, a phone has no hover, and a list
+                      whose links look exactly like the plain text this fix
+                      replaced is the same defect wearing a new implementation.
+                      The form is `components/legal-body.tsx`'s. */}
                   <ul className="flex flex-col gap-1">
                     {block.units.map((unit) => (
                       <li key={unit.slug} className="text-sm">
-                        {open ? unit.title : `${unit.title} — ${t("locked")}`}
-                        {completed.has(unit.slug) ? ` · ${t("done")}` : ""}
+                        {open ? (
+                          <Link
+                            href={`/dashboard/course/${encodeURIComponent(unit.slug)}`}
+                            className="text-primary underline underline-offset-4"
+                          >
+                            {unit.title}
+                          </Link>
+                        ) : (
+                          `${unit.title} — ${t("locked")}`
+                        )}
+                        {/* ⚠️ Only while the block is OPEN. A block can re-lock
+                            — a refund and a repurchase move `startedAt` — and a
+                            line then read "Titel — noch nicht freigeschaltet ·
+                            erledigt", two states that contradict each other. A
+                            locked line states one thing. */}
+                        {open && completed.has(unit.slug) ? ` · ${t("done")}` : ""}
                       </li>
                     ))}
                   </ul>

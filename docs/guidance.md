@@ -36,6 +36,26 @@ triggers and over that mark it has stopped being a procedure and become a
 catalogue the customer's session pays for on every use. The fix is never to
 delete it — it is to move the catalogue into `references/` beside the skill.
 
+## Only recommend what you have run
+
+A prohibition costs an unnecessary detour at worst. **A recommendation is a
+guarantee** — and whoever follows one has no way of telling that it does not
+hold. So whoever writes a class, a call or a command into a doc, a skill or a
+reference as *the* answer to something **runs it once first**, and says in the
+same place what came back.
+
+The measured case: `docs/design-system.md` and the `design` skill's
+`references/tokens.md` both named `shadow-(--elevation-overlay)` as the
+sanctioned way to write the elevation dial, and did so for three releases
+without the form ever having been sent through `cn()`. tailwind-merge did not
+know that shape, so the class lost to any plain `shadow-…` standing beside it
+and did nothing at all — a silent no-op behind a clean HTTP 200, on a page that
+looked finished. Two lines in a `node` REPL would have answered it before the
+first reader followed the advice.
+
+This is the mirror of **Only report what you can show** further down: a finding
+needs something you saw, and a recommendation needs something you ran.
+
 ## How a skill works — the same way every time
 
 Whoever writes or changes a skill keeps to this, because a user who has found

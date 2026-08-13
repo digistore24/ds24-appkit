@@ -69,6 +69,12 @@ const PUBLIC: Record<string, string> = {
     "Bearer DIAGNOSTICS_SECRET, constant-time compare; 404 with an empty body when the secret is unset, absent or wrong — indistinguishable from a route that was never built",
   "/api/diagnostics/health":
     "Bearer DIAGNOSTICS_SECRET, constant-time compare; 404 with an empty body when the secret is unset, absent or wrong — indistinguishable from a route that was never built",
+  // The one diagnostics door that SPENDS: `node run.mjs ai-check --live` asks it
+  // for one real model call. Same bearer and same silent 404 as its two
+  // neighbours, plus a meter of its own on successful calls — the failure mode
+  // here is a loop holding a valid secret, not somebody guessing one.
+  "/api/diagnostics/ai":
+    "Bearer DIAGNOSTICS_SECRET, constant-time compare, before any model call; 404 with an empty body when the secret is unset, absent or wrong — plus a spend meter per caller",
   "/api/chat": "currentActiveUser() in the handler — 401 for anonymous and blocked alike",
   // The setup surface's two doors. Neither has a session and neither can have
   // one: the caller is the operator's coding agent over MCP, not a browser.

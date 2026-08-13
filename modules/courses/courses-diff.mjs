@@ -135,6 +135,24 @@ function print(heading, entries, { grouped, note } = {}) {
 console.log(`\nThis repo against ${target}`);
 console.log(`  read first, compared here — nothing was written, in either place.`);
 
+// ── 🚨 ABOVE the lists, because it changes how every one of them reads ──────
+// A target whose deploy computes an older fingerprint version disagrees with
+// this repo about every lesson, whatever the lessons say. Printed at the bottom
+// with the other notes it would be read after the reader has already believed
+// "34 lessons differ"; printed here it is the frame they read the lists in. This
+// is the ordinary state right after a template update — the repo moves first,
+// the environment follows — so it must not look like a defect either.
+if (report.fingerprintMismatch) {
+  const { here, there } = report.fingerprintMismatch;
+  console.log(`\n! ${target} computes a DIFFERENT lesson fingerprint than this repo.`);
+  console.log(`  here: ${here} · there: ${there ?? "no version sent — that app predates the tag"}`);
+  console.log(`  The two are not comparable, so every lesson below reads as "would change"`);
+  console.log(`  even where the content is identical. This is what a template update looks`);
+  console.log(`  like before the environment has caught up: deploy ${target} and run this`);
+  console.log(`  again. Publishing now is not wrong — the applier upserts by slug and would`);
+  console.log(`  write the same rows — but this report cannot tell you which ones needed it.`);
+}
+
 print("NEW — a publish would create these blocks", report.blocks.new);
 print("NEW — a publish would create these lessons", report.units.new, { grouped: true });
 print("WOULD CHANGE — these blocks differ", report.blocks.changed);

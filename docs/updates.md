@@ -69,7 +69,7 @@ channel was built to make impossible.
 
 From the public repo this app was cloned out of:
 
-<https://github.com/digistore-io/ds24-appkit>
+<https://github.com/digistore24/ds24-appkit>
 
 Nothing is published anywhere else and there is no second copy to keep in sync:
 the manifest is that repo's own `.template-version`, and the files are the files.
@@ -101,7 +101,7 @@ says one line when there is. That check is the only part of this app that talks
 to anybody, so, plainly:
 
 - it is **one GET** of one public file on GitHub —
-  `raw.githubusercontent.com/digistore-io/ds24-appkit/main/.template-version`
+  `raw.githubusercontent.com/digistore24/ds24-appkit/main/.template-version`
 - it sends **no query string, no body, no identifier** — nothing about you, your
   app, your customers or your machine. It does not reach a server of ours at all:
   GitHub sees an IP fetch a public file, exactly as a browser would

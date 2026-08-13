@@ -25,9 +25,14 @@ at the two things it cannot see.
 
 `ux-check` settles: hard-coded palette colours, **a value written past a dial**
 (an arbitrary `font-[…]` or `shadow-[…]`, a bare `shadow-lg`, a hex inside an
-arbitrary value, the generated `font-heading` class — each hit names the dial it
-bypasses), raw `<button>`/`<input>`/`<select>`/`<textarea>`/`<table>`, pages
-under `/dashboard` that are in no menu, every token pair's contrast in **both**
+arbitrary value, the generated `font-heading` class, a shadow naming any custom
+property other than the two elevation roles — each hit names the dial it
+bypasses), raw `<button>`/`<input>`/`<select>`/`<textarea>`/`<table>` (a place you have
+judged and want kept goes on `RAW_ELEMENT_EXCEPTIONS` in `scripts/ux/rules.mjs`
+with its reason, and is then COUNTED in the green line rather than dropped —
+needs template 0.27.0), pages
+under `/dashboard` that nothing leads to — no menu entry and no link, which
+since template 0.27.0 includes `[param]` pages — every token pair's contrast in **both**
 modes, and **every token being defined in both blocks** rather than one. Each
 comes with a file and a line, so each goes straight into the report. Its
 **images with no `alt`** are check 8's — see there.

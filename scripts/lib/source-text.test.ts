@@ -16,7 +16,7 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { blankComments, blankEmittedCode } from "./source-text.mjs";
+import { blankComments, blankEmittedCode, isQuotedMention } from "./source-text.mjs";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -113,6 +113,56 @@ describe("blankEmittedCode", () => {
     // Deliberate: import specifiers are double-quoted, which is what makes them
     // separable from the emitted code above.
     expect(blankEmittedCode('import x from "@/lib/y";')).toContain("@/lib/y");
+  });
+});
+
+describe("isQuotedMention", () => {
+  /** Where `needle` starts in `source` — the offset a `matchAll()` would hand over. */
+  const at = (source: string, needle: string) => source.indexOf(needle);
+  const NEEDLE = "process.env.OPENAI_API_KEY";
+
+  it("says no for a real read", () => {
+    const source = `const key = ${NEEDLE};`;
+    expect(isQuotedMention(source, at(source, NEEDLE))).toBe(false);
+  });
+
+  it("🚨 says no for the BRACKET form, whose name is inside a string", () => {
+    // The whole reason this is a position question rather than a `blankStrings()`.
+    // `process.env["OPENAI_API_KEY"]` is a read; the match starts at `process`,
+    // outside the quote. Blanking strings would have erased the name and left
+    // the guard reporting success over a real leak.
+    const source = 'const key = process.env["OPENAI_API_KEY"];';
+    expect(isQuotedMention(source, at(source, "process.env["))).toBe(false);
+  });
+
+  it("says yes for a quoted mention in a message or a fixture", () => {
+    // Both shapes exist in this tree today with other variables:
+    // `scripts/lib/env.test.ts` writes one into an assertion message,
+    // `scripts/security/rungs.test.ts` into a fixture.
+    for (const source of [
+      `throw new Error("set ${NEEDLE} in .env");`,
+      `expect(namesIn('${NEEDLE}')).toEqual(["OPENAI_API_KEY"]);`,
+    ]) {
+      expect(isQuotedMention(source, at(source, NEEDLE))).toBe(true);
+    }
+  });
+
+  it("🚨 reports rather than excuses when a quote never closes", () => {
+    // A regex literal opens a quote that has no partner. Everything after it
+    // would look like string content, so a real read on that line would vanish
+    // — a silent guard, which is the failure this must not have.
+    const source = `const q = /["']/; const key = ${NEEDLE};`;
+    expect(isQuotedMention(source, at(source, NEEDLE))).toBe(false);
+  });
+
+  it("answers per line, so a previous line's string cannot reach", () => {
+    const source = `const label = "a string";\nconst key = ${NEEDLE};`;
+    expect(isQuotedMention(source, at(source, NEEDLE))).toBe(false);
+  });
+
+  it("is not fooled by an apostrophe inside a double-quoted string", () => {
+    const source = `const t = "don't"; const key = ${NEEDLE};`;
+    expect(isQuotedMention(source, at(source, NEEDLE))).toBe(false);
   });
 });
 

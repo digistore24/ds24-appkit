@@ -189,7 +189,28 @@ describe("🚨 the audit row carries no token and no secret", () => {
     ).toBeGreaterThan(0);
     const at = DISPATCH.lastIndexOf("recordAct({", anchor);
     const body = DISPATCH.slice(at + "recordAct({".length);
-    return [...body.slice(0, body.indexOf("});")).matchAll(/^\s+([a-zA-Z]+)\s*[:,]/gm)].map(
+    const literal = body.slice(0, body.indexOf("});"));
+    const keys = [...literal.matchAll(/^\s+([a-zA-Z]+)\s*[:,]/gm)].map((match) => match[1]);
+
+    // 🚨 A spread is a hole in a scan that reads keys. `...accountability(input)`
+    // is the ONE this file knows about — the two named exceptions, in one
+    // spelling so the success path and the refusal paths cannot drift — and it
+    // is resolved rather than tolerated: what it contributes is read out of that
+    // function's own body. Any OTHER spread here is a set of columns nothing
+    // measures, so it fails.
+    const spreads = [...literal.matchAll(/^\s+\.\.\.(\w+)\(/gm)].map((match) => match[1]);
+    expect(spreads, "an unrecognised spread hides columns from this scan").toEqual([
+      "accountability",
+    ]);
+    return [...keys, ...accountabilityKeys()];
+  }
+
+  /** What `accountability()` contributes, read from the function itself. */
+  function accountabilityKeys(): string[] {
+    const at = DISPATCH.indexOf("function accountability(");
+    expect(at, "accountability() moved — this scan is looking at nothing").toBeGreaterThan(0);
+    const body = DISPATCH.slice(DISPATCH.indexOf("return {", at));
+    return [...body.slice(0, body.indexOf("};")).matchAll(/^\s+([a-zA-Z]+):/gm)].map(
       (match) => match[1],
     );
   }
@@ -203,6 +224,9 @@ describe("🚨 the audit row carries no token and no secret", () => {
       "reason",
       "role",
       "rows",
+      // A70: the foreign key both Art. 15 exports slice on. An id this app
+      // issued — never an address, and never anything a caller sent.
+      "subjectMemberId",
       "target",
       "tool",
       "ownerId",
@@ -229,7 +253,11 @@ describe("🚨 the audit row carries no token and no secret", () => {
   });
 
   it("passes the result's code through, and only the code", () => {
-    expect(DISPATCH).toMatch(/code:\s*\(result\.code \?\? null\)/);
+    // 🚨 Two fields, and both are identifiers the tool declared: `refused`
+    // REPLACES the outcome (A75), `code` REFINES it. Neither is a sentence, and
+    // nothing else off the result reaches this column — a `detail` here would be
+    // the second copy of the payload this whole file exists to refuse.
+    expect(DISPATCH).toMatch(/code:\s*\(result\.refused \?\? result\.code \?\? null\)/);
     // The rows are derived, not taken from a field a tool could fill freely.
     expect(DISPATCH).toContain("rows: result.created + result.changed");
   });

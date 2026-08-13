@@ -68,7 +68,12 @@ node run.mjs errors         # what the log caught behind a 200
 
 `ux-check` is the narrow half and it takes two seconds: contrast of every token
 pair in both modes, hard-coded colours, hand-built elements, icon buttons with
-no name, images with no `alt`, pages under `/dashboard` that are in no menu.
+no name, images with no `alt`, and pages under `/dashboard` that nothing leads
+to — in no menu AND with no page linking to them. ⚠️ Since template 0.27.0 that
+includes `[param]` pages: a lesson or a group page is reached by a link and
+never by a menu entry, so for those the only sensible answer to a finding is the
+link, never a `NAVIGATION` line. Before 0.27.0 they were skipped, and that is how
+a finished course shipped with no way into any lesson.
 **Run it first and fold its findings in** — they are already measured, so they
 go straight into the report with a file and a line. One exception: its
 **images with no `alt`** belong under check 8 with the rest of what goes wrong
@@ -127,14 +132,22 @@ time, all documented, none of them findings:
 
 - The app sets **no cookie banner** and must not grow one (`docs/compliance.md`).
 - Sign-in is a **magic link** by default; a password is optional on purpose.
-- A **segmented control built by hand** — the kit ships no ToggleGroup, and
-  `ux-check` reports one as a warning rather than a failure for that reason.
-  The kit DOES ship `<Checkbox>`, `<RadioGroup>` and `<Switch>` — a hand-built
-  one of those is a finding, with one carve-out: a **native input in a form
-  that must work without JavaScript** (the `/plans` auto-reload consent is the
-  shipped example, with the reasoning in a comment above it). A Radix control
-  cannot reach `FormData` without JS, so there the native input is the correct
-  element, styled from tokens.
+- A **segmented control built by hand** — the kit ships no ToggleGroup. The kit
+  DOES ship `<Checkbox>`, `<RadioGroup>` and `<Switch>` — a hand-built one of
+  those is a finding, with one carve-out: a **native input in a form that must
+  work without JavaScript** (the `/plans` auto-reload consent is the shipped
+  example, with the reasoning in a comment above it). A Radix control cannot
+  reach `FormData` without JS, so there the native input is the correct element,
+  styled from tokens.
+
+  The template's own four such places are named in `RAW_ELEMENT_EXCEPTIONS`
+  (`scripts/ux/rules.mjs`), each with its reason, so `ux-check` counts them in
+  its green line instead of warning about them for ever. **Yours go in the same
+  list** — it is code, so `node run.mjs update` never touches it. Do that only
+  for a place you have judged: an entry with no reason is an exemption nobody
+  can review, and the list is keyed on the element as well as the file, so a
+  different hand-built control in the same file is still reported.
+  (Needs template 0.27.0; before that the four were reported on every run.)
 - **The shipped default look on an app with no `docs/design.md`.** Keeping it
   is the `0` from `build-app` step 1e, recorded in `docs/app.md` — an answer,
   not an unfinished job. The way to a look of its own is the skill `design`,
@@ -281,8 +294,15 @@ fixed*:
 ```markdown
 | Finding | Where | Why accepted | By | Date | Review |
 |---|---|---|---|---|---|
-| Hand-built segmented control | app/plans/page.tsx | the kit ships no ToggleGroup | Anna | 2026-07-27 | when shadcn toggle-group is added |
+| Sparse dashboard on a fresh install | app/dashboard/page.tsx | nothing to show until the first purchase | Anna | 2026-07-27 | after the first ten customers |
 ```
+
+⚠️ That register and `RAW_ELEMENT_EXCEPTIONS` are not the same thing and do not
+replace each other. The register is a JUDGEMENT with a name and a date on it,
+for anything this skill found; the list is what makes one particular check stop
+repeating itself. A hand-built control you decide to keep belongs in both — the
+list so the check is quiet, the register so the decision has an owner and a
+review date.
 
 **Two records, and check 9 is the first thing here that reads both.** They mean
 opposite things and must not be merged:

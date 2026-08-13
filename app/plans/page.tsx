@@ -17,6 +17,13 @@ import {
   blockerFor,
   type CheckoutBlocker,
 } from "@/lib/digistore/checkout";
+import {
+  isPlansPreviewActive,
+  wantsPlansPreview,
+  plansRenderMode,
+  PLANS_PREVIEW_PARAM,
+  PLANS_PREVIEW_VALUE,
+} from "@/lib/digistore/preview";
 import { auth } from "@/auth";
 import { startCheckoutAction } from "./actions";
 import { PublicHeader } from "@/components/public-header";
@@ -62,12 +69,13 @@ async function PlanCard({
   def,
   blocker,
   url,
-  signedIn,
+  asForm,
 }: {
   def: ProductDef;
   blocker: CheckoutBlocker | null;
   url: string | null;
-  signedIn: boolean;
+  /** Click-time form instead of the shared link — signed in, or previewing. */
+  asForm: boolean;
 }) {
   const t = await getTranslations("plans");
   const locale = await getLocale();
@@ -123,7 +131,7 @@ async function PlanCard({
               </>
             )}
           </p>
-        ) : signedIn ? (
+        ) : asForm ? (
           // Signed in: the checkout is built on click, not on render, so it
           // can carry the identity that names this Member. `mt-auto`
           // sits on the form — it is what keeps the card footers aligned.
@@ -138,9 +146,11 @@ async function PlanCard({
               // steps outside `components/ui/` — recorded here rather than left
               // to look like an oversight.
               //
-              // shadcn's Checkbox is a Radix button with no form value: it needs
-              // `@radix-ui/react-checkbox` (NFR-12 forbids a new runtime
-              // dependency) plus a hidden input to reach `FormData` at all. This
+              // shadcn's Checkbox is a Radix button with no form value: it reaches
+              // `FormData` only through a hidden input beside it. (It used to say
+              // the dependency was forbidden as well — `radix-ui` has shipped
+              // since, and `components/ui/checkbox.tsx` is in the kit. The
+              // dependency is not the reason; the plain POST is.) This
               // control has to work in a plain POST — it authorises a recurring
               // card charge, and the consent for that must not depend on
               // JavaScript having loaded.
@@ -156,12 +166,23 @@ async function PlanCard({
                   name="autoReload"
                   className="accent-primary border-input focus-visible:ring-ring/50 mt-0.5 size-4 shrink-0 rounded-[4px] focus-visible:ring-[3px] focus-visible:outline-none"
                 />
-                <Label
-                  htmlFor={`auto-reload-${def.key}`}
-                  className="text-muted-foreground text-sm leading-snug font-normal"
-                >
-                  {t("autoReloadLabel")}
-                </Label>
+                {/* ⚠️ The LABEL is the consent phrase, and the rest is helper
+                    text beside it. It was one ~210-character paragraph of two
+                    sentences until 2026-08-13 — the whole thing a click target,
+                    and the whole thing read out as the checkbox's name. A label
+                    is what somebody agrees to; the mechanics belong next to it,
+                    not inside it. */}
+                <div className="grid gap-1">
+                  <Label
+                    htmlFor={`auto-reload-${def.key}`}
+                    className="text-sm leading-snug font-normal"
+                  >
+                    {t("autoReloadLabel")}
+                  </Label>
+                  <p className="text-muted-foreground text-xs leading-snug">
+                    {t("autoReloadHint")}
+                  </p>
+                </div>
               </div>
             )}
             <Button type="submit" size="lg" className="w-full">
@@ -183,7 +204,7 @@ async function PlanCard({
 export default async function PlansPage({
   searchParams,
 }: {
-  searchParams: Promise<{ checkout?: string }>;
+  searchParams: Promise<{ checkout?: string; preview?: string | string[] }>;
 }) {
   const t = await getTranslations("plans");
   const locale = await getLocale();
@@ -197,7 +218,21 @@ export default async function PlansPage({
   // is public — it returns null when nobody is signed in.
   const session = await auth();
   const signedIn = Boolean(session?.user);
-  const checkoutFailed = (await searchParams).checkout === "error";
+  const sp = await searchParams;
+  const checkoutFailed = sp.checkout === "error";
+
+  // The DEV fixture (lib/digistore/preview.ts): `?preview=checkout` renders the
+  // buy forms of an app that has no Digistore24 products yet, so they can be
+  // looked at without putting dummy ids into config/digistore-products.json —
+  // a file git tracks — and a dummy key into `.env`. Two independent questions,
+  // asked separately: did somebody ask for it, and may it exist on this
+  // machine at all. It asks Digistore24 nothing and produces no URL.
+  const previewing =
+    wantsPlansPreview(sp[PLANS_PREVIEW_PARAM]) && isPlansPreviewActive();
+  const mode = plansRenderMode({ signedIn, previewing });
+  // Only worth offering while there is nothing to see anyway, and only where
+  // the fixture would actually work.
+  const previewOffered = !previewing && isPlansPreviewActive();
 
   // Flattened, so a blocker and a cached link are resolved for every product
   // that will be rendered — including the one-off purchase, which reached
@@ -218,10 +253,15 @@ export default async function PlansPage({
   // locale picks WHICH product this offering sends them to
   // (lib/digistore/products.ts → checkoutProductFor). Without it half the
   // visitors are asked for their card details in the other language.
-  const blockers = signedIn ? await checkoutBlockersFor(defs) : null;
-  const links = signedIn ? null : await checkoutLinksFor(defs, {}, locale);
+  const blockers = mode.askBlockers ? await checkoutBlockersFor(defs) : null;
+  const links = mode.askDigistore
+    ? await checkoutLinksFor(defs, {}, locale)
+    : null;
 
   const cardFor = (def: ProductDef): { blocker: CheckoutBlocker | null; url: string | null } => {
+    // The preview shows the form and NEVER a URL — an invented address is the
+    // dead link this page exists to refuse.
+    if (mode.ignoreBlockers) return { blocker: null, url: null };
     if (blockers) return { blocker: blockerFor(blockers, def.key), url: null };
     const link = links?.get(def.key) ?? { url: null, blocker: "error" as const };
     return { blocker: link.blocker ?? null, url: link.url };
@@ -243,6 +283,26 @@ export default async function PlansPage({
           <Callout variant="danger" title={t("checkoutFailedTitle")}>
             {t("checkoutFailedBody")}
           </Callout>
+        )}
+
+        {/* Both of these exist only on a local development machine
+            (isPlansPreviewActive), so no visitor of a deployed app ever sees
+            them. They are addressed at whoever is building the app. */}
+        {previewing && (
+          <Callout variant="warning" title={t("previewTitle")}>
+            {t("previewBody")}
+          </Callout>
+        )}
+        {previewOffered && (
+          <p className="text-muted-foreground text-center text-sm">
+            {t("previewOffer")}{" "}
+            <a
+              className="underline underline-offset-4"
+              href={`?${PLANS_PREVIEW_PARAM}=${PLANS_PREVIEW_VALUE}`}
+            >
+              {t("previewOfferLink")}
+            </a>
+          </p>
         )}
 
         {sections.length === 0 && (
@@ -278,7 +338,7 @@ export default async function PlansPage({
                   key={def.key}
                   def={def}
                   {...cardFor(def)}
-                  signedIn={signedIn}
+                  asForm={mode.asForm}
                 />
               ))}
             </div>

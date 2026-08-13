@@ -122,6 +122,109 @@ export function repositorySkipReason(result) {
 }
 
 /**
+ * Both spellings against ONE shared budget — the loop, with the process left out.
+ *
+ * 🚨 The bound is on the RUNG, not on the attempt. Two spellings at 60 s each
+ * would be a two-minute wall clock wearing a one-minute label — measured, before
+ * this existed: a gitleaks that never returns took 120 s. So the second attempt
+ * gets whatever is left, and no attempt starts once there is nothing left.
+ *
+ * It hands back the two FACTS the answer is made of, and they are not the same
+ * question:
+ *
+ *   · `stopped` — an attempt was killed by its own bound. `capture()` enforced
+ *     that bound and therefore knows; nothing here re-derives it.
+ *   · `budgetSpent` — an attempt never STARTED, because the shared budget was
+ *     already gone. A fact about this loop, and the one place a clock is still
+ *     legitimately read: it decides how much time to GIVE, never what happened.
+ *
+ * `attempt` and `readBack` are handed in so this is testable without gitleaks,
+ * without a repository and without waiting a minute — the same shape
+ * `rungs/live.mjs` uses to keep its decisions inside `npm run test`.
+ *
+ * @param {object} o
+ * @param {string[][]} o.list  argument vectors, newest spelling first
+ * @param {number} o.budgetMs
+ * @param {(args: string[], timeoutMs: number) => Promise<{code: number, stdout: string, stderr: string, timedOut: boolean}>} o.attempt
+ * @param {() => object[]|null} o.readBack  what the attempt left behind, or null
+ * @param {() => number} [o.now]
+ * @returns {Promise<{rows: object[]|null, spelling: string, last: object, stopped: boolean, budgetSpent: boolean}>}
+ */
+export async function spendBudget({ list, budgetMs, attempt, readBack, now = Date.now }) {
+  const started = now();
+  let last = { code: 127, stdout: "", stderr: "", timedOut: false };
+  let rows = null;
+  let spelling = "";
+  let stopped = false;
+  let budgetSpent = false;
+
+  for (const args of list) {
+    const remaining = budgetMs - (now() - started);
+    if (remaining <= 0) {
+      budgetSpent = true;
+      break;
+    }
+    last = await attempt(args, remaining);
+    // ANY attempt stopped by the bound answers the question for the rung —
+    // "gitleaks was still running when we gave up" is true of the run, and a
+    // later attempt cannot make it untrue.
+    if (last.timedOut) stopped = true;
+    rows = readBack();
+    if (rows) {
+      spelling = args[0];
+      break;
+    }
+  }
+
+  return { rows, spelling, last, stopped, budgetSpent };
+}
+
+/**
+ * Why no report came back — from what HAPPENED, never from a clock.
+ *
+ * 🚨 There are three ways to end up here and they must never be merged:
+ *
+ *   1. **the bound stopped an attempt** — `capture()` says so itself
+ *      (`stopped`, from `result.timedOut`). A partial scan is not a pass.
+ *   2. **the shared budget was gone** before the next spelling could be started
+ *      (`budgetSpent`). Nothing was stopped; there was simply nothing left to
+ *      spend, and whatever the last attempt said is still the useful half.
+ *   3. **the tool was here and failed for its own reason** — a bad config, a
+ *      version that does not know either spelling, a crash. That one carries
+ *      gitleaks' own first line, and it is the only one that tells the operator
+ *      what to fix.
+ *
+ * ⚠️ This used to be `Date.now() - started >= TIMEOUT_MS`, which is an ESTIMATE
+ * at exactly the place the ladder has to tell *clean* from *nobody asked*.
+ * Measured on 2026-08-12 against this file's previous revision: a gitleaks that
+ * refused its config and exited **1 after 12 ms**, with the wall clock stepped
+ * forward once mid-run (an NTP correction does this), was reported as
+ * `gitleaks did not finish within 60s and was stopped — a partial scan is not a
+ * pass`. State 3 wearing state 1's sentence, and the tool's own error text —
+ * the one line that named the real fault — dropped on the way. `Date.now()` is
+ * a wall clock: it steps, and nothing here may depend on it not stepping.
+ *
+ * `capture()` returns `timedOut` since Story A38 (`scripts/lib/proc.mjs`), which
+ * is the fact this reads instead.
+ *
+ * @param {{stopped?: boolean, budgetSpent?: boolean, last?: {stdout?: string, stderr?: string}}} outcome
+ * @returns {string}
+ */
+export function noReportReason({ stopped = false, budgetSpent = false, last = {} } = {}) {
+  if (stopped) {
+    return `gitleaks did not finish within ${TIMEOUT_MS / 1000}s and was stopped — a partial scan is not a pass`;
+  }
+  const said = firstLine(last?.stderr) || firstLine(last?.stdout);
+  if (budgetSpent) {
+    // Not "was stopped": nothing was. The budget for BOTH spellings ran out, so
+    // the second one never started — a different fact, and one an operator acts
+    // on differently (a slow repository, not a hung tool).
+    return `gitleaks wrote no report and this rung's ${TIMEOUT_MS / 1000}s budget is spent${said ? `: ${said}` : ""}`;
+  }
+  return said ? `gitleaks wrote no report: ${said}` : "gitleaks wrote no report and said nothing";
+}
+
+/**
  * The report, or null.
  *
  * 🚨 This is the discriminator, and it is deliberately structural: a file that
@@ -261,50 +364,26 @@ export const history = {
       const own = join(cwd, ".gitleaks.toml");
       const config = existsSync(own) ? own : null;
 
-      const started = Date.now();
-      let last = { code: 127, stdout: "", stderr: "" };
-      let rows = null;
-      let spelling = "";
+      // ⚠️ It used to say here that a killed process whose own GRANDCHILD still
+      // held the stdio pipes would hang past the bound — true when it was
+      // written, and measured at 12 s against a 1 s bound. `capture()` settles
+      // the bound itself now instead of leaving it to 'close', so the limit holds
+      // whatever the tool starts. It stays worth knowing that `gitleaks` is one
+      // static binary: the bound is enforced everywhere, but the CLEANUP of a
+      // grandchild that left our process group is complete only on POSIX.
+      const { rows, spelling, last, stopped, budgetSpent } = await spendBudget({
+        list: attempts(cwd, report, config),
+        budgetMs: TIMEOUT_MS,
+        attempt: (args, timeout) => capture("gitleaks", args, { cwd, timeout }),
+        readBack: () => readReport(report),
+      });
 
-      for (const args of attempts(cwd, report, config)) {
-        // 🚨 The bound is on the RUNG, not on the attempt. Two spellings at 60 s
-        // each would be a two-minute wall clock wearing a one-minute label —
-        // measured, before this line: a gitleaks that never returns took 120 s.
-        // So the second attempt gets whatever is left of the budget, and no
-        // attempt starts once there is nothing left.
-        const remaining = TIMEOUT_MS - (Date.now() - started);
-        if (remaining <= 0) break;
-        // ⚠️ This used to say that a killed process whose own GRANDCHILD still
-        // held the stdio pipes would hang past this bound — true when it was
-        // written, and measured at 12 s against a 1 s bound. `capture()` now
-        // settles the bound itself instead of leaving it to 'close', so the
-        // limit holds whatever the tool starts. It stays worth knowing that
-        // `gitleaks` is one static binary: the bound is enforced everywhere, but
-        // the CLEANUP of a grandchild that left our process group is complete
-        // only on POSIX.
-        last = await capture("gitleaks", args, { cwd, timeout: remaining });
-        rows = readReport(report);
-        if (rows) {
-          spelling = args[0];
-          break;
-        }
-      }
-
-      if (!rows) {
-        // A child killed by `capture()`'s timeout resolves non-zero with no
-        // report, which lands on the discriminator by itself — but the reason has
-        // to name the BOUND rather than say "no report", or the operator learns
-        // nothing and goes looking for a broken gitleaks.
-        if (Date.now() - started >= TIMEOUT_MS) {
-          return unanswered(
-            `gitleaks did not finish within ${TIMEOUT_MS / 1000}s and was stopped — a partial scan is not a pass`,
-          );
-        }
-        const said = firstLine(last.stderr) || firstLine(last.stdout);
-        return unanswered(
-          said ? `gitleaks wrote no report: ${said}` : "gitleaks wrote no report and said nothing",
-        );
-      }
+      // A child killed by `capture()`'s bound resolves non-zero with no report,
+      // which lands on the discriminator by itself — but the reason has to name
+      // the BOUND rather than say "no report", or the operator learns nothing and
+      // goes looking for a broken gitleaks. Which of the three it was is decided
+      // from the facts collected above, in one pure function.
+      if (!rows) return unanswered(noReportReason({ stopped, budgetSpent, last }));
 
       const kept = collapse(rows);
       const findings = kept.map(findingFrom);

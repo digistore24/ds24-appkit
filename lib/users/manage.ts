@@ -12,7 +12,7 @@
 // themselves against the actor they are given. The actions still call
 // requireOwner() on top of that (belt and braces).
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { setupAudit, users } from "@/db/schema";
 import { eq, count, asc } from "drizzle-orm";
 import { requireActiveUser } from "@/lib/authz";
 import type { Role } from "@/lib/roles";
@@ -272,6 +272,31 @@ async function deleteAccountRow(memberId: string): Promise<void> {
     // `DELETE FROM users` — which is the right answer for an app that holds
     // nothing but the core's own tables.
     for (const mod of MODULES) await mod.eraseFor?.(tx, memberId);
+
+    // 🚨 The setup trail, and it is the core's own case of exactly what the
+    // loop above does for a module: the ACT stays and the PROSE goes.
+    //
+    // `setup_audit.reason` is a sentence an operator wrote ABOUT this member —
+    // why they were granted a plan by hand, why one was ended. It is one of the
+    // two named exceptions to "identifiers and numbers, never payload"
+    // (`docs/data-protection.md` → *The setup surface*), it is in both Art. 15
+    // exports, and § 14g's rule therefore reaches it: *what is emptied is the
+    // TEXT; the ACT stays*. `subject_member_id` is `set null`, so the row
+    // survives the delete with its link removed — but the words would have
+    // survived with it, for the twenty-four months this trail is kept.
+    //
+    // ⚠️ It runs BEFORE the delete, in the same transaction, because the
+    // foreign key is what makes these rows findable at all: after
+    // `delete from users` the link is null and nothing can tell whose sentence
+    // this was. `target` is deliberately left alone — an address in a record
+    // that outlives the account is the footing `orders.buyer_email` already
+    // keeps, and the operator's trail would otherwise say an act happened to
+    // nobody.
+    await tx
+      .update(setupAudit)
+      .set({ reason: null })
+      .where(eq(setupAudit.subjectMemberId, memberId));
+
     await tx.delete(users).where(eq(users.id, memberId));
   });
 }

@@ -205,7 +205,7 @@ The most important commands at a glance (`node run.mjs` alone shows them all):
 | `node run.mjs ds24-connect` | fetch the Digistore24 API key (browser) and store it in `.env` |
 | `node run.mjs logs` | follow the log of the running app |
 | `node run.mjs doctor` | check that everything needed is installed |
-| `node run.mjs ux-check` | the interface, measured: contrast in both modes, the design system, missing names, pages in no menu — see [`docs/ux.md`](docs/ux.md) |
+| `node run.mjs ux-check` | the interface, measured: contrast in both modes, the design system, missing names, pages nothing leads to — see [`docs/ux.md`](docs/ux.md) |
 | `node run.mjs update` | fetch improved guidance for the AI agent (`CLAUDE.md`, `docs/`, skills) — your code is never touched, see [`docs/updates.md`](docs/updates.md) |
 | `node run.mjs` | show all commands |
 

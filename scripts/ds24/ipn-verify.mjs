@@ -22,7 +22,7 @@
 //   Via the runner:  node run.mjs ds24-ipn-verify     (or: … --order ABC123)
 import crypto from "node:crypto";
 import "../lib/env.mjs";
-import postgres from "postgres";
+import { connectUtc } from "../lib/pg-utc.mjs";
 
 function parseArgs(argv) {
   const out = { _: [] };
@@ -137,7 +137,7 @@ function diagnose(row) {
   }
 }
 
-const sql = postgres(url, { max: 1 });
+const sql = connectUtc(url, { max: 1 });
 try {
   const where = args.order
     ? sql`ds24_order_id = ${args.order}`

@@ -635,8 +635,18 @@ https://YOUR-DOMAIN/api/readyz       → {"status":"ready"}   (this one talks to
 quotes**: `"status":"ready"`, never the bare word `ready` — it is a substring of
 `not-ready`, so a keyword check written on it reports green while the database
 is unreachable. And "any response counts as up" is the same bug in another
-place, because readiness answers 503 deliberately. The skill that sets this up
-is `setup-monitoring` (step 4).
+place, because readiness answers 503 deliberately.
+
+🚨 **And write down which way round the keyword rule points**, because that field
+is the same defect a second time. The alarm has to fire when `"status":"ready"`
+is **ABSENT** — never when it is present. Providers spell that polarity opposite
+ways and neither wording is guessable: UptimeRobot's `keyword_type` takes an
+*exists* / *not exists* value and the intent here is *not exists*; Better Stack's
+plain `keyword` type means *up while the keyword is present*, which is the one
+you want, while its `keyword_absence` type is the inverse and is wrong here. Read
+the field's own wording rather than copying a value out of a document — chosen
+the wrong way round it is a check that is green exactly while the app is down.
+The skill that sets this up, provider by provider, is `setup-monitoring` (step 4).
 
 `smoke-account` gives smoke a way IN on the deployed app: the development
 login does not exist there, so it provisions a member account with a random

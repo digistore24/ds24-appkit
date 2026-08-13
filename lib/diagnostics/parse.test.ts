@@ -127,6 +127,120 @@ unhandledRejection: TypeError: Cannot read properties of null
     expect(found[0].location).toBe("app/dashboard/report/ui.tsx:41");
   });
 
+  // ── A scheduled job that fell over ──────────────────────────────────────
+  //
+  // 🚨 The class this command missed entirely, and the one it can least afford
+  // to: a page that breaks still answers 200, so a status code at least
+  // EXISTS to be checked. A job has none. Its log line is its only signal, and
+  // every one of these came back with 0 findings while the app was visibly
+  // broken.
+  //
+  // All three blocks below are verbatim from a run of this template with a
+  // throw planted in `prune-ipn-log` — not written by hand from the format
+  // string, because what the parser sees is what `console.error` MADE of it.
+  describe("a scheduled job that failed", () => {
+    it("finds the job that threw, and names the line in jobs.ts", () => {
+      const log = ` GET / 200 in 833ms (next.js: 91ms, proxy.ts: 106ms)
+[cron] prune-ipn-log FAILED after 0ms: Error: A81 planted failure: the retention sweep could not run
+    at Object.run (lib/cron/jobs.ts:140:13)
+    at runOne (lib/cron/run.ts:113:30)
+    at async handle (app/api/cron/route.ts:66:20)
+  138 |     async run({ now, settings }) {
+  139 |       const retentionDays = days(settings, IPN_LOG_RETENTION_DAYS);
+> 140 |       throw new Error("A81 planted failure: the retention sweep could not run");
+`;
+      const found = parseErrors(log);
+
+      expect(found).toHaveLength(1);
+      // The prefix STAYS. `[intl]` and `[browser]` say where an error was
+      // raised and are stripped; `[cron]` says which subsystem is broken, and
+      // the job id after it is the first thing the operator needs.
+      expect(found[0].message).toContain("[cron] prune-ipn-log FAILED");
+      expect(found[0].location).toBe("lib/cron/jobs.ts:140");
+    });
+
+    it("finds the scheduler's own tick, which never reaches a job at all", () => {
+      const log = `[cron] tick failed: Error: A81 planted: the tick itself fell over
+    at Timeout.tick [as _onTimeout] (lib/cron/scheduler.ts:47:7)
+`;
+      const found = parseErrors(log);
+
+      expect(found).toHaveLength(1);
+      expect(found[0].message).toContain("[cron] tick failed");
+      expect(found[0].location).toBe("lib/cron/scheduler.ts:47");
+    });
+
+    it("finds the bookkeeping failing, which leaves the lock behind", () => {
+      const log = `[cron] could not record the outcome of prune-ipn-log: Error: A81 planted: the bookkeeping UPDATE failed
+    at finish (lib/cron/run.ts:80:11)
+`;
+      expect(parseErrors(log)[0]?.location).toBe("lib/cron/run.ts:80");
+    });
+
+    it("stays quiet about a job that WORKED, however loudly it says so", () => {
+      // 🚨 The counter-probe that decides whether the widening was worth having.
+      // `console.log` and `console.error` wear the same prefix once both are in
+      // one stream, so "it begins with [cron]" can never be the test — and a
+      // parser that flagged these would flag nine lines on every healthy app.
+      const healthy = `[cron] prune-ai-usage ok in 2ms — 0 row(s) older than 12 month(s) deleted
+[cron] check-advisories ok in 2825ms — 2 of 10 rung(s) answered — 0 critical, 0 high
+[cron] ops-watchdog ok in 6ms — nothing open — 4 check(s) ran, 0 could not be checked
+[api] rejected a key from 10.0.0.1: unknown key
+`;
+      expect(parseErrors(healthy)).toEqual([]);
+    });
+
+    it("counts a job failing every minute as ONE finding, not one per run", () => {
+      // Measured on a real one-minute schedule: three failures, three findings,
+      // identical but for the milliseconds. The window holds 500 lines, so a job
+      // broken overnight is a page of them — the wall this parser must not open
+      // with, arriving through the fix rather than in spite of it.
+      const log = `[cron] prune-ipn-log FAILED after 3ms: Error: the retention sweep could not run
+    at Object.run (lib/cron/jobs.ts:141:13)
+[cron] prune-ipn-log FAILED after 5ms: Error: the retention sweep could not run
+    at Object.run (lib/cron/jobs.ts:141:13)
+[cron] prune-ipn-log FAILED after 4ms: Error: the retention sweep could not run
+    at Object.run (lib/cron/jobs.ts:141:13)
+`;
+      const found = parseErrors(log);
+
+      expect(found).toHaveLength(1);
+      expect(found[0].count).toBe(3);
+      // The one shown is the first, verbatim — no invented "Nms" in the output.
+      expect(found[0].message).toContain("FAILED after 3ms");
+    });
+
+    it("keeps two errors at two lines of one file apart", () => {
+      // The other half of the rule above: numbers stop distinguishing the
+      // MESSAGE, and the LOCATION still distinguishes everything.
+      const log = `[media] could not derive the 320px variant: Error: sharp failed
+    at variants (lib/media/variants.ts:88:5)
+[media] could not derive the 640px variant: Error: sharp failed
+    at variants (lib/media/variants.ts:104:5)
+`;
+      expect(parseErrors(log)).toHaveLength(2);
+    });
+
+    it("is not a cron rule — every prefix in the tree goes the same way", () => {
+      // 🚨 28 prefixes exist in this tree and the parser knew two of them, both
+      // foreign. Fixing `[cron]` alone would be the same defect a year later
+      // with a different prefix, so the pattern takes any prefix and requires
+      // the ERROR SHAPE instead.
+      const log = `[ipn] could not arm auto top-up: TypeError: Cannot read properties of null
+    at arm (lib/digistore/payment-event.ts:210:7)
+[chat] the model call failed: Error: 429 rate limited
+    at call (lib/ai/chat-endpoint.ts:88:9)
+[ops] the job table could not be read: Error: connection terminated
+    at read (lib/ops/watchdog.ts:41:3)
+`;
+      expect(parseErrors(log).map((f) => f.location)).toEqual([
+        "lib/digistore/payment-event.ts:210",
+        "lib/ai/chat-endpoint.ts:88",
+        "lib/ops/watchdog.ts:41",
+      ]);
+    });
+  });
+
   it("keeps two different errors in the same file apart", () => {
     const log = `Error: MISSING_MESSAGE: Could not resolve \`admin.title\`
     at AdminPage (app/dashboard/admin/page.tsx:10:5)

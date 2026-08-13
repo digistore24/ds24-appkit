@@ -18,12 +18,13 @@ import {
   mayRunDestructive,
   needsConfirmation,
   parseEnvClaim,
+  payloadDigest,
   serverEnv,
   setupError,
   validateInput,
 } from "./rules";
 import { authenticateKey, spendConfirmation } from "./manage";
-import type { SetupTool } from "./types";
+import type { SetupContext, SetupTool } from "./types";
 import type { AppEnv } from "@/lib/env-guard";
 
 /** Per key. Generous — this is a setup session, not a public API. */
@@ -44,6 +45,13 @@ export type GuardResult =
       tool: SetupTool;
       mode: "plan" | "apply";
       input: Record<string, unknown>;
+      /**
+       * The digest of the bytes this call carried, or null — computed HERE so
+       * the `apply` that spends a token and the `plan` that mints one cannot
+       * hash the payload two different ways. `dispatch.ts` takes it from here
+       * rather than computing its own.
+       */
+      payloadSha: string | null;
     };
 
 export interface SetupRequestBody {
@@ -65,8 +73,10 @@ export async function guardSetup(args: {
   body: SetupRequestBody;
   tools: ReadonlyMap<string, SetupTool>;
   callerKey: string;
+  /** Bytes, when this came through the multipart door. See step 12. */
+  file?: SetupContext["file"];
 }): Promise<GuardResult> {
-  const { request, body, tools, callerKey } = args;
+  const { request, body, tools, callerKey, file } = args;
 
   // 1. Origin. Absent is fine (a native client sends none); foreign is not.
   //    The DNS-rebinding guard `/api/v1` already makes, for the same reason.
@@ -169,9 +179,31 @@ export async function guardSetup(args: {
     return { ok: false, response: setupError("badRequest", validated.detail) };
   }
 
-  // 12. Outside DEV, applying needs the token this key was given for THIS tool
-  //     and THIS input — and spending it is a conditional UPDATE, not a lookup.
-  if (mode === "apply" && needsConfirmation(appEnv, tool.mutates)) {
+  // 12. Outside DEV, applying needs the token this key was given for THIS tool,
+  //     THIS input and THESE bytes — and spending it is a conditional UPDATE,
+  //     not a lookup.
+  //
+  // 🚨 **The payload is part of the binding (A79), and only where there is
+  // one.** Everywhere else the validated input names what will happen; at
+  // `/api/setup/media` it does not — the input is a `path` this app never opens
+  // and the act is the file beside it. Measured before it was fixed: a plan
+  // answering `two-act.png (70 bytes) would be stored as public`, applied with
+  // its own token and 584 different bytes, answered
+  // `200 {"created":1,"detail":"stored 584 bytes as image"}`. Changing the
+  // `path` invalidated the token; changing the file did not. The second act
+  // confirmed a label rather than the thing.
+  //
+  // ⚠️ Computed here rather than per door, and computed ONCE — `dispatch.ts`
+  // reads it off the result to mint with. Two spellings of "the digest of this
+  // call's payload" is the same failure `canonicalJson()` was pinned against.
+  //
+  // ⚠️ And only when a confirmation is actually in play: in DEV nothing here
+  // runs, so a 50 MB upload on a developer's machine is not hashed for a branch
+  // that answers false.
+  const confirmationInPlay = needsConfirmation(appEnv, tool.mutates);
+  const payloadSha = confirmationInPlay && file ? payloadDigest(file.bytes) : null;
+
+  if (mode === "apply" && confirmationInPlay) {
     if (typeof body.confirmation !== "string" || body.confirmation === "") {
       return {
         ok: false,
@@ -187,13 +219,19 @@ export async function guardSetup(args: {
       tool: tool.name,
       appEnv,
       toolInput: validated.value,
+      payloadSha,
     });
     if (problem) {
       return {
         ok: false,
         response: setupError(
           problem,
-          "That confirmation is spent, expired, or was issued for different input.",
+          // ⚠️ "for a different call" and no longer "for different input": the
+          // binding covers the file too, and a sentence naming only the input
+          // would send an operator whose upload changed underneath them looking
+          // at their JSON.
+          "That confirmation is spent, expired, or was issued for a different call " +
+            "(a different input, or a different file).",
         ),
       };
     }
@@ -207,6 +245,7 @@ export async function guardSetup(args: {
     tool,
     mode,
     input: validated.value,
+    payloadSha,
   };
 }
 

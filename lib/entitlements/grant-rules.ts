@@ -114,8 +114,8 @@ export function normalizeGrantReason(input: unknown): string | null {
  *
  * 23:59:59.999 UTC, so the chosen day is covered in every zone at or behind
  * UTC+00 and in the European ones this template is aimed at. It is written
- * through drizzle as a JS `Date`, never as `sql\`…\``, so db/index.ts's UTC
- * round-trip for `timestamp` (OID 1114) holds on both directions.
+ * through drizzle as a JS `Date`, never as `sql\`…\``, so the `timestamp`
+ * column's own mapper holds on both directions (`db/timestamp-utc.test.ts`).
  *
  * @returns null for anything that is not an unambiguous ISO day. NULL FROM HERE
  *   IS NOT "PERMANENT" — the caller must tell the two apart, which is what the

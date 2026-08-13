@@ -42,11 +42,12 @@ remember to join. A module joins them from its manifest instead:
 |---|---|
 | `summary` | the line `node run.mjs module list` prints after the id — see below |
 | `docs` + `skill` | the same list's second line: this module's page in `docs/` and the skill that builds on it. Pointers INTO the core tree, never guidance shipped from the module — see *Where a module's guidance lives* |
-| `config` | printed there as the module's **switch**, because installed and switched on are two questions |
+| `config` | printed there as the module's **switch**, because installed and switched on are two questions. ⚠️ **The file is named for the FEATURE and not always for the module**, so it is read off the manifest and never guessed from the id: `courses` switches in `config/course.json`, `companion` in `config/ai-companion.json` (reported 2026-08-12 — the first reflex reaches for `config/courses.json` and finds nothing there). `module list` prints the path for **every** module in the tree, dormant ones included, and `module add` names it again after an install; those two are the answer, and a guessed path is not |
 | `schema` | `db/schema.ts`, through one generated line that never changes |
 | `messages` | the text catalogue, merged per locale in `i18n/request.ts` |
 | `errorCodes` | the union check — a code with no text is a build failure |
 | `publicRoutes` | `PUBLIC` in `app/route-protection.test.ts`, with the same "say what guards it" bar |
+| `requires` | other modules this one cannot run without. `loadModules()` REFUSES an arrangement naming a module whose dependency is missing, and **both `add` and `remove` check it BEFORE they write** — `module add courses` without `api` names the missing one and changes nothing, `module remove api` under an installed `courses` names the dependant and changes nothing. 🚨 That ordering is the whole of it and it was wrong once: `add` used to write `config/modules.json` first and meet the registry's refusal afterwards, exiting 1 with the module already in the list and no generated file rewritten — an error message over a half-changed app, which is worse than no refusal at all. ⚠️ **It costs something specific and `module check` says so on every run**: the factory can only test k+2 profiles while modules are independent, so a dependency widens the profile that tests it — `scripts/modules/profiles.test.ts` builds each single as the transitive closure of `requires` rather than as the module alone. Declared rather than refused, because an undeclared dependency is worse: it becomes a cross-module import nobody wrote down. Two modules use it — `courses` and `community`, both on `api`, because they serve endpoints on its surface ([`docs/api.md`](api.md) → *What a MODULE adds to this surface*) |
 | `commands` | `node run.mjs`, under a name that must start with the module's id |
 | `navAreas`, `tablePrefix` | the greeting's inventory of what shipped |
 | `cron` + `cronJobs` | the scheduler — `CRON_JOBS` and `JOB_IDS`, through two generated halves. **Both fields or neither**: the bodies cannot be imported where the names are needed ([`docs/cron.md`](cron.md) → *A MODULE can bring a job*) |
@@ -60,10 +61,10 @@ remember to join. A module joins them from its manifest instead:
 | `components` | `lib/modules/component-registry.ts` — what the APP's OWN pages import from this module, and the only legal way to reach it — see below |
 | `serverExports` | `lib/modules/server-exports.ts` — the same for the app's own SERVER code (`askCompanion()` is the shipped one). **Two barrels, not one**: importing any name from a barrel pulls its whole graph, so a client component reaching for a hook would drag a module's server code — and its keys — into the browser |
 | `setup` | the setup/MCP surface `app/api/setup` serves — this module's own tools, so an agent can configure and fill it without a shell ([`docs/setup-mcp.md`](setup-mcp.md)). Every tool name starts with the module's id, and none may shadow a core tool's; the rule lives in `lib/setup/registry.test.ts` rather than the manifest, because the collision is between tool NAMES in TypeScript, not between module ids |
-| `presence` | `node run.mjs content-check` — this module's answer to *"does this environment hold what it should"*. **Required for a module with `tables`**, on the same bar `privacy` clears: a module that holds rows must be able to say whether an environment HAS them, or the check answers a smaller question than its name while showing a green tick. ⚠️ A module that cannot answer counts as a **failure**, never a pass |
+| `presence` | `node run.mjs content-check` — this module's answer to *"does this environment hold what it should"*. **Required for a module with `tables`**, on the same bar `privacy` clears: a module that holds rows must be able to say whether an environment HAS them, or the check answers a smaller question than its name while showing a green tick. ⚠️ A module that cannot answer counts as a **failure**, never a pass. 🚨 **It COUNTS, and the file it imports decides whether it may.** The core composes this file into `lib/modules/presence-registry.ts`, which the content plan reaches — and `lib/content/applier-plan.test.ts` asserts over that whole closure that a plan can call nothing which WRITES an object. So a contributor that imports its module's `lib/manage.ts` for one counting helper drags the media store's `put`/`copy`/`remove` onto the plan's path: exactly what `community` shipped, and every app that installed it had a permanently red `npm run test` (reported 2026-08-12). Two rules meet here and both hold — the contributor stays a THIN CALLER (`lib/setup/module-boundary.test.ts` refuses a `@/db` import in it, spine AD-81), so the query goes in a NARROW file of the module's own `lib/` that imports `@/db` and the module's schema and nothing else. `modules/community/lib/room-counts.ts` is the worked example, and `scripts/modules/presence-purity.test.ts` asks it of every module in the tree, installed or not |
 | `content` | the two rows below — it is what says WHICH of them this module owes. **Required for a module with `tables`**, on the same bar `privacy` and `presence` clear, and there are exactly two answers. `"authored"`: the rows come from the REPO, so `appliers` is **required** — content that cannot be applied exists only where it was typed. `"collected"`: the rows come from the people using the app, so it owes no transport. ⚠️ And on a `collected` module a declared `appliers` is **refused**, which is the half only a discriminator can say: those rows are posts, keys and a learner's own answers, and an applier there would upsert over them on every `content-apply`. That is why the duty could not simply be hung on `tables` — three of the four table-owning modules are `collected`, and requiring a transport of them would refuse three correct modules. A module with **no** `tables` declares nothing here, and doing so anyway is refused as a promise about rows it does not have |
 | `contentSource` | `lib/content-source/sources.ts` — what the in-app assistant may search inside this module ([`docs/content-source.md`](content-source.md)). A `.ts` file whose default export is a `ContentSource`, because it reads the module's own tables and therefore runs where the database is. 🚨 The contract stays in the CORE, so a default export that does not keep it fails `npm run typecheck` naming the module rather than a customer's first question. Deciding NOT to declare it is a decision too, and the community module has taken it — `modules/community/ai-boundary.test.ts` refuses the coupling structurally, because what a chat tool returns is sent to an AI provider and posts are the largest personal-data surface here |
-| `appliers` | `node run.mjs content-apply` — the module's own content, upserted into whichever environment the command runs against. Whether it ARRIVED is the `presence` row above; WHETHER IT IS OWED is the `content` row above it — this field is required of a module declaring `"content": "authored"`, and refused on a `"collected"` one. A module that brings tables it authors must be able to fill them, or its content exists only where it was typed ([`docs/content.md`](content.md) → *A MODULE can bring one*). It is also a **tracing** declaration: the directory is traced for `/api/setup` under `output: "standalone"`, derived from this field so that no core file ever names a module |
+| `appliers` | the module's own content, upserted into whichever environment it is pointed at. ⚠️ **Two callers drive the same appliers, not one**: the shell pair (`node run.mjs content-apply`) and the setup tool `content_publish` since Story 34.3 — so an applier that is not idempotent, or that assumes it runs from a checkout, breaks on the path nobody was thinking of. Whether it ARRIVED is the `presence` row above; WHETHER IT IS OWED is the `content` row above it — this field is required of a module declaring `"content": "authored"`, and refused on a `"collected"` one. A module that brings tables it authors must be able to fill them, or its content exists only where it was typed ([`docs/content.md`](content.md) → *A MODULE can bring one*). It is also a **tracing** declaration: the directory is traced for `/api/setup` under `output: "standalone"`, derived from this field so that no core file ever names a module |
 
 The generated files (`db/schema-modules.ts`, `lib/modules/messages.ts`,
 `lib/modules/registry.ts`, `lib/modules/nav-registry.ts`,
@@ -239,8 +240,17 @@ Adding one, taking one out — by id, one module at a time:
 
   node run.mjs module add activity
   node run.mjs db-migrate         activity brings 1 table, which is not there yet
+  docs/learning.md              render <ActivityPanel> — activity has no page of its own
   node run.mjs module remove <id> nothing is installed here, so there is nothing to take out
 ```
+
+**That third line is not a command, and that is the point.** A module bringing a
+COMPONENT and no route of its own — `activity` and `companion` — is installed,
+migrated, switched on and still shows nothing until one of your own pages renders
+its panel. Reported 2026-08-12 by somebody who did every printed step and
+reasonably concluded the module system was broken. It is derived from the
+manifest (`components`, with no `app`, `nav` or `slots`), so a fifth module of
+that shape is covered the day it lands. Needs template 0.27.0.
 
 **The sentence after the id is the module's own `summary`**, and the manifest
 requires it — one English line, at most 110 characters so it does not wrap into
@@ -474,11 +484,13 @@ installed **and** switched on.
   therefore never an answer to *what is this app made of*; `module list` is.
   **And the switch file lives in the CORE's `config/`, where it stays whether the
   module is installed or not** — `config/api.json`, `config/community.json`,
-  `config/ai-companion.json` are in a fresh app that has none of them. It is the
+  `config/ai-companion.json` and `config/course.json` are in a fresh app that has
+  none of them. It is the
   second thing in this system that looks like a leak and is not: `remove` refuses
   while rows exist and names *keep it installed and switch it OFF* as the way
   forward, so a switch that vanished with an uninstall would take that way out
-  with it. `modules/boundary.test.ts` §1c writes each of the three down with its
+  with it. `modules/boundary.test.ts` §1c derives that set from the manifests and
+  writes each one down with its
   reason and holds the thing that actually matters — a module's declared switch
   file must EXIST, because every one of these readers resolves an unreadable file
   to OFF and a missing one would make the module installed, migrated and silently

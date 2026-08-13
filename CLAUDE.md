@@ -166,7 +166,7 @@ dates — are **[`docs/conventions.md`](docs/conventions.md)**.
 - **Messages always as a `Callout`** with one of its four intents, never with hand-picked colour classes. What must stay on screen is a `Callout`, what may drift past is a toast — three mechanisms, never a fourth. See **UI**.
 - **Light and dark both count.** Every new piece of UI MUST be readable in both, which follows by itself as long as colours come from the tokens.
 - **Tests are mandatory, and green is the commit condition rather than a courtesy** — nothing runs them for you after a push, so a red test that gets committed stays red until somebody looks. `.githooks/pre-commit` refuses on red, and a shipped test that fails is a finding about your change, never an obstacle to weaken or delete.
-- **⚠️ A SKIPPED test is not a passed one.** `⏭ <file>: NOT CHECKED — <reason>` on stderr has exactly two legitimate causes — `node run.mjs agent-setup --apply`, and deleted example products emptying `config/digistore-products.json`. Anything else is a question nobody answered. Needs template 0.25.0
+- **⚠️ A SKIPPED test is not a passed one.** `⏭ <file>: NOT CHECKED — <reason>` on stderr has exactly three legitimate causes — `node run.mjs agent-setup --apply`; deleted example products emptying `config/digistore-products.json`; and **a foreign tool this machine does not have**, because `scripts/foreign-config.test.ts` asks whether gitleaks, ESLint, PostCSS and drizzle-kit ACCEPT the config files written for them, and a tool that is absent cannot be asked. Anything else is a question nobody answered. Needs template 0.25.0
 - **Call up the app yourself before you say "done", then ask the log.** Green tests are no proof that the page loads, and a page that loads is no proof that it rendered. See **Never ship a broken page** below.
 - **Linux, macOS and Windows all count.** Every command in `run.mjs` and every script under `scripts/` MUST work on all three — a developer on Windows who cannot start the app has no way around it. See **Three systems**.
 - **Commit your work — a finished change is a commit, every time.** Unfinished work too: `git commit --no-verify`, saying so in the message, and that is the flag's only legitimate use. Session artifacts (screenshots, throwaway scripts) live in `.dev/` or get deleted, never committed; at the end of a unit of work `git status` is empty and every commit was made on green. (`AGENTS.md` is generated from this file — never edit it.)
@@ -201,9 +201,9 @@ TEMPLATE, never a decision an app makes about itself.
    parameter carries a reference the receiving page looks up.
 2. **Everything destructive asks first** — `<AlertDialog>`, naming *what* gets hit,
    confirm button `variant="destructive"` and never the accent.
-3. **Every new page goes into the shell** under `app/dashboard/…`, one line in
-   `NAVIGATION` (`components/app-shell.tsx`) plus its text in both language files, and
-   its `<EmptyState>` in the same commit — empty is the state most customers meet first.
+3. **Every new page has a way in, in the same commit** — one line in `NAVIGATION`
+   (`components/app-shell.tsx`) plus its text in both language files, or a **link** if it
+   is a `[param]` page; and its `<EmptyState>`, the state most customers meet first.
 4. **Both modes, always.** Colours come from tokens, never from Tailwind palettes, and
    **every dial is set in BOTH blocks, not only `:root`** (`--radius` is the one
    deliberate exception — a corner does not change with the mode).
@@ -264,12 +264,12 @@ rather than counted as redirects. Its verdicts:
 **The second pass can be unavailable, and then it says so** — one line naming the reason. **Read that line**: "9 protected page(s) NOT checked" is not a pass.
 
 **A 200 is not proof that the page rendered, and green means it loaded, not that it is
-correct.** A bad date, a missing translation, a hydration mismatch and a promise nobody
-awaited all answer 200 over a visibly broken page. That is what `node run.mjs errors`
-is for, and it exits non-zero so it can gate a "done". `smoke` also skips dynamic pages
-(`[id]`) and is signed in as ONE account and as nobody else, so for money, roles and
-customer data a look at the page itself is part of the job — a gate needs a test or
-your own eyes.
+correct.** A bad date, a missing translation, a hydration mismatch and an unawaited promise
+all answer 200 over a visibly broken page. That is what `node run.mjs errors` is for, and it
+exits non-zero so it can gate a "done". `smoke` still skips dynamic PAGES (`[id]`) and is
+signed in as ONE account, so money, roles and customer data need your own eyes. Dynamic API
+**routes** it does reach: `/api/media/[id]` gets a real item and is asked as its owner AND
+as nobody — both answering alike is the defect — and the rest are printed with the reason.
 
 The deployed app answers both over `DIAGNOSTICS_SECRET`, and `node run.mjs health --url
 https://…` asks them plus the database, the jobs, the media store and the last payment
@@ -452,6 +452,12 @@ whether the keys are there and what one call costs.
 - **Every call is recorded in `ai_usage`** — task, provider, model, tokens,
   latency, outcome, member. No prompt and no completion is ever stored there; it is
   a numbers table, and recording never fails a call.
+- ⚠️ **A key that is PRESENT is not a key that WORKS, and only `node run.mjs
+  ai-check --live` can tell you** — one real call per binding, made by the running
+  app so it goes through `runTask()` and is recorded like any other. It spends
+  money (~0.0001 USD on the shipped bindings, printed before it is spent), so it is
+  🚨 **never a gate**: not in `make check`, not in `npm run test`, not in a deploy.
+  A run that could not look says `⏭ NOT CHECKED` and exits 1 — never 0.
 - **There is no spend ceiling, deliberately** — a ceiling takes the app's AI
   offline for real customers, and a hard stop belongs on the provider account.
 - 🚨 **Customer-written text is FENCED, and the fence is the CORE's** —
@@ -543,8 +549,9 @@ app is the core and nothing else.
 | companion | `node run.mjs module add companion` | [`docs/ai-in-product.md`](docs/ai-in-product.md) | `ai-companion` |
 | api | `node run.mjs module add api` | [`docs/api.md`](docs/api.md) | `mobile-companion` |
 
-Then `db-migrate` — a module's tables are not there yet. The mobile companion
-that talks to the `api` module is [`docs/mobile.md`](docs/mobile.md). Everything
+Then `db-migrate` — a module's tables are not there yet. ⚠️ **`courses` and
+`community` REQUIRE `api`**: add it first, or `add` refuses before it writes.
+The mobile companion that talks to it is [`docs/mobile.md`](docs/mobile.md). Everything
 else about the system — `remove` refusing while rows exist, the generated
 registries, `slots`, what a manifest may declare — is
 **[`docs/modules.md`](docs/modules.md)**.
@@ -572,7 +579,10 @@ says where it stands; the guide is
 - **Outside DEV every change is two acts** — a plan, then an apply carrying the
   one-time token the server issued. ⚠️ That stops a stale plan and a mistyped
   flag; it does **not** stop an agent calling both in a row. Whoever wants a
-  human in the loop for production keeps the surface off there.
+  human in the loop for production keeps the surface off there. 🚨 **A door that
+  carries BYTES binds them into the token too** — bound to the input alone, the
+  second act confirms a label: measured, a plan for a 70-byte file applied with
+  the same token and a different file, `200 created: 1`.
 - **Every act is one append-only row** — key, operator, environment, tool,
   target, counts; never payload content. Read it on
   `/dashboard/admin/setup-audit`.
@@ -696,6 +706,12 @@ is **[`docs/digistore-billing-modes.md`](docs/digistore-billing-modes.md)**:
   mode.
 - **A mode may hide an empty thing, never a non-empty one.** Every call site is
   written `!sellsTokens() && balance === 0`, never `!sellsTokens()` alone.
+
+🚨 **To LOOK at the buy forms before the products exist, open
+`/plans?preview=checkout`** (DEV + localhost only) — never by writing dummy
+product ids into `config/digistore-products.json`. That file is tracked by
+git, so the leftover gets committed and the next `ds24-sync` updates a product
+that is not there. The preview asks Digistore24 nothing and buys nothing.
 
 **Leave `APP_URL` alone** — a non-local value switches off the development login
 (`lib/auth/dev-login.ts`) and locks you out of your own app; the deployed domain

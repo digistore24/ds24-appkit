@@ -25,9 +25,25 @@ export const dynamic = "force-dynamic";
  *
  * `input` travels as a JSON string rather than as loose form fields, and that
  * is load-bearing: the confirmation token is bound to the canonical hash of the
- * validated input, so both doors have to hash the *same* object. Loose fields
- * would arrive as strings — `"1"` instead of `1` — and a plan made at one door
- * could never be applied at the other.
+ * validated input, so a plan and its apply have to hash the *same* object.
+ * Loose fields would arrive as strings — `"1"` instead of `1` — and a plan made
+ * here could never be applied here.
+ *
+ * 🚨 **And the token is bound to the BYTES as well, at this door only** (A79).
+ * The two halves of that sentence are one decision: the input a tool declares
+ * names what will happen everywhere else in this surface, and here it does not
+ * — `media_upload`'s `path` is an identifier for a file on the operator's own
+ * machine, never opened by this app, while the act is the payload arriving
+ * beside it. Measured before it was closed: the same token, the same `input`
+ * JSON and a different file stored the different file, `200 created: 1`.
+ *
+ * ⚠️ One consequence, and it is the honest one: a token minted here is no
+ * longer accepted at the JSON door. It used to be — accepted, SPENT, and then
+ * refused `badRequest` for the bytes that door cannot carry, which cost the
+ * operator a plan on a call that could never succeed. The canonical hash still
+ * travels between the doors and is still one helper (`canonicalCallHash()`); it
+ * now covers a property of the CALL, and a call with no payload is not the call
+ * this token was minted for.
  */
 export async function POST(request: Request): Promise<Response> {
   // First line, before the body is touched. See surfaceOffResponse(): parsing

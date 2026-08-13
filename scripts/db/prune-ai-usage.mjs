@@ -26,7 +26,7 @@
 //   node scripts/db/prune-ai-usage.mjs --dry-run   # count, delete nothing
 //   Via the runner:  node run.mjs db-prune-ai
 import "../lib/env.mjs";
-import postgres from "postgres";
+import { connectUtc } from "../lib/pg-utc.mjs";
 
 const argv = process.argv.slice(2);
 const daysArg = argv.indexOf("--days");
@@ -45,7 +45,15 @@ if (!url) {
 }
 
 const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
-const sql = postgres(url, { max: 1 });
+const sql = connectUtc(url, { max: 1 });
+
+// 🚨 The boundary travels as `sql.typed.utcTimestamp(cutoff)`, never as a bare
+// `${cutoff}`: a `Date` is typed timestamptz on the wire, `created_at` is
+// `timestamp`, and Postgres then casts the COLUMN into the database session's
+// zone — which moves this window by the server's offset in whichever direction
+// that offset points. `scripts/lib/pg-utc.mjs` has the measurement, and refuses
+// the bare form rather than deleting the wrong year of cost history.
+const boundary = () => sql.typed.utcTimestamp(cutoff);
 
 try {
   if (dryRun) {
@@ -56,7 +64,7 @@ try {
       select count(*)::int as rows,
              coalesce(sum(cost_micros), 0)::bigint as micros
       from ai_usage
-      where created_at < ${cutoff}`;
+      where created_at < ${boundary()}`;
     const spend = (Number(row.micros) / 1_000_000).toFixed(2);
     console.log(
       `Dry run: ${row.rows} row(s) older than ${retentionDays} days ` +
@@ -66,7 +74,7 @@ try {
   } else {
     const deleted = await sql`
       delete from ai_usage
-      where created_at < ${cutoff}
+      where created_at < ${boundary()}
       returning id`;
     console.log(
       `✓ ${deleted.length} AI-usage row(s) older than ${retentionDays} days deleted.`,

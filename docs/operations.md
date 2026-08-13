@@ -193,6 +193,14 @@ page*. Getting the app onto a host so that there is something to ask at all is
 **How these are misread.** `smoke`'s line *"9 protected page(s) NOT checked"* is
 **not** a pass — those are the pages carrying the real queries; provision the
 sign-in once with `node run.mjs smoke-account --apply` and run it again.
+The other line to read rather than skim is *"N of M dynamic API route(s)
+exercised"*. Against a **deployed** app that number is **0**, and it is not a
+defect: the pair behind it — `/api/media/[id]` asked as the item's owner and
+then as nobody — needs one item planted through the upload door, and `smoke`
+reads a deployed app without writing to it. (The one thing this template does
+put into a deployed app, the smoke account, is its own `--apply` command for
+exactly that reason.) Run `node run.mjs smoke` against a local app to exercise
+it; every route in that list carries the reason it was not.
 `errors --url` exits **1** for *found something* and **2** for *could not look*,
 and the refusal never prints a `✓`. Its window lives in one instance's memory
 and empties on every restart, which is why the success line always names the

@@ -22,19 +22,45 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { recordAct, guardSetup, loadManifest, store, revokeGrantByHand, publishContent } =
-  vi.hoisted(() => ({
-    recordAct: vi.fn(async () => undefined),
-    guardSetup: vi.fn(),
-    loadManifest: vi.fn(),
-    store: { head: vi.fn(), firstBytes: vi.fn(), remove: vi.fn(), createUploadUrl: vi.fn() },
-    revokeGrantByHand: vi.fn(),
-    publishContent: vi.fn(),
-  }));
+const {
+  recordAct,
+  memberIdForEmail,
+  guardSetup,
+  loadManifest,
+  store,
+  grantByHand,
+  createUser,
+  selected,
+  memberOfGrant,
+  revokeGrantByHand,
+  publishContent,
+  applierPlans,
+  issueConfirmation,
+} = vi.hoisted(() => ({
+  recordAct: vi.fn(async () => undefined),
+  memberIdForEmail: vi.fn(async () => null as string | null),
+  guardSetup: vi.fn(),
+  applierPlans: vi.fn(),
+  issueConfirmation: vi.fn(async () => "confirmation-token"),
+  loadManifest: vi.fn(),
+  store: { head: vi.fn(), firstBytes: vi.fn(), remove: vi.fn(), createUploadUrl: vi.fn() },
+  grantByHand: vi.fn(),
+  createUser: vi.fn(async () => ({ id: "member-42", email: "neu@example.com", role: "member" })),
+  /** What the tools' own `db.select(...).limit(1)` answers with. */
+  selected: { rows: [] as unknown[] },
+  memberOfGrant: vi.fn(async () => null as string | null),
+  revokeGrantByHand: vi.fn(),
+  publishContent: vi.fn(),
+}));
 
 // The trail's writer, captured rather than mocked away: what is asserted here is
 // the ARGUMENT, which is the whole subject of this file.
-vi.mock("./manage", () => ({ recordAct, issueConfirmation: vi.fn(), touchKey: vi.fn() }));
+vi.mock("./manage", () => ({
+  recordAct,
+  memberIdForEmail,
+  issueConfirmation,
+  touchKey: vi.fn(),
+}));
 // The guard has its own file and its own tests; what it hands over is fixed here
 // so these tests are about the recording and nothing else.
 vi.mock("./guard", () => ({ guardSetup }));
@@ -51,13 +77,35 @@ vi.mock("@/scripts/content/_manifest.mjs", async (importOriginal) => ({
   loadManifest,
 }));
 vi.mock("@/lib/media/store", () => ({ mediaStore: () => store }));
-vi.mock("@/lib/entitlements/manage", () => ({ grantByHand: vi.fn(), revokeGrantByHand }));
+vi.mock("@/lib/entitlements/manage", () => ({ grantByHand, memberOfGrant, revokeGrantByHand }));
+// The two person-shaped tools look an address up themselves before they act.
+// That read is the DOMAIN's business and not this file's subject, so it answers
+// from here — otherwise every act below reaches for a database that is not
+// there and every refusal arrives as `internal`.
+vi.mock("@/db", () => {
+  const chain: Record<string, unknown> = {};
+  chain.from = () => chain;
+  chain.where = () => chain;
+  chain.innerJoin = () => chain;
+  chain.limit = () => Promise.resolve(selected.rows);
+  return { db: { select: () => chain } };
+});
+vi.mock("@/lib/users/manage", () => ({ createUser, listUsers: vi.fn(async () => []) }));
 vi.mock("@/lib/content/publish", async (importOriginal) => ({
   ...((await importOriginal()) as Record<string, unknown>),
   publishContent,
   assertContentMediaRow: vi.fn(async () => ({ created: true, key: "content/x" })),
 }));
+// Only `content_publish`'s PLAN half reaches this, and only the A75 block below
+// uses it — the enumeration failing is one of the five refusals-by-answer.
+vi.mock("@/lib/content/applier-plan", async (importOriginal) => ({
+  ...((await importOriginal()) as Record<string, unknown>),
+  applierPlans,
+}));
 
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { blankComments } from "@/scripts/lib/source-text.mjs";
 import { runSetupCall } from "./dispatch";
 import { toolsByName } from "./registry";
 import type { AuditEntry } from "./manage";
@@ -119,10 +167,16 @@ async function actOn(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  memberIdForEmail.mockResolvedValue(null);
+  memberOfGrant.mockResolvedValue(null);
+  selected.rows = [];
   loadManifest.mockReturnValue({ entries: [ENTRY], problems: [] });
   store.head.mockResolvedValue(null);
   store.firstBytes.mockResolvedValue(MP4_HEAD);
   store.remove.mockResolvedValue(undefined);
+  // The local driver's honest answer, and the one A75's fifth case turns on.
+  store.createUploadUrl.mockReturnValue(null);
+  issueConfirmation.mockResolvedValue("confirmation-token");
 });
 
 describe("🚨 a refused act keeps its target", () => {
@@ -238,5 +292,414 @@ describe("🚨 a refused act keeps its target", () => {
     expect(rows.length).toBe(1);
     expect(rows[0][0].tool).toBe("no_such_tool");
     expect(rows[0][0].target ?? null).toBeNull();
+  });
+});
+
+// 🚨 A70 — WHO the act was about, and A72 — WHY, on the paths that refuse.
+//
+// Two defects with one shape: a column that only the success path ever filled.
+//
+// `setup_audit.subject_member_id` was written by NOTHING — `dispatch.ts` is the
+// trail's only writer and never passed the field, so `manage.ts` put `?? null`
+// in every row. Meanwhile `lib/privacy/export.ts` and
+// `scripts/privacy/export-data.mjs` both cut the `setupActs` section with
+// `where subject_member_id = <memberId>`: that section was empty in BOTH Art. 15
+// exports of every member of every app, while rows about exactly that person sat
+// in the table. `docs/data-protection.md` calls the column "what makes the
+// section sliceable per person".
+//
+// `reason` and `role` were recorded only where the act SUCCEEDED. So a refused
+// `grant_revoke` — the irreversible one, whose tool DEMANDS a written reason
+// before it will run — kept no reason at all, and `docs/setup-mcp.md` calls that
+// reason "the accountability".
+//
+// The tests below drive the real tools through the real dispatch and read what
+// `recordAct()` was handed, the same way the block above does for `target`.
+describe("🚨 an act names its member, and a refusal keeps its reason", () => {
+  it("resolves the member behind the address, on the success path", async () => {
+    memberIdForEmail.mockResolvedValue("member-42");
+
+    const row = await actOn("user_upsert", { email: "Neu@Example.com", role: "member" });
+
+    expect(row.outcome).toBe("applied");
+    expect(row.subjectMemberId).toBe("member-42");
+    // The address is what an operator reads; the id is what an export slices on.
+    // Both, never one standing in for the other.
+    expect(row.target).toBe("neu@example.com");
+    expect(memberIdForEmail).toHaveBeenCalledWith("Neu@Example.com");
+    // The role is the security question this trail exists to answer.
+    expect(row.role).toBe("member");
+  });
+
+  // The one that made A70 sharp: an act about a person that was REFUSED is
+  // still an act about that person.
+  it("names the member of a refused grant, and keeps the reason with it", async () => {
+    memberIdForEmail.mockResolvedValue("member-42");
+    selected.rows = [{ id: "member-42" }];
+    grantByHand.mockRejectedValue(new DomainError("GrantError", "unknownProduct"));
+
+    const row = await actOn("grant_by_hand", {
+      email: "kunde@example.com",
+      productKey: "kurs_komplett",
+      reason: "paid by invoice, order 4711",
+    });
+
+    expect(row.outcome).toBe("refused");
+    expect(row.code).toBe("unknownProduct");
+    expect(row.subjectMemberId).toBe("member-42");
+    expect(row.reason).toBe("paid by invoice, order 4711");
+  });
+
+  // The irreversible tool, on both halves of the two-act protocol. Its input
+  // names a GRANT, so the member comes from the row and not from the input —
+  // the result-side half of the declaration.
+  it("takes the member of a revoke off the grant row, in plan and in apply", async () => {
+    memberOfGrant.mockResolvedValue("member-7");
+    const planned = await actOn("grant_revoke", { grantId: "gr_1", reason: "wrong person" }, "plan");
+
+    vi.clearAllMocks();
+    memberIdForEmail.mockResolvedValue(null);
+    revokeGrantByHand.mockResolvedValue({
+      id: "gr_1",
+      memberId: "member-7",
+      productKey: "kurs_komplett",
+      endedAt: new Date("2026-08-12T08:00:00.000Z"),
+    });
+    const applied = await actOn("grant_revoke", { grantId: "gr_1", reason: "wrong person" });
+
+    expect(planned.subjectMemberId).toBe("member-7");
+    expect(applied.subjectMemberId).toBe("member-7");
+    // 🚨 And never from the input: the id is read out of the row that was
+    // closed, so a caller cannot decide whose export an act turns up in.
+    expect(revokeGrantByHand).toHaveBeenCalledWith({
+      actor: { id: "owner-1", role: "owner" },
+      grantId: "gr_1",
+    });
+  });
+
+  it("keeps the reason when the irreversible act is REFUSED", async () => {
+    revokeGrantByHand.mockRejectedValue(new DomainError("GrantError", "alreadyEnded"));
+
+    const row = await actOn("grant_revoke", { grantId: "gr_1", reason: "asked to reverse it" });
+
+    expect(row.outcome).toBe("refused");
+    expect(row.reason).toBe("asked to reverse it");
+  });
+
+  it("keeps the reason when the act CRASHED", async () => {
+    revokeGrantByHand.mockRejectedValue(
+      Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }),
+    );
+
+    const row = await actOn("grant_revoke", { grantId: "gr_1", reason: "asked to reverse it" });
+
+    expect(row.code).toBe("internal");
+    expect(row.reason).toBe("asked to reverse it");
+  });
+
+  // ⚠️ The distinction the empty column has to carry. Both rows say `null`, and
+  // they are different statements — so the difference lives where it can: the
+  // tool's own declaration, and the address still standing in `target`.
+  it("tells 'looked and found nobody' from 'this tool knows no person'", async () => {
+    // The real case, not a contrived one: a PLAN for somebody who does not have
+    // an account yet. The address is perfectly good; nobody is behind it.
+    memberIdForEmail.mockResolvedValue(null);
+    const lookedAndFoundNobody = await actOn(
+      "user_upsert",
+      { email: "niemand@example.com", role: "member" },
+      "plan",
+    );
+
+    vi.clearAllMocks();
+    selected.rows = [];
+    publishContent.mockRejectedValue(new DomainError("PublishError", "applierWithoutApply"));
+    const knowsNoPerson = await actOn("content_publish", {});
+
+    expect(lookedAndFoundNobody.subjectMemberId ?? null).toBeNull();
+    expect(knowsNoPerson.subjectMemberId ?? null).toBeNull();
+
+    // What tells them apart, from the row plus the enumerated surface:
+    expect(toolsByName().get("user_upsert")?.subjectEmailField).toBe("email");
+    expect(lookedAndFoundNobody.target).toBe("niemand@example.com");
+    expect(toolsByName().get("content_publish")?.subjectEmailField).toBeNull();
+    expect(knowsNoPerson.target).toBeNull();
+  });
+
+  // 🚨 The line A53 drew and A72 does NOT move. The guard refuses before
+  // `validateInput()` has judged anything: `body.input` is unbounded text from a
+  // stranger who need not even hold a key, and a trail whose rule is
+  // "identifiers and numbers" must not let them choose what these columns say.
+  it("writes no reason, no role and no member for a refusal the guard made", async () => {
+    guardSetup.mockResolvedValue({
+      ok: false,
+      response: Response.json({ error: "badKey" }, { status: 401 }),
+    });
+
+    await runSetupCall({
+      request: new Request("http://localhost:3003/api/setup", { method: "POST" }),
+      body: {
+        tool: "grant_revoke",
+        env: "production",
+        mode: "apply",
+        input: { grantId: "gr_1", reason: "x".repeat(5000), role: "owner", email: "a@b.de" },
+      },
+    });
+
+    const row = (recordAct.mock.calls as unknown as AuditEntry[][])[0][0];
+    expect(row.reason ?? null).toBeNull();
+    expect(row.role ?? null).toBeNull();
+    expect(row.subjectMemberId ?? null).toBeNull();
+    // And nothing was looked up on that path either — an unauthenticated caller
+    // does not get to make the trail query the user table.
+    expect(memberIdForEmail).not.toHaveBeenCalled();
+  });
+});
+
+// 🚨 A75 — a tool that REFUSES BY ANSWERING is recorded as a refusal.
+//
+// The third defect of the same family, and the one that reached the sharpest
+// column. Five branches hand back a `SetupResult` instead of throwing, so they
+// never pass the `catch` that the two blocks above are about — they run the
+// SUCCESS path, and it wrote `applied` (or `planned`), `code: null`, `rows: 0`:
+//
+//   user_upsert       | neuer.chef@example.com | owner | applied | — | 0
+//   grant_by_hand     | niemand@example.com    |       | applied | — | 0
+//   media_upload      | /home/op/held.png      |       | applied | — | 0
+//   content_media_url | kurs-basics/intro.mp4  |       | applied | — | 0
+//   content_publish   |                        |       | planned | — | 0
+//
+// Measured against Postgres 16 with all eight migrations, a real key through the
+// real `guardSetup()`, and the real `recordAct()` — not read off the code. Every
+// one of those five is a refusal before any write, which `docs/setup-mcp.md`'s
+// four-state table has always said is `refused` carrying the refusal's code.
+//
+// ⚠️ **Returning rather than throwing stays**, and the repair is on this side:
+// three of the five carry a payload the caller acts on (`content_media_url`
+// hands back the two ways forward and `scripts/content/publish.mjs` branches on
+// it), and all five carry `subjects`, which an exception cannot. So the tools
+// declare the refusal (`SetupResult.refused`) and `dispatch.ts` reads it —
+// never guessing off `created === 0`, which is also what an honest no-op success
+// looks like. That last sentence is the counter-proof at the foot of this block.
+describe("🚨 a refusal the tool ANSWERS with is recorded as one", () => {
+  /** The five, as the reproduction drove them. */
+  const CASES: {
+    tool: string;
+    input: Record<string, unknown>;
+    mode: "plan" | "apply";
+    code: string;
+    target: string | null;
+    arrange?: () => void;
+  }[] = [
+    {
+      // AD-92: the one irreversible escalation, refused outside DEV. The row
+      // that most needs to say it was refused said the opposite.
+      tool: "user_upsert",
+      input: { email: "neuer.chef@example.com", role: "owner", name: "Chef" },
+      mode: "apply",
+      code: "ownerPromotionRefused",
+      target: "neuer.chef@example.com",
+    },
+    {
+      tool: "grant_by_hand",
+      input: {
+        email: "niemand@example.com",
+        productKey: "kurs_komplett",
+        reason: "paid by invoice, order 4711",
+      },
+      mode: "apply",
+      code: "notFound",
+      target: "niemand@example.com",
+      arrange: () => {
+        selected.rows = [];
+      },
+    },
+    {
+      // Reached through the JSON door, which carries no bytes — `actOn` passes
+      // no `file`, which IS the refusal.
+      tool: "media_upload",
+      input: { path: "/home/op/bilder/held.png", visibility: "public", alt: "Held" },
+      mode: "apply",
+      code: "badRequest",
+      target: "/home/op/bilder/held.png",
+    },
+    {
+      // The local driver cannot mint an address. The one of the five that had no
+      // name at all — it sets no `data.refused` either, because its CLI reads
+      // `data.upload` / `data.reason` instead.
+      tool: "content_media_url",
+      input: { path: ENTRY.path },
+      mode: "apply",
+      code: "noUploadAddress",
+      target: ENTRY.path,
+      arrange: () => {
+        store.head.mockResolvedValue(null);
+        store.createUploadUrl.mockReturnValue(null);
+      },
+    },
+    {
+      // "I could not look" and "there is nothing there" must never be the same
+      // answer — including in the row.
+      tool: "content_publish",
+      input: {},
+      mode: "plan",
+      code: "appliersUnreadable",
+      target: null,
+      arrange: () => {
+        applierPlans.mockRejectedValue(new Error("content/appliers: ENOENT"));
+      },
+    },
+  ];
+
+  for (const testCase of CASES) {
+    it(`records ${testCase.tool} → ${testCase.code} as refused`, async () => {
+      testCase.arrange?.();
+
+      const row = await actOn(testCase.tool, testCase.input, testCase.mode);
+
+      expect(row.outcome).toBe("refused");
+      expect(row.code).toBe(testCase.code);
+      // The four-state table's third column: nothing was written.
+      expect(row.rows ?? 0).toBe(0);
+      // A53 holds on this path too — a refusal names what it was about.
+      expect(row.target ?? null).toBe(testCase.target);
+    });
+  }
+
+  // 🚨 THE COUNTER-PROOF, and the reason `refused` is a declared field rather
+  // than something `dispatch.ts` infers. An upsert of somebody who already has
+  // that role changes nothing: `created: 0, changed: 0, rows: 0` — the very
+  // numbers every refusal above carries. It is an honest `applied`, and a rule
+  // that read the numbers would have turned it into a refusal.
+  it("leaves an honest no-op success as applied", async () => {
+    selected.rows = [{ id: "member-42", role: "member" }];
+    memberIdForEmail.mockResolvedValue("member-42");
+
+    const row = await actOn("user_upsert", { email: "schon.da@example.com", role: "member" });
+
+    expect(row.outcome).toBe("applied");
+    expect(row.code ?? null).toBeNull();
+    expect(row.rows).toBe(0);
+  });
+
+  // The branch NEXT DOOR to the fifth refusal, in the same tool: the object is
+  // already there, nothing is minted, and that is a success. Two results that
+  // both mint nothing, and only one of them is a refusal.
+  it("leaves content_media_url's found answer as applied", async () => {
+    store.head.mockResolvedValue({ bytes: ENTRY.bytes });
+
+    const row = await actOn("content_media_url", { path: ENTRY.path });
+
+    expect(row.outcome).toBe("applied");
+    expect(row.code ?? null).toBeNull();
+  });
+
+  // `code` REFINES an outcome, `refused` REPLACES it — so the `??` ordering in
+  // `dispatch.ts` must not have swallowed the partial publish.
+  it("still carries contentPublishPartial on a half-finished apply", async () => {
+    publishContent.mockResolvedValue({
+      created: 3,
+      changed: 0,
+      rows: 3,
+      appliers: [{ label: "course", ran: true }],
+      unreached: ["media"],
+      media: null,
+      problems: [],
+      partial: true,
+    });
+
+    const row = await actOn("content_publish", {});
+
+    expect(row.outcome).toBe("applied");
+    expect(row.code).toBe("contentPublishPartial");
+  });
+
+  // ⚠️ A plan that refused hands back no confirmation. A token is a capability
+  // with an hour on it, and minting one for an act the tool has just declined
+  // offers a second act that will decline identically.
+  it("mints no confirmation for a plan that refused", async () => {
+    await actOn("user_upsert", { email: "chef@example.com", role: "owner" }, "plan");
+    expect(issueConfirmation).not.toHaveBeenCalled();
+
+    vi.clearAllMocks();
+    issueConfirmation.mockResolvedValue("confirmation-token");
+    memberIdForEmail.mockResolvedValue(null);
+    selected.rows = [];
+    await actOn("user_upsert", { email: "kunde@example.com", role: "member" }, "plan");
+    expect(issueConfirmation).toHaveBeenCalledTimes(1);
+  });
+
+  // ── the discovery half ────────────────────────────────────────────────────
+  //
+  // 🚨 A list of five read off the code is exactly as complete as the attention
+  // of whoever read it — which is how `content_media_url` stayed invisible: it
+  // is the one branch that never wrote the word `refused` anywhere. So the set
+  // is DISCOVERED from the sources of every tool the app can compose, and the
+  // cases above have to cover it.
+  //
+  // ⚠️ What this can and cannot see, said plainly rather than left to be
+  // assumed: it finds a branch that DECLARES `refused`, and it finds the
+  // established `data: { refused: … }` idiom used without one. It cannot find a
+  // sixth refusal written like `content_media_url`'s original — an ordinary
+  // return whose only tell is prose. Nothing short of a parser could, and a
+  // scanner that guessed off `created: 0` would call every no-op success above a
+  // refusal. `docs/setup-mcp.md` therefore carries the rule in words as well.
+  /**
+   * The core's tools plus every module's, found on the TREE rather than listed
+   * here — so the module that lands next year is covered the day it does instead
+   * of being silently skipped. A module's file is read whether or not
+   * `config/modules.json` installs it: the tools are in the tree either way, and
+   * a scan that only saw the installed set would measure this app rather than
+   * the template.
+   */
+  function toolSources(): string[] {
+    const modulesDir = join(process.cwd(), "modules");
+    const found = readdirSync(modulesDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => join("modules", entry.name, "setup", "tools.ts"))
+      .filter((relative) => existsSync(join(process.cwd(), relative)));
+    // A count guard on the walk itself: this template ships two modules with
+    // setup tools, and finding none would mean the directory moved and this
+    // scan is reading one file while believing it read the surface.
+    expect(found.length, "no module setup tools found — this walk is looking at nothing").toBeGreaterThan(0);
+    return ["lib/setup/tools.ts", ...found];
+  }
+
+  /** Every `refused: "code"` a tool DECLARES, per file. */
+  function declaredRefusals(source: string): string[] {
+    // Anchored at the start of a line, which is what keeps a `detail` out of it:
+    // those lines begin `detail:` or with the quote of a wrapped string, never
+    // with the bare key. Comments are blanked, or this file's own prose about
+    // the five would answer for them.
+    return [...source.matchAll(/^\s*refused: "([A-Za-z][A-Za-z0-9]*)",$/gm)].map((m) => m[1]);
+  }
+
+  it("finds no refusal the cases above do not cover", () => {
+    const found: string[] = [];
+    let payloadIdioms = 0;
+
+    for (const relative of toolSources()) {
+      const source = blankComments(readFileSync(join(process.cwd(), relative), "utf8"));
+      found.push(...declaredRefusals(source));
+
+      // The wire signal, and the half that can be checked mechanically: a branch
+      // that tells the CALLER it refused must tell the TRAIL as well. Four of
+      // the five spell both; the fifth deliberately spells only the trail's.
+      for (const match of source.matchAll(/data:\s*\{\s*refused:\s*"([A-Za-z][A-Za-z0-9]*)"/g)) {
+        payloadIdioms += 1;
+        const before = source.slice(source.lastIndexOf("return {", match.index), match.index);
+        expect(
+          before,
+          `${relative}: a branch answers the caller with data.refused="${match[1]}" and does ` +
+            `not declare SetupResult.refused, so the trail records it as a success`,
+        ).toMatch(new RegExp(`\\brefused: "${match[1]}"`));
+      }
+    }
+
+    // Two count guards. Zero found means the scan is looking at nothing — the
+    // exact way a green check comes to mean "I did not measure".
+    expect(found.length, "no tool declares a refusal — this scan found nothing").toBeGreaterThan(0);
+    expect(payloadIdioms, "no tool answers with data.refused — this scan found nothing").toBeGreaterThan(0);
+
+    expect([...new Set(found)].sort()).toEqual([...new Set(CASES.map((c) => c.code))].sort());
   });
 });

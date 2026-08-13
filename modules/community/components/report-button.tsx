@@ -24,6 +24,7 @@ import { Flag } from "lucide-react";
 import { useActionToast } from "@/hooks/use-action-toast";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -128,15 +129,24 @@ export function ReportButton({
               <ul className="grid max-h-48 gap-1 overflow-y-auto">
                 {siblings.map((sibling) => (
                   <li key={sibling.id} className="flex items-start gap-2">
-                    {/* A plain checkbox with a token-derived look: this form
-                        posts a repeated field name, which is what lets the
-                        server read them as a list. */}
-                    <input
-                      type="checkbox"
+                    {/* The kit's <Checkbox>, and it still posts a REPEATED field
+                        name — `reports/actions.ts` reads `formData.getAll(
+                        "attached")` and gets its list, because Radix renders its
+                        own bubble input inside the form.
+
+                        ⚠️ It was a native <input> until 2026-08-13, on the
+                        argument that a repeated name is a native form's own
+                        mechanism. That argument is about a form which must work
+                        WITHOUT JavaScript, and this one cannot: it lives in a
+                        Radix <Dialog> that only JavaScript opens, and its
+                        onSubmit calls preventDefault(). So the exception never
+                        applied here, and the kit's focus ring, dark mode and
+                        keyboard behaviour were being given up for nothing. */}
+                    <Checkbox
                       id={`attach-${sibling.id}`}
                       name="attached"
                       value={sibling.id}
-                      className="accent-primary mt-1"
+                      className="mt-1"
                     />
                     <label
                       htmlFor={`attach-${sibling.id}`}

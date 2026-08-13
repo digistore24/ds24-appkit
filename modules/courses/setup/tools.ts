@@ -53,10 +53,19 @@
 // secret** either — anybody holding the lesson can recompute it — so nothing may
 // ever treat it as a credential.
 //
-// The known limit, named rather than papered over: swapping one video for
-// another in the SAME slot does not move the fingerprint, because what is hashed
-// is the slot's occupancy and not the media id (an id exists once, in one
-// database — `schema.ts`). `lib/fingerprint.mjs` records the escape hatch.
+// ⚠️ **Each of the four media slots is hashed as its STORAGE KEY**, resolved
+// here by `mediaKeysFor()` and never sent. That is what makes *"the video was
+// swapped for another file"* a difference the comparison can see — it read as
+// UNTOUCHED while the slots were hashed as a boolean, which is the one
+// product-visible gap this surface used to carry. The key is derivable on both
+// sides (`content/<topic>/<file>.<ext>`) where a media id is not, and it stays
+// off the wire exactly as the id does: what travels is the digest.
+//
+// 🚨 The payload therefore also carries **`fingerprintVersion`**, once, at the
+// top. A comparison against an environment whose deploy computes an older
+// version is not a comparison, and without the tag it reads as every lesson
+// having changed. Naming it is the difference between a verdict and *"I could
+// not compare"* (NFR-60) — `lib/fingerprint.mjs` argues it in full.
 //
 // ── `origin`, and why a comparison needs it ────────────────────────────────
 // 🚨 Every block and every lesson also carries `origin` — which WRITER owns that
@@ -72,8 +81,8 @@
 // payload grew by `fingerprint` and `origin` per lesson and by `unitCount`,
 // `summary` and `origin` per block — no body, no task prompt, no media id, and
 // nothing about a member.
-import { outlinePayload } from "../lib/outline";
-import { courseOutline } from "../lib/manage";
+import { mediaIdsIn, outlinePayload } from "../lib/outline";
+import { courseOutline, mediaKeysFor } from "../lib/manage";
 import type { ModuleSetupTools, SetupResult, SetupTool } from "@/lib/setup/types";
 
 const outline: SetupTool = {
@@ -91,11 +100,19 @@ const outline: SetupTool = {
   // nothing to name — declared rather than left out (`SetupTool.targetField`),
   // which is what keeps "about nothing nameable" different from "forgotten".
   targetField: null,
+  // A course outline is about the repo's rows, never about one member.
+  subjectEmailField: null,
   mutates: false,
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
   async run(context): Promise<SetupResult> {
     const blocks = await courseOutline();
     const units = blocks.reduce((sum, block) => sum + block.units.length, 0);
+    // The second read, and the only one that leaves this module's own tables:
+    // media id → storage key, for the four slots the fingerprint hashes. One
+    // query, and it is asked HERE rather than inside `courseOutline()` so that
+    // the member's overview does not pay for a value only this tool reads
+    // (`../lib/manage.ts` argues it where the function lives).
+    const mediaKeys = await mediaKeysFor(mediaIdsIn(blocks));
 
     return {
       mode: context.mode,
@@ -109,7 +126,7 @@ const outline: SetupTool = {
       // lets the refusal above be TESTED without a database: `outline.test.ts`
       // asserts no lesson text reaches this payload, which nothing could do
       // while the mapping lived inside this call.
-      data: outlinePayload(blocks),
+      data: outlinePayload(blocks, mediaKeys),
     };
   },
 };

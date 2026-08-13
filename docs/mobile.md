@@ -7,7 +7,14 @@ not this codebase compiled twice. What the two share is deliberate and narrow:
 
 1. **The backend.** The mobile app talks to this app's HTTP API
    ([`docs/api.md`](api.md)) — same database, same entitlements, same billing,
-   because there is only one of each.
+   because there is only one of each. **What it can reach depends on which
+   modules the app has**: the core's rows always, and a `courses` or `community`
+   module contributes its own endpoints while it is installed. Both declare
+   `requires: ["api"]`, so an app with either necessarily has the API.
+   The companion can therefore walk a course, tick lessons off, hand work in,
+   read the rooms and post in them — and cannot touch a private message, create
+   a room, author a lesson or moderate anything, none of which is an omission
+   waiting to be filled in.
 2. **The shared core.** The pure decision layer — product registry, prices,
    entitlement and token rules, locale negotiation, key-shape checks — copied
    into the companion repo by `node run.mjs export-core`, so both apps make
@@ -117,6 +124,7 @@ the template repo.
 | | |
 |---|---|
 | The backend | install the API module and switch it on: `node run.mjs module add api`, then `config/api.json` — [`docs/api.md`](api.md) |
+| What it reaches | the account, entitlements, tokens, billing, media and the assistant — **plus the course and the community's rooms**, where those modules are installed |
 | The core | `node run.mjs export-core ../my-app-mobile/core` — plan first, `--apply` writes |
 | What is in it | `config/core-export.json` — the explicit list, nothing else ever goes out |
 | The stamp | `.core-version` in the target — a file you changed there is yours, re-exports keep it |

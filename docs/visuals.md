@@ -260,6 +260,17 @@ if (!item || !(await mayAccess(item, { memberId, role }))) notFound();
 `mayAccess()` said yes. Calling it without that check is how a private file
 becomes a public one.
 
+**What measures that in a RUNNING app is `node run.mjs smoke`.** It plants one
+private item through `POST /api/media` and then asks `/api/media/[id]` twice —
+once with the session that owns it, once with no session at all. The finding is
+the difference: a route that answers both the same is the defect this whole page
+is about, and a 200 for the owner on its own proves nothing. Measured against
+the deployed app it is the only check here that runs through the real route, the
+real session and the real store: deleting the `mayAccess()` gate from
+`lib/media/deliver.ts` leaves `npm run typecheck` clean and every one of this
+app's tests green, and turns `smoke` red. ⚠️ The plant happens on a **local** app
+only — `smoke` does not write to a deployed one, and says so on the line.
+
 ### A phone does not get the desktop-sized picture
 
 An uploaded photo is routinely 3000 px wide and a phone shows it at 390. Nothing

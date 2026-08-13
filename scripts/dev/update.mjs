@@ -93,7 +93,7 @@ if (!existsSync(STAMP)) {
   console.error("  could take your own notes with it.");
   console.error("");
   console.error("  Clone the current template into a second folder and compare by hand:");
-  console.error("  git clone https://github.com/digistore-io/ds24-appkit");
+  console.error("  git clone https://github.com/digistore24/ds24-appkit");
   process.exit(2);
 }
 

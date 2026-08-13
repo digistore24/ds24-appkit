@@ -49,9 +49,21 @@ import { dirname, join, resolve } from "node:path";
  * `""` IS the bare path, which is why it leads: a specifier that names its own
  * suffix must never be shadowed by a sibling that only guesses one.
  *
- * Order matters only where two files share a stem, and in this tree they do not
- * — `.mjs` and `.ts` never do, by convention. A caller that needs a narrower
- * list passes `extensions`.
+ * Order matters where two files share a stem, and this tree HAS such stems.
+ * `docs/conventions.md` → *A `.mjs` beside a `.ts`* does not forbid one; it
+ * permits it in two named forms — a typed `.ts` DOOR onto the one `.mjs`
+ * implementation, and two spellings of one query with a test comparing them. So
+ * for every such pair this probe answers the `.ts`, which is what the door is
+ * for, and the `.mjs` half is reached by naming it — which is what that rule
+ * requires of every import of one anyway.
+ *
+ * ⚠️ The pairs are not counted here. `import-graph.test.ts` derives them from
+ * the tree and checks each against those two forms; a number written into a
+ * comment is a claim that is right until the next one lands. This comment used
+ * to say the opposite of the truth ("`.mjs` and `.ts` never share a stem")
+ * while six pairs sat in the tree.
+ *
+ * A caller that needs a narrower list passes `extensions`.
  */
 export const DEFAULT_IMPORT_EXTENSIONS = [
   "",

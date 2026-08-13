@@ -22,6 +22,11 @@
 import "../lib/env.mjs";
 import { readFileSync, existsSync } from "node:fs";
 
+import {
+  setupConfigFrom,
+  setupProblemsFrom,
+} from "../../lib/setup/config-shape.mjs";
+
 const args = process.argv.slice(2);
 const flag = (name) => {
   const i = args.indexOf(`--${name}`);
@@ -54,35 +59,70 @@ const bad = (line) => {
 
 console.log("\nThe switch (config/setup.json in this checkout)\n");
 
+// 🚨 **Read through the APP's reader, never a second one.** This block carried
+// its own known-key set, its own unknown-key filter and its own `enabled`
+// predicate until 2026-08-13 — all correct-looking, and already drifted: it
+// printed `allowDestructive` without ever checking its SHAPE, so
+//
+//     { "enabled": true, "allowDestructive": "media_upload" }
+//
+// made this command say `✓ enabled` about a file `setupConfigFrom()` throws away
+// whole. The one command whose job is to say where the surface stands said the
+// opposite, on the question the surface exists for. `lib/setup/config-shape.mjs`
+// is the shared reading; its head carries this measurement.
+//
+// `undefined` is "no such file" and `null` is "could not be parsed" — the
+// contract that reader states, so both are handed to it rather than guessed at
+// here.
 let enabled = false;
-if (!existsSync("config/setup.json")) {
-  bad("config/setup.json is missing — the surface is off and cannot be turned on");
-} else {
-  try {
-    const raw = JSON.parse(readFileSync("config/setup.json", "utf8"));
-    const known = new Set(["enabled", "allowDestructive"]);
-    const unknown = Object.keys(raw).filter((k) => !k.startsWith("_") && !known.has(k));
-    enabled = raw.enabled === true && unknown.length === 0;
+{
+  let raw;
+  if (!existsSync("config/setup.json")) {
+    raw = undefined;
+  } else {
+    try {
+      raw = JSON.parse(readFileSync("config/setup.json", "utf8"));
+    } catch (error) {
+      raw = null;
+      bad(`config/setup.json is not readable JSON (${error.message}) — the surface is off`);
+    }
+  }
 
-    if (unknown.length > 0) {
-      bad(`unknown key(s) ${unknown.join(", ")} — the WHOLE surface is off until they go`);
-    } else if (raw.enabled === true) {
-      console.log("  ✓ enabled");
-      // ⚠️ Said out loud rather than left as a detail. It caught its own author
-      // twice: switch it on to try something, forget, and the shipped default
-      // is quietly no longer the shipped default.
-      console.log(
-        "    ⚠️  this is NOT the shipped state — a fresh app ships with the surface off",
-      );
-    } else {
-      console.log('  · off ("enabled": false) — this is the shipped state');
+  // Not `problems` — that name is the finding COUNTER above, and shadowing it
+  // here would put two different meanings on one word in one file.
+  const wrong = setupProblemsFrom(raw);
+  const config = setupConfigFrom(raw);
+  enabled = config.enabled;
+
+  if (raw === undefined) {
+    bad("config/setup.json is missing — the surface is off and cannot be turned on");
+  } else if (raw === null) {
+    // The parse failure already said its piece above.
+  } else if (wrong.length > 0) {
+    // Every problem, not the first: `setupOffReasonFrom()` returns one because a
+    // terminal line has room for one, and this is the place with room for all.
+    for (const problem of wrong) {
+      bad(`${problem} — the WHOLE surface is off until it is fixed`);
     }
-    const allow = raw.allowDestructive ?? [];
-    if (Array.isArray(allow) && allow.length > 0) {
-      console.log(`    destructive tools allowed outside DEV: ${allow.join(", ")}`);
-    }
-  } catch (error) {
-    bad(`config/setup.json is not readable JSON (${error.message}) — the surface is off`);
+  } else if (config.enabled) {
+    console.log("  ✓ enabled");
+    // ⚠️ Said out loud rather than left as a detail. It caught its own author
+    // twice: switch it on to try something, forget, and the shipped default
+    // is quietly no longer the shipped default.
+    console.log(
+      "    ⚠️  this is NOT the shipped state — a fresh app ships with the surface off",
+    );
+  } else {
+    // ⚠️ The JSON spelling, not `setupOffReasonFrom()`'s sentence. This line is
+    // read by somebody about to open the file, so it says what they will find in
+    // it. The pure reason is the one-line form for a terminal that has no room,
+    // and `scripts/deploy-test.mjs` pins this wording — a fresh app saying
+    // anything else here is a finding.
+    console.log('  · off ("enabled": false) — this is the shipped state');
+  }
+
+  if (config.allowDestructive.length > 0) {
+    console.log(`    destructive tools allowed outside DEV: ${config.allowDestructive.join(", ")}`);
   }
 }
 

@@ -2,6 +2,9 @@
   "id": "courses",
   "version": "1.0.0",
   "requiresTemplate": "0.20.0",
+  "requires": [
+    "api"
+  ],
   "title": {
     "de": "Kurs",
     "en": "Course"
@@ -9,15 +12,13 @@
   "summary": "a course whose blocks and lessons live in tables: self-study, week by week, or accompanied",
   "docs": "docs/courses.md",
   "skill": "courses",
-
   "app": [
     "dashboard/course",
-    "dashboard/admin/course"
+    "dashboard/admin/course",
+    "api/v1/courses"
   ],
-
   "config": "config/course.json",
   "configDefault": "config.default.json",
-
   "messages": {
     "namespaces": [
       "courses",
@@ -29,7 +30,6 @@
     "source": "rules.ts",
     "export": "COURSES_ERROR_CODES"
   },
-
   "schema": "schema.ts",
   "tables": [
     "courses_blocks",
@@ -41,7 +41,6 @@
   "content": "authored",
   "migrations": "drizzle",
   "migrationsTable": "__drizzle_migrations_courses",
-
   "nav": "nav.ts",
   "features": [
     "courses",
@@ -52,7 +51,6 @@
   ],
   "gate": "gate.ts",
   "entry": "module.ts",
-
   "erase": true,
   "privacy": {
     "sections": [
@@ -77,17 +75,16 @@
     },
     "courses-diff": {
       "script": "courses-diff.mjs",
-      "help": "What publishing this repo's course into an environment would create and change, and what is only there — reads, never writes"
+      "help": "What publishing this repo's course into an environment would create and change, and what is only there \u2014 reads, never writes"
     }
   },
   "smoke": "smoke.mjs",
-
   "setup": "setup/tools.ts",
   "presence": "presence/check.ts",
   "appliers": "content/appliers",
   "contentSource": "content-source.ts",
-
   "coreExport": [
-    "rules.ts"
+    "rules.ts",
+    "slug.mjs"
   ]
 }

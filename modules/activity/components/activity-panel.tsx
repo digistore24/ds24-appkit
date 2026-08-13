@@ -173,6 +173,21 @@ export function ActivityPanel({ activityId, subject, children }: ActivityPanelPr
       setNotRecorded(false);
       try {
         const result = await submitActivityAction({ activityId, subject, submission });
+        // 🚨 **The live region is cleared HERE, after the await — never beside
+        // the two resets above.** Both would look right and one is a silent
+        // regression: `announce()` is the same setter (see above), and a game
+        // that announces its last move and then submits does both in one React
+        // batch, so a reset at the top turns the region "" → "" and the
+        // message never reaches the DOM at all. Not announced early — never
+        // announced. After the await the render has happened and a screen
+        // reader has read it.
+        //
+        // What the clearing is for: reported 2026-08-12, one wrong attempt then
+        // a right one left "Not passed this time." standing in the sr-only
+        // region under a visible "Passed!". Every branch below either writes a
+        // new sentence or is a Callout that announces itself — none of them may
+        // inherit the previous attempt's.
+        setLiveMessage("");
         if (!result.ok) {
           // The danger Callout carries role="status" and announces itself —
           // feeding the live region too would say every error twice.
@@ -194,6 +209,9 @@ export function ActivityPanel({ activityId, subject, children }: ActivityPanelPr
           setLiveMessage(t("finished"));
         }
       } catch {
+        // The throw skipped the clearing above, so the previous attempt's
+        // sentence would survive under a fresh error Callout.
+        setLiveMessage("");
         setErrorCode("activityFailed");
       } finally {
         pendingRef.current = false;

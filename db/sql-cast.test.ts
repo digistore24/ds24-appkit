@@ -22,7 +22,9 @@
 //
 // And "just wrap it in new Date()" is the wrong fix: the string carries no zone,
 // so V8 reads it in the host's zone and the date silently shifts by the host's
-// offset — the exact bug db/index.ts was written to prevent.
+// offset — the exact bug drizzle's `timestamp` column mapper prevents wherever
+// there IS a column (`db/timestamp-utc.test.ts`), and a raw expression is
+// precisely where there is not one.
 //
 // The way out is any of:
 //   • select the column itself and aggregate in JS, or

@@ -86,3 +86,25 @@ export function switchLine(file, state) {
   if (state.on) return `switch: ${file} — on`;
   return state.note ? `switch: ${file} — OFF (${state.note})` : `switch: ${file} — OFF`;
 }
+
+/**
+ * What an installed module with NO switch says instead.
+ *
+ * ⚠️ **Saying nothing is the bug this replaces.** A module that declares no
+ * `config` has nothing to switch — `activity` contributes components INTO a
+ * lesson somebody else already gates, so it has no route of its own to answer
+ * 404 with and no position for an operator to hold. But every OTHER module
+ * prints a `switch:` line here, and the guidance tells the reader to set the
+ * switch after each `module add`; against that background the one module
+ * without a line reads as a manifest somebody forgot to finish rather than as
+ * a decision (reported 2026-08-12).
+ *
+ * It lives here rather than in `cli.mjs` for the reason the whole file exists:
+ * `switch-state.test.ts` refuses a second wording of this state invented at the
+ * call site.
+ *
+ * @returns {string}
+ */
+export function noSwitchLine() {
+  return "no switch — live as soon as it is installed";
+}

@@ -43,6 +43,16 @@ import { StartDiscussionDialog } from "../../ui";
 // member holds right now — never carried over from the list page that linked
 // here, and never trusted by the composer's action, which asks again on every
 // submit. A refund between the two closes the door.
+
+// "Group" — the kind of page, not this group's name. `groupFor()` is
+// viewer-dependent, so putting the real name in the tab would mean a second,
+// access-checked load per request purely to fill a tab. See the note on
+// `modules/community/pages/page.tsx`.
+export async function generateMetadata() {
+  const t = await getTranslations("community");
+  return { title: t("groupTitle") };
+}
+
 export default async function CommunityGroupPage({
   params,
   searchParams,

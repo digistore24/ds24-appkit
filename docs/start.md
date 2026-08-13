@@ -87,7 +87,7 @@ On Windows, work in **Git Bash** (it comes with git) or WSL2 — not PowerShell.
 
 ### A2. Get the project — as **their** repository, not ours
 
-**Do not `git clone https://github.com/digistore-io/ds24-appkit`.** That is the
+**Do not `git clone https://github.com/digistore24/ds24-appkit`.** That is the
 step to get right, and it is the one that gets skipped, because cloning looks
 like the obvious move and fails silently: the copy points at a repository they
 cannot write to, so the first `git push` is refused and everything they build
@@ -111,7 +111,7 @@ gh auth status
 Answers "Logged in" → one command, and it clones as well:
 
 ```bash
-gh repo create my-app --template digistore-io/ds24-appkit --private --clone
+gh repo create my-app --template digistore24/ds24-appkit --private --clone
 cd my-app
 ```
 
@@ -120,7 +120,7 @@ install — do not install `gh` for this, and do not run `gh auth login` for the
 (it opens a browser and wants a code typed in; they are the one at the screen).
 Tell them:
 
-1. open https://github.com/digistore-io/ds24-appkit
+1. open https://github.com/digistore24/ds24-appkit
 2. press the green **"Use this template"** → **"Create a new repository"**
 3. give it a name, choose **Private**, **"Create repository"**
 4. copy the address of the new repository and paste it back to you
@@ -139,7 +139,7 @@ disk that dies takes the product with it. It is repaired later with
 `git remote set-url origin <their new repo>`, nothing has to be rebuilt.
 
 ```bash
-git clone https://github.com/digistore-io/ds24-appkit
+git clone https://github.com/digistore24/ds24-appkit
 cd ds24-appkit
 ```
 

@@ -2,6 +2,7 @@
   "id": "community",
   "version": "1.0.0",
   "requiresTemplate": "0.19.0",
+  "requires": ["api"],
   "title": {
     "de": "Community",
     "en": "Community"
@@ -13,7 +14,8 @@
   "app": [
     "dashboard/community",
     "dashboard/admin/community",
-    "api/community"
+    "api/community",
+    "api/v1/community"
   ],
   "publicRoutes": {
     "/api/community/live": "has no session of its own to check at the edge — it is the polling transport, and it opens with the same enablement check and participant scoping every other community surface does; app/api/community/live/route.test.ts reads the handler rather than trusting this line"

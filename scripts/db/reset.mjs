@@ -13,7 +13,7 @@
 import { execFileSync } from "node:child_process";
 import "../lib/env.mjs";
 import { existsSync } from "node:fs";
-import postgres from "postgres";
+import { connectUtc } from "../lib/pg-utc.mjs";
 
 const force = process.argv.includes("--force");
 
@@ -55,7 +55,7 @@ if ((!isLocal || isProd) && !force) {
 const run = (args) => execFileSync(process.execPath, args, { stdio: "inherit" });
 
 console.log(`>> Dropping and recreating schemas (${host})`);
-const sql = postgres(url, { max: 1 });
+const sql = connectUtc(url, { max: 1 });
 try {
   // 'public' = the tables of the app.
   await sql.unsafe("drop schema if exists public cascade");

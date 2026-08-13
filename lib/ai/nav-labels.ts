@@ -22,7 +22,9 @@
 // fails the build rather than quietly teaching her yesterday's menu.
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/i18n/config";
 import { MODULE_NAV } from "@/lib/modules/nav-registry";
+import type { ModuleNav } from "@/lib/modules/nav";
 import { MODULE_GATES } from "@/lib/modules/gate-registry";
+import type { ModuleGate } from "@/lib/modules/gate";
 import { MODULE_MESSAGES } from "@/lib/modules/messages";
 import { mergeModuleMessages } from "@/lib/modules/messages-merge";
 import de from "@/messages/de.json";
@@ -62,17 +64,27 @@ export type MemberNavKey = (typeof MEMBER_NAV_KEYS)[number];
  *
  * Static config only — no request, no database — because this lands in the
  * CACHED half of the system prompt.
+ *
+ * ⚠️ **The registries come in as ARGUMENTS, defaulted to the real ones.** Every
+ * call site passes nothing and is unchanged; the parameters exist so that
+ * `nav-labels.test.ts` can compose an app this tree is not. Both registries are
+ * GENERATED from `config/modules.json`, which ships `{ "installed": [] }` — so
+ * read only through the module scope, both filters below are dead code in the
+ * factory and were measured by nothing at all. That is how the withheld-key
+ * guard in that file came to be permanently vacuous (see its own comment).
  */
-function moduleMemberNavKeys(): string[] {
+export function moduleMemberNavKeys(
+  nav: readonly ModuleNav[] = MODULE_NAV,
+  gates: readonly ModuleGate[] = MODULE_GATES,
+): string[] {
   // 🚨 `"on"` exactly — not "anything but off". A module whose config is
   // switched on but malformed still hides its menu entries and still answers
   // not-found on its routes; only the operator's diagnosis page stays
   // reachable, and she is not talking to the operator. `ModuleState` in
   // `lib/modules/gate.ts` is where the three states are argued.
-  const on = new Set(
-    MODULE_GATES.filter((gate) => gate.state() === "on").map((gate) => gate.id),
-  );
-  return MODULE_NAV.filter((mod) => on.has(mod.id))
+  const on = new Set(gates.filter((gate) => gate.state() === "on").map((gate) => gate.id));
+  return nav
+    .filter((mod) => on.has(mod.id))
     .flatMap((mod) => mod.NAVIGATION)
     .filter((item) => !item.ownerOnly)
     .map((item) => item.labelKey);

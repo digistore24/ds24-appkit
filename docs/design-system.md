@@ -235,8 +235,9 @@ It reads the tokens and computes real contrast ratios in both modes, checks that
 every token is defined in **both** blocks and not only one, finds hard-coded
 colours, values written past a dial (an arbitrary `font-[…]` or `shadow-[…]`, a
 bare `shadow-lg`, a hex inside an arbitrary value, the generated `font-heading`
-class), hand-built controls, icon buttons with no name, images with no `alt`,
-and pages that are in no menu. **Green means counted, not good** — the half a
+class, and a shadow naming any custom property other than the two elevation
+roles), hand-built controls, icon buttons with no name, images with no `alt`,
+and pages nothing leads to. **Green means counted, not good** — the half a
 machine cannot settle is [`ux.md`](ux.md), and the skill that walks it is
 `ux-gateway`.
 
@@ -322,12 +323,32 @@ where the plain form returns `shadow-(--elevation-overlay)` alone — and
 `shadow-none` survives the merge and then loses in the browser, which is the
 override this rule exists to protect.
 
-⚠️ But
-the same syntax can name any variable at all, and `shadow-(--my-own-shadow)` is
-a value written past the dial under another name that no check here catches
-today; whoever writes one has left the list below without the list saying so.
-And `shadow-none` sets no value, so it turns no dial — a page taking an
-elevation back off something the kit raised is composition, not a fifth slot.
+🚨 **Those two names are the whole of it, and the syntax is closed to everything
+else.** The same shorthand can name any variable at all, so a page inventing its
+own — a shadow variable of its own naming, in place of one of the two role names
+— reads to a human exactly like the sanctioned form and is a fifth elevation step
+arriving as a tweak. `ux-check` reports every variable on the shadow utility
+except `--elevation-raised` and `--elevation-overlay`, and names the elevation
+dial when it does (`shadowVariable` in `scripts/ux/rules.mjs`; §7).
+
+**That is a decision taken rather than an omission noticed**, and it is worth
+saying why, because this paragraph used to say the opposite. The form stood
+here named-but-uncaught while `cn()` was still stock — and there it was harmless
+in the way a broken thing is harmless: tailwind-merge did not know the shorthand,
+so such a class lost to whatever shadow was already on the element and changed
+nothing. The `extendTailwindMerge` above **made it work**. Measured on this tree
+after that repair: a class list carrying a base step plus an invented shadow
+variable now returns the invented one alone, exactly as it does for the two
+sanctioned names. The fix that made the recommended form real made the
+unsanctioned one real in the same line, which is what turned a documented
+opening into a live way past the dial.
+
+Two neighbours are deliberately NOT reported, each for its own reason. An
+**inset, drop or text shadow** in the same shorthand is a different CSS property
+that `app/globals.css` maps nowhere, so it is not this dial (the same reason
+`inset-shadow-sm` is not). And **`shadow-none`** sets no value, so it turns no
+dial — a page taking an elevation back off something the kit raised is
+composition, not a fifth slot.
 
 ### The four
 
@@ -394,7 +415,7 @@ built on this template agrees with every other:
 | `config/brand.json` · `lib/brand.ts` | whether there is a logo, and where |
 | `lib/pwa/manifest.ts` | the icon list and the PWA colours, pinned to the tokens by a test |
 | `next.config.ts` | the security headers, including the brand folder's |
-| `scripts/ux/rules.mjs` | what `ux-check` measures, and the five ways past a dial it counts |
+| `scripts/ux/rules.mjs` | what `ux-check` measures, and the six ways past a dial it counts |
 | `scripts/design/dials.mjs` | the four dials as DATA, held against §8 from both sides by `dials.test.ts` — a fifth one fails the build here |
 | `docs/design.md` | this app's own choice — written by the skill `design` |
 

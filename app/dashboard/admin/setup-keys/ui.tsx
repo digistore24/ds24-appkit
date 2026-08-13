@@ -142,7 +142,13 @@ export function SetupKeys({ rows }: { rows: KeyRowView[] }) {
             <TableRow>
               <TableHead>{t("name")}</TableHead>
               <TableHead>{t("key")}</TableHead>
-              <TableHead>{t("created")}</TableHead>
+              {/* `created_col`, not `created` — the latter is the confirmation
+                  sentence `actions.ts` returns ("Key minted."), and it read as a
+                  column heading, full stop and all, until 2026-08-12. Two keys
+                  that both sound right is exactly what `i18n/messages.test.ts`
+                  cannot see: it compares the two languages' key SETS, and a
+                  wrong call site is equally wrong in both. */}
+              <TableHead>{t("created_col")}</TableHead>
               <TableHead>{t("lastUsed")}</TableHead>
               <TableHead>{t("state")}</TableHead>
               <TableHead />

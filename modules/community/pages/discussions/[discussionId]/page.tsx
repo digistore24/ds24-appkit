@@ -40,6 +40,16 @@ import { ReadReceipt } from "@/modules/community/components/read-receipt";
 // page. The verdict is NOT cached between this render and the composer's
 // action: that action re-derives it on every submit, because a refund between
 // the two has to refuse the write.
+
+// "Discussion" — the kind of page, not this discussion's title, and here that is
+// the safer answer twice over: `discussionFor()` is viewer-dependent, and a
+// title can be scrubbed along with its author's account. A browser tab is a poor
+// place to have to get that right a second time.
+export async function generateMetadata() {
+  const t = await getTranslations("community");
+  return { title: t("discussionTitle") };
+}
+
 export default async function DiscussionPage({
   params,
   searchParams,

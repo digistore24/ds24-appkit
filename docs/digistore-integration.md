@@ -339,6 +339,45 @@ carries the DS24 test-payment parameter by itself (`lib/digistore/testpay.ts`;
 inspect/rotate with `node run.mjs ds24-testpay`). Outside DEV the vendor sets the
 [test-purchase cookie](https://help.digistore24.com/hc/de/articles/23901169396241).
 
+### Looking at the buy forms before any of that — the DEV fixture
+
+Until `ds24-sync` has run there is not one buy form on `/plans`. Every product
+in `config/digistore-products.json` ships with `productIds: null`, so every card
+renders *"Not created at Digistore24 yet"* — there is nothing to judge in dark
+mode, nothing to check at 380 px, and nothing to look at while writing the page.
+
+**On your own machine, add `?preview=checkout`:**
+
+```
+http://localhost:3000/plans?preview=checkout
+```
+
+Every card then shows the buy form a visitor would get once the products exist —
+the button, the layout, and the auto-reload checkbox on each token package.
+
+**Do not fake it instead.** The way this used to be done was a dummy product id
+in `config/digistore-products.json` plus a dummy `DIGISTORE_API_KEY` in `.env`,
+then undoing both. `.env` is gitignored, but **the registry is not**: a
+forgotten dummy id gets committed, and the next `node run.mjs ds24-sync` then
+calls `updateProduct` on a Digistore24 product that does not exist. The preview
+holds no state at all — close the tab and it is gone.
+
+Four things it deliberately is **not**:
+
+| | |
+|---|---|
+| **not a checkout** | pressing *Buy* resolves the real registry, finds no product, and lands on the same `?checkout=error` message it otherwise would. Nothing is charged and nothing is unlocked |
+| **not a link** | it renders the form, never an `<a href>` to a checkout that does not exist. A dead link is what `checkoutLinksFor()` exists to refuse |
+| **not a mock of the API** | it asks Digistore24 nothing at all, so it can never make a real outage look healthy. The `error` state is untouched and still reachable — the rule in `guardrails` holds |
+| **not available anywhere else** | it needs `APP_ENV=development`, `NODE_ENV` other than `production` and a **localhost** `APP_URL` — the same allowlist as the development login and the test-payment parameter (`lib/digistore/preview.ts`). Anything unrecognised counts as production. On a deployed app the parameter does nothing |
+
+It **reads** `APP_URL` and never changes it — setting `APP_URL` to a non-local
+value switches off the development login and locks you out of your own app.
+
+The page offers the link by itself while the products are missing, so you do not
+have to remember it. `DS24_PLANS_PREVIEW=off` in `.env` removes it on one
+machine.
+
 ### Which marketplace a product is submitted to
 
 Approval is requested **per marketplace** (`data[approval_status][<siteowner>]`),

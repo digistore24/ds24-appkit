@@ -158,9 +158,30 @@ one here.
 ## Step 5 — Prove it works
 
 ```bash
-node run.mjs ai-check     # bindings, keys, cost per call
+node run.mjs ai-check          # bindings, keys, cost per call — all read off files
 node run.mjs start
+node run.mjs ai-check --live   # ONE REAL CALL per binding. Costs money.
 ```
+
+**`ai-check` alone cannot tell a key that works from a key that is merely
+there** — a revoked key, a retired model id and an account with no quota all
+look identical to it. `--live` is the line that finds out: it asks the running
+app to make one real call through the same path a customer's question takes,
+and it prints what that will cost before it costs it (about **0.0001 USD** on
+the shipped bindings).
+
+Three things to say when you run it, because they are decisions rather than
+mechanics:
+
+- **Ask first.** It spends the person's money, however little. Say the figure it
+  is about to print and let them say go.
+- **It needs the app up**, because nothing outside `lib/ai/providers/` may talk
+  to a provider. If it says nothing answered, that is `node run.mjs start`.
+- **`⏭ NOT CHECKED` is not a pass**, and neither is a rate limit (`!`). Read the
+  line: each ending names the one thing to do next. `--url https://…` asks a
+  DEPLOYED app the same question with the host's own keys — which is the version
+  worth running after a go-live, because the key and the egress there are not
+  the ones on this machine.
 
 Then use the feature — for the assistant, ask her a question. Two things to
 check afterwards, and the second is the one nobody thinks of:

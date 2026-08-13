@@ -10,10 +10,39 @@
 // compares fingerprints against EACH OTHER across mutated fixtures.
 import { describe, expect, it } from "vitest";
 
-import { outlinePayload, unitFingerprint } from "./outline";
+import { mediaIdsIn, outlinePayload, unitFingerprint } from "./outline";
+import { FINGERPRINT_VERSION } from "./fingerprint.mjs";
 import type { BlockWithUnits } from "./manage";
 
 type UnitRow = BlockWithUnits["units"][number];
+
+/**
+ * The join `mediaKeysFor()` makes, as a fixture — one deterministic key per id.
+ *
+ * 🚨 **Derived from the id rather than hand-kept**, because that is what makes
+ * the two claims below different claims. A NEW id gets a NEW key, which is what
+ * a swapped video really is (a second media row under a second manifest path);
+ * `pin` is how a test says the opposite — *another database's id for the same
+ * file* — which is the DEV/PROD portability property and the one thing the
+ * previous design got right.
+ */
+function keysFor(blocks: BlockWithUnits[], pin: Record<string, string> = {}): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const id of mediaIdsIn(blocks)) if (id) map.set(id, pin[id] ?? `content/kurs/${id}.mp4`);
+  return map;
+}
+
+/** One row in the shape `outlinePayload()` hands to the hash: the row plus its four keys. */
+function hashable(row: UnitRow, pin: Record<string, string> = {}) {
+  const key = (id: string | null) => (id === null ? null : (pin[id] ?? `content/kurs/${id}.mp4`));
+  return {
+    ...row,
+    coverKey: key(row.coverMediaId),
+    videoKey: key(row.videoMediaId),
+    subtitleKey: key(row.subtitleMediaId),
+    worksheetKey: key(row.worksheetMediaId),
+  };
+}
 
 /** The needles: long, recognisable sentences that must never reach the payload. */
 const BODY_NEEDLE =
@@ -52,9 +81,25 @@ function block(over: Partial<BlockWithUnits> = {}): BlockWithUnits {
   };
 }
 
+/** One lesson's fingerprint straight from a row — the shape the payload builds. */
+const fp = (over: Partial<UnitRow> = {}) => unitFingerprint(hashable(unit(over)));
+
+/**
+ * `outlinePayload()` with the media join already made — the shape the tool calls.
+ *
+ * ⚠️ It is a helper here and NOT a default parameter on the function itself: an
+ * `outlinePayload(blocks)` that quietly resolved no keys is exactly the mistake
+ * the required argument exists to make unspellable (`./outline.ts` says why).
+ * A test may hand it a fixture; production may not hand it nothing.
+ */
+const payloadOf = (blocks: BlockWithUnits[], pin: Record<string, string> = {}) =>
+  outlinePayload(blocks, keysFor(blocks, pin));
+
 /** Every unit's fingerprint, block by block — the value the sensitivity tests diff. */
-function prints(blocks: BlockWithUnits[]): string[][] {
-  return outlinePayload(blocks).blocks.map((b) => b.units.map((u) => u.fingerprint));
+function prints(blocks: BlockWithUnits[], pin: Record<string, string> = {}): string[][] {
+  return outlinePayload(blocks, keysFor(blocks, pin)).blocks.map((b) =>
+    b.units.map((u) => u.fingerprint),
+  );
 }
 
 /** Three lessons in two blocks — enough that "exactly that lesson" is a real claim. */
@@ -88,7 +133,11 @@ function course(): BlockWithUnits[] {
  * that the others did not, because "nothing moved" is what a comparison that
  * never ran also reports.
  */
-function movesOnly(mutate: (blocks: BlockWithUnits[]) => void, at: [number, number]): void {
+function movesOnly(
+  mutate: (blocks: BlockWithUnits[]) => void,
+  at: [number, number],
+  pin: Record<string, string> = {},
+): void {
   const before = prints(course());
   // Non-vacuity: three DISTINCT lessons, so "no other one moved" is a claim
   // about the comparison rather than about three copies of one string.
@@ -97,7 +146,7 @@ function movesOnly(mutate: (blocks: BlockWithUnits[]) => void, at: [number, numb
 
   const after = course();
   mutate(after);
-  const now = prints(after);
+  const now = prints(after, pin);
 
   const [bi, ui] = at;
   expect(now[bi][ui], "the mutated lesson's fingerprint did NOT move").not.toBe(before[bi][ui]);
@@ -111,11 +160,14 @@ function movesOnly(mutate: (blocks: BlockWithUnits[]) => void, at: [number, numb
 }
 
 /** Nothing moved anywhere. For the fields the fingerprint must be blind to. */
-function movesNothing(mutate: (blocks: BlockWithUnits[]) => void): void {
+function movesNothing(
+  mutate: (blocks: BlockWithUnits[]) => void,
+  pin: Record<string, string> = {},
+): void {
   const before = prints(course());
   const after = course();
   mutate(after);
-  expect(prints(after)).toEqual(before);
+  expect(prints(after, pin)).toEqual(before);
 }
 
 describe("the refusal this surface is built on", () => {
@@ -126,7 +178,7 @@ describe("the refusal this surface is built on", () => {
   // analogous assertion for `findMedia()`; this is the same claim for the outline.
   it("🚨 puts no lesson text on the payload, body or task prompt", () => {
     const payload = JSON.stringify(
-      outlinePayload([block({ units: [unit({ body: BODY_NEEDLE, taskPrompt: PROMPT_NEEDLE })] })]),
+      payloadOf([block({ units: [unit({ body: BODY_NEEDLE, taskPrompt: PROMPT_NEEDLE })] })]),
     );
 
     expect(
@@ -143,7 +195,7 @@ describe("the refusal this surface is built on", () => {
   });
 
   it("🚨 exposes exactly these unit keys, so a new field cannot arrive unnoticed", () => {
-    const [only] = outlinePayload([block()]).blocks;
+    const [only] = payloadOf([block()]).blocks;
     expect(Object.keys(only.units[0]).sort()).toEqual(
       [
         "asksForSubmission",
@@ -163,7 +215,7 @@ describe("the refusal this surface is built on", () => {
   });
 
   it("exposes exactly these block keys", () => {
-    const [only] = outlinePayload([block()]).blocks;
+    const [only] = payloadOf([block()]).blocks;
     expect(Object.keys(only).sort()).toEqual(
       // `origin` and `summary` arrived with Story 35.2 — the block's four
       // applied fields have to be comparable, and `summary` was the missing one.
@@ -173,7 +225,7 @@ describe("the refusal this surface is built on", () => {
 
   it("carries no media id, on any slot", () => {
     const payload = JSON.stringify(
-      outlinePayload([
+      payloadOf([
         block({
           units: [
             unit({
@@ -195,13 +247,13 @@ describe("the refusal this surface is built on", () => {
 
 describe("the fingerprint's shape", () => {
   it("is 64 lowercase hex characters, never truncated", () => {
-    expect(unitFingerprint(unit())).toMatch(/^[0-9a-f]{64}$/);
+    expect(fp()).toMatch(/^[0-9a-f]{64}$/);
   });
 });
 
 describe("stability — the same content answers the same string", () => {
   it("twice in a row", () => {
-    expect(unitFingerprint(unit())).toBe(unitFingerprint(unit()));
+    expect(fp()).toBe(fp());
   });
 
   it("across a whole payload built twice", () => {
@@ -249,6 +301,45 @@ describe("sensitivity — a change moves exactly that lesson", () => {
       blocks[0].units[0].videoMediaId = null;
     }, [0, 0]);
   });
+
+  // ── 🚨 A29/A49: one file SWAPPED for another in the same slot ─────────────
+  // The defect this whole design replaced. While the slots were hashed as a
+  // boolean, `video → another video` was invisible: measured end to end against
+  // a real Postgres, a lesson moved from `kurs/knoten.mp4` to
+  // `kurs/palomar.mp4` came back as `0 would change · 2 untouched`, both sides
+  // on the same digest. Occupancy is unchanged in every one of these, which is
+  // exactly why the old shape could not see them.
+  for (const [slot, replacement] of [
+    ["coverMediaId", "med-cover-2"],
+    ["videoMediaId", "med-video-2"],
+    ["subtitleMediaId", "med-subtitle-2"],
+    ["worksheetMediaId", "med-worksheet-2"],
+  ] as const) {
+    it(`🚨 ${slot} swapped for ANOTHER file, the slot staying occupied`, () => {
+      // The lesson has to hold the slot on BOTH sides, or "swapped" is "filled".
+      const base = course();
+      base[0].units[0][slot] = "med-first";
+      const before = prints(base);
+      expect(before.flat().length, "no lesson was fingerprinted at all").toBe(3);
+
+      const after = course();
+      after[0].units[0][slot] = replacement;
+      // Non-vacuity, the count guard of this test: occupied before, occupied
+      // after, and the two are different files.
+      expect(base[0].units[0][slot], "the slot was empty before — a fill, not a swap").not.toBeNull();
+      expect(after[0].units[0][slot], "the slot is empty after — an emptying, not a swap").not.toBeNull();
+      expect(after[0].units[0][slot], "the same file on both sides").not.toBe(base[0].units[0][slot]);
+
+      const now = prints(after);
+      expect(
+        now[0][0],
+        `${slot} was swapped for another file and the fingerprint did not move — a lesson whose ` +
+          `video was replaced reads as UNTOUCHED in courses-diff, which is A49`,
+      ).not.toBe(before[0][0]);
+      expect(now[0][1], "the OTHER lesson in that block moved").toBe(before[0][1]);
+      expect(now[1][0], "a lesson in the other block moved").toBe(before[1][0]);
+    });
+  }
 });
 
 describe("insensitivity — what a publish cannot change must not move it", () => {
@@ -272,27 +363,69 @@ describe("insensitivity — what a publish cannot change must not move it", () =
     });
   });
 
-  // 🚨 The sharpest one. A media id exists once, in one database, so hashing it
-  // would make DEV and PROD disagree about a lesson that is byte-identical in
-  // both — the exact failure the fingerprint exists to prevent.
-  it("every media id, while the slot stays occupied", () => {
+  // 🚨 The sharpest one, and the property the storage key had to preserve. A
+  // media id exists once, in one database: PROD's row for the very same file
+  // carries a different UUID. Hashing the id would make DEV and PROD disagree
+  // about a lesson that is byte-identical in both — the exact failure this
+  // exists to prevent, and the reason the OCCUPANCY boolean was the answer
+  // until the key made a better one available.
+  //
+  // ⚠️ The `pin` is what makes this the right claim rather than the old one:
+  // the ids are rewritten AND every new id resolves to the key its predecessor
+  // resolved to, which is precisely "another database, same file". Without it
+  // the fixture's derived keys would move with the ids and this test would be
+  // asserting the swap case with the wrong words.
+  it("every media id, while the slot stays occupied and the FILE is the same", () => {
     let rewritten = 0;
-    movesNothing((blocks) => {
-      for (const b of blocks) {
-        for (const u of b.units) {
-          rewritten += [u.coverMediaId, u.videoMediaId, u.subtitleMediaId, u.worksheetMediaId].filter(
-            (id) => id !== null,
-          ).length;
-          if (u.coverMediaId !== null) u.coverMediaId = "med-prod-cover";
-          if (u.videoMediaId !== null) u.videoMediaId = "med-prod-video";
-          if (u.subtitleMediaId !== null) u.subtitleMediaId = "med-prod-sub";
-          if (u.worksheetMediaId !== null) u.worksheetMediaId = "med-prod-work";
+    movesNothing(
+      (blocks) => {
+        for (const b of blocks) {
+          for (const u of b.units) {
+            rewritten += [
+              u.coverMediaId,
+              u.videoMediaId,
+              u.subtitleMediaId,
+              u.worksheetMediaId,
+            ].filter((id) => id !== null).length;
+            if (u.coverMediaId !== null) u.coverMediaId = "med-prod-cover";
+            if (u.videoMediaId !== null) u.videoMediaId = "med-prod-video";
+            if (u.subtitleMediaId !== null) u.subtitleMediaId = "med-prod-sub";
+            if (u.worksheetMediaId !== null) u.worksheetMediaId = "med-prod-work";
+          }
         }
-      }
-    });
+      },
+      {
+        // PROD's ids, DEV's files. `med-video-1` is the only slot the fixture
+        // fills, so this is the key `keysFor()` derived for it before the
+        // rewrite — hand-written here because the point is that the two
+        // DATABASES agree, which a derivation would hide.
+        "med-prod-cover": "content/kurs/med-cover-1.mp4",
+        "med-prod-video": "content/kurs/med-video-1.mp4",
+        "med-prod-sub": "content/kurs/med-subtitle-1.mp4",
+        "med-prod-work": "content/kurs/med-worksheet-1.mp4",
+      },
+    );
     // Non-vacuity: a fixture with no media at all would pass the line above
     // while proving nothing about media ids.
     expect(rewritten, "no media id was rewritten — the fixture has none").toBeGreaterThan(0);
+  });
+
+  // The other half of that claim, and the one the boolean could not make: two
+  // environments holding the same FILE agree even when nothing else does.
+  it("🚨 the same file under two databases' ids fingerprints identically", () => {
+    const dev = unitFingerprint(hashable(unit({ videoMediaId: "med-dev-77" }), {
+      "med-dev-77": "content/kurs/knoten.mp4",
+    }));
+    const prod = unitFingerprint(hashable(unit({ videoMediaId: "med-prod-88" }), {
+      "med-prod-88": "content/kurs/knoten.mp4",
+    }));
+    const other = unitFingerprint(hashable(unit({ videoMediaId: "med-prod-88" }), {
+      "med-prod-88": "content/kurs/palomar.mp4",
+    }));
+
+    expect(dev, "two databases disagree about a lesson that is identical in both").toBe(prod);
+    // Non-vacuity: the comparison above is not two copies of one constant.
+    expect(other, "a different FILE fingerprinted the same — the key is not being read").not.toBe(dev);
   });
 
   it("the block's id, slug, title, summary, position and releaseAfterDays", () => {
@@ -321,62 +454,127 @@ describe("line endings — the same lesson on Windows and on Linux", () => {
   const lf = "Zeile eins\nZeile zwei\nZeile drei";
 
   it("CRLF hashes like LF", () => {
-    expect(unitFingerprint(unit({ body: lf.replace(/\n/g, "\r\n") }))).toBe(
-      unitFingerprint(unit({ body: lf })),
+    expect(fp({ body: lf.replace(/\n/g, "\r\n") })).toBe(
+      fp({ body: lf }),
     );
   });
 
   it("a lone CR hashes like LF", () => {
-    expect(unitFingerprint(unit({ body: lf.replace(/\n/g, "\r") }))).toBe(
-      unitFingerprint(unit({ body: lf })),
+    expect(fp({ body: lf.replace(/\n/g, "\r") })).toBe(
+      fp({ body: lf }),
     );
   });
 
   it("the task prompt is normalised too", () => {
-    expect(unitFingerprint(unit({ taskPrompt: "Frage eins\r\nFrage zwei" }))).toBe(
-      unitFingerprint(unit({ taskPrompt: "Frage eins\nFrage zwei" })),
+    expect(fp({ taskPrompt: "Frage eins\r\nFrage zwei" })).toBe(
+      fp({ taskPrompt: "Frage eins\nFrage zwei" }),
     );
   });
 
   it("and the normalisation is not a blanket whitespace collapse", () => {
     // A trailing space is a change an operator made and can see in their file.
-    expect(unitFingerprint(unit({ body: "Text " }))).not.toBe(unitFingerprint(unit({ body: "Text" })));
+    expect(fp({ body: "Text " })).not.toBe(fp({ body: "Text" }));
   });
 });
 
 describe("null is not empty", () => {
   it("a lesson with no body and a lesson with an empty body are different rows", () => {
-    expect(unitFingerprint(unit({ body: null }))).not.toBe(unitFingerprint(unit({ body: "" })));
+    expect(fp({ body: null })).not.toBe(fp({ body: "" }));
   });
 
   it("the same holds for the task prompt", () => {
-    expect(unitFingerprint(unit({ taskPrompt: null }))).not.toBe(
-      unitFingerprint(unit({ taskPrompt: "" })),
+    expect(fp({ taskPrompt: null })).not.toBe(
+      fp({ taskPrompt: "" }),
     );
   });
 });
 
 describe("unitCount", () => {
   it("equals the block's unit array length", () => {
-    const payload = outlinePayload(course());
+    const payload = payloadOf(course());
     expect(payload.blocks.map((b) => b.unitCount)).toEqual([2, 1]);
     expect(payload.blocks.map((b) => b.units.length)).toEqual([2, 1]);
   });
 
   it("is 0 for a block nobody has written a lesson into yet", () => {
-    const payload = outlinePayload([block({ units: [] })]);
+    const payload = payloadOf([block({ units: [] })]);
     expect(payload.blocks[0].unitCount).toBe(0);
     expect(payload.blocks[0].units).toEqual([]);
   });
 
   it("an empty course is an empty block list", () => {
-    expect(outlinePayload([])).toEqual({ blocks: [] });
+    // ⚠️ The version tag is on the payload even here. An environment with no
+    // course at all still says which fingerprint it computes — otherwise the
+    // first block published into it would arrive against a silence.
+    expect(payloadOf([])).toEqual({ fingerprintVersion: FINGERPRINT_VERSION, blocks: [] });
+  });
+});
+
+describe("the fingerprint version travels", () => {
+  it("is on the payload, once, at the top", () => {
+    const payload = payloadOf(course());
+    expect(payload.fingerprintVersion).toBe(FINGERPRINT_VERSION);
+    expect(Object.keys(payload).sort()).toEqual(["blocks", "fingerprintVersion"]);
+  });
+
+  it("is not repeated per block or per lesson", () => {
+    const payload = payloadOf(course());
+    for (const b of payload.blocks) {
+      expect(Object.hasOwn(b, "fingerprintVersion")).toBe(false);
+      for (const u of b.units) expect(Object.hasOwn(u, "fingerprintVersion")).toBe(false);
+    }
+  });
+
+  it("🚨 says v2, because the storage key moved every fingerprint that existed", () => {
+    // A pinned literal, and the one place in this file that has one. It is not
+    // a digest — it is the CONTRACT with `compareCourse()`, which reads this
+    // string off the wire to tell "these lessons differ" apart from "that app
+    // computes something else". Bumping it is a decision about every deployed
+    // app's next `courses-diff`, so it fails a test rather than passing quietly.
+    expect(FINGERPRINT_VERSION).toBe("courses-unit-v2");
+  });
+});
+
+describe("🚨 an unresolved slot is refused, never hashed as an empty one", () => {
+  // The back door into the defect A49 was about: a caller that hands over a raw
+  // `courseOutline()` row — the shape this function took until the storage key
+  // arrived — passes four media ids and no keys. Read as absent, a lesson WITH a
+  // video would hash exactly like one without, in every environment, and every
+  // diff would say `untouched`. There is nothing downstream that could notice.
+  it("a row with a media id and no key throws, naming the lesson and the slot", () => {
+    const raw = unit({ videoMediaId: "med-video-1" }) as never;
+    expect(() => unitFingerprint(raw)).toThrow(/erste-schritte/);
+    expect(() => unitFingerprint(raw)).toThrow(/videoKey/);
+  });
+
+  it("each of the four slots is guarded, not only the video", () => {
+    for (const slot of ["cover", "video", "subtitle", "worksheet"] as const) {
+      const raw = {
+        ...unit({ videoMediaId: null }),
+        [`${slot}MediaId`]: "med-77",
+        coverKey: null,
+        videoKey: null,
+        subtitleKey: null,
+        worksheetKey: null,
+      } as never;
+      expect(() => unitFingerprint(raw), `the ${slot} slot is not guarded`).toThrow(
+        new RegExp(`${slot}Key`),
+      );
+    }
+  });
+
+  it("and an EMPTY slot is not refused — the guard reads the id, not the key", () => {
+    // Counter-probe: without this, a guard that simply refused every null key
+    // would pass the two tests above and break every text-only lesson.
+    expect(() =>
+      unitFingerprint(hashable(unit({ videoMediaId: null }))),
+    ).not.toThrow();
   });
 });
 
 describe("everything the tool returned before is still there, unchanged", () => {
   it("block and unit fields keep their values", () => {
-    const [only] = outlinePayload([
+    const [only] = payloadOf([
       block({
         units: [unit({ body: null, taskPrompt: PROMPT_NEEDLE, videoMediaId: null, worksheetMediaId: "med-w" })],
       }),
@@ -398,7 +596,7 @@ describe("everything the tool returned before is still there, unchanged", () => 
   });
 
   it("blocks and units keep the order they were handed in", () => {
-    const payload = outlinePayload(course());
+    const payload = payloadOf(course());
     expect(payload.blocks.map((b) => b.slug)).toEqual(["grundlagen", "vertiefung"]);
     expect(payload.blocks[0].units.map((u) => u.slug)).toEqual(["lektion-1", "lektion-2"]);
   });

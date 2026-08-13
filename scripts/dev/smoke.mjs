@@ -43,6 +43,15 @@
 // reason. A sweep that quietly stopped being signed in would report green
 // while checking nothing.
 //
+// ── And a third pass, for the routes a sweep cannot reach ──────────────────
+// A `[id]` route needs a real record, so the page walk skips every dynamic
+// segment. That left `/api/media/[id]` — the route deciding whether a PRIVATE
+// FILE is handed out — called by no run that ever existed. It is now given one
+// real item and asked TWICE: as the member who owns it, and as nobody at all.
+// The finding is the DIFFERENCE, because a route answering both the same is
+// exactly the defect. Every other dynamic route is printed with the reason no
+// run calls it, and the count is on screen — `scripts/dev/smoke-dynamic.mjs`.
+//
 // Verdict:
 //   5xx                          → FAILURE, exit code 1
 //   3xx to /login WHILE SIGNED IN → FAILURE: the session did not take
@@ -68,6 +77,7 @@ import { diagnosticsCredentials, readRemoteFindings, describeWindow } from "./er
 import { collectPageRoutes } from "./routes.mjs";
 import { renderFindings } from "../../lib/diagnostics/parse.mjs";
 import { signInAsOwner, signInAsSmokeMember } from "./sign-in.mjs";
+import { runDynamicRoutes } from "./smoke-dynamic.mjs";
 import { runModuleSmoke } from "../modules/inventory.mjs";
 
 const args = process.argv.slice(2);
@@ -272,6 +282,8 @@ await callManifest();
 // neither door opens, the right answer is that these pages were not checked,
 // said plainly.
 let signedInPages = 0;
+/** The session the dynamic pass below borrows, when there was one. */
+let sessionCookie = "";
 if (gated.length > 0 && wantSignedIn) {
   const session = isLocal ? await signInAsOwner(baseUrl) : await signInAsSmokeMember(baseUrl);
   if (session.skipped) {
@@ -288,6 +300,7 @@ if (gated.length > 0 && wantSignedIn) {
     }
     for (const route of gated) await callPage(route, session.cookie);
     signedInPages = gated.length;
+    sessionCookie = session.cookie;
 
     // Whatever an INSTALLED MODULE claims about the running app. A module
     // declaring `smoke` in its manifest ships an `assert(context)` that returns
@@ -312,11 +325,41 @@ if (gated.length > 0 && wantSignedIn) {
   );
 }
 
-if (failures > 0) {
+// ── the dynamic routes ──────────────────────────────────────────────────────
+// The sweep above cannot reach a `[id]` route: it has no id. This pass gives
+// ONE of them a real record and asks it twice — as the owner and as nobody —
+// and names every other dynamic route with the reason no run calls it
+// (`scripts/dev/smoke-dynamic.mjs`, Retro-Action A15).
+//
+// 🚨 **Planting happens on a LOCAL app only, and that is a rule about writing,
+// not about capability.** The remote pass would work — the smoke member may
+// upload — but `smoke` reads a deployed app and does not write to it; the one
+// thing this template does put INTO a deployed app, the smoke account itself,
+// is its own `--apply` command (`node run.mjs smoke-account`) precisely because
+// it is a write somebody has to choose. A check that quietly added a row to a
+// customer's production store on every run would be that decision taken by
+// nobody, and it is not one this command may take.
+const dynamicFailures = await runDynamicRoutes({
+  baseUrl,
+  cookie: sessionCookie,
+  plant: Boolean(sessionCookie) && isLocal,
+  plantReason: !sessionCookie
+    ? "the pair needs the session that owns the item, and no second pass ran"
+    : "smoke does not write to a deployed app — the pair needs one item planted " +
+      "through the upload door. Run it against a local app (node run.mjs start && " +
+      "node run.mjs smoke) to exercise this route",
+});
+
+if (failures > 0 || dynamicFailures > 0) {
+  // Two sentences rather than one sum: a page that 500s and a route that handed
+  // a private file to a stranger are not the same finding, and the first line
+  // is quoted verbatim in `.claude/skills/security-gateway/references/fix-pass.md`.
+  if (failures > 0) console.error(`\n✗ ${failures} page(s) with a server error.`);
+  if (dynamicFailures > 0) {
+    console.error(`\n✗ ${dynamicFailures} dynamic API route(s) answered the wrong caller.`);
+  }
   console.error(
-    `\n✗ ${failures} page(s) with a server error.\n` +
-      "  Look at the cause in the log: node run.mjs logs\n" +
-      "  Do not ship before that is fixed.",
+    "  Look at the cause in the log: node run.mjs logs\n" + "  Do not ship before that is fixed.",
   );
   process.exit(1);
 }

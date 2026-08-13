@@ -126,6 +126,67 @@ describe("the enumerated surface", () => {
     });
   });
 
+  // 🚨 A70. `setup_audit.subject_member_id` is what makes the trail sliceable
+  // per person — both Art. 15 exports cut the `setupActs` section with
+  // `where subject_member_id = <memberId>` — and NOTHING wrote it: the section
+  // was empty in every app while rows about the person sat in the table. The
+  // fix is the same shape as `targetField` rather than a second one: the tool
+  // declares, `null` is an answer, and a tool that has not decided does not
+  // compile.
+  it("makes every tool say whether an act of it is about a MEMBER", () => {
+    expect(ALL_SETUP_TOOLS.length).toBeGreaterThan(0);
+    let declared = 0;
+
+    for (const tool of ALL_SETUP_TOOLS) {
+      const field = tool.subjectEmailField;
+      expect(field === null || typeof field === "string", `${tool.name} declares none`).toBe(true);
+      if (field === null) continue;
+      declared++;
+
+      const property = tool.inputSchema.properties[field];
+      expect(property, `${tool.name}.subjectEmailField "${field}" is not in its schema`)
+        .toBeDefined();
+      // 🚨 An EMAIL, so a string — and the trail's own reason for insisting:
+      // `subject_member_id` is a foreign key on `users.id`, this field is an
+      // address, and `dispatch.ts` is the one place that turns one into the
+      // other. A field of any other type could not be looked up at all.
+      expect(property?.type, `${tool.name}.${field}`).toBe("string");
+      // Required, for `targetField`'s reason: a column that is present or
+      // absent depending on how the caller phrased the request is the ambiguity
+      // this mechanism exists to remove.
+      expect(tool.inputSchema.required ?? [], `${tool.name}.${field} may be absent`).toContain(
+        field,
+      );
+    }
+
+    expect(declared, "no tool names a member at all").toBeGreaterThan(0);
+  });
+
+  // The core mapping, and every entry is a decision about whose Art. 15 export
+  // an act turns up in. ⚠️ `grant_revoke` is null here and is NOT an act about
+  // nobody: its input names a GRANT, and the member is read off that row into
+  // `SetupResult.subjectMemberId` — the result-side half. `dispatch.test.ts`
+  // holds that end.
+  it("is this member mapping for the core surface", () => {
+    const mapping = Object.fromEntries(
+      CORE_SETUP_TOOLS.map((tool) => [tool.name, tool.subjectEmailField]),
+    );
+    expect(mapping).toEqual({
+      content_media_confirm: null,
+      content_media_url: null,
+      content_presence: null,
+      content_publish: null,
+      grant_by_hand: "email",
+      grant_revoke: null,
+      list_acts: null,
+      list_environment: null,
+      list_modules: null,
+      media_upload: null,
+      user_list: null,
+      user_upsert: "email",
+    });
+  });
+
   it("refuses an unknown field on every tool", () => {
     for (const tool of ALL_SETUP_TOOLS) {
       const result = validateInput(tool.inputSchema, { thisIsNotAField: 1 });
@@ -179,6 +240,14 @@ describe("the enumerated surface", () => {
     for (const tool of describeTools()) {
       expect(tool.description.length, tool.name).toBeGreaterThan(20);
       expect(tool.inputSchema.type, tool.name).toBe("object");
+      // 🚨 It TRAVELS. An operator reading a blank `subject_member_id` can only
+      // tell "found nobody" from "never about a person" if the surface says
+      // which tools can name one — and this description is what the MCP server
+      // and `list_environment` hand back.
+      expect(
+        tool.subjectEmailField === null || typeof tool.subjectEmailField === "string",
+        `${tool.name} is described without its member declaration`,
+      ).toBe(true);
     }
   });
 

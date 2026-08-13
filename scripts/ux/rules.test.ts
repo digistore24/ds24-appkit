@@ -29,6 +29,9 @@ import {
   findImagesWithoutAlt,
   findPlaceholderHome,
   navHrefs,
+  routeShape,
+  RAW_ELEMENT_EXCEPTIONS,
+  partitionAcceptedControls,
 } from "./rules.mjs";
 
 describe("parseHsl", () => {
@@ -141,6 +144,21 @@ describe("findPaletteClasses", () => {
   });
 });
 
+/**
+ * Tailwind v4's parenthesised custom-property shorthand, ASSEMBLED rather than
+ * written out.
+ *
+ * 🚨 `CLAUDE.md` → **Rules**, and `scripts/tailwind-raw-text.test.ts` in full:
+ * Tailwind reads this file as RAW TEXT and does not know what a test fixture
+ * is. Every class spelled here becomes a real CSS rule in every app built on
+ * this template. This form is not one of the two families that take the app
+ * down, but a fixture whose whole job is to be the class NOBODY may write has
+ * no business shipping as a rule — so it is put together at run time and
+ * `it("the shorthand fixture is really the form")` is what proves the assembled
+ * string is the thing the rule is about.
+ */
+const shadowVar = (name: string) => `shadow-${"("}${name}${")"}`;
+
 describe("findDialBypasses", () => {
   it("finds an arbitrary font", () => {
     const hits = findDialBypasses(`<h1 className="font-['Playfair_Display']">`);
@@ -206,6 +224,78 @@ describe("findDialBypasses", () => {
     expect(findDialBypasses('className="inset-shadow-sm"')).toEqual([]);
   });
 
+  it("the shorthand fixture is really the form — the needle's own probe", () => {
+    // A guard whose probe cannot fire reports success. Every assertion below
+    // rests on this helper producing the shorthand and not something adjacent
+    // to it, and the helper is the one thing here that is assembled rather than
+    // read, so it is checked against its own shape once.
+    expect(shadowVar("--x")).toBe(["shadow-", "(", "--x", ")"].join(""));
+    expect(shadowVar("--x")).toMatch(/^shadow-\(--[a-z-]+\)$/);
+  });
+
+  it("🚨 finds a variable that is not one of the two elevation roles", () => {
+    // The form Story 43.3 named and 43.4 named again, neither closed: the same
+    // syntax as the sanctioned answer, pointing at a slot the design system
+    // does not have. §8 calls it a fifth elevation step arriving as a tweak.
+    const hits = findDialBypasses(`<div className="${shadowVar("--my-own-shadow")}">`);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({
+      found: shadowVar("--my-own-shadow"),
+      dial: "elevation",
+    });
+  });
+
+  it("🚨 does not flag the two sanctioned role names, which is the other half", () => {
+    // A rule that reported these would report six lines of the shipped tree and
+    // contradict the recipe `docs/design-system.md` §8 gives for answering a
+    // `shadow-lg` finding. Both real: `app/login/ui.tsx` and `app/page.tsx`.
+    expect(findDialBypasses(`<Card className="${shadowVar("--elevation-overlay")}">`)).toEqual([]);
+    expect(findDialBypasses(`<Card className="${shadowVar("--elevation-raised")}">`)).toEqual([]);
+    expect(
+      findDialBypasses(
+        `<Card className="bg-background gap-0 overflow-hidden p-0 ${shadowVar("--elevation-overlay")}">`,
+      ),
+    ).toEqual([]);
+  });
+
+  it("flags a name that only STARTS like a sanctioned one", () => {
+    // The exception is the two names, not a prefix of them — otherwise the way
+    // past the rule is to append a letter.
+    expect(findDialBypasses(shadowVar("--elevation-raised-more"))).toHaveLength(1);
+    expect(findDialBypasses(shadowVar("--elevation"))).toHaveLength(1);
+  });
+
+  it("flags the hinted colour form, which names neither role", () => {
+    // Tailwind's `type:` hint. `shadow-(color:--x)` sets a shadow COLOUR from a
+    // variable holding a whole shadow — not one of the two sanctioned
+    // spellings, and not a thing this design system has a slot for.
+    expect(findDialBypasses(shadowVar("color:--elevation-overlay"))).toHaveLength(1);
+    expect(findDialBypasses(shadowVar("color:--brand-glow"))[0]).toMatchObject({
+      dial: "elevation",
+    });
+  });
+
+  it("does not flag the shorthand on an inset, drop or text shadow", () => {
+    // Same lookbehind, same reason as the size words: a different property,
+    // mapped nowhere in app/globals.css, so not this dial.
+    for (const prefix of ["inset-", "drop-", "text-"]) {
+      expect(findDialBypasses(`${prefix}${shadowVar("--x")}`), prefix).toEqual([]);
+    }
+  });
+
+  it("does not flag a parenthesised class that carries no custom property", () => {
+    // The shorthand accepts nothing but a `--` name, so Tailwind emits no rule
+    // for these at all (measured in scripts/tailwind-raw-text.test.ts). They are
+    // typos, and reporting a typo as an elevation bypass is how a checker that
+    // tells people their page is wrong stops being read.
+    expect(findDialBypasses(shadowVar("x"))).toEqual([]);
+    expect(findDialBypasses(shadowVar(""))).toEqual([]);
+  });
+
+  it("finds the shorthand behind a variant too", () => {
+    expect(findDialBypasses(`className="dark:${shadowVar("--my-own-shadow")}"`)).toHaveLength(1);
+  });
+
   it("does not flag a token class or an arbitrary value with no hex in it", () => {
     // Real lines out of this template: the launcher's width, and the tokens
     // every page is told to use.
@@ -269,6 +359,8 @@ describe("🚨 DIAL_BYPASSES — the needle", () => {
     fontArbitrary: `<h1 className="font-[--brand-face]">`,
     shadowArbitrary: `<div className="shadow-[0_2px_8px_#000]">`,
     shadowSize: `<div className="rounded-lg border shadow-lg">`,
+    // Assembled — see `shadowVar` above for why this one alone is not written.
+    shadowVariable: `<div className="${shadowVar("--my-own-shadow")}">`,
     hexArbitrary: `<span className="text-[#0f172a]">`,
     fontHeading: `<h2 className="font-heading tracking-tight">`,
   };
@@ -283,14 +375,19 @@ describe("🚨 DIAL_BYPASSES — the needle", () => {
 
   it("🚨 has an entry for every form, and that is what this pin catches", () => {
     // A form silently dropped from the list is precisely the failure this
-    // number exists for: the `it.each` above would then run over four entries,
-    // pass, and say nothing about the fifth. The pin is not a style rule about
+    // number exists for: the `it.each` above would then run over five entries,
+    // pass, and say nothing about the sixth. The pin is not a style rule about
     // list length — it is the only assertion that notices a shrinking table.
     //
-    // Adding a SIXTH form is a deliberate act: raise this number, add its
+    // Adding a SEVENTH form is a deliberate act: raise this number, add its
     // sample above, and say in docs/design-system.md §7 what it settles.
-    expect(DIAL_BYPASSES).toHaveLength(5);
-    expect(Object.keys(SAMPLES)).toHaveLength(5);
+    //
+    // The sixth arrived that way and is worth reading as the worked example:
+    // `shadow-(--anything)` stood named-but-open in §8 across two stories, and
+    // this pin is what made closing it a decision somebody took rather than a
+    // pattern that slipped into the list unremarked.
+    expect(DIAL_BYPASSES).toHaveLength(6);
+    expect(Object.keys(SAMPLES)).toHaveLength(6);
     expect(DIAL_BYPASSES.map((b) => b.id).sort()).toEqual(Object.keys(SAMPLES).sort());
   });
 
@@ -632,5 +729,199 @@ export default nav;`;
 const OTHER = [{ href: "/nope" }];
 export const NAVIGATION = [{ href: "/dashboard" }];`;
     expect(navHrefs(source)).toEqual(["/dashboard"]);
+  });
+});
+
+describe("routeShape", () => {
+  // 🚨 Both sides of the navigation check go through this, and that is the
+  // whole design: a route on disk spells its parameter `[groupId]`, the link
+  // that leads there spells it `${encodeURIComponent(group.id)}`. Normalising
+  // one side only reports every dynamic route in the app as unreachable.
+  it("leaves a static path exactly as it is", () => {
+    expect(routeShape("/dashboard/account")).toBe("/dashboard/account");
+    expect(routeShape("/")).toBe("/");
+  });
+
+  it("makes a route file's parameter and a link's interpolation the same string", () => {
+    const route = routeShape("/dashboard/community/groups/[groupId]");
+    const link = routeShape("/dashboard/community/groups/${encodeURIComponent(group.id)}");
+    expect(route).toBe(link);
+    expect(route).toBe("/dashboard/community/groups/[param]");
+  });
+
+  it("normalises EVERY dynamic segment, not the first", () => {
+    expect(routeShape("/a/[x]/b/[y]")).toBe("/a/[param]/b/[param]");
+    expect(routeShape("/a/${p}/b/${q}")).toBe("/a/[param]/b/[param]");
+  });
+
+  it("knows the catch-all spellings a route file may use", () => {
+    expect(routeShape("/a/[...slug]")).toBe("/a/[param]");
+    expect(routeShape("/a/[[...slug]]")).toBe("/a/[param]");
+  });
+
+  it("drops the query, which is not part of the route", () => {
+    expect(routeShape("/a/${id}?page=${n}")).toBe("/a/[param]");
+    expect(routeShape("/a/b#anchor")).toBe("/a/b");
+  });
+
+  // 🚨 The counter-test, and the one that earns the brace counting: a segment
+  // is a parameter WHOLE or not at all. Matching a partial one would let
+  // `/a/pre-${x}` count as a link to `/a/[x]`, and then a real orphan hides
+  // behind a link that never leads to it.
+  it("does not take a partly dynamic segment for a parameter", () => {
+    expect(routeShape("/a/pre-${x}")).toBe("/a/pre-${x}");
+    expect(routeShape("/a/${x}-${y}")).toBe("/a/${x}-${y}");
+    expect(routeShape("/a/${x}suffix")).toBe("/a/${x}suffix");
+    expect(routeShape("/a/x[y]")).toBe("/a/x[y]");
+  });
+
+  it("survives the nested braces every link in this tree actually has", () => {
+    // `${encodeURIComponent(x)}` closes a brace before its own end — a lazy
+    // match would stop there and read the rest as literal text.
+    expect(routeShape("/a/${encodeURIComponent(row.id)}")).toBe("/a/[param]");
+    expect(routeShape("/a/${x ? `${y}` : z}")).toBe("/a/[param]");
+  });
+
+  // 🚨 Both of these broke the first version of this function, which cut the
+  // query with `split(/[?#]/)` and then split on every `/`. An interpolation may
+  // legitimately contain either character, and the shortcut tore the expression
+  // in half and left a fragment that matches nothing — a link that exists and is
+  // not seen, which is exactly the class of defect this whole rule is for.
+  it("does not let a `?` INSIDE an interpolation end the path", () => {
+    expect(routeShape("/a/${a ? b : c}")).toBe("/a/[param]");
+    expect(routeShape("/a/${a ? b : c}?page=2")).toBe("/a/[param]");
+  });
+
+  it("does not let a `/` INSIDE an interpolation start a new segment", () => {
+    expect(routeShape('/a/${cond ? "b/c" : "d"}')).toBe("/a/[param]");
+  });
+
+  it("answers for a non-string rather than throwing", () => {
+    // It is fed whatever a regex captured; a check that crashes on one file
+    // measures nothing about the rest.
+    expect(routeShape(undefined as unknown as string)).toBe("");
+  });
+});
+
+describe("partitionAcceptedControls", () => {
+  const entries = {
+    "components/theme-toggle.tsx": {
+      found: '<button role="radio">',
+      reason: "a segmented control, and the kit has no ToggleGroup",
+    },
+  };
+
+  it("accepts a listed place with the listed element", () => {
+    const { open, accepted } = partitionAcceptedControls(
+      [{ file: "components/theme-toggle.tsx", line: 45, found: '<button role="radio">', kind: "soft" }],
+      entries,
+    );
+    expect(open).toEqual([]);
+    expect(accepted).toHaveLength(1);
+  });
+
+  // 🚨 Keyed on the ELEMENT as well as the file. A second, different hand-built
+  // control in an accepted file is a new finding — otherwise one judgement
+  // exempts a whole file for ever, which is how a real one hides.
+  it("reports a different element in a listed file", () => {
+    const { open, accepted } = partitionAcceptedControls(
+      [{ file: "components/theme-toggle.tsx", line: 90, found: '<input type="checkbox">', kind: "soft" }],
+      entries,
+    );
+    expect(open).toHaveLength(1);
+    expect(accepted).toEqual([]);
+  });
+
+  it("reports an unlisted file", () => {
+    const { open } = partitionAcceptedControls(
+      [{ file: "app/somewhere/new.tsx", line: 1, found: '<input type="checkbox">', kind: "soft" }],
+      entries,
+    );
+    expect(open).toHaveLength(1);
+  });
+
+  // The direction that must never invert: `hard` is not acceptable at all.
+  it("🚨 never accepts a hard finding, even in a listed file", () => {
+    const { open, accepted } = partitionAcceptedControls(
+      [{ file: "components/theme-toggle.tsx", line: 45, found: '<button role="radio">', kind: "hard" }],
+      entries,
+    );
+    expect(open).toHaveLength(1);
+    expect(accepted).toEqual([]);
+  });
+
+  it("takes an empty list and a missing list without complaint", () => {
+    expect(partitionAcceptedControls([], {})).toEqual({ open: [], accepted: [] });
+    expect(partitionAcceptedControls(undefined as never, {})).toEqual({ open: [], accepted: [] });
+  });
+
+  // ⚠️ NOT a count. `scripts/security/accepted.mjs` and MODE_SINGLE_TOKENS both
+  // argue this in their own heads: a test that asserted "there are four" goes
+  // green on the day a fifth, wrong one is added, and an entry that stops
+  // matching is good news. What is asserted is the SHAPE — an entry without
+  // prose reads as an arbitrary exemption to whoever finds it next.
+  it("ships entries that each carry an element and a reason, never `true`", () => {
+    for (const [file, entry] of Object.entries(RAW_ELEMENT_EXCEPTIONS)) {
+      expect(typeof entry.found, file).toBe("string");
+      expect(entry.found.length, file).toBeGreaterThan(0);
+      expect(entry.reason.length, `${file} has no reason`).toBeGreaterThan(80);
+    }
+  });
+});
+
+describe("routeShape and the App Router's non-URL segments", () => {
+  // 🚨 These made the change WORSE before they made it better. A grouped route
+  // used to be skipped for containing a `[`, so nobody noticed; compared
+  // without this filter, every page under a route group becomes a confident
+  // false finding — and route groups are the ordinary way to divide a dashboard.
+  it("drops a route group, which is not in the URL", () => {
+    expect(routeShape("/dashboard/(marketing)/reports/[id]")).toBe(
+      routeShape("/dashboard/reports/${id}"),
+    );
+    expect(routeShape("/dashboard/(marketing)/reports/[id]")).toBe("/dashboard/reports/[param]");
+  });
+
+  it("drops a parallel route slot", () => {
+    expect(routeShape("/dashboard/@modal/photo/[id]")).toBe("/dashboard/photo/[param]");
+  });
+
+  it("keeps an ordinary segment that merely contains a bracket or an at-sign", () => {
+    // The filter is anchored: a whole segment, never a substring.
+    expect(routeShape("/dashboard/e@mail")).toBe("/dashboard/e@mail");
+    expect(routeShape("/dashboard/a(b)c")).toBe("/dashboard/a(b)c");
+  });
+});
+
+describe("findRawElements reads a whole tag, not up to the first `>`", () => {
+  // 🚨 Measured 2026-08-13 on `components/theme-toggle.tsx`: adding a `ref`
+  // with an arrow function made `ux-check` FAIL — the `>` of `=>` ended the tag
+  // for the old `[^>]*>` pattern, `role` fell outside it, and a segmented
+  // control was reported as a raw <button> the kit already covers. A wrong
+  // verdict, not a missed one, over an attribute that changed nothing.
+  it("sees a role that sits behind an arrow function", () => {
+    const hits = findRawElements(
+      `<button ref={(node) => { keep(node); }} type="button" role="radio">`,
+    );
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({ found: '<button role="radio">', kind: "soft" });
+  });
+
+  it("sees an input type behind one too", () => {
+    const hits = findRawElements(`<input onChange={(e) => set(e)} type="checkbox" />`);
+    expect(hits[0]).toMatchObject({ found: '<input type="checkbox">', kind: "soft" });
+  });
+
+  // The counter-test: a `>` inside a STRING must not end the tag either, and a
+  // tag that genuinely ends still ends.
+  it("is not fooled by a > inside an attribute string, and still stops at the real one", () => {
+    const hits = findRawElements(`<button title="a > b" role="radio">x</button>`);
+    expect(hits[0]).toMatchObject({ found: '<button role="radio">' });
+  });
+
+  it("still reports a plain raw element as hard", () => {
+    expect(findRawElements(`<button onClick={() => go()}>Go</button>`)[0]).toMatchObject({
+      found: "<button>",
+      kind: "hard",
+    });
   });
 });

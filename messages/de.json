@@ -501,7 +501,12 @@
     "blocked_notSynced": "Noch nicht bei Digistore24 angelegt",
     "blocked_notConnected": "Digistore24 ist noch nicht verbunden",
     "blocked_error": "Der Checkout ist gerade nicht erreichbar. Bitte versuche es in Kürze noch einmal.",
-    "autoReloadLabel": "Guthaben automatisch nachfüllen — wird es knapp, wird dieses Paket zum selben Preis erneut gekauft und über die Zahlungsdaten dieses Kaufs abgerechnet. Jederzeit unter Abrechnung abschaltbar."
+    "autoReloadLabel": "Guthaben automatisch nachfüllen",
+    "previewTitle": "Vorschau — hier kann nichts gekauft werden",
+    "previewBody": "Diese Seite zeigt die Kaufformulare so, wie ein Besucher sie sähe, wenn die Produkte bei Digistore24 angelegt wären. Es wurde nichts bei Digistore24 abgefragt, und keiner dieser Knöpfe führt zu einer Kasse: „Kaufen“ landet auf derselben Fehlermeldung wie sonst auch. Diese Vorschau gibt es nur auf deinem eigenen Rechner (APP_ENV=development und localhost) — eine veröffentlichte App hat sie nicht. Zum echten Checkout: node run.mjs ds24-connect und node run.mjs ds24-sync.",
+    "previewOffer": "Noch keine Produkte bei Digistore24 — die Kaufformulare kannst du dir trotzdem ansehen:",
+    "previewOfferLink": "Vorschau öffnen",
+    "autoReloadHint": "Wird es knapp, wird dieses Paket zum selben Preis erneut gekauft und über die Zahlungsdaten dieses Kaufs abgerechnet. Jederzeit unter Abrechnung abschaltbar."
   },
   "optin": {
     "title": "Danke für deinen Kauf!",

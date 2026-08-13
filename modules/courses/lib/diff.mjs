@@ -37,9 +37,25 @@
 //   * **a lesson MOVED between blocks** reads as `untouched` for the same
 //     reason — `blockId` is not hashed. The report groups lessons under their
 //     block, so a reader sees it moved even though nothing calls it a change.
-//   * **one video swapped for another in the same slot**. The occupancy boolean
-//     is what is hashed; `./fingerprint.mjs` carries the escape hatch and why it
-//     is not taken.
+//
+// A third used to stand here — *one video swapped for another in the same slot*
+// — and it is gone: the four slots are hashed as their STORAGE KEY, which both
+// sides derive (`./fingerprint.mjs`). What replaced it is the version question
+// below.
+//
+// ── 🚨 A different fingerprint version is not a difference ─────────────────
+// The target's digest was computed by the deploy running over there, and a
+// deploy older than this checkout computes a different `FINGERPRINT_VERSION`.
+// Every lesson then mismatches, correctly and meaninglessly. `compareCourse()`
+// reports that as `fingerprintMismatch` — its own field, NOT an entry in
+// `notCompared`, because `notCompared` means *that app does not send this
+// field* and this is *it sends a value from another version*. Two different
+// sentences; folding them would make the report say the wrong one.
+//
+// The lessons stay in `changed` while it holds, deliberately. It is the safe
+// direction — a publish at that moment re-asserts rows that were identical
+// anyway — and the command prints the reason above the lists rather than
+// leaving a reader to wonder why a course they have not touched is on fire.
 //
 // ── Nothing here writes, and nothing here proposes ─────────────────────────
 // The epic's word is *report*. There is no `--fix`, no rename, no offer: a slug
@@ -79,7 +95,7 @@
 // Fortgeschrittene"* and is exactly the case where updating the wrong one
 // destroys a course. Everything past the dumb rule is the agent's judgement in
 // the conversation, where a human is present.
-import { localUnitRow, unitFingerprint } from "./fingerprint.mjs";
+import { FINGERPRINT_VERSION, localUnitRow, unitFingerprint } from "./fingerprint.mjs";
 
 /**
  * @typedef {object} DiffEntry
@@ -175,10 +191,13 @@ const carried = (rows, field) => rows.length === 0 || rows.some((row) => Object.
  *        `readBlocks()`'s output — already refused for duplicate slugs and positions
  * @param {{ blocks?: object[] } | null | undefined} outlineData
  *        `courses_outline`'s `data`
- * @returns {{ blocks: DiffLists, units: DiffLists, notCompared: string[] }}
+ * @returns {{ blocks: DiffLists, units: DiffLists, notCompared: string[],
+ *             fingerprintMismatch: {here: string, there: string | null} | null }}
  *   `notCompared` names every field that deploy's payload does not send at all —
  *   an empty list is the ordinary answer and a non-empty one is a sentence the
- *   command prints, never a silence.
+ *   command prints, never a silence. `fingerprintMismatch` is non-null only when
+ *   a fingerprint was actually compared AND the two sides compute different
+ *   versions of it; `there: null` is a deploy that predates the tag.
  */
 export function compareCourse(localBlocks, outlineData) {
   const targetBlocks = outlineData?.blocks ?? [];
@@ -278,7 +297,20 @@ export function compareCourse(localBlocks, outlineData) {
   for (const lists of [blocks, units]) {
     for (const name of Object.keys(lists)) lists[name] = shed(lists[name]);
   }
-  return { blocks, units, notCompared };
+
+  // ⚠️ Gated on a comparison having HAPPENED, not on the field being absent.
+  // `changed` + `untouched` is exactly the set of lessons whose fingerprint was
+  // put next to another one; a target holding a course this repo shares no slug
+  // with compares no digests at all, and announcing a version disagreement there
+  // would be a warning about nothing. Zero comparisons, zero sentences.
+  const compared = units.changed.length + units.untouched.length;
+  const theirVersion = outlineData?.fingerprintVersion ?? null;
+  const fingerprintMismatch =
+    compared > 0 && theirVersion !== FINGERPRINT_VERSION
+      ? { here: FINGERPRINT_VERSION, there: theirVersion }
+      : null;
+
+  return { blocks, units, notCompared, fingerprintMismatch };
 }
 
 /**

@@ -50,7 +50,7 @@ if (!config) {
   else warn("switched OFF — every course route answers 404 (this is the normal state until the content is written)");
 
   if (config.shape === undefined) {
-    if (config.enabled === true) bad('"shape" is missing, and there is deliberately no default');
+    if (config.enabled === true) bad('"shape" is missing, and there is deliberately no default — the switch is on before the course was set up');
   } else if (!SHAPES.includes(config.shape)) {
     bad(`"shape" is ${JSON.stringify(config.shape)} — one of ${SHAPES.join(", ")}`);
   } else {
@@ -60,7 +60,21 @@ if (!config) {
   const products = readJson("config/digistore-products.json");
   const keys = products && products.products ? Object.keys(products.products) : [];
   if (typeof config.productKey !== "string" || !config.productKey) {
-    if (config.enabled === true) bad('"productKey" is missing — the course has to be sold as something');
+    if (config.enabled === true) {
+      // ⚠️ Named as a SEQUENCE, not just as an absence. The commonest way to
+      // reach this line is not a broken app but an early switch: `module add
+      // courses` ships `enabled: false` and `productKey: null` on purpose, and
+      // an operator who flips the switch first sees a ✗ that reads like a
+      // defect in the module (reported 2026-08-12). `config/course.json` says
+      // this in its own `_comment`; the check used to make the reader go and
+      // find it.
+      bad(
+        '"productKey" is missing — the course has to be sold as something. ' +
+          "If you have only just run `module add courses`: this is that window, " +
+          "not a fault. Switch `enabled` back off until the course is written and sold, " +
+          "or set the key now.",
+      );
+    }
     else warn("no productKey yet");
   } else if (keys.length > 0 && !keys.includes(config.productKey)) {
     // `hasPlan()` THROWS on an unknown key, so this is a 500 on the course

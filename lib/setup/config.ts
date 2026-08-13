@@ -22,6 +22,24 @@
 
 import raw from "@/config/setup.json";
 
+// 🚨 The READING of that file is `./config-shape.mjs`, and this file only ever
+// applies it to the app's own JSON. It was two readings until 2026-08-13:
+// `scripts/setup/check.mjs` could not import this one — a `.mjs` cannot import a
+// `.ts` — so it carried a copy, and the copy had already drifted. Its own head
+// carries the measurement.
+export {
+  DEFAULT_SETUP_CONFIG,
+  setupConfigFrom,
+  setupOffReasonFrom,
+  setupProblemsFrom,
+} from "./config-shape.mjs";
+
+import {
+  setupConfigFrom as configFrom,
+  setupOffReasonFrom as offReasonFrom,
+  setupProblemsFrom as problemsFrom,
+} from "./config-shape.mjs";
+
 export interface SetupConfig {
   enabled: boolean;
   /**
@@ -32,49 +50,9 @@ export interface SetupConfig {
   allowDestructive: string[];
 }
 
-export const DEFAULT_SETUP_CONFIG: SetupConfig = {
-  enabled: false,
-  allowDestructive: [],
-};
-
-/**
- * Keys the file may carry. Anything else switches the surface off.
- *
- * Keys beginning with an underscore are comments and are ignored — the
- * convention `config/modules.json` and the module manifests already use
- * (`scripts/modules/manifest.mjs` filters them the same way), so a file can
- * explain itself without that explanation being a syntax error.
- */
-const KNOWN_KEYS = new Set(["enabled", "allowDestructive"]);
-
-function fileProblems(file: Record<string, unknown>): string[] {
-  const problems: string[] = [];
-
-  for (const key of Object.keys(file)) {
-    if (key.startsWith("_") || KNOWN_KEYS.has(key)) continue;
-    problems.push(
-      `unknown key "${key}" — the surface is off until it is removed, because a ` +
-        `misspelt key is more likely a rule somebody meant to write than one they meant to drop`,
-    );
-  }
-
-  if (file.enabled !== undefined && typeof file.enabled !== "boolean") {
-    problems.push('"enabled" must be true or false');
-  }
-
-  const allow = file.allowDestructive;
-  if (allow !== undefined) {
-    if (!Array.isArray(allow) || allow.some((v) => typeof v !== "string" || v.trim() === "")) {
-      problems.push('"allowDestructive" must be a list of tool names');
-    }
-  }
-
-  return problems;
-}
-
-/** Everything wrong with the shipped file — empty when it is coherent. */
+/** Everything wrong with THIS app's file — empty when it is coherent. */
 export function setupConfigProblems(): string[] {
-  return fileProblems(raw as Record<string, unknown>);
+  return problemsFrom(raw);
 }
 
 /**
@@ -85,15 +63,7 @@ export function setupConfigProblems(): string[] {
  * editing, and half-applying their intent is worse than not applying it.
  */
 export function setupConfig(): SetupConfig {
-  const file = raw as Record<string, unknown>;
-  if (fileProblems(file).length > 0) return DEFAULT_SETUP_CONFIG;
-
-  return {
-    enabled: file.enabled === true,
-    allowDestructive: Array.isArray(file.allowDestructive)
-      ? (file.allowDestructive as string[]).map((v) => v.trim())
-      : [],
-  };
+  return configFrom(raw);
 }
 
 /** The one question every request in front of this surface asks first. */
@@ -102,16 +72,25 @@ export function isSetupEnabled(): boolean {
 }
 
 /**
- * Why it is off, for `node run.mjs setup-check` — and for nobody else.
+ * Why THIS app's surface is off — for the command line, and for nobody else.
  *
  * ⚠️ This must never reach a caller. While the surface is off it answers 404,
  * deliberately indistinguishable from a route that was never built; a body
  * explaining WHY would hand an outsider the difference for free. The operator
  * asks from the command line, where they are already authenticated by having a
  * shell.
+ *
+ * ⚠️ **It had no caller at all until 2026-08-13, and that was a finding
+ * rather than a design.** `node run.mjs setup-check` — the command this exists
+ * for — re-implemented the rule with its own `JSON.parse` and its own copy of
+ * the known-key set, and that copy had already drifted: it printed
+ * `allowDestructive` without ever checking its shape, so
+ * `{"enabled": true, "allowDestructive": "media_upload"}` made the command say
+ * `✓ enabled` about a file this reader throws away whole. Both now read
+ * `./config-shape.mjs`, and `scripts/setup/check.mjs` calls this question by its
+ * pure name.
  */
 export function setupOffReason(): string | null {
-  const problems = setupConfigProblems();
-  if (problems.length > 0) return problems[0];
-  return isSetupEnabled() ? null : '"enabled" is false in config/setup.json';
+  const reason = offReasonFrom(raw);
+  return reason === null ? null : `config/setup.json: ${reason}`;
 }

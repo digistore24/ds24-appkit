@@ -1,6 +1,9 @@
 // Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA
 // SPDX-License-Identifier: MIT
 
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { SETUP_KEY_BODY_CHARS, newSetupKey } from "./key.mjs";
 import { describe, expect, it } from "vitest";
 import { appEnv } from "@/lib/env-guard";
 import {
@@ -9,7 +12,7 @@ import {
   SETUP_ERROR_CODES,
   SETUP_KEY_PREFIX,
   bearerFrom,
-  canonicalInputHash,
+  canonicalCallHash,
   canonicalJson,
   confirmationExpired,
   hashSecret,
@@ -20,6 +23,7 @@ import {
   moduleToolNameProblem,
   needsConfirmation,
   parseEnvClaim,
+  payloadDigest,
   serverEnv,
   setupError,
   setupErrorStatus,
@@ -131,14 +135,14 @@ describe("the key", () => {
   });
 });
 
-describe("the canonical input hash", () => {
+describe("the canonical call hash", () => {
   it("does not depend on key order", () => {
-    expect(canonicalInputHash({ a: 1, b: 2 })).toBe(canonicalInputHash({ b: 2, a: 1 }));
+    expect(canonicalCallHash({ a: 1, b: 2 })).toBe(canonicalCallHash({ b: 2, a: 1 }));
   });
 
   it("separates values that differ", () => {
-    expect(canonicalInputHash({ email: "a@example.com" })).not.toBe(
-      canonicalInputHash({ email: "b@example.com" }),
+    expect(canonicalCallHash({ email: "a@example.com" })).not.toBe(
+      canonicalCallHash({ email: "b@example.com" }),
     );
   });
 
@@ -163,7 +167,61 @@ describe("the canonical input hash", () => {
     expect(applied.ok).toBe(true);
     if (!applied.ok) return;
     expect(applied.value).toEqual({ email: "a@example.com", role: "member" });
-    expect(canonicalInputHash(raw)).not.toBe(canonicalInputHash(applied.value));
+    expect(canonicalCallHash(raw)).not.toBe(canonicalCallHash(applied.value));
+  });
+
+  // ── the payload half (A79) ────────────────────────────────────────────────
+  //
+  // 🚨 The claim: at the one door whose act IS the payload, the token has to be
+  // bound to the bytes and not only to the label naming them. Measured against
+  // a real STAGING app before this existed — a plan for a 70-byte picture,
+  // applied with its own token and 584 different bytes, stored the 584.
+  const input = { path: "content/hero.png", visibility: "public" };
+  const digest = (text: string) => payloadDigest(new TextEncoder().encode(text));
+
+  it("separates two calls that differ only in their bytes", () => {
+    expect(canonicalCallHash(input, digest("one"))).not.toBe(
+      canonicalCallHash(input, digest("two")),
+    );
+  });
+
+  it("is the same for the same bytes, so an honest apply matches its plan", () => {
+    expect(canonicalCallHash(input, digest("one"))).toBe(canonicalCallHash(input, digest("one")));
+  });
+
+  // ⚠️ The scoping decision, measured rather than asserted in prose: a call with
+  // no payload hashes EXACTLY what it hashed before the payload half existed.
+  // Mixing a constant in for the doorless case would change the canonical hash
+  // of every tool, and every confirmation outstanding at the moment of a deploy
+  // would stop matching its own apply.
+  it("leaves a call with no payload untouched", () => {
+    const bare = canonicalCallHash(input);
+    expect(canonicalCallHash(input, null)).toBe(bare);
+    expect(canonicalCallHash(input, undefined)).toBe(bare);
+    expect(createHash("sha256").update(canonicalJson(input), "utf8").digest("hex")).toBe(bare);
+  });
+
+  // 🚨 The cross-door answer. A token minted where there are bytes cannot be
+  // presented where there are none — which is the JSON door for `media_upload`,
+  // the call that used to be accepted, SPENT, and only then refused for the
+  // missing file.
+  it("does not match the same input presented without its bytes", () => {
+    expect(canonicalCallHash(input, digest("one"))).not.toBe(canonicalCallHash(input));
+  });
+
+  // The separator can never be produced by the canonical form itself, so no
+  // input can be crafted whose canonical JSON ends in "\n<64 hex>" and thereby
+  // collides with a different (input, payload) pair.
+  it("cannot be spoofed through the separator", () => {
+    expect(canonicalJson({ a: "x\ny" })).toBe('{"a":"x\\ny"}');
+    expect(canonicalJson({ a: "x\ny" })).not.toContain("\n");
+  });
+
+  it("hashes the bytes and not their length", () => {
+    expect(payloadDigest(new Uint8Array([1, 2, 3]))).not.toBe(
+      payloadDigest(new Uint8Array([3, 2, 1])),
+    );
+    expect(payloadDigest(new Uint8Array([1, 2, 3]))).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it("expires a plan that sat too long", () => {
@@ -344,5 +402,30 @@ describe("the retention floor", () => {
     // answers — a billing dispute, an audit, "who created my account" — arrive
     // late. A year would end just before they do.
     expect(SETUP_AUDIT_RETENTION_MONTHS).toBeGreaterThan(IMPERSONATION_RETENTION_MONTHS);
+  });
+});
+
+describe("the key's length is one number, not four", () => {
+  // 🚨 The refactor of 2026-08-12 moved the prefix, the byte count and the hash
+  // into `lib/setup/key.mjs` so the app and two command-line minters share one
+  // arithmetic. The body LENGTH is the constant that argument is really about:
+  // raise `SETUP_KEY_BYTES` and a literal `43` anywhere makes the guard refuse
+  // every key the app mints — the whole surface answering unauthorized, with
+  // nothing red until somebody tries it.
+  it("the guard accepts exactly what the minter produces", () => {
+    const minted = newSetupKey();
+    expect(looksLikeSetupKey(minted)).toBe(true);
+    expect(minted.slice(SETUP_KEY_PREFIX.length)).toHaveLength(SETUP_KEY_BODY_CHARS);
+  });
+
+  it("🚨 the secret scanner still recognises a key of that length", () => {
+    // `scripts/security/patterns.mjs` writes the number out, because its pattern
+    // covers two key families whose byte counts are each their own module's
+    // business. Coupled here instead: a setup key the scanner would miss is a
+    // leaked credential nobody is told about.
+    const source = readFileSync(new URL("../../scripts/security/patterns.mjs", import.meta.url), "utf8");
+    const declared = /const APP_KEY_BODY = (\d+);/.exec(source)?.[1];
+    expect(declared, "APP_KEY_BODY not found — did patterns.mjs rename it?").toBeDefined();
+    expect(Number(declared)).toBe(SETUP_KEY_BODY_CHARS);
   });
 });

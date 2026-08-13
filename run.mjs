@@ -144,7 +144,9 @@ const TASKS = {
   },
   "ai-check": {
     group: "Tests & quality",
-    help: "Which task runs on which model, are the keys there, what does a call cost",
+    help:
+      "Which task runs on which model, are the keys there, what does a call cost; " +
+      "--live makes one REAL call per binding (costs money, needs the app running)",
     needs: ["env", "node_modules"],
     run: (args) => script("scripts/ai/check.mjs", args),
   },
@@ -433,6 +435,16 @@ const TASKS = {
     needs: ["env", "node_modules"],
     run: (args) => script("scripts/setup/bootstrap.mjs", args),
   },
+  "setup-key": {
+    group: "Users & roles",
+    help: "A further setup key for an owner who already exists, straight into .env (--apply)",
+    // The other half of `setup-bootstrap`, which refuses once an owner exists —
+    // correctly, and then names the admin page as the only way on. An agent
+    // with no browser stops there, and so does `content-check`. Same `needs`
+    // and the same reason: it talks to the database and does not need the app.
+    needs: ["env", "node_modules"],
+    run: (args) => script("scripts/setup/mint-key.mjs", args),
+  },
   "user-list": {
     group: "Users & roles",
     help: "List users and roles (--role owner)",
@@ -681,8 +693,17 @@ function showHelp(args = []) {
 function takePort(args) {
   const index = args.indexOf("--port");
   if (index !== -1 && args[index + 1]) {
-    const port = Number(args.splice(index, 2)[1]);
-    if (Number.isFinite(port)) return port;
+    const given = args.splice(index, 2)[1];
+    const port = Number(given);
+    // ⚠️ Both elements are already spliced out by the time this is asked, so a
+    // value that is not a number used to leave nothing behind and say nothing:
+    // `--port abc` took the flag AND its value away and the command ran on the
+    // default. Refused instead — somebody who typed a port meant one.
+    if (!Number.isFinite(port) || port <= 0 || port > 65535) {
+      console.error(`✗ --port needs a number between 1 and 65535 (got ${given}).\n`);
+      process.exit(2);
+    }
+    return port;
   }
   const fromEnv = Number(process.env.PORT);
   return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : undefined;
@@ -703,9 +724,67 @@ async function runTask(name, args, options) {
 const argv = process.argv.slice(2);
 const command = argv.shift() ?? "help";
 
+// `node run.mjs --help` and `-h` are what a first-time reader types, and they
+// answered "✗ Unknown command: --help" until 2026-08-12 — the lookup below ran
+// first and a flag is not a command.
+if (command === "--help" || command === "-h") {
+  showHelp();
+  process.exit(0);
+}
+
 if (!Object.hasOwn(TASKS, command) || TASKS[command].hidden) {
   console.error(`✗ Unknown command: ${command}\n`);
   showHelp();
+  process.exit(2);
+}
+
+// 🚨 `--help` answers instead of running. Reported 2026-08-12:
+// `node run.mjs content-apply --help` RAN THE APPLIER — nothing here looked at
+// flags, `--help` was passed through, and the one script it reached does not
+// know the flag either. Asking a writing command what it does must never be the
+// way to make it do it.
+//
+// ⚠️ This is the ONE flag `run.mjs` claims. Rejecting unknown flags in general
+// would need a per-command list this file does not have: 28 documented flags
+// across 40 commands, `module` takes positional subcommands, and `ds24-sync`
+// feeds one array to two scripts that know different flags. That is a bigger
+// change, and it is written down rather than half-done here.
+//
+// ⚠️ `brand` is exempt: it is the one command in this tree with a help text of
+// its own — subcommands, the contrast behaviour, a paragraph about what a `--url`
+// tells a foreign host — and swallowing that behind a three-line stub would make
+// this fix a regression for the one command it could not improve.
+if ((argv.includes("--help") || argv.includes("-h")) && command !== "brand") {
+  const task = TASKS[command];
+  console.log(`\n  node run.mjs ${command}\n`);
+  console.log(`  ${task.help ?? "(no description)"}\n`);
+  console.log(`  Full list: node run.mjs help   (machine-readable: --json)\n`);
+  process.exit(0);
+}
+
+// 🚨 A near-miss of `--dry-run` on a command that WRITES by default.
+// `content-apply` and `ds24-sync` append `--apply` unless the argument is
+// exactly `--dry-run`, which is the documented convention and stays — but it
+// makes `--dryrun`, `--dry_run` and `--dry` silent writes, and somebody typing
+// any of those has said plainly what they wanted. So they are refused rather
+// than swallowed. Narrow on purpose: it is a guard on one measured failure, not
+// the flag validator this file cannot yet have.
+const WRITES_UNLESS_DRY_RUN = new Set(["content-apply", "ds24-sync"]);
+const nearMiss = argv.find((arg) => /^--dry/.test(arg) && arg !== "--dry-run");
+if (nearMiss !== undefined) {
+  console.error(`✗ Unknown flag: ${nearMiss}\n`);
+  console.error(`  Did you mean --dry-run? Spelled any other way it is ignored.`);
+  // 🚨 The consequence, and it is the OPPOSITE for the two conventions this
+  // tree has. Saying "writes unless it reads --dry-run" about `setup-key` or
+  // `user-create` — which write nothing without `--apply` — would be telling
+  // somebody the alarming thing about the safe case, on the one question where
+  // being wrong costs them.
+  console.error(
+    WRITES_UNLESS_DRY_RUN.has(command)
+      ? `  ⚠️  ${command} WRITES unless it reads exactly --dry-run.`
+      : `  ${command} writes nothing without --apply, so nothing happened.`,
+  );
+  console.error("");
   process.exit(2);
 }
 

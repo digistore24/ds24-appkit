@@ -14,7 +14,8 @@ node run.mjs ux-check
 ```
 
 That command settles contrast, the design system, missing names and pages that
-are in no menu. It cannot settle whether the first five minutes make sense —
+nothing leads to — in no menu AND linked from no page, `[param]` pages
+included. It cannot settle whether the first five minutes make sense —
 that is the skill's job, and yours.
 
 ---
@@ -251,8 +252,9 @@ active menu item. A brand colour light enough to look right as a button can be
 unreadable as a word on white — and the mode you were not looking at is the one
 that breaks. `node run.mjs ux-check` measures both roles in both modes and tells
 you the ratio. It measures the other three from the other side: a `font-[…]`,
-a `shadow-[…]`, a bare `shadow-lg` or a hex in an arbitrary value is a value
-written past a dial, and each hit says which dial it went past.
+a `shadow-[…]`, a bare `shadow-lg`, a hex in an arbitrary value or a shadow
+naming any custom property but the two elevation roles is a value written past a
+dial, and each hit says which dial it went past.
 
 ---
 
@@ -267,11 +269,30 @@ node run.mjs ux-check
 | contrast of every token pair, light and dark | whether the wording is clear |
 | the focus ring at 3:1 | whether the first five minutes make sense |
 | every token defined in **both** blocks, not one | whether a flow has a dead end |
-| a value written past a dial — `font-[…]`, `shadow-[…]`, a bare `shadow-lg`, a hex in an arbitrary value, `font-heading` | whether the empty state says the right thing |
+| a value written past a dial — `font-[…]`, `shadow-[…]`, a bare `shadow-lg`, a hex in an arbitrary value, `font-heading`, a shadow naming any variable but the two elevation roles | whether the empty state says the right thing |
 | hard-coded colours and hand-built elements | whether the look somebody chose is the right one |
 | icon buttons with no name, images with no `alt` | anything that needs the app running |
-| pages under `/dashboard` that are in no menu | |
+| pages under `/dashboard` that nothing leads to — no menu entry AND no link, `[param]` pages included | |
+| a file whose raw TEXT compiles to a broken CSS rule — a `var()` whose first argument is not a custom-property name, a `url()` the bundler cannot resolve | whether a THIRD reader exists; two have been measured |
 
 A green run means the countable things are counted. **It is not a verdict on the
 app.** The verdict is `ux-gateway`, which reads the pages, runs the app and
 writes a dated report into `docs/reports/`.
+
+### Why the raw-text row is here at all
+
+That last row is the only one whose failure you meet as **every page answering
+500** — Tailwind reads every file in the app as raw text, comments included, and
+turns a class written to EXPLAIN a mistake into a real rule
+([`conventions.md`](conventions.md) → *Never write a bracketed arbitrary Tailwind
+class in prose*). It has been guarded since it happened, by
+`scripts/tailwind-raw-text.test.ts` under `npm run test`. The reason it is in
+this command too: after a 500 nobody runs the test suite, they run `ux-check`,
+and a finding that arrives only from the place nobody goes to in that moment
+arrives late.
+
+**It is not a second check.** The scanner, the tree walk and the needle are
+`scripts/ux/tailwind-raw-text.mjs`; the test file and this command call the same
+functions, so the two can never disagree. And the green line says *against the
+two readers that have been measured* rather than "nothing can break" — that
+honesty is load-bearing, because a third reader has not been ruled out.

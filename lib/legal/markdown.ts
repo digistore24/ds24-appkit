@@ -47,8 +47,28 @@ export type Block =
  */
 const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|\/)/i;
 
-/** `[text](href)`, `**strong**`, `*em*` — in that order of precedence. */
-const INLINE = /\[([^\]]+)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*|\*([^*]+)\*/g;
+/**
+ * `[text](href)`, `**strong**`, `*em*` — in that order of precedence.
+ *
+ * 🚨 **An emphasis run begins and ends on a NON-SPACE, and that is not
+ * pedantry.** Without it `* … *` matches across ordinary prose and takes the
+ * asterisks with it: measured 2026-08-13, `Preis: 5 * 3 * 2 Euro` rendered as
+ * `Preis: 5 3 2 Euro` with a silently italic " 3 ". There is no escape in this
+ * subset and no code span to hide in, so the characters simply disappear.
+ *
+ * It mattered little while this parser served only the legal pages, where a
+ * stray asterisk is rare. Since 2026-08-12 it also renders LESSON BODIES — the
+ * freest prose surface in the app, and the one where arithmetic and footnote
+ * asterisks actually occur.
+ *
+ * ⚠️ The rule is CommonMark's left/right-flanking, in its short form, and it is
+ * the one `lib/ai/markdown.ts` already spells out as `EMPHASIS_EDGE`. Not
+ * imported from there: that file guards its own `[media:…]` markers inside the
+ * same expression and this one has none, so a shared constant would carry a
+ * rule about a syntax the legal subset does not have.
+ */
+const INLINE =
+  /\[([^\]]+)\]\(([^)\s]+)\)|\*\*(?=\S)([^*]+?)(?<=\S)\*\*|\*(?=\S)([^*]+?)(?<=\S)\*/g;
 
 export function parseInline(line: string): Inline[] {
   const parts: Inline[] = [];
@@ -107,7 +127,12 @@ export function parse(text: string): Block[] {
     }
   };
 
-  for (const raw of text.split(/\r?\n/)) {
+  // ⚠️ All three endings, not two. `\r?\n` covers a browser's CRLF and a Unix
+  // `\n`, and misses a lone `\r` — which is what a paste out of an old Mac
+  // tool, or a file converted by one, still carries. The whole text then
+  // collapses into one line, which is exactly the bug this parser was brought
+  // in to fix one ending earlier.
+  for (const raw of text.split(/\r\n|\r|\n/)) {
     const line = raw.trim();
 
     if (line === "") {

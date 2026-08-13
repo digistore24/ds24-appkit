@@ -9,6 +9,8 @@ import { readFileSync } from "node:fs";
 
 import { describe, it, expect } from "vitest";
 
+import { blankComments } from "@/scripts/lib/source-text.mjs";
+
 import { recordSubmission } from "./results";
 
 describe("recordSubmission", () => {
@@ -31,7 +33,9 @@ describe("recordSubmission input bounds", () => {
   it("refuses an unbounded or padded subject before any work runs", async () => {
     // The bounds themselves are pure now (subjectProblem, tested in
     // rules.test.ts); what this pins is that the shell actually calls them.
-    const source = readFileSync(new URL("./results.ts", import.meta.url), "utf8");
+    // Comments blanked — a needle QUOTED in prose would answer for a call the
+    // file no longer makes (CLAUDE.md: a checker reading source as TEXT does).
+    const source = blankComments(readFileSync(new URL("./results.ts", import.meta.url), "utf8"));
     expect(source).toContain("subjectProblem(input.subject)");
   });
 });
@@ -43,7 +47,9 @@ describe("the shape of modules/activity/", () => {
     // `import { db }` in either quietly ends that — this is the tripwire
     // (the leak-guard convention).
     for (const pure of ["rules.ts", "activities.ts"]) {
-      const source = readFileSync(new URL(`./${pure}`, import.meta.url), "utf8");
+      // …and in the other direction: the comment that EXPLAINS this rule may
+      // name `@/db` without breaking it.
+      const source = blankComments(readFileSync(new URL(`./${pure}`, import.meta.url), "utf8"));
       expect(source, pure).not.toMatch(/@\/db|drizzle-orm|\.\.\/db/);
     }
   });
@@ -51,7 +57,7 @@ describe("the shape of modules/activity/", () => {
   it("grade() runs before anything is written", () => {
     // AC 7's ordering, pinned as a tripwire: the source must await the
     // activity's grade() before the insert that persists a verdict.
-    const source = readFileSync(new URL("./results.ts", import.meta.url), "utf8");
+    const source = blankComments(readFileSync(new URL("./results.ts", import.meta.url), "utf8"));
     const gradeAt = source.indexOf("await activity.grade(");
     const writeAt = source.indexOf(".insert(activityResults)");
     expect(gradeAt).toBeGreaterThan(0);
@@ -62,9 +68,8 @@ describe("the shape of modules/activity/", () => {
 describe("the action around the primitive", () => {
   // modules/activity/actions.ts is an HTTP endpoint of its own; these pin the
   // three properties a refactor is most likely to lose.
-  const source = readFileSync(
-    new URL("../../modules/activity/actions.ts", import.meta.url),
-    "utf8",
+  const source = blankComments(
+    readFileSync(new URL("../../modules/activity/actions.ts", import.meta.url), "utf8"),
   );
 
   it("authenticates before it looks anything up — in BOTH actions", () => {

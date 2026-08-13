@@ -80,6 +80,9 @@ export const COURSES_ERROR_CODES = [
   // surface that could produce any of them.
   "coursesSlugTaken",
   "coursesSlugMalformed",
+  // The operator's own text, which had no ceiling until 2026-08-13 while the
+  // member's hand-in on the same lesson always had one.
+  "coursesUnitTextTooLong",
   "coursesPositionTaken",
   "coursesBlockNotEmpty",
   // The two the media slots add. `coursesUploadTooLarge` carries the number AND
@@ -120,6 +123,21 @@ export class CoursesError extends Error {
   }
 }
 
+/**
+ * What an operator may write into ONE lesson. A ceiling, not a target.
+ *
+ * ⚠️ There was none until 2026-08-13: `courses_units.body` is an unbounded
+ * `text` and the admin form only trimmed. A body is turned into React elements
+ * on EVERY request — a pasted book is thousands of nodes in every RSC payload,
+ * for every learner, for ever. The hand-in on the other side of the same lesson
+ * has had a ceiling since it was built; the operator's own text had none, which
+ * is the wrong way round for the one that is served more often.
+ *
+ * Generous on purpose: a long lesson is a legitimate lesson, and this refuses a
+ * paste, not a chapter.
+ */
+
+
 /** What a member may hand in at once. A ceiling, not a target. */
 export const MAX_SUBMISSION_CHARS = 20_000;
 
@@ -144,14 +162,27 @@ export const MAX_REPLY_CHARS = 20_000;
  * HERE means the applier says so about a content file, which is a sentence
  * somebody can act on, rather than a page that scrolls nowhere.
  */
-export function slugProblem(slug: string): string | null {
-  if (!slug) return "a slug may not be empty";
-  if (slug.length > 80) return `"${slug}" is longer than 80 characters`;
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
-    return `"${slug}" is not a slug — lower-case ASCII letters, digits and single hyphens`;
-  }
+/**
+ * Why this lesson's own text will not do, or `null`.
+ *
+ * One function for BOTH writers — the admin form and the content applier — for
+ * the reason `slug.mjs` states about the slug: a ceiling one of them enforces is
+ * a ceiling the other walks straight past.
+ */
+export function unitTextProblem(input: {
+  title: string;
+  body?: string | null;
+}): CoursesErrorCode | null {
+  if (input.title.length > MAX_UNIT_TITLE_CHARS) return "coursesUnitTextTooLong";
+  if ((input.body?.length ?? 0) > MAX_UNIT_BODY_CHARS) return "coursesUnitTextTooLong";
   return null;
 }
+
+// ⚠️ Re-exported from `./slug.mjs`, not declared here: the content applier is a
+// `.mjs` and cannot import this file, and the docstring above used to claim it
+// enforced this rule when it did not. See that file's head.
+export { MAX_UNIT_BODY_CHARS, MAX_UNIT_TITLE_CHARS, slugProblem } from "./slug.mjs";
+import { MAX_UNIT_BODY_CHARS, MAX_UNIT_TITLE_CHARS, slugProblem } from "./slug.mjs";
 
 /**
  * What the operator's surface knows about a slug before it writes one.
@@ -540,6 +571,21 @@ export function progress(done: number, total: number): number {
 /** The shape a `nextUnit` decision needs — deliberately not the DB row. */
 export interface UnitRef {
   readonly slug: string;
+  /**
+   * What the learner calls this lesson.
+   *
+   * ⚠️ It travels because the ANSWER is shown, not only followed. The card says
+   * "next up: …" and a slug is an address — `was-dich-erwartet` where the person
+   * wrote "Was dich erwartet". Reported 2026-08-12 as the first line a paying
+   * member reads on this page. The alternative — look the title up again on the
+   * page from `units` — is a second lookup keyed on the thing this function
+   * already returned.
+   *
+   * ⚠️ There is a SECOND, unrelated `UnitRef` in this module —
+   * `admin/ui.tsx`'s, for the operator's unit menu. It is a different type with
+   * the same name and does not travel with this one.
+   */
+  readonly title: string;
   readonly blockPosition: number;
   readonly position: number;
   readonly unlocked: boolean;
