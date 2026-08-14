@@ -123,6 +123,16 @@ are all registry fields:
 }
 ```
 
+ℹ️ **A pass mark looks like the legal trigger and is the mild end of it.**
+*Überwachung des Lernerfolgs* is one of the elements that turn a paid course
+whose learners are at a distance into **Fernunterricht** (§ 1(1) Nr. 2 FernUSG),
+which needs state authorisation before it may be sold at all — but Digistore24's
+own criteria put **automatically evaluated tests and quizzes on the harmless
+side**, and the courts get there through a right to ask *questions*. So this
+recipe is not what decides it; a `grade()` a person or a model performs, and the
+community one page over, are. The whole picture, and who answers it, is
+[`docs/compliance.md`](compliance.md) §6.5 — do not answer it here.
+
 `passed` derives from the pass mark unless `grade()` says otherwise, and it
 is **sticky**: having passed does not un-happen on a failed retake —
 `score`/`attempts` still tell the latest story. "Not judged" is `null`, not
@@ -182,7 +192,10 @@ completions), optionally read by a companion
 document that claims to *prove* competence makes a promise the vendor — not
 the template — has to keep, to employers and in disputes. If a vendor wants
 one anyway, that is a product decision to record in `docs/app.md` with its
-wording checked by `compliance-check`, not a recipe to copy.
+wording checked by `compliance-check`, not a recipe to copy. ⚠️ **And it is a
+second reason to read [`docs/compliance.md`](compliance.md) §6.5** — advertising
+a certificate is, in the practice around § 1 FernUSG, one of the things that
+argues the course is Fernunterricht.
 
 ## What this file refuses to promise
 

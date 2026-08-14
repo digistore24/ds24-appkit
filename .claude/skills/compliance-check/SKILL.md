@@ -42,7 +42,7 @@ Eight checks. You do not have to know which one you want.
 | 5 | **`consent`** | § 25 TDDDG, marketing mail — and whether you need any at all | 10 min |
 | 6 | **`rights`** | access, deletion, portability, objection — end to end | 10 min |
 | 7 | **`evidence`** | the accountability pack (Art. 5(2)): records, TOMs, DPAs | 20–30 min |
-| 8 | **`map`** | BFSG, DSA, Data Act — do they reach you yet? Judged elements sharpen the BFSG half | 5 min |
+| 8 | **`map`** | BFSG, DSA, Data Act, FernUSG — do they reach you yet? Judged elements sharpen the BFSG half and are half the FernUSG question | 5 min |
 
 **How to dispatch:**
 
@@ -116,7 +116,8 @@ Read from disk first, and say what you found rather than asking about it:
 | Is there **ingested third-party material**? | `content/knowledge-sources/` — a rights question the Licence Gate at intake already governs (verbatim storage only for own or licensed content; third-party sources are distilled, source cited): [`docs/knowledge.md`](../../../docs/knowledge.md) |
 | What personal data is held? | `docs/data-protection.md` |
 | Is the HTTP API on? | `node run.mjs module list` (is the `api` module installed?) **and** `config/api.json`. ⚠️ Switched off is not the same as never used — the keys minted while it ran are still held and still in both exports (`docs/data-protection.md` §9) |
-| What is sold, and how? | `config/digistore-products.json` (`billingMode`) |
+| **How** is it sold? | `config/digistore-products.json` (`billingMode`) — one-off, subscription or token balance |
+| 🚨 **WHAT** is sold — is this teaching? | `billingMode` answers the billing FORM and says nothing about the OBJECT, and the object is what one German statute turns on. Read off disk and report together: `node run.mjs module list` (is `courses` installed? `community`? `activity`?), `config/course.json` → `shape` (shape 3 means a person judges what was handed in), `grep -n "passMark" modules/activity/activities.ts`, and `grep -rin "zertifikat\|certificate\|bescheinigung" content/ messages/ app/` for a promised certificate. **Paid teaching + learners mostly not in the room + the learning outcome monitored** is § 1(1) FernUSG, and then the product needs ZFU authorisation *before* it may be sold — [`docs/compliance.md`](../../../docs/compliance.md) §6.5. 🚨 **Weight them the right way round**: `community` and a human or model judgement CARRY the monitoring element, an auto-graded quiz does not. Report the combination; **never decide whether it applies** |
 
 Then ask — and **only** these, in one message, because none of them leaves a
 trace on disk:
@@ -280,11 +281,18 @@ Five minutes, no building. Answer each with *reaches you / does not reach you
 yet / and here is what changes it*, using the `scope` answers.
 `docs/compliance.md` §6 has the detail.
 
-The four regimes to answer for — BFSG with its micro-enterprise exemption and
+The five regimes to answer for — BFSG with its micro-enterprise exemption and
 what crossing it means, the DSA contact points that reach even a
-micro-enterprise, the Data Act's reach into a SaaS, and where NIS2 stops — are
-in [`references/consumer-and-info-duties.md`](references/consumer-and-info-duties.md)
+micro-enterprise, the Data Act's reach into a SaaS, where NIS2 stops, and the
+**FernUSG**, which is the only one of the five that can stop the product being
+sold at all — are in
+[`references/consumer-and-info-duties.md`](references/consumer-and-info-duties.md)
 → *The map beyond*.
+
+⚠️ **The FernUSG one is not answered with "reaches you / does not reach you
+yet".** The other four are thresholds; this one is a fact pattern about what the
+app teaches and how it checks, so the answer is *these facts are present, and
+here is who decides* — `scope`'s WHAT-is-sold row gathered them.
 
 ## The report
 
@@ -323,6 +331,15 @@ Prepare these, do not decide them:
   Three different regimes wearing one word — Art. 9, possibly Annex III, and
   professional liability the AI Act does not govern at all. Mark it, prepare
   what the app actually sends and stores, and hand the question over.
+- 🚨 **A sectoral licence for what is being SOLD** — this list used to know none,
+  and the one this template can walk into by itself is the **FernUSG**. A paid
+  course whose learners are mostly not in the room and whose learning outcome is
+  monitored — which a `community` room where members ask about the material
+  already does — may be Fernunterricht, and that needs ZFU authorisation
+  *before* the product may be sold at all; § 7(1) makes the contract void
+  without it, in B2B too. Whether it applies here is a lawyer's call and an
+  authority's; what this skill does is name the facts it found and hand the
+  question over (`docs/compliance.md` §6.5).
 - **A suspected data breach.** That has a 72-hour clock on it — go to
   `docs/compliance/datenpanne.md` and to a human, in that order.
 - **Any app not established in Germany**, for the national statutes.

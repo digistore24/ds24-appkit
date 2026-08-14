@@ -142,8 +142,13 @@ What the block holds:
   off the registry entry — **never retyped into prose or a message file**. One
   price, one place (`config/digistore-products.json`); a price written twice is
   the one that is wrong after the next change. One-off purchases say so ("pay
-  once, keep it") — against subscription fatigue that is itself a selling
-  point.
+  once, no subscription") — against subscription fatigue that is itself a
+  selling point. 🚨 **What they must not say is how LONG access lasts** — "für
+  immer", "lebenslang", "lifetime", "dauerhaft", "unbegrenzt". A one-off grant
+  has no end date because no event ends it, which is not the same as a term the
+  page may promise, and for a members' area it is a Digistore24 approval
+  criterion rather than a matter of taste:
+  [`docs/courses.md`](courses.md) → *Shape 1*.
 - **An honest risk-reversal.** EU consumer law gives most digital purchases a
   14-day withdrawal right — *naming* it costs nothing and reads as a
   guarantee. A money-back promise beyond that is the vendor's decision to

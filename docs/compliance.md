@@ -407,8 +407,21 @@ duties are theirs (§ 0).
 
 - **Right of withdrawal**, 14 days. For digital content it lapses early only
   with the consumer's express consent *and* their acknowledgement that they
-  thereby lose it (§ 356(5) BGB). Digistore24's checkout collects this when it
-  is the seller.
+  thereby lose it — **§ 356(6) BGB**. Digistore24's checkout collects this when
+  it is the seller.
+  ⚠️ **That was § 356(5) until 19 June 2026** and is one paragraph further down
+  now: the law of 3 February 2026 (BGBl. 2026 I Nr. 28) inserted new paragraphs
+  and moved the old 4 and 5 to 5 and 6. Today **§ 356(5) is services** and
+  § 356(6) is digital content, so a source written before that date cites the
+  right rule under the wrong number, and this file did too.
+  🚨 **The distinction is not cosmetic for a course.** A supervised programme
+  with live calls or a community is a **service**, and § 356(5) lets the right
+  lapse only on **complete performance** — which a nine-month programme does not
+  reach inside fourteen days. Only genuine digital content lapses at the *start*
+  of performance.
+  🚨 **And if § 6.5 applies, none of this is the question any more**: a contract
+  void under § 7 FernUSG has no withdrawal right to lapse, and what the buyer
+  has instead is restitution with no clock on it.
 - **The order button** must be labelled unambiguously — "zahlungspflichtig
   bestellen" or equivalent (§ 312j(3) BGB). A button reading "Weiter" is not a
   contract.
@@ -449,6 +462,14 @@ elements, the keyboard-only playthrough in `ux-gateway` §7 and the skill
 running even inside the § 3(3) exemption, because "your paying customer
 cannot take the test" is a refund and a review long before it is a statute.
 
+🚨 **The same folder raises a second question, and it is the sharper one.** This
+section reads `modules/activity/` for whether the interface *holds*; § 6.5 below
+reads it for whether the product may be **sold** — *Überwachung des Lernerfolgs*
+under § 1(1) Nr. 2 FernUSG. ⚠️ It is not the same reading of the same folder: an
+auto-graded check is the mild end there and a `community` room is the sharp one,
+which is the opposite of the order here. An accessibility defect costs a
+customer; a missing ZFU authorisation costs the contract.
+
 ### 6.2 Digital Services Act
 
 Applies to intermediary services. An app that merely stores its own customers'
@@ -476,6 +497,78 @@ businesses who will ask about exit.
 
 Sectoral and size-gated. A small SaaS is normally outside it. If you sell into
 critical infrastructure, ask.
+
+### 6.5 FernUSG — the one that can stop the product being sold at all
+
+The other four are thresholds you grow into. This one is a **fact pattern**, and
+this template builds it: a course behind `hasPlan()`, lessons somebody works
+through alone, and a place to ask about them. It is a **German statute**, so it
+reaches a business established in Germany (`compliance-check` `scope`
+question 5) — and it is the only entry on this map whose answer is *you may not
+sell this yet*.
+
+**§ 1(1) FernUSG asks three things, and it needs all of them:**
+
+| | |
+|---|---|
+| **entgeltlich** | knowledge or skills conveyed **for a fee** — a paid plan is that |
+| **Nr. 1 — räumliche Trennung** | teacher and learner apart "ausschließlich oder überwiegend" |
+| **Nr. 2 — Überwachung des Lernerfolgs** | the learning outcome is monitored |
+
+(It is § 1 **Abs. 1 Nr. 2**. A widely copied citation says "§ 1 Abs. 2"; that
+paragraph is about *unpaid* distance teaching and says nothing about this.)
+
+🚨 **Nr. 2 is met far more cheaply than anybody building a course expects.**
+BGH 5 February 2026 – **III ZR 137/25** Rn. 34: a contractual right to ask
+questions about one's own understanding of the material is enough — *"der …
+verlangten 'Kontrolle durch den Lehrenden oder seinen Beauftragten' bedarf es
+nicht"*; BGH 12 February 2026 – **III ZR 73/25** Rn. 10 says the same in a
+sentence. So **the `community` module carries this element by existing**, if
+members may ask about the lessons there. Digistore24's own criteria say it
+outright, and name forums, Q&A rounds and Facebook/WhatsApp/Messenger groups —
+while putting **automatically evaluated tests and quizzes on the other side**:
+those, it says, are *not* Lernerfolgskontrolle.
+
+⚠️ **So a `passMark` is not the sharp trigger it looks like, and a human who
+reads what was handed in is.** `modules/activity/`'s auto-graded check is the
+case Digistore24 excludes; [`courses.md`](courses.md) shape 3, where a person
+judges a submission, and a `grade()` a model or a person performs, are on the
+other side of that line. Do not read this as clearance for a quiz — read it as:
+the element you thought you were avoiding, you are carrying in the community.
+
+**Since February 2026 the decision falls on Nr. 1.** The same judgment's
+official Leitsatz reads § 1(1) Nr. 1 **teleologically narrow**: where the
+teaching is bidirectional and **synchronous**, so the learner can reach the
+teacher without particular effort, there is no räumliche Trennung and no
+Fernunterricht. Recorded calls count as **asynchronous**. What is judged is what
+the **contract** says, not how people used it — and the party invoking the
+FernUSG carries the burden.
+
+**What happens without the authorisation is the part with a number on it.**
+§ 12(1) FernUSG makes a Fernlehrgang subject to ZFU authorisation — the
+Staatliche Zentralstelle für Fernunterricht in Köln, acting for the sixteen
+Länder. Only a course serving *exclusively* recreation or entertainment is
+exempt, and even that must be **notified**; no qualification or final exam is
+required for a course to be caught. **§ 7(1): a contract closed without the
+authorisation is void.** The buyer reclaims what they paid under § 812 BGB, and
+BGH 12 June 2025 – **III ZR 109/24** Rn. 32 held that this holds **whether or
+not they bought for business purposes** — a €47,600 mentoring contract, €23,800
+repaid. BGH 5 February 2026 – **III ZR 74/25** held § 7 and § 12 constitutional,
+so this is not a line that is about to be argued away.
+
+**What Digistore24 actually does is ask, not refuse.** Products are accepted
+with and without a ZFU certification; for a distance-teaching product the vendor
+sends support a copy of the **ZFU certification** (vocational courses) or of the
+**ZFU notification** (recreational ones). Its help pages carry the same warning
+this section does, including that German courts regularly side with the buyer.
+
+🚨 **This file cannot tell you whether your course is Fernunterricht, and
+neither can the skill.** It is a question about your contract, and it is
+answered by a lawyer and by the ZFU. What `compliance-check` does is read what
+is on disk — which modules are installed, whether anything is graded, whether a
+certificate is promised — and hand you the combination. Ask before the first
+sale rather than after: the ZFU takes about three months, and the fee is €3,000
+or 150 % of the sales price.
 
 ---
 

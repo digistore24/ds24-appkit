@@ -180,6 +180,19 @@ already done that?" needs an answer next month.
 
 - **Anything the customer will SEE or DO is proposed, never assumed** — the
   menu in `decide`, once, before the data model.
+- 🚨 **Judging paying learners at a distance is a licensing question before it is
+  a product one.** *Überwachung des Lernerfolgs* is one of the elements that make
+  a course **Fernunterricht** under § 1(1) Nr. 2 FernUSG, and such a course needs
+  state authorisation before it may be sold at all. ⚠️ **Which recipe you are on
+  changes the answer**: an auto-graded check (recipe B) is the case Digistore24's
+  own criteria call harmless, while a `grade()` a **model or a person** performs,
+  recipe C, and a community where members ask about the material are the ones
+  that carry it. This skill advertises the trigger ("I want to see who passes and
+  where they are weak"), so it owes the user the question with it: say once that
+  it exists, name what is on disk, and hand it to `compliance-check` —
+  [`docs/compliance.md`](../../../docs/compliance.md) §6.5. **Never answer it
+  yourself**; it is a lawyer's and an authority's call, exactly like the
+  high-risk fork that skill already refuses to decide.
 - **A `0` is recorded and not argued with.**
 - **Shape 3's submission is not an element.** A person reads it; the line is
   recipe C.

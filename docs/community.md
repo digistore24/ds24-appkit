@@ -616,6 +616,19 @@ key gates it) before it is a layout. The skill `community`'s `decide` step asks
 it, records the answer in `docs/app.md`, and treats "none of it" as a real
 answer that ends the conversation.
 
+🚨 **The first row carries a legal consequence, and it is not obvious from
+here.** *"The embeds carry the questions"* is, in German law, **Überwachung des
+Lernerfolgs** — a contractual right to ask about the material is enough
+(BGH 5 February 2026 – III ZR 137/25), and Digistore24's own product criteria
+name forums and messenger groups outright. Put together with a paid course whose
+learners are mostly not in the room, that is the fact pattern of
+**Fernunterricht** (§ 1(1) FernUSG), which needs ZFU authorisation before the
+product may be sold — § 7(1) makes the contract void without it, in B2B too. So
+adding rooms to a course is a question for a lawyer as well as a product
+decision. It is **not** a reason to leave members without a place to ask; it is
+a reason to ask early: [`docs/compliance.md`](compliance.md) §6.5, skill
+`compliance-check`.
+
 ## Recipe — a digest mail, on the cron seam
 
 The report queue is the only channel the module ships (above). A weekly digest

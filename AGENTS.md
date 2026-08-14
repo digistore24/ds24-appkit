@@ -679,7 +679,12 @@ that replaces it is **`salespage`**; the reference is
   for the comparison.
 - **Nothing invented.** No made-up testimonials, member numbers, results or
   guarantees; a new product's honest proof is a founder story or no proof section
-  at all. (UWG; `compliance-check` takes it seriously.)
+  at all. (UWG; `compliance-check` takes it seriously.) 🚨 **And never promise how
+  LONG a members' area lasts** — "für immer", "lebenslang", "lifetime",
+  "dauerhaft", "unbegrenzt" and five more words Digistore24 names. A one-off
+  grant has no end date because no event ends it, which is not the same as a
+  term the page may promise; two years is the most that may be offered
+  ([`docs/courses.md`](docs/courses.md) → *Shape 1*).
 - **One price, one place** — `formatPrice()` off the registry, and the buy button
   through `checkoutLinksFor()`, which says "checkout unavailable" instead of
   rendering a dead link.

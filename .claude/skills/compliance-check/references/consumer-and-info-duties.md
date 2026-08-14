@@ -33,10 +33,16 @@ in Digistore24's purchase terms.
 
 Where the user *is* the seller: for digital content the right of withdrawal
 lapses early only with express consent **and** an acknowledgement that it is
-thereby lost (§ 356(5) BGB), and the order button must be unambiguously labelled
-(§ 312j(3) BGB).
+thereby lost — **§ 356(6) BGB** — and the order button must be unambiguously
+labelled (§ 312j(3) BGB).
 
-## The map beyond — BFSG, DSA, Data Act, NIS2
+⚠️ **It is Abs. 6 since 19 June 2026, not Abs. 5** (BGBl. 2026 I Nr. 28). Abs. 5
+is now **services**, and there the right lapses only on **complete performance**
+— which a supervised course does not reach in fourteen days. Getting the number
+right matters less than getting the side right: a coached programme is a
+service, not digital content.
+
+## The map beyond — BFSG, DSA, Data Act, NIS2, FernUSG
 
 - **BFSG / accessibility** — in force since 28 June 2025. § 3(3) BFSG exempts
   micro-enterprises **offering services**, and a SaaS is a service: under 10
@@ -51,3 +57,14 @@ thereby lost (§ 356(5) BGB), and the order button must be unambiguously labelle
   SaaS is switching and data portability for business customers.
 - **NIS2** — sectoral and size-gated; normally outside. If they sell into
   critical infrastructure, say so and stop.
+- 🚨 **FernUSG** — the odd one out: not a threshold but a **fact pattern**, and
+  the only one here that can mean *you may not sell this yet*. Paid teaching +
+  learners "ausschließlich oder überwiegend" apart + the learning outcome
+  monitored (§ 1(1) Nr. 1 and Nr. 2) needs **ZFU authorisation**, and § 7(1)
+  makes a contract closed without it **void** — in B2B too (BGH 12 June 2025 –
+  III ZR 109/24). ⚠️ The monitoring element is met by a contractual right to ask
+  questions about the material (BGH 5 February 2026 – III ZR 137/25 Rn. 34), so
+  **a community room carries it and an auto-graded quiz does not**; since that
+  judgment the case turns on whether the teaching is synchronous. **Report the
+  facts you found and stop** — `docs/compliance.md` §6.5 is the long form, and
+  this one goes on the STOP list, not into a verdict.

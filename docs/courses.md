@@ -29,6 +29,21 @@ scheduled work is [`docs/cron.md`](cron.md), migrations are
 produced via [`docs/content-production.md`](content-production.md) (skill
 `content-production`).
 
+🚨 **One legal question comes before all three shapes, and it is the only one in
+this file that can stop the product being sold.** A paid course whose learners
+are "ausschließlich oder überwiegend" not in the room, and whose learning
+outcome is *monitored*, is the fact pattern of **Fernunterricht** under
+§ 1(1) FernUSG — and that needs state authorisation before the first sale, with
+§ 7(1) making the contract **void** without it, in B2B too. ⚠️ **The monitoring
+element is cheaper to trigger than it sounds**: a contractual right to ask
+questions about the material carries it, so the `community` module does and an
+auto-graded quiz does not. Shape 3 carries it most plainly of all, because there
+a person judging what was handed in IS the product. Do not answer it from this
+file and do not answer it yourself: the elements, the consequence, what
+Digistore24 asks for and who decides are
+[`docs/compliance.md`](compliance.md) §6.5, and the skill is
+`compliance-check`.
+
 ## The module, and the one file you set
 
 The course is a MODULE — `node run.mjs module add courses`, then `db-migrate`.
@@ -393,9 +408,27 @@ shape 2 — do not bolt a lock onto this one.
 **The product.** One registry entry, `kind: "one_time"`
 (`config/digistore-products.json`, skill `setup-digistore`). Access from a
 one-off purchase has no `last_paid_day` event, so it does not expire on its
-own — the grant simply has no end date. (A refund still ends it; do not write
-"lifetime" into the sales copy, write what is true: pay once, no
-subscription.)
+own — the grant simply has no end date. (A refund still ends it.)
+
+🚨 **Do not write "lifetime" into the sales copy — write what is true: pay
+once, no subscription.** Two reasons, and the second is the sharper one:
+
+1. **The grant has no end date; that is not the same as a promise.** Nothing in
+   the app ends it, but a refund does, and so does the vendor shutting the
+   product down. A page that promised otherwise has made a claim the code never
+   made.
+2. **Digistore24 refuses the wording.** Its product criteria forbid promising
+   members' areas "lebenslangen" access and name ten words to avoid —
+   *lifetime, lebenslanger, unlimitierter, dauerhafter, unbegrenzter,
+   unbefristeter, unbeschränkter, permanenter, auf unbestimmte Zeit, für
+   immer* — while allowing access to be **limited to at most two years**. Their
+   reason is the one that costs money: an offer that is gone after 24 months can
+   oblige the vendor to refund the full price. ⚠️ These criteria bind whoever
+   sells through the reseller **Digistore24 GmbH**; check your own contract
+   before treating the two years as universal.
+
+The same rule, on the page that has to keep it: [`docs/salespage.md`](salespage.md)
+→ *The offer block*.
 
 **Blueprint pointers.**
 
@@ -423,7 +456,12 @@ upload works.
 
 **What this shape cannot do.** A certificate with
 evidentiary weight — a look back over the course is fine, a document that
-claims to prove competence is a promise the vendor has to keep.
+claims to prove competence is a promise the vendor has to keep. ⚠️ It also feeds
+the question at the top of this file: courts read a course's **whole
+self-presentation** — "Lehrgang", "Akademie", "Absolventen", a certificate —
+when deciding whether it is Fernunterricht
+([`docs/compliance.md`](compliance.md) §6.5). A vendor who wants one is asking a
+licensing question as well as a design one.
 
 **Expose it to AI.** *Needs template 0.16.0 or newer.* This exact schema is
 the worked example in [`docs/content-source.md`](content-source.md) — one

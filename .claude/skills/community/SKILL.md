@@ -284,6 +284,15 @@ that?" needs an answer next month.
   recipe, not as an option: every DM read function demands a participant's
   member id, and a content source has no participant, so there is nothing for
   one to call.
+- 🚨 **Rooms attached to a paid COURSE change what the course is, legally.** A
+  contractual right to ask questions about the material is *Überwachung des
+  Lernerfolgs*, and together with lessons the learner works through alone that
+  is **Fernunterricht** (§ 1(1) FernUSG) — which needs ZFU authorisation before
+  the product may be sold, and without it § 7(1) makes every contract void, in
+  B2B too. Say this once, plainly, when a course is what the rooms hang off; do
+  **not** talk the user out of the rooms and do **not** answer the question
+  yourself — hand it to `compliance-check`
+  ([`docs/compliance.md`](../../../docs/compliance.md) §6.5).
 - **Never add a member list, a member count or a "who is here".** Presence in a
   plan-gated room IS purchase information, and this template's products are
   routinely health-adjacent. Same for follower counts.

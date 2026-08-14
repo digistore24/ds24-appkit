@@ -77,6 +77,18 @@ as "there is none". A clean 200 over a course they paid for.
 The same list gates the lesson media (`planKeys` on the manifest entry), so buying
 the course is buying its files, whichever product you bought it under.
 
+🚨 **Two sentences about the sale itself, and neither is a matter of taste.**
+The page selling it **must not say how long access lasts** — a one-off grant has
+no end date because no event ends it, which is not a term anybody may promise
+(`docs/courses.md` → *Shape 1*). And a paid course whose learners are mostly not
+in the room and whose **learning outcome is monitored** may be
+**Fernunterricht** under § 1(1) FernUSG, which needs state authorisation before
+the first sale — without it § 7(1) makes every contract void, in B2B too. ⚠️ The
+monitoring element is carried by a right to ask questions about the material, so
+**installing `community` is what usually trips it**, not the quiz. Say that it
+exists, name what is on disk, hand it to `compliance-check`, and never answer it
+yourself: [`docs/compliance.md`](../../../docs/compliance.md) §6.5.
+
 ⚠️ `hasPlan()` **throws** on a key the registry does not know, so a typo here is
 a 500 on the course page rather than a locked-out member. `node run.mjs
 courses-check` names every unknown key at once rather than the first.
