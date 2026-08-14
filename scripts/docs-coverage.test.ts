@@ -35,6 +35,7 @@ import path from "node:path";
 
 import { JOURNEY } from "./dev/journey.mjs";
 import { requiresFrom } from "./dev/update-plan.mjs";
+import { availableModules } from "./modules/registry.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const read = (rel: string) => readFileSync(path.join(ROOT, rel), "utf8");
@@ -62,7 +63,53 @@ function commands(): string[] {
 }
 
 const COMMANDS = commands();
-const SKILLS = readdirSync(path.join(ROOT, ".claude/skills")).sort();
+
+/**
+ * The skills THIS TEMPLATE shipped — never simply what is in the folder.
+ *
+ * 🚨 An app may hold skills that are not ours. A third party publishes one, the
+ * agent drops it into `.claude/skills/`, and from that moment every assertion
+ * below that reads the folder is asking our questions about somebody else's
+ * file. Measured before this existed, with one throwaway folder planted: `names
+ * exactly the skills that exist` and `names each skill folder once` both went
+ * RED — and `CLAUDE.md` makes green the commit condition while
+ * `.githooks/pre-commit` refuses on red, so installing a skill locked the
+ * customer out of committing their own work. There is no way for them to fix it
+ * either: the answer the test asks for is a line in `## The path`, and that
+ * section is byte-capped below AND editing `CLAUDE.md` makes it `local-change`
+ * for ever, which costs them every future update of the file.
+ *
+ * So the folder is filtered against `.template-version`, which is the record of
+ * what shipped and therefore already the answer to "is this ours". A foreign
+ * skill is not held to our path, our journey or our size caps — and it also
+ * cannot SATISFY any of them, because it never enters `CORPUS` either: a
+ * stranger's file may not be the reason a command counts as documented.
+ *
+ * ⚠️ Unreadable stamp ⇒ every folder counts as ours, which is what this file
+ * did before. The fail-safe direction here is STRICTER, never laxer: a missing
+ * stamp must not be a way to switch these checks off.
+ */
+function ourSkills(): string[] {
+  const onDisk = readdirSync(path.join(ROOT, ".claude/skills")).sort();
+  let shipped: Record<string, unknown>;
+  try {
+    shipped = JSON.parse(read(".template-version")).files ?? {};
+  } catch {
+    return onDisk;
+  }
+  const ours = onDisk.filter((skill) => `.claude/skills/${skill}/SKILL.md` in shipped);
+  // A stamp that lists none of them is a stamp this code no longer understands,
+  // and answering "then nothing is ours" would turn every check below green by
+  // emptiness — the one outcome a test about omissions may never have. The
+  // count guard in the inventory block is the backstop; this is the reason it
+  // can be trusted to fire.
+  return ours.length === 0 ? onDisk : ours;
+}
+
+const SKILLS = ourSkills();
+const FOREIGN = readdirSync(path.join(ROOT, ".claude/skills"))
+  .filter((skill) => !SKILLS.includes(skill))
+  .sort();
 const DOCS = list("docs", ".md");
 const CONFIGS = list("config", ".json");
 
@@ -85,9 +132,32 @@ const EVERYWHERE = [...CORPUS.values()].join("\n");
 describe("the inventory is readable at all", () => {
   it("finds the commands, skills, docs and configs", () => {
     expect(COMMANDS.length, "no commands parsed out of run.mjs").toBeGreaterThan(30);
-    expect(SKILLS.length).toBeGreaterThan(10);
+    // 🚨 Also the backstop under `ourSkills()`: everything about the skills
+    // below is asked of THIS list, so a filter that came out empty would make
+    // the whole of section 2 and section 6 pass by describing nothing.
+    expect(SKILLS.length, "no skills recognised as this template's own").toBeGreaterThan(10);
     expect(DOCS.length).toBeGreaterThan(5);
     expect(CONFIGS.length).toBeGreaterThan(3);
+  });
+
+  // 🚨 The exemption has to be legible, or it becomes a way for one of OUR
+  // skills to fall silently out of every check below — drop its line from
+  // `.template-version` and it would simply stop being asked about.
+  //
+  // What makes that impossible is that our guidance NAMES our skills: a folder
+  // this file treats as a stranger's, while `## The path` or the journey points
+  // at it, is not a stranger's at all — it is ours with a stale stamp, and the
+  // repair is the stamp rather than this list. (The journey's own half of this
+  // is `unknown` in section 6, which fires on the same fault from the other
+  // side; here is where CLAUDE.md's path is held to it.)
+  it("treats no skill of ours as a stranger's", () => {
+    const claimed = FOREIGN.filter((skill) => new RegExp(`\`${skill}\``).test(GUIDE));
+    expect(
+      claimed,
+      `not in .template-version, yet CLAUDE.md names ${claimed.join(", ")} — either ` +
+        `this skill shipped with the template and the stamp is stale (run make sync), ` +
+        `or it came from somewhere else and CLAUDE.md should not be pointing at it`,
+    ).toEqual([]);
   });
 });
 
@@ -414,9 +484,38 @@ describe("the journey's other joins resolve", () => {
     }
 
     expect(wrong, `a module join is broken:\n${wrong.join("\n")}`).toEqual([]);
-    // Non-vacuity: five of the thirty rows carry a module id, and a loop over an
-    // empty list satisfies this test perfectly.
-    expect(JOURNEY.filter((row) => row.module !== null)).toHaveLength(5);
+
+    // ⚠️ The other direction, and it replaces a hard-coded 5.
+    //
+    // Non-vacuity is what that number was for — a loop over an empty list
+    // satisfies the check above perfectly. But a count cannot say WHICH module
+    // is missing, and it fails on the day a sixth one lands with a message
+    // ("expected 6 to be 5") that names nothing and reads like a broken test
+    // rather than an unfinished job. So the guard asks the real question
+    // instead: every module of OURS is a step of the path, and the path is the
+    // only place an agent learns the step exists.
+    //
+    // 🚨 "Ours" is read off `docs`, never off a list kept here: a module of
+    // this template points at a page in the core tree, one from outside points
+    // inside itself (`docs/modules.md` → *A module from somewhere else*). A
+    // customer who installs a stranger's module is not thereby missing a row in
+    // OUR journey, and this must not turn their suite red for it.
+    const ours = availableModules(ROOT).filter((id) => {
+      try {
+        return !String(JSON.parse(read(`modules/${id}/module.json`)).docs).startsWith("modules/");
+      } catch {
+        return false;
+      }
+    });
+    const named = new Set(JOURNEY.filter((row) => row.module !== null).map((row) => row.module));
+    const unwalked = ours.filter((id) => !named.has(id));
+
+    expect(ours.length, "no module of this template found — the join checked nothing").toBeGreaterThan(1);
+    expect(
+      unwalked,
+      `these modules ship with the template and no journey step names them: ${unwalked.join(", ")} ` +
+        `— add a row to scripts/dev/journey.mjs, or the path cannot show the step`,
+    ).toEqual([]);
   });
 
   it("gives every step a unique number and hands to a row that exists", () => {

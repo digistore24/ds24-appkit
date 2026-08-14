@@ -24,6 +24,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { versionAtLeast } from "../dev/update-plan.mjs";
 import { installedModules } from "./installed.mjs";
 import { manifestProblems } from "./manifest.mjs";
 
@@ -120,6 +121,53 @@ export function withRequires(ids, root = ROOT) {
 export function missingRequires(manifest, installed) {
   const requires = Array.isArray(manifest.requires) ? manifest.requires : [];
   return requires.filter((dep) => !installed.includes(dep));
+}
+
+/**
+ * The version of the CODE in this app — `package.json`, the same number
+ * `node run.mjs update` compares a skill's `requires:` against.
+ *
+ * @param {string} [root]
+ * @returns {string}
+ */
+export function templateVersion(root = ROOT) {
+  return JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version;
+}
+
+/**
+ * Is this app too old for `manifest`? The sentence to print, or `null`.
+ *
+ * 🚨 **`requiresTemplate` was validated and compared against NOTHING.** From the
+ * day it existed, `manifest.mjs` checked that it LOOKED like a version and no
+ * caller ever read it: a module declaring `requiresTemplate: "0.60.0"` installed
+ * cleanly into 0.28 and failed later, somewhere else, as a missing export or a
+ * function that is not there. That is the exact shape this repo threw the
+ * `guidance` key out for — *a manifest key that promises a mechanism nobody
+ * built is worse than no key, because the next person to find it assumes the
+ * mechanism.* For our own five modules it was harmless, because they move with
+ * the template. For a module somebody else wrote it is the only compatibility
+ * statement there is.
+ *
+ * ⚠️ **A floor, never a ceiling.** A `supportsTemplate` upper bound would be a
+ * promise about versions that do not exist yet — wrong by default, and its
+ * failure mode is refusing a module on a template it would have worked on,
+ * which teaches people to edit a foreign manifest. `module check` reports the
+ * distance after an update instead.
+ *
+ * The comparison is `versionAtLeast()` from `scripts/dev/update-plan.mjs`,
+ * imported rather than rewritten: a second opinion about whether a version is
+ * new enough is how the two answers drift apart.
+ *
+ * @param {Record<string, unknown>} manifest
+ * @param {string} [root]
+ * @returns {string|null}
+ */
+export function templateTooOld(manifest, root = ROOT) {
+  const needs = manifest.requiresTemplate;
+  if (typeof needs !== "string") return null;
+  const have = templateVersion(root);
+  if (versionAtLeast(have, needs)) return null;
+  return `needs template ${needs}, this app is ${have}`;
 }
 
 /**
@@ -239,16 +287,59 @@ export function loadModules(root = ROOT, ids = installedModules(root)) {
   // Cross-module collisions. Each of these is invisible inside a single
   // manifest and fatal across two, which is why they are checked here rather
   // than in `manifestProblems()`.
+  const [first] = crossModuleProblems(records);
+  if (first) throw new Error(first);
+
+  const list = (record, key) => {
+    const value = record.manifest[key];
+    return Array.isArray(value) ? value : [];
+  };
+
+  // A module may only require another module that is also installed — otherwise
+  // it is running against a half of itself it cannot see.
+  for (const record of records) {
+    for (const dep of list(record, "requires")) {
+      if (!installed.includes(dep)) {
+        throw new Error(
+          `"${record.id}" requires "${dep}", which is not installed. ` +
+            `Install it first, or take the dependency out of its manifest.`,
+        );
+      }
+    }
+  }
+
+  return records;
+}
+
+/**
+ * Everything two modules would be claiming twice — empty when they can coexist.
+ *
+ * 🚨 **These are invisible inside a single manifest and fatal across two**, which
+ * is why they live above `manifestProblems()` rather than in it.
+ *
+ * Lifted out of `loadModules()` so that `module verify` can ask the SAME
+ * question of a candidate before a byte of it reaches the app tree. Two callers,
+ * one rule set: a second implementation here would be two opinions about
+ * whether an arrangement is legal, and the one nobody runs is the one that
+ * rots. `loadModules()` still throws on the first entry, with the message
+ * unchanged.
+ *
+ * @param {ModuleRecord[]} records
+ * @returns {string[]}
+ */
+export function crossModuleProblems(records) {
+  const problems = [];
   const clash = (what, keyOf) => {
     const seen = new Map();
     for (const record of records) {
       for (const key of keyOf(record)) {
         const other = seen.get(key);
         if (other) {
-          throw new Error(
+          problems.push(
             `${what} "${key}" is claimed by both "${other}" and "${record.id}" — ` +
               `two modules cannot own the same one`,
           );
+          continue;
         }
         seen.set(key, record.id);
       }
@@ -296,19 +387,13 @@ export function loadModules(root = ROOT, ids = installedModules(root)) {
     ...Object.keys(r.manifest.components ?? {}),
     ...Object.keys(r.manifest.serverExports ?? {}),
   ]);
+  // The switch file lives in the core's `config/`, so two modules naming the
+  // same one would share an on/off switch — and `boundary.test.ts` §1c would
+  // then hold ONE file against two reasons. Unreachable between our own five
+  // and cheap to state; a module from outside is the caller this is for.
+  clash("a switch file", (r) =>
+    typeof r.manifest.config === "string" ? [r.manifest.config] : [],
+  );
 
-  // A module may only require another module that is also installed — otherwise
-  // it is running against a half of itself it cannot see.
-  for (const record of records) {
-    for (const dep of list(record, "requires")) {
-      if (!installed.includes(dep)) {
-        throw new Error(
-          `"${record.id}" requires "${dep}", which is not installed. ` +
-            `Install it first, or take the dependency out of its manifest.`,
-        );
-      }
-    }
-  }
-
-  return records;
+  return problems;
 }

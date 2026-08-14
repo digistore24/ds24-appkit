@@ -434,7 +434,7 @@ export async function buildMemberExport(
         "Your password, if you set one. It is stored only as a one-way hash which nobody — not even we — can read back.",
         "Sign-in link tokens and confirmation tokens. Single-use secrets, stored hashed, and spent or expired by the time you read this.",
         "OAuth tokens from a connected sign-in provider. Those are credentials for that service, not information about you.",
-        "The raw webhook bodies our payment provider sends us. They can contain details about other people (an affiliate, for example), so they are not part of a self-service download. Ask us and we will provide them with the third-party parts removed.",
+        "The raw webhook bodies sent to us by Digistore24, the platform we sell through. They can contain details about other people (an affiliate, for example), so they are not part of a self-service download. Ask us and we will provide them with the third-party parts removed.",
       ],
       aboutTheNotes:
         "`grants[].note` and `tokenLedger[].note` are notes we wrote about your account — for example when access was granted by hand or a balance corrected. They are part of what we hold about you, so they are here.",

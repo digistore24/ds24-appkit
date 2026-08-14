@@ -14,3 +14,9 @@
 // that: a handler written here would be the module's code living in the core's
 // tree, uncovered by the module's own tests and left behind by `module remove`.
 export { POST } from "@/modules/api/routes/auth-token";
+
+// Restated as literals rather than re-exported: Next reads route segment
+// config WITHOUT running the module, so a re-export is not seen and the route
+// would not have them. Measured, and held by modules/boundary.test.ts §1b.
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";

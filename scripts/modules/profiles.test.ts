@@ -118,7 +118,23 @@ describe("the matrix has real modules to combine", () => {
     // Non-vacuity for every loop below. A profile list built from an empty tree
     // would make this whole file pass while measuring nothing — the exact
     // green-by-vacuity it exists to remove.
-    expect(ALL).toEqual(["activity", "api", "community", "companion", "courses"]);
+    // ⚠️ `arrayContaining` rather than equality, and the difference matters.
+    //
+    // What this line guards is that the tree really holds the modules this
+    // template ships — an empty or half-read list would make the whole file
+    // pass while measuring nothing. What it must NOT do is refuse a SIXTH
+    // module, and there are two ways one arrives: we write it, or a customer
+    // installs one from outside. Written as an equality it did both, so a
+    // module from a third party turned the customer's own `npm run test` red on
+    // an app with no line of their own code in it — measured, with a module
+    // fetched over `module add --from`.
+    //
+    // The five names stay spelled out on purpose: dropping one of ours is still
+    // a finding, and a bare length check would not see it.
+    expect(ALL).toEqual(
+      expect.arrayContaining(["activity", "api", "community", "companion", "courses"]),
+    );
+    expect(ALL.length).toBeGreaterThanOrEqual(5);
     expect(PROFILES).toHaveLength(ALL.length + 2);
   });
 

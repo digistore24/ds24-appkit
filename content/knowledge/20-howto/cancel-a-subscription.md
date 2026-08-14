@@ -9,8 +9,8 @@ updated: 2026-07-24
 
 1. Open *Billing* from the menu on the left.
 2. Find the running subscription in the list.
-3. Follow the **cancel** link. It takes you to Digistore24, our payment
-   provider, where the cancellation is confirmed.
+3. Follow the **cancel** link. It takes you to Digistore24, the platform we
+   sell through, where the cancellation is confirmed.
 
 ## What happens then
 

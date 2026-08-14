@@ -26,10 +26,20 @@ the user is one click: the authorization in the browser at Digistore24.
 
 ## How the billing works
 
-Digistore24 is the payment provider and the app touches no money — it **reacts to
+Digistore24 is the **merchant of record** — it runs the checkout, takes the
+money, and handles VAT and refunds — and the app touches no money: it **reacts to
 events**. A purchase arrives as the IPN event `on_payment`, is attributed to a
 Member out of `tracking[custom]` and recorded; refunds, chargebacks and missed
 subscription payments update that record.
+
+🚨 **Not a payment provider, and the difference reaches the customer.** A PSP
+processes a payment for the seller; Digistore24 GmbH SELLS — where it resells it
+is the buyer's contractual partner and carries the invoice, the VAT and the right
+of withdrawal. **The money is collected by Digistore24 either way**, and their
+name is what turns up on the buyer's bank statement. So customer-facing text says
+*the platform we sell through*, never *our payment provider* — and which parts of
+the deal it carries is the vendor's contract rather than a property of this app:
+**[`docs/compliance.md`](../../../docs/compliance.md)** → *who sells?*
 
 ⚠️ **The shipped handler is idempotent; the EVENT is not.** Digistore24
 redelivers until it gets a 200, and the signature check says who wrote the

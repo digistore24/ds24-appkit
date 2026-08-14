@@ -20,9 +20,10 @@ this one sells.
 
 ## Buying
 
-The plans page lists what is available. Checkout runs at Digistore24, our
-payment provider, and you can pay without being signed in first — the purchase
-attaches to your account the next time you sign in with the same email address.
+The plans page lists what is available. Checkout runs at Digistore24, the
+platform we sell through, and you can pay without being signed in first — the
+purchase attaches to your account the next time you sign in with the same email
+address.
 
 ## Invoices, payment details and cancelling
 

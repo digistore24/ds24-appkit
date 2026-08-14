@@ -764,7 +764,7 @@
     "exportBody": "A copy of everything this app holds about you — as a JSON file you can also read elsewhere.",
     "exportCta": "Download my data",
     "exportHint": "Includes your account, your purchases, your balance with every entry, your chat transcripts and every time an operator signed in to your account.",
-    "exportExcluded": "Not included: your password (it cannot be read back) and the raw data from our payment provider, because it can contain details about other people.",
+    "exportExcluded": "Not included: your password (it cannot be read back) and the raw data from Digistore24, the platform we sell through, because it can contain details about other people.",
     "deleteTitle": "Delete account",
     "deleteBody": "You can delete your account yourself at any time. Some of your data has to be kept for legal reasons — the confirmation says exactly what.",
     "deleteCta": "Delete account",

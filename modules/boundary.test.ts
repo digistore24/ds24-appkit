@@ -303,7 +303,7 @@ describe("a module's route files under app/ stay thin and stay their own", () =>
   //
   // Mechanical, and therefore safe where a textual rule would not be: it asks
   // what the wrapper already delegates to and whether that file exports a title
-  // at all. Measured at **0 findings over 17 page wrappers** on the day it was
+  // at all. Measured at **0 findings over 18 page wrappers** on the day it was
   // armed — the guard's own loop, not a hand count.
   //
   // ⚠️ **What it does NOT catch, said plainly: a module page with no title at
@@ -390,6 +390,92 @@ describe("a module's route files under app/ stay thin and stay their own", () =>
           `check guards nothing.`,
       ).toBeGreaterThan(0);
     }
+  });
+
+  // 🚨 The same defect one door over, and it was open while the title rule was
+  // being written: a module's handler declares `export const runtime` /
+  // `dynamic`, and the wrapper that IS the route says nothing — so the route
+  // does not have them. Reported over 19 handlers in this tree, none of whose
+  // 20 wrappers carried either line.
+  //
+  // ⚠️ **Restated as a LITERAL, never re-exported — and that is the opposite of
+  // the title rule above.** Measured with Next's own extractor
+  // (`next/dist/build/analysis/extract-const-value.js`, which is what reads
+  // these at build time): asked for `runtime` and `dynamic`, a file with
+  // `export const runtime = "nodejs"` answers `{"value":"nodejs"}` and a file
+  // with `export { runtime } from "…"` answers **null**. The extractor walks
+  // top-level `ExportDeclaration`s wrapping a `VariableDeclaration`; a re-export
+  // is neither. `generateMetadata` travels because it is resolved by running
+  // the module, and route segment config is read without running anything —
+  // two mechanisms, and the wrapper has to obey each on its own terms.
+  //
+  // Probably symptomless today: these handlers read headers or a session and
+  // are dynamic anyway. It is armed because "the declaration is the route" is
+  // the whole claim of §1b, and a value the route silently does not have is
+  // exactly what nobody notices until the day it matters.
+  it("restates the route segment config of the file it delegates to", () => {
+    // Next's list, and the values are literals by its own requirement.
+    const KEYS = [
+      "dynamic", "dynamicParams", "revalidate", "fetchCache", "runtime",
+      "preferredRegion", "maxDuration",
+    ];
+    const declared = (source: string) => {
+      const found = new Map<string, string>();
+      for (const key of KEYS) {
+        const value = new RegExp(`export\\s+const\\s+${key}\\s*=\\s*([^;\\n]+)`).exec(source)?.[1];
+        if (value !== undefined) found.set(key, value.trim());
+      }
+      return found;
+    };
+
+    const missing: string[] = [];
+    let checked = 0;
+
+    for (const file of MODULE_ROUTE_FILES) {
+      const source = withoutComments(read(file));
+      const target = /export\s*\{[^}]*\}\s*from\s*["'`]@\/([^"'`]+)["'`]/.exec(source)?.[1];
+      if (!target) continue;
+
+      let targetSource: string | null = null;
+      for (const extension of [".ts", ".tsx"]) {
+        try {
+          targetSource = withoutComments(read(`${target}${extension}`));
+          break;
+        } catch {
+          // Try the other extension before giving up.
+        }
+      }
+      if (targetSource === null) continue;
+
+      const theirs = declared(targetSource);
+      if (theirs.size === 0) continue;
+      checked += 1;
+      const ours = declared(source);
+
+      for (const [key, value] of theirs) {
+        if (ours.get(key) === value) continue;
+        missing.push(
+          `${file} → @/${target} declares \`${key} = ${value}\` and the wrapper ` +
+            `${ours.has(key) ? `says \`${ours.get(key)}\`` : "says nothing"}`,
+        );
+      }
+    }
+
+    expect(
+      missing,
+      `a route declaration must RESTATE its target's route segment config, as a literal — ` +
+        `Next reads these without running the module, so a re-export is not seen and the ` +
+        `route simply does not have the value:\n${missing.join("\n")}`,
+    ).toEqual([]);
+
+    // Non-vacuity: the loop drops out three times, and any of those going blind
+    // would leave it passing over nothing. Zero is legitimate only for a tree
+    // whose modules declare no segment config at all.
+    expect(
+      checked,
+      "no module route target declares any segment config — either none does, or the " +
+        "pattern above no longer matches how this template writes one",
+    ).toBeGreaterThan(0);
   });
 
   it("delegates rather than implements", () => {
@@ -736,7 +822,30 @@ describe("🚨 a module uses the core's media layer, and only its doors", () => 
     // Non-vacuity for all three assertions below: an empty walk reports every
     // module as clean, which is the green-by-vacuity this whole file refuses.
     expect(moduleIds.length).toBeGreaterThan(1);
-    for (const id of moduleIds) {
+
+    // ⚠️ Asked of the modules that BRING code, not of every folder here.
+    //
+    // The claim being guarded is "there was source to judge", and a module that
+    // declares no code at all — only texts, say — has none to judge and breaks
+    // none of the three rules below by construction. Demanding a file from it
+    // anyway made this test refuse a manifest the validator accepts, which is a
+    // test disagreeing with the rule it is supposed to enforce. Measured with a
+    // module from outside that shipped a manifest, a docs page and two message
+    // files: legal, installable, and this line was the only thing in the whole
+    // suite that objected.
+    const CODE_KEYS = [
+      "entry", "nav", "gate", "schema", "cron", "setup", "presence", "contentSource",
+      "disclosure", "smoke", "appliers", "components", "serverExports", "slots", "commands",
+      "privacy",
+    ];
+    const bringsCode = (id: string) => {
+      const manifest = JSON.parse(read(join("modules", id, "module.json")));
+      return CODE_KEYS.some((key) => manifest[key] !== undefined);
+    };
+
+    const judged = moduleIds.filter(bringsCode);
+    expect(judged.length, "no module in this tree declares any code at all").toBeGreaterThan(1);
+    for (const id of judged) {
       expect(filesOf(id, { withTests: true }).length, `no source found for ${id}`).toBeGreaterThan(
         0,
       );

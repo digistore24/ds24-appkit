@@ -19,6 +19,7 @@ import {
   loadModules,
   missingRequires,
   readModule,
+  templateTooOld,
 } from "./registry.mjs";
 
 let root: string;
@@ -75,24 +76,24 @@ describe("reading what is there", () => {
   });
 
   it("loads an installed module", () => {
-    const dir = app(["chat"], { chat: tiny("chat") });
+    const dir = app(["forum"], { forum: tiny("forum") });
     const [record] = loadModules(dir);
-    expect(record.id).toBe("chat");
-    expect(record.dir).toBe("modules/chat");
+    expect(record.id).toBe("forum");
+    expect(record.dir).toBe("modules/forum");
     expect(record.manifest.version).toBe("1.0.0");
   });
 
   it("keeps the order config/modules.json gives", () => {
     // Not cosmetic: the generated registry's import order is this order, and a
     // list that reshuffles itself between runs makes the generated file churn.
-    const dir = app(["community", "chat"], { chat: tiny("chat"), community: tiny("community") });
-    expect(loadModules(dir).map((m) => m.id)).toEqual(["community", "chat"]);
+    const dir = app(["community", "forum"], { forum: tiny("forum"), community: tiny("community") });
+    expect(loadModules(dir).map((m) => m.id)).toEqual(["community", "forum"]);
   });
 
   it("lists what is present but not installed", () => {
     // `module list` has to tell "here and switched off" from "not here at all".
-    const dir = app([], { chat: tiny("chat"), community: tiny("community") });
-    expect(availableModules(dir)).toEqual(["chat", "community"]);
+    const dir = app([], { forum: tiny("forum"), community: tiny("community") });
+    expect(availableModules(dir)).toEqual(["community", "forum"]);
     expect(loadModules(dir)).toEqual([]);
   });
 });
@@ -105,24 +106,24 @@ describe("an app that claims what it does not carry", () => {
   });
 
   it("refuses a folder with no manifest", () => {
-    expect(() => loadModules(app(["chat"], { chat: null }))).toThrow(/no module\.json/);
+    expect(() => loadModules(app(["forum"], { forum: null }))).toThrow(/no module\.json/);
   });
 
   it("refuses a manifest that does not parse", () => {
-    const dir = app(["chat"], { chat: tiny("chat") });
-    writeFileSync(join(dir, "modules", "chat", "module.json"), "{ nope");
+    const dir = app(["forum"], { forum: tiny("forum") });
+    writeFileSync(join(dir, "modules", "forum", "module.json"), "{ nope");
     expect(() => loadModules(dir)).toThrow(/not valid JSON/);
   });
 
   it("refuses a manifest whose id disagrees with its folder", () => {
     // The folder is the address every generated import uses.
-    const dir = app(["chat"], { chat: tiny("community") });
+    const dir = app(["forum"], { forum: tiny("community") });
     expect(() => loadModules(dir)).toThrow(/the folder name is the id/);
   });
 
   it("passes an incoherent manifest straight through with its reasons", () => {
-    const dir = app(["chat"], { chat: { id: "chat", version: "nope", title: {} } });
-    expect(() => loadModules(dir)).toThrow(/problem\(s\) in modules\/chat\/module\.json/);
+    const dir = app(["forum"], { forum: { id: "forum", version: "nope", title: {} } });
+    expect(() => loadModules(dir)).toThrow(/problem\(s\) in modules\/forum\/module\.json/);
   });
 });
 
@@ -205,8 +206,8 @@ describe("a declared dependency must actually be installed", () => {
 describe("readModule on its own", () => {
   it("reads a module that is present but not installed", () => {
     // `module add` needs this: it validates a module BEFORE putting it in the list.
-    const dir = app([], { chat: tiny("chat") });
-    expect(readModule("chat", dir).id).toBe("chat");
+    const dir = app([], { forum: tiny("forum") });
+    expect(readModule("forum", dir).id).toBe("forum");
   });
 });
 
@@ -238,6 +239,50 @@ describe("missingRequires", () => {
     // The manifest validator already refuses this shape; a reader reached with
     // it anyway must not take the command down on its way to saying so.
     expect(missingRequires(tiny("d", { requires: "a" }), [])).toEqual([]);
+  });
+});
+
+describe("templateTooOld", () => {
+  /** A throwaway root whose package.json says `version`. */
+  const at = (version: string) => {
+    const dir = app([], { a: tiny("a") });
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ version }));
+    return dir;
+  };
+
+  it("says nothing when the module declares no floor", () => {
+    // The key is optional, and a module without one runs anywhere. Answering
+    // with a sentence here would refuse every module written before the key
+    // existed.
+    expect(templateTooOld(tiny("a"), at("0.28.0"))).toBeNull();
+  });
+
+  it("says nothing when the app is new enough — including exactly on the floor", () => {
+    expect(templateTooOld(tiny("a", { requiresTemplate: "0.19.0" }), at("0.28.0"))).toBeNull();
+    expect(templateTooOld(tiny("a", { requiresTemplate: "0.28.0" }), at("0.28.0"))).toBeNull();
+  });
+
+  it("names both numbers when the app is too old", () => {
+    expect(templateTooOld(tiny("a", { requiresTemplate: "0.60.0" }), at("0.28.0"))).toBe(
+      "needs template 0.60.0, this app is 0.28.0",
+    );
+  });
+
+  it("compares numerically rather than as strings", () => {
+    // The trap `versionAtLeast()` exists for: "0.9.0" > "0.10.0" as text, and a
+    // string comparison would refuse a module on an app that is newer than it
+    // asked for — the direction nobody would think to check.
+    expect(templateTooOld(tiny("a", { requiresTemplate: "0.9.0" }), at("0.10.0"))).toBeNull();
+    expect(templateTooOld(tiny("a", { requiresTemplate: "0.10.0" }), at("0.9.0"))).toBe(
+      "needs template 0.10.0, this app is 0.9.0",
+    );
+  });
+
+  it("ignores a malformed floor rather than throwing", () => {
+    // manifestProblems() already refuses a `requiresTemplate` that is not a
+    // version. A reader reached with one anyway must not take the command down
+    // on its way to saying so — same rule as missingRequires above.
+    expect(templateTooOld(tiny("a", { requiresTemplate: 19 }), at("0.28.0"))).toBeNull();
   });
 });
 

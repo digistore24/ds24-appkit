@@ -12,3 +12,9 @@
 //
 // It delegates and holds no logic; `modules/boundary.test.ts` §1b enforces that.
 export { GET } from "@/modules/courses/routes/course-outline";
+
+// Restated as literals rather than re-exported: Next reads route segment
+// config WITHOUT running the module, so a re-export is not seen and the route
+// would not have them. Measured, and held by modules/boundary.test.ts §1b.
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";

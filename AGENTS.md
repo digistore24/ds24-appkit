@@ -551,11 +551,11 @@ app is the core and nothing else.
 | api | `node run.mjs module add api` | [`docs/api.md`](docs/api.md) | `mobile-companion` |
 
 Then `db-migrate` — a module's tables are not there yet. ⚠️ **`courses` and
-`community` REQUIRE `api`**: add it first, or `add` refuses before it writes.
-The mobile companion that talks to it is [`docs/mobile.md`](docs/mobile.md). Everything
-else about the system — `remove` refusing while rows exist, the generated
-registries, `slots`, what a manifest may declare — is
-**[`docs/modules.md`](docs/modules.md)**.
+`community` REQUIRE `api`**: add it first, or `add` refuses before it writes; the
+mobile companion is [`docs/mobile.md`](docs/mobile.md). 🚨 **A module may also
+come from a stranger** — `module add --from https://…`, never hand-copied: it is
+checked, then copied in as YOUR code, and runs with your code's access although
+nobody read it. All of it: **[`docs/modules.md`](docs/modules.md)**.
 
 🚨 **A `##` section in this file may condense only a subsystem present in a
 pristine deploy.** A subsystem behind `module add` gets one row of that table and

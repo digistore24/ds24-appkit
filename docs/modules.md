@@ -194,6 +194,23 @@ A skill that describes a feature whose code this app is too old for already has
 its answer, and it is a version rather than a location: `requires:` in the
 skill's frontmatter.
 
+**A module from OUTSIDE this template is the one exception, and `docs` takes a
+second form for it** — `modules/<id>/docs.md` instead of `docs/<id>.md`. Both
+reasons above were re-read against that case and they answer differently. The
+first proves the page must SHIP, not that it must sit in `docs/`: every module
+folder ships in every app (`config/modules.json` is empty in a fresh one and all
+five folders are still there), so a page inside the module is exactly as
+readable for a module nobody installed — and for a module we have never heard
+of there is no third option, because we cannot ship a page about it. The second
+holds and is why our own five keep the core form: `node run.mjs update` plans
+over the paths in its manifest and the stamp, and a vendor's page is in neither,
+so the channel never touches it. Its guidance freezes with its code, like the
+rest of it.
+
+A module from outside declares no `skill` at all — the key is optional. A third
+party who wants to publish a playbook publishes a **skill**, which is its own
+product and needs nothing from the module system.
+
 > There used to be a `guidance` field in the manifest for this. It was validated,
 > declared by no module and read by nothing, and it is **gone** — a manifest key
 > that promises a mechanism nobody built is worse than no key, because the next
@@ -327,6 +344,7 @@ say what is in the tree must not die on one bad file.
 ## Adding one, and taking one out
 
 ```bash
+node run.mjs module verify <id>     # could this app install it? (also a URL or a path)
 node run.mjs module add <id>        # make this app one that has it
 node run.mjs db-migrate             # its tables are not there yet
 node run.mjs module remove <id>     # see the gate below
@@ -340,6 +358,49 @@ broken one in that list would break every command that reads the arrangement,
 including the one that explains what is wrong — and rewrites the generated
 registries in the same breath. The list and the generated files belong in one
 commit.
+
+### A module from somewhere else
+
+Somebody who is not us can write a module for this app and ship it themselves.
+They publish a `.tar.gz` wherever it is reachable over HTTPS — their own site, a
+release asset, a bucket — and there is no account, no registry and no list they
+have to be on.
+
+```bash
+node run.mjs module verify https://acme.example/ds24-crm-1.2.0.tar.gz   # would it fit?
+node run.mjs module add --from https://acme.example/ds24-crm-1.2.0.tar.gz
+node run.mjs db-migrate && npm run test
+```
+
+`--from` is required for anything that is not already in your tree, so this can
+never happen by mistyping an id. A local path or a folder works too, which is
+what the author of a module uses while writing it. `--sha256 <hash>` checks the
+download against a hash the vendor published.
+
+**What arrives becomes YOUR code.** It is unpacked into `modules/<id>/` and
+committed with the rest of your app — not a dependency, not something `npm ci`
+re-fetches. That is deliberate: it means you can read it, diff it and delete it,
+and it means the module freezes with your app the way everything else here does.
+Updating one is re-fetching over it, then `module sync`, `db-migrate` and
+`npm run test`.
+
+**What is checked before anything is written:** the manifest, that every file it
+names is really there, that it needs no newer template than you have, that it
+claims no table, route, text namespace, command, component or switch file
+somebody else already owns, and that it imports no npm package your
+`package.json` lacks — `npm ci` on your host installs that file and nothing
+else. Then the archive itself: an entry that climbs out of its folder, an
+absolute path, a symlink or a device node is refused rather than unpacked.
+
+🚨 **None of that says the code is safe.** It says it FITS. Nobody read it,
+there is no signature, and there is no sandbox to be had — a module runs in the
+same process as the rest of your app, with your database, your `.env` and your
+members' rows. `module add` prints that before it writes, and where the module
+came from is recorded in `docs/reports/module-installs.md`. The real place to
+look is the commit: the code is a tracked change in your own repository.
+
+⚠️ **A module from outside brings no skill.** A vendor who wants to ship a
+playbook ships a skill, which is its own thing and installs on its own.
 
 ### 🚨 `remove` looks in the database first
 

@@ -35,8 +35,8 @@ what support asks for when something about a purchase needs looking up.
 
 ## Digistore24
 
-The payment provider this app bills through. Checkout, invoices, payment details
-and cancellation all happen there, which is why some links lead off this site.
+The platform this app sells through. Checkout, invoices, payment details and
+cancellation all happen there, which is why some links lead off this site.
 
 ## Auto top-up
 

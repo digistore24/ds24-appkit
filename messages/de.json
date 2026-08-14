@@ -764,7 +764,7 @@
     "exportBody": "Eine Kopie von allem, was diese App über dich gespeichert hat — als JSON-Datei, die du auch woanders einlesen kannst.",
     "exportCta": "Daten herunterladen",
     "exportHint": "Enthält dein Konto, deine Käufe, dein Guthaben mit allen Buchungen, deine Chatverläufe und jeden Zugang.",
-    "exportExcluded": "Nicht enthalten: dein Passwort (es lässt sich nicht zurücklesen) und die Rohdaten unseres Zahlungsanbieters, weil darin Angaben zu anderen Personen stehen können.",
+    "exportExcluded": "Nicht enthalten: dein Passwort (es lässt sich nicht zurücklesen) und die Rohdaten unserer Verkaufsplattform Digistore24, weil darin Angaben zu anderen Personen stehen können.",
     "deleteTitle": "Konto löschen",
     "deleteBody": "Du kannst dein Konto jederzeit selbst löschen. Ein Teil deiner Daten muss aus gesetzlichen Gründen erhalten bleiben — was genau, steht in der Rückfrage.",
     "deleteCta": "Konto löschen",

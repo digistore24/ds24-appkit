@@ -40,7 +40,50 @@ const ID = /^[a-z][a-z0-9-]*$/;
  * Found by `page-extensions.test.ts` walking `app/` — a real collision, not a
  * hypothetical one.
  */
-export const RESERVED_IDS = new Set(["test", "spec", "d", "module", "modules", "core"]);
+export const RESERVED_IDS = new Set([
+  "test", "spec", "d", "module", "modules", "core",
+  // 🚨 The second group, and a different failure. `docs/modules.md` names it and
+  // nothing prevented it: a module called `ai`, `chat` or `token` takes `ai_`,
+  // `chat_` or `token_` as its prefix and thereby CLAIMS the core's own tables —
+  // `ai_usage`, `chat_messages`, `token_ledger`. After which `module check`
+  // reports a core table as that module's orphan and `remove --drop-data`
+  // offers to drop it. Reserved rather than detected, because the detection
+  // needs a database and this needs none.
+  "ai", "chat", "token", "user", "users", "media", "grants", "setup", "cron",
+]);
+
+/**
+ * The id as it appears inside a SQL identifier.
+ *
+ * 🚨 **A dash is legal in an id and illegal in an unquoted SQL name.** `ID`
+ * allows one, and no module of ours has ever used one — so the table prefix and
+ * the journal name were compared against the id verbatim, and the first module
+ * called `acme-crm` would have been told to name its journal
+ * `__drizzle_migrations_acme-crm`. Postgres would take it only in quotes, and
+ * the module's own bare-Node privacy half writes raw SQL where nothing quotes
+ * for it.
+ *
+ * Dashes become underscores, so `acme-crm` owns `acme_crm_` and
+ * `__drizzle_migrations_acme_crm`. For every module in this tree today the
+ * answer is the id unchanged — none of them has a dash — which is why this can
+ * be tightened without moving a single existing manifest.
+ *
+ * @param {string} id
+ * @returns {string}
+ */
+export const sqlName = (id) => id.replaceAll("-", "_");
+
+/**
+ * How long an id may be.
+ *
+ * Postgres truncates an identifier at 63 bytes, silently. `__drizzle_migrations_`
+ * is 21 of them, so two long ids sharing their first 42 characters would share
+ * ONE journal — and a shared journal means one module's migrations count as
+ * already applied and its tables never appear, which is the exact silent
+ * failure the per-module journal exists to prevent. 40 leaves the prefix room
+ * to be read as well.
+ */
+const MAX_ID = 40;
 
 /** Loose semver — enough to reject prose, not a package manager. */
 const VERSION = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
@@ -105,6 +148,33 @@ const KNOWN = new Set([
 // decision about how released apps get text — not a manifest field.
 // `docs/modules.md` → *Where a module's guidance lives* carries this for the
 // customer.
+//
+// ── What changed, and what did NOT ──────────────────────────────────────────
+//
+// 🚨 **The key stays gone.** What `docs` now also accepts is a path inside the
+// module, and it is worth being exact about why that is not the same seam
+// coming back through a side door — both bullets above were re-read against a
+// module SOMEBODY ELSE wrote, and they answer differently:
+//
+//   - *"An app has to be able to learn about a module it does not have"* proves
+//     the file must SHIP, not that it must sit in `docs/`. Every module folder
+//     ships in every app — `config/modules.json` is empty in a fresh one and all
+//     five folders are still there — so `modules/<id>/docs.md` is exactly as
+//     readable as `docs/<id>.md` for a module nobody installed. And for a module
+//     from outside there is no third option: we cannot ship a page about a
+//     module we have never heard of.
+//   - *"The update channel is addressed by PATH"* is TRUE and is the reason the
+//     core form stays the default for our own five. It does not bind a foreign
+//     module: `scripts/dev/update.mjs` plans over
+//     `keys(remote.files) ∪ keys(stamp.files)`, and a vendor's page is in
+//     neither, so the channel never touches it — no `withdrawn`, no overwrite.
+//     Its guidance freezes with its code, which is what the rest of that module
+//     does anyway.
+//
+// The skill is untouched by all of this and still points at `.claude/skills/`:
+// that path is Claude Code's and OpenCode's, not ours. A module from outside
+// simply declares no skill — the key is optional — and a third party who wants
+// to publish one publishes it as a skill, which needs nothing from this file.
 
 const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const isStringArray = (v) => Array.isArray(v) && v.every((x) => typeof x === "string");
@@ -137,8 +207,14 @@ export function manifestProblems(raw, where) {
   if (typeof id !== "string" || !ID.test(id)) {
     say('"id" must be lower-case letters, digits and dashes');
   } else if (RESERVED_IDS.has(id)) {
-    say(`"id": "${id}" is reserved — a module's routes are named page.<id>.tsx, and that ` +
-      `name already means something else here (route.test.ts is the clearest case)`);
+    say(`"id": "${id}" is reserved — either a module's routes are named page.<id>.tsx and ` +
+      `that name already means something else here (route.test.ts is the clearest case), ` +
+      `or the table prefix it forces would claim tables the core owns`);
+  } else if (id.length > MAX_ID) {
+    say(`"id" is ${id.length} characters — at most ${MAX_ID}. Postgres truncates an ` +
+      `identifier at 63 bytes silently, and "__drizzle_migrations_" already spends 21 of ` +
+      `them: two long ids would share one journal, and a shared journal is a module whose ` +
+      `migrations count as applied and whose tables never appear`);
   }
   if (typeof m.version !== "string" || !VERSION.test(m.version)) {
     say('"version" must look like 1.0.0');
@@ -197,11 +273,22 @@ export function manifestProblems(raw, where) {
   //
   // A dangling pointer is worse than none, so `scripts/modules/manifest.test.ts`
   // opens both against the real tree.
+  // Two legal forms, and the second one is for a module this template did not
+  // write. See `moduleOwnedDocs` below for why that is not a hole in the rule
+  // the note beside KNOWN states.
   const docs = m.docs;
-  if (typeof docs !== "string" || !/^docs\/[a-z0-9-]+\.md$/.test(docs)) {
-    say('"docs" must name this module\'s page in the CORE tree, e.g. "docs/community.md" — ' +
-      "a module does not ship its own guidance (see the note beside KNOWN), it points at the " +
-      "page `node run.mjs update` keeps current");
+  const inCore = typeof docs === "string" && /^docs\/[a-z0-9-]+\.md$/.test(docs);
+  const inModule =
+    typeof docs === "string" &&
+    typeof id === "string" &&
+    new RegExp(`^modules/${id}/[a-z0-9/-]+\\.md$`).test(docs) &&
+    !docs.includes("..");
+  if (!inCore && !inModule) {
+    say('"docs" must name this module\'s page — either in the CORE tree, e.g. ' +
+      `"docs/community.md", which is where a module of this template puts it and where ` +
+      "`node run.mjs update` keeps it current; or inside the module itself, e.g. " +
+      `"modules/${typeof id === "string" ? id : "<id>"}/docs.md", which is where a module ` +
+      "from somewhere else puts it");
   }
   if (m.skill !== undefined && (typeof m.skill !== "string" || !ID.test(m.skill))) {
     say('"skill" must be the name of a skill in .claude/skills/, e.g. "community" — it is the ' +
@@ -377,9 +464,10 @@ export function manifestProblems(raw, where) {
       say('"tables" without a "tablePrefix" — the prefix is how a script recognises the ' +
         "module's tables without importing TypeScript");
     } else {
-      if (typeof id === "string" && !prefix.startsWith(id)) {
-        say(`"tablePrefix" ("${prefix}") must start with the module id ("${id}") — that is ` +
-          `what keeps two modules from claiming the same tables`);
+      if (typeof id === "string" && !prefix.startsWith(sqlName(id))) {
+        say(`"tablePrefix" ("${prefix}") must start with "${sqlName(id)}" — the module id ` +
+          `with dashes as underscores, which is what keeps two modules from claiming the ` +
+          `same tables and still names a table nobody has to quote`);
       }
       const stray = tables.filter((t) => typeof t === "string" && !t.startsWith(prefix));
       if (stray.length > 0) say(`"tables" outside the prefix: ${stray.join(", ")}`);
@@ -389,9 +477,9 @@ export function manifestProblems(raw, where) {
       if (m[key] === undefined) say(`"tables" declared but no "${key}"`);
     }
     if (typeof m.migrationsTable === "string" && typeof id === "string" &&
-        m.migrationsTable !== `__drizzle_migrations_${id}`) {
-      say(`"migrationsTable" must be "__drizzle_migrations_${id}" — one journal per module, ` +
-        `named after it, so a database says which chains have run`);
+        m.migrationsTable !== `__drizzle_migrations_${sqlName(id)}`) {
+      say(`"migrationsTable" must be "__drizzle_migrations_${sqlName(id)}" — one journal per ` +
+        `module, named after it, so a database says which chains have run`);
     }
 
     // 🚨 Rule 2. A module that stores personal data and cannot answer for it is

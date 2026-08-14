@@ -105,6 +105,72 @@ describe("a coherent manifest passes", () => {
     ).toEqual([]);
   });
 
+  it("accepts a dashed id, with its SQL names spelled in underscores", () => {
+    // The shape a third party's id takes — `<vendor>-<feature>` — and the one
+    // no module of ours has ever had, which is why the two rules below could
+    // demand `acme-crm_` and `__drizzle_migrations_acme-crm` for years without
+    // anybody noticing they were asking for identifiers Postgres takes only in
+    // quotes.
+    expect(
+      manifestProblems(
+        broken({
+          id: "acme-crm",
+          tablePrefix: "acme_crm_",
+          tables: ["acme_crm_leads"],
+          migrationsTable: "__drizzle_migrations_acme_crm",
+          messages: { namespaces: ["acme-crm"], dir: "messages" },
+          commands: undefined,
+          cron: undefined,
+          cronJobs: undefined,
+          slots: undefined,
+          components: undefined,
+          serverExports: undefined,
+          contentSource: undefined,
+          app: undefined,
+          publicRoutes: undefined,
+          navAreas: undefined,
+          coreExport: undefined,
+          errorCodes: undefined,
+          privacy: {
+            sections: ["acme-crm"],
+            ts: "privacy/sections.ts",
+            mjs: "privacy/sections.mjs",
+            accountNotes: {
+              export: "acme-crm.accountExportNote",
+              deletion: "acme-crm.accountDeletionNote",
+            },
+          },
+        }),
+        WHERE,
+      ),
+    ).toEqual([]);
+  });
+
+  it("accepts a docs page inside the module — the form a foreign module uses", () => {
+    // Our own five point into `docs/`, where `node run.mjs update` keeps them
+    // current. A module this template did not write has no page there and never
+    // could: we cannot ship a doc about a module we have never heard of. It
+    // ships its own, and the update channel never touches it because the file
+    // is in neither manifest.
+    expect(manifestProblems(broken({ docs: "modules/community/docs.md" }), WHERE)).toEqual([]);
+    expect(manifestProblems(broken({ docs: "modules/community/docs/guide.md" }), WHERE)).toEqual([]);
+  });
+
+  it("refuses a docs path that points into ANOTHER module, or out of the tree", () => {
+    // The same containment the tracing globs get, and for the same reason: a
+    // path that resolves from the app root could otherwise name somebody
+    // else's file — or the core's — and `module list` would print it as this
+    // module's own page.
+    for (const docs of [
+      "modules/courses/docs.md",
+      "modules/community/../courses/docs.md",
+      "modules/community/docs.txt",
+      "../secrets.md",
+    ]) {
+      expect(manifestProblems(broken({ docs }), WHERE).join(" "), docs).toMatch(/"docs"/);
+    }
+  });
+
   it("🚨 refuses `guidance` — a module does not ship its own docs or skill", () => {
     // It was a validated key that no module declared, no generator read and no
     // page documented, and it is gone rather than built: guidance has to be
@@ -558,6 +624,51 @@ describe("the shape itself", () => {
     for (const id of ["test", "spec", "core", "modules"]) {
       expect(manifestProblems(broken({ id }), WHERE).join(" "), id).toMatch(/reserved/);
     }
+  });
+
+  it("🚨 refuses an id that would claim the core's own tables", () => {
+    // A different failure from the reserved names above, and the sharper one:
+    // `docs/modules.md` describes it and nothing prevented it. `ai` forces the
+    // prefix `ai_` and thereby owns `ai_usage`; `token` owns `token_ledger`;
+    // `chat` owns `chat_messages`. After which `module check` calls a core
+    // table that module's orphan, and `remove --drop-data` offers to drop it.
+    for (const id of ["ai", "chat", "token", "users", "media", "grants", "setup", "cron"]) {
+      expect(manifestProblems(broken({ id }), WHERE).join(" "), id).toMatch(/reserved/);
+    }
+  });
+
+  it("🚨 refuses an id too long for one migration journal per module", () => {
+    // Postgres truncates at 63 bytes in silence and `__drizzle_migrations_`
+    // spends 21. Two ids agreeing on their first 42 characters would share a
+    // journal — and a shared journal is one module's `0000` counting as applied
+    // for the other, so its tables simply never appear.
+    const long = `acme-${"x".repeat(40)}`;
+    expect(manifestProblems(broken({ id: long }), WHERE).join(" ")).toMatch(/at most 40/);
+    expect(manifestProblems(broken({ id: "a".repeat(40) }), WHERE).join(" ")).not.toMatch(
+      /at most 40/,
+    );
+  });
+
+  it("🚨 refuses SQL names that spell a dashed id verbatim", () => {
+    // The rule reads `acme-crm` as `acme_crm` everywhere it becomes an
+    // identifier. Spelled with the dash it is a name Postgres takes only in
+    // quotes, and the module's own bare-Node privacy half writes raw SQL where
+    // nothing quotes for it.
+    const dashed = {
+      id: "acme-crm",
+      tables: ["acme_crm_leads"],
+      migrationsTable: "__drizzle_migrations_acme_crm",
+      tablePrefix: "acme_crm_",
+    };
+    expect(
+      manifestProblems({ ...broken(dashed), tablePrefix: "acme-crm_" }, WHERE).join(" "),
+    ).toMatch(/must start with "acme_crm"/);
+    expect(
+      manifestProblems(
+        { ...broken(dashed), migrationsTable: "__drizzle_migrations_acme-crm" },
+        WHERE,
+      ).join(" "),
+    ).toMatch(/__drizzle_migrations_acme_crm/);
   });
 
   it("refuses a missing or malformed identity", () => {

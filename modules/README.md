@@ -23,8 +23,14 @@ modules/community/
   drizzle/         its own migration chain, its own journal table
   messages/        its own text namespaces
   privacy/         its two GDPR contributors (TypeScript and bare Node)
-  guidance/        its CLAUDE.md fragment, docs and skill
 ```
+
+⚠️ **There is no `guidance/` here, and there used to be a line saying there
+was.** A module of THIS template points at a page in the core tree
+(`docs/community.md`) — `docs/modules.md` → *Where a module's guidance lives*
+carries the reasoning. A module from somewhere else keeps its page inside
+itself, `modules/<id>/docs.md`, because we cannot ship a page about a module we
+have never heard of.
 
 **Three files, three worlds, and mixing them is the one mistake this layout
 exists to prevent:**

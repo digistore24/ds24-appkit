@@ -40,13 +40,22 @@
 // Safe for the import-graph rule below: `lib/env.mjs` imports `node:fs` alone.
 import "../lib/env.mjs";
 
-import { availableModules, dependantsOf, loadModules, missingRequires, readModule } from "./registry.mjs";
+import {
+  availableModules,
+  dependantsOf,
+  loadModules,
+  missingRequires,
+  readModule,
+  templateTooOld,
+  templateVersion,
+} from "./registry.mjs";
 import { installedModules } from "./installed.mjs";
 import { writeGenerated } from "./generate.mjs";
 // What still has to happen before an installed module does anything — one
 // answer, read by `add` and by `list`, because the two used to disagree by
 // omission: `list` named the switch and `add` did not. See that file's header.
 import { afterInstall } from "./next-steps.mjs";
+import { verifyProblems } from "./verify.mjs";
 // Which way each installed module's switch points — the weak, certain half of
 // the question its own reader answers in full. See that file's header for why
 // a weaker claim is allowed here where a copy of `isCommunityEnabled()` is not.
@@ -73,11 +82,31 @@ import { noSwitchLine, switchLine, switchStateFrom } from "./switch-state.mjs";
 // already `async` and both already refuse without a reachable database, so the
 // import sits behind the same condition the database work does.
 const dataGate = () => import("./data-gate.mjs");
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  appendFileSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { createInterface } from "node:readline/promises";
+import { fileURLToPath } from "node:url";
+
+import { flagsFrom } from "../lib/args.mjs";
+import { confirmsApply } from "../dev/update-plan.mjs";
+
+/** The app root, from this file's own location — never `process.cwd()`. */
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const args = process.argv.slice(2);
 const command = args[0] ?? "list";
+
+// `--flag value` goes through the shared reader, never a local indexOf — there
+// were eight of those in three semantics once, and one of them bootstrapped the
+// wrong environment.
+const flag = flagsFrom(args);
 
 /** What a module says it brings, in one line per kind. Empty kinds stay silent. */
 function summarise(manifest) {
@@ -403,6 +432,19 @@ async function check() {
       // stops, this is the second place somebody sees it.
       problems.push(`"${id}" holds tables but declares no eraseFor()`);
     }
+    // 🚨 The case `add` structurally cannot see: the module was fine when it
+    // went in, and the APP moved. `node run.mjs update` brings guidance
+    // forward and a customer can roll code back, so a floor that held on
+    // Monday is not a floor that holds today. Nothing else asks this — and the
+    // failure without it is not a refusal but a missing export, hours later,
+    // in whichever page happens to reach the newer code first.
+    const tooOld = templateTooOld(manifest);
+    if (tooOld) {
+      problems.push(
+        `"${id}" ${tooOld} — it was installed against a newer template than this app now ` +
+          `carries. Either bring the app up to date, or take the module out.`,
+      );
+    }
   }
 
   // 🚨 The backstop the gate cannot cover: somebody edited config/modules.json
@@ -527,10 +569,168 @@ function writeRemovalRecord(id, counted) {
   return path;
 }
 
+/**
+ * Write down where a module came from, the same way `--drop-data` writes down
+ * what it deleted.
+ *
+ * 🚨 **This is a provenance record and never a trust claim.** There is no
+ * signature here, so the hash proves only that these were the bytes that
+ * arrived — which is worth exactly one thing, and it is a real thing: the
+ * customer can hold it against what the vendor published, and it lands in their
+ * git diff beside the code it describes. A year later, "where did modules/x
+ * come from" has an answer that is not somebody's memory.
+ */
+function writeInstallRecord(id, manifest, origin) {
+  const dir = "docs/reports";
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const path = `${dir}/module-installs.md`;
+  if (!existsSync(path)) {
+    writeFileSync(
+      path,
+      "# Modules installed from outside this template\n\n" +
+        "Written by `node run.mjs module add --from …`. Where the code came from and\n" +
+        "what its bytes hashed to — never a judgement about it. There is no signature\n" +
+        "behind this: it says what arrived, so that later you can tell whether what\n" +
+        "you have is still what you fetched.\n\n",
+    );
+  }
+  const when = new Date().toISOString().slice(0, 10);
+  const hash = origin.sha256 ? `, sha256 ${origin.sha256}` : "";
+  appendFileSync(
+    path,
+    `- ${when} — "${id}" ${manifest.version} from ${origin.origin}${hash}\n`,
+  );
+  return path;
+}
+
+/**
+ * Say what installing somebody else's code into this app actually means.
+ *
+ * 🚨 **Everything here is true and checkable, and the paragraph about what was
+ * NOT checked is the load-bearing half.** A warning that only listed the
+ * reassuring things would be worse than none: it would read as a clearance.
+ * There is no signature here, no key to check one against, and no sandbox to
+ * be had in a single Next.js app — so this says so rather than implying
+ * otherwise with a tick.
+ *
+ * ⚠️ **The confirmation is asked only where a person can answer it.** With a
+ * terminal, a human is standing here and gets the moment. Without one the
+ * command carries on, and that is not a loophole: `--from` had to be typed with
+ * a URL nobody can guess, so the source was already somebody's decision. The
+ * real checkpoint is neither of those — it is the COMMIT, where the module's
+ * code shows up as a tracked change in the customer's own repository, which is
+ * the one thing that makes foreign code readable, diffable and deletable.
+ *
+ * @returns {Promise<boolean>} whether to carry on
+ */
+async function warnAboutForeignCode(id, fetched) {
+  console.log(`\n⚠ "${id}" did not come from this template.\n`);
+  console.log("  It will run inside your app with exactly the access your own code has: the");
+  console.log("  database, everything in .env — your Digistore24 key, your AI keys, your mail");
+  console.log("  credentials — and every row your members have written. If it brings setup");
+  console.log("  tools, they stand beside this app's own, on the same surface.\n");
+  console.log(`  Where it came from`);
+  console.log(`    ${fetched.origin}`);
+  if (fetched.sha256) console.log(`    sha256 ${fetched.sha256}`);
+  console.log("");
+  console.log("  What was NOT checked");
+  console.log("    Nobody read this code. The checks above say it FITS this app — its manifest,");
+  console.log("    its files, the names it claims. They say nothing about what it does. This is");
+  console.log("    not a signature and not an authenticity check.\n");
+  console.log("  After the install it is ordinary source in your repository:");
+  console.log(`    git diff                      read every line it added`);
+  console.log(`    rm -rf modules/${id}${" ".repeat(Math.max(1, 14 - id.length))}throw it away again\n`);
+
+  if (!process.stdin.isTTY) return true;
+
+  const ask = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    return confirmsApply(await ask.question(`  Install it into modules/${id}/? [y/N] `));
+  } finally {
+    ask.close();
+  }
+}
+
+/**
+ * Bring a module in from outside, and say plainly what that means.
+ *
+ * 🚨 **`--from` is required for anything that is not already in the tree**, so
+ * installing somebody else's code can never happen by mistyping an id. What
+ * follows the flag is a download URL or a local path; what comes back is
+ * verified in a throwaway folder and only then copied in.
+ *
+ * @returns {Promise<{ id: string, origin: string, sha256: string|null } | number>}
+ *   the id to carry on with, or an exit code
+ */
+async function bringIn(source) {
+  let fetched;
+  try {
+    const { materialise } = await import("./fetch.mjs");
+    fetched = await materialise(source, { expectSha256: flag("sha256") });
+  } catch (error) {
+    console.error(`✗ Could not fetch ${source}:\n\n  ${error.message}\n`);
+    return 1;
+  }
+
+  try {
+    const manifestPath = join(fetched.dir, "module.json");
+    // The id is the MANIFEST's. An archive called `crm-1.2.0.tar.gz` says nothing
+    // about what is in it, and a module installed under the wrong name is one
+    // whose own imports — `@/modules/<id>/…`, all of them generated from this
+    // id — point at a folder that is not there.
+    const id = JSON.parse(readFileSync(manifestPath, "utf8")).id;
+    if (typeof id !== "string" || id.length === 0) {
+      console.error(`✗ ${manifestPath} declares no id.`);
+      return 1;
+    }
+    if (existsSync(join(ROOT, "modules", id))) {
+      console.error(
+        `✗ modules/${id}/ is already here.\n\n` +
+          `  Nothing has been changed. This command does not overwrite a module that is\n` +
+          `  already in your tree — that is a decision about code you own, and it belongs\n` +
+          `  in your own hands and your own git history.`,
+      );
+      return 1;
+    }
+
+    const problems = verifyProblems({ id, dir: fetched.dir });
+    if (problems.length > 0) {
+      console.error(
+        `✗ "${id}" cannot be installed into this app — ${problems.length} problem(s):\n`,
+      );
+      for (const problem of problems) console.error(`  · ${problem}`);
+      console.error("\n  Nothing has been changed.\n");
+      return 1;
+    }
+
+    if (!(await warnAboutForeignCode(id, fetched))) {
+      console.log("\n  Nothing has been changed.\n");
+      return 1;
+    }
+
+    cpSync(fetched.dir, join(ROOT, "modules", id), { recursive: true });
+    console.log(`·  Copied it into modules/${id}/.`);
+    return { id, origin: fetched.origin, sha256: fetched.sha256 };
+  } finally {
+    fetched.discard();
+  }
+}
+
 async function add() {
-  const id = args[1];
+  const source = flag("from");
+  let origin = null;
+  let id = args[1];
+
+  if (source) {
+    const brought = await bringIn(source);
+    if (typeof brought === "number") return brought;
+    id = brought.id;
+    origin = brought;
+  }
+
   if (!id) {
     console.error("Usage: node run.mjs module add <id>");
+    console.error("       node run.mjs module add --from https://…/module.tar.gz");
     return 2;
   }
 
@@ -555,6 +755,22 @@ async function add() {
   // worse than no refusal: the operator reads an error, believes nothing
   // happened, and every later command answers for an arrangement that does not
   // exist.
+  // Same placement and the same argument as the dependency check below: a
+  // module the template is too old for must be refused BEFORE anything is
+  // written, not diagnosed afterwards as a missing export.
+  const tooOld = templateTooOld(manifest);
+  if (tooOld) {
+    console.error(
+      `✗ "${id}" ${tooOld}.\n\n` +
+        `  Nothing has been changed.\n\n` +
+        `  This module declares the oldest template it can run on, and this app is\n` +
+        `  older than that. Bring the app's guidance and code up to date, or ask\n` +
+        `  whoever wrote the module for a build that runs on ${templateVersion()}.\n\n` +
+        `  See docs/modules.md → *What a module joins by declaring itself*.`,
+    );
+    return 1;
+  }
+
   const missing = missingRequires(manifest, installed);
   if (missing.length > 0) {
     const list = missing.map((dep) => `"${dep}"`).join(", ");
@@ -571,6 +787,11 @@ async function add() {
 
   writeInstalled([...installed, id]);
   const changed = writeGenerated();
+
+  if (origin) {
+    const written = writeInstallRecord(id, manifest, origin);
+    console.log(`·  Where it came from is recorded in ${written}.`);
+  }
 
   console.log(`✓ "${id}" is now part of this app (${manifest.version}).\n`);
   if (changed.length > 0) {
@@ -748,13 +969,94 @@ async function remove() {
   return 0;
 }
 
-const COMMANDS = { list, check, sync, add, remove };
+/**
+ * Could this app install that module? Asked of a folder, before anything moves.
+ *
+ * Takes an id in the tree (`module verify community`) or a path to a folder
+ * that is not in it yet (`module verify ../my-module`) — which is what a vendor
+ * runs before publishing, and what `add --from` runs on a download.
+ */
+async function verify() {
+  const target = args[1];
+  if (!target) {
+    console.error("Usage: node run.mjs module verify <id|path>");
+    return 2;
+  }
+
+  // An id in the tree, or anything `add --from` would accept: a URL, an
+  // archive, a folder. A vendor's own use of this command is against the
+  // tarball they are about to publish, so refusing an archive here would leave
+  // them checking something other than what they ship.
+  const fromOutside =
+    /^https?:\/\//i.test(target) || target.includes("/") || target.includes("\\") || target === ".";
+
+  let dir;
+  let discard = () => {};
+  let id = target;
+
+  if (fromOutside) {
+    try {
+      const { materialise } = await import("./fetch.mjs");
+      const fetched = await materialise(target, { expectSha256: flag("sha256") });
+      dir = fetched.dir;
+      discard = fetched.discard;
+    } catch (error) {
+      console.error(`✗ Could not read ${target}:\n\n  ${error.message}\n`);
+      return 1;
+    }
+    // The id is the manifest's, never the folder's or the archive's name — a
+    // download called `crm-1.2.0.tar.gz` says nothing about what is inside it,
+    // and taking the id from the file name is how a module ends up installed
+    // under a name none of its own imports use.
+    try {
+      id = JSON.parse(readFileSync(join(dir, "module.json"), "utf8")).id;
+    } catch (error) {
+      discard();
+      console.error(`✗ Could not read its module.json: ${error.message}`);
+      return 1;
+    }
+  } else {
+    dir = join(ROOT, "modules", target);
+    if (!existsSync(dir)) {
+      console.error(`✗ There is no module "${target}" in this tree.`);
+      return 1;
+    }
+  }
+
+  let problems;
+  try {
+    problems = verifyProblems({ id: String(id), dir });
+  } finally {
+    discard();
+  }
+  if (problems.length > 0) {
+    console.error(`✗ "${id}" cannot be installed into this app — ${problems.length} problem(s):\n`);
+    for (const problem of problems) console.error(`  · ${problem}`);
+    console.error("");
+    return 1;
+  }
+
+  console.log(`✓ "${id}" fits this app.\n`);
+  console.log("  Its manifest is coherent, every file it names is there, it needs a template");
+  console.log(`  no newer than ${templateVersion()}, and it claims no table, route, text`);
+  console.log("  namespace, command, component or switch file that this app already owns.\n");
+  // 🚨 Never "verified", and never without this paragraph. Everything above is
+  // shape, paths and names. Nobody read the code, nothing ran it, and the
+  // checks that walk a module's imports and its GDPR halves live in the suite —
+  // which cannot run against a folder outside the tree.
+  console.log("  Nobody read this code. That says it FITS, never that it is safe or that it");
+  console.log("  does what it says. The full check is `npm run test` once it is installed.");
+  return 0;
+}
+
+const COMMANDS = { list, check, sync, add, remove, verify };
 
 if (!Object.hasOwn(COMMANDS, command)) {
   console.error(`Unknown: module ${command}\n`);
   console.error(`  node run.mjs module list    what this app is made of`);
   console.error(`  node run.mjs module check   is the arrangement coherent?`);
   console.error(`  node run.mjs module sync    rewrite the generated registries`);
+  console.error(`  node run.mjs module verify <id|path>   could this app install it?`);
   console.error(`  node run.mjs module add <id> / remove <id>`);
   process.exit(2);
 }
