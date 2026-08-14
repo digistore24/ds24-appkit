@@ -32,6 +32,8 @@ import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+import { loadManifest } from "./_manifest.mjs";
+
 const SCRIPT = fileURLToPath(new URL("./check.mjs", import.meta.url));
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -87,9 +89,34 @@ async function check(payload: { reports?: unknown; problems?: unknown }) {
   }
 }
 
+/**
+ * How many product files THIS checkout declares.
+ *
+ * 🚨 Read rather than assumed, because `check.mjs` reads it too: it compares
+ * the environment's answer against `loadManifest(ROOT)` and exits 1 when the
+ * environment is behind this tree (`declaredVsReported()`). Fixtures with the
+ * numbers typed in were fine in the template, which declares none — and turned
+ * red in the first app that shipped two files, i.e. in any app that used the
+ * feature. The claim these tests make is about EXIT CODES; how much content the
+ * app happens to hold is not part of it.
+ *
+ * The root is the script's own, not `process.cwd()` — `check.mjs` derives it
+ * from `import.meta.url`, so there is no working directory to move this into.
+ */
+const DECLARED = (() => {
+  const manifest = loadManifest(ROOT) as {
+    missing?: boolean;
+    entries?: unknown[];
+  };
+  return manifest.missing ? 0 : (manifest.entries?.length ?? 0);
+})();
+
+/** Always ahead of what this checkout declares, so the tree can never disagree. */
+const COUNT = DECLARED + 2;
+
 const clean: Report = {
   owner: "core",
-  items: [{ what: "product media", found: 2, expected: 2 }],
+  items: [{ what: "product media", found: COUNT, expected: COUNT }],
 };
 
 describe("the exit code is the reports, not the payload's verdict", () => {
@@ -123,8 +150,8 @@ describe("the exit code is the reports, not the payload's verdict", () => {
           items: [
             {
               what: "product media",
-              found: 0,
-              expected: 1,
+              found: COUNT - 1,
+              expected: COUNT,
               missing: ["kurs/cover.png (a media row, but no object in the store)"],
             },
           ],
@@ -165,7 +192,7 @@ describe("the states that were already right stay right", () => {
   it("a clean answer is still exit 0 and still says so", async () => {
     const run = await check({ reports: [clean], problems: [] });
 
-    expect(run.stdout).toContain("✓ core         product media: 2 of 2");
+    expect(run.stdout).toContain(`✓ core         product media: ${COUNT} of ${COUNT}`);
     expect(run.stdout).toContain("✓ every owner answered, nothing missing.");
     expect(run.code, `content-check exited ${run.code}: ${run.stderr}`).toBe(0);
   });
@@ -181,8 +208,8 @@ describe("the states that were already right stay right", () => {
           items: [
             {
               what: "product media",
-              found: 1,
-              expected: 1,
+              found: COUNT,
+              expected: COUNT,
               notChecked: "the media store was not asked — MEDIA_S3_BUCKET is not set",
             },
           ],
@@ -191,7 +218,7 @@ describe("the states that were already right stay right", () => {
       problems: [],
     });
 
-    expect(run.stdout).toContain("⏭ core         product media: 1 of 1");
+    expect(run.stdout).toContain(`⏭ core         product media: ${COUNT} of ${COUNT}`);
     expect(run.stdout).toContain("1 thing(s) NOT checked");
     expect(run.stdout).toContain("nothing missing among what was checked");
     expect(run.code, `content-check exited ${run.code}: ${run.stderr}`).toBe(0);

@@ -1,9 +1,9 @@
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
-# Pre-flight — why each of the seven is there
+# Pre-flight — why each of the eight is there
 
 Part of the skill `go-live`, step 1. SKILL.md holds the checks and the order; this
-file holds what each one costs when it is skipped. Four of the seven the host
+file holds what each one costs when it is skipped. Four of the eight the host
 enforces at boot anyway (`lib/env-guard.ts`), which sounds like a reason not to
 check them here and is the opposite: at boot the same fault arrives as *"the deploy
 is broken"*, hours after the user was told the app was ready.
@@ -42,7 +42,28 @@ missing From (deliberate exception `EMAIL_FROM_FOREIGN_DOMAIN`, see
   too, and without it they open with a generic "Sign in" instead of the product's
   name.
 
-## 4 · Somewhere for files to live
+## 4 · The app's own address
+
+`APP_URL` is what the app says it is, and it is where everything the app MAILS OUT
+points — the sign-in link above all. Without it Auth.js falls back to the request
+headers, and behind a hosting router those say what the container calls itself:
+measured on DigitalOcean App Platform, `https://localhost:8080`. So STAGING and PROD
+do not start without it, and `AUTH_URL` is derived from it
+([`lib/auth/auth-url.mjs`](../../../../lib/auth/auth-url.mjs)).
+
+🚨 **`AUTH_TRUST_HOST=true` is not the same lever** — it says which `Host` values are
+ACCEPTED, never which one goes into the mail. *"But trust host is on"* is the
+sentence to stop reading at. If an operator has set `AUTH_URL` or `NEXTAUTH_URL` by
+hand and it names a different origin, the app refuses the start rather than sending
+half the customers to one address and half to the other
+([`docs/troubleshooting.md`](../../../../docs/troubleshooting.md) → *The sign-in link
+points at `localhost`*).
+
+What no guard can settle is whether the URL is **your** domain: it can only see that
+it is a URL. That is why a human opens the mail and looks at where its button points
+— the skill's step 5, *Smoke test (live)*.
+
+## 5 · Somewhere for files to live
 
 On a host a local disk is not storage. The next deploy takes every uploaded file
 with it, and with two instances a customer's picture is present about half the time
@@ -60,14 +81,14 @@ in order — does this app take files at all (`enabled`, and whether anything ca
 says where files go and proves it by writing, reading and deleting a throwaway
 object.
 
-## 5 · The home page
+## 6 · The home page
 
 If `app/page.tsx` still carries the shipped placeholder — the three `home.features.*`
 keys, with or without swapped texts — the first page every visitor to the live domain
 reads is a README about the template. The skill that builds the real one is
 **`salespage`** ([`docs/salespage.md`](../../../../docs/salespage.md)).
 
-## 6 · The icons
+## 7 · The icons
 
 Five files carry one picture
 ([`docs/design-system.md`](../../../../docs/design-system.md) § 4), and the three
@@ -78,7 +99,7 @@ is **`design`**. `node run.mjs smoke` proves the manifest and every icon in it r
 answer on the deployed domain, which is the half that fails for packaging reasons
 rather than for design ones.
 
-## 7 · Migrations and the law
+## 8 · Migrations and the law
 
 `drizzle/` up to date (`node run.mjs db-generate` after a schema change), and
 `node run.mjs legal-check`. That one exits non-zero on the things that must not meet

@@ -30,6 +30,11 @@ async function loadConfig(env: Record<string, string | undefined>) {
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.resetModules();
+  // Importing auth.config WRITES to process.env (`applyAuthUrl`), and
+  // `unstubAllEnvs` only restores what was stubbed — so without this the first
+  // load's origin would still be in force for every later one.
+  delete process.env.AUTH_URL;
+  delete process.env.NEXTAUTH_URL;
 });
 
 describe("auth.config cookie names", () => {
@@ -60,6 +65,72 @@ describe("auth.config cookie names", () => {
     });
 
     expect(config.cookies).toBeUndefined();
+  });
+});
+
+// 🚨 The origin of everything Auth.js MAILS OUT.
+//
+// The pure rule is `lib/auth/auth-url.mjs` and is tested there. What is tested
+// HERE is that it reaches Auth.js at all — the same argument as the cookie
+// names above, and the same failure mode: a value computed and then thrown
+// away. Auth.js offers no config field for this, so the only lever is the
+// environment (`reqWithEnvURL()` in next-auth/lib/env.js), and importing this
+// file is what pulls it.
+//
+// What it prevents, measured on a real deployment 2026-08-14: behind
+// DigitalOcean's router the container sees itself as `localhost:8080`, and the
+// sign-in mails carried `https://localhost:8080/api/auth/callback/email?…`
+// while typecheck, the whole suite, `smoke` and `errors` were green.
+describe("🚨 the origin of outgoing auth links", () => {
+  it("comes from APP_URL, not from the request", async () => {
+    delete process.env.AUTH_URL;
+    await loadConfig({
+      APP_ENV: "production",
+      APP_URL: "https://fangfertig.de",
+      AUTH_SECRET: SECRET,
+    });
+
+    expect(process.env.AUTH_URL).toBe("https://fangfertig.de");
+  });
+
+  it("is the ORIGIN — a path in APP_URL must not move the auth routes", async () => {
+    // AUTH_URL's pathname becomes Auth.js's basePath (next-auth/lib/env.js),
+    // so handing APP_URL over whole would put every auth route under /app.
+    delete process.env.AUTH_URL;
+    await loadConfig({
+      APP_ENV: "production",
+      APP_URL: "https://example.com/app",
+      AUTH_SECRET: SECRET,
+    });
+
+    expect(process.env.AUTH_URL).toBe("https://example.com");
+  });
+
+  it("leaves an operator's own AUTH_URL alone", async () => {
+    // A deployment that already worked around the defect by hand keeps
+    // working; `lib/env-guard.ts` refuses the start when the two disagree.
+    process.env.AUTH_URL = "https://www.fangfertig.de";
+    await loadConfig({
+      APP_ENV: "production",
+      APP_URL: "https://fangfertig.de",
+      AUTH_SECRET: SECRET,
+    });
+
+    expect(process.env.AUTH_URL).toBe("https://www.fangfertig.de");
+  });
+
+  it("runs before anything in this file can build a URL", () => {
+    // Structural, because the ordering is the whole point and an import that
+    // was moved below `NextAuth()`'s reach would still typecheck: the call sits
+    // at module scope, not inside a callback.
+    const source = blankComments(
+      readFileSync(new URL("./auth.config.ts", import.meta.url), "utf8"),
+    );
+    expect(source).toMatch(/^applyAuthUrl\(process\.env\);$/m);
+    expect(
+      source.indexOf("applyAuthUrl(process.env);"),
+      "applyAuthUrl() must run before the config object is built",
+    ).toBeLessThan(source.indexOf("export default {"));
   });
 });
 

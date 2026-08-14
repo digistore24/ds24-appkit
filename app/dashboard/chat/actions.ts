@@ -15,8 +15,15 @@ const PAGE = "/dashboard/chat";
 
 import type { ActionState } from "@/lib/action-state";
 
-/** Re-exported so the components beside this file keep importing it from here. */
-export type { ActionState };
+// Re-exported so the components beside this file keep importing it from here.
+// 🚨 WITH the `from` clause, and that is not a style choice. Written
+// `export type { ActionState };` — a re-export of a LOCAL binding — Turbopack's
+// "use server" transform emits the bare identifier into the server entry list
+// (`ensureServerEntryExports([…, ActionState])`) where nothing defines it, and
+// the first POST to ANY action in the file dies with
+// `ReferenceError: ActionState is not defined`. Measured in this template's own
+// production build; `scripts/server-actions.test.ts` now refuses the form.
+export type { ActionState } from "@/lib/action-state";
 
 async function toState(error: unknown): Promise<ActionState> {
   unstable_rethrow(error);

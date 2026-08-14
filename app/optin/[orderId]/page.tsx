@@ -117,6 +117,28 @@ export default async function OptinPage({
             )}
           </CardContent>
         </Card>
+
+        {/* 🚨 Who took the money — outside the conditional, on purpose.
+            Digistore24 GmbH is the RESELLER: it is their name on the buyer's
+            bank statement, not the vendor's. A buyer who does not recognise a
+            line on their statement does not write a support mail, they call
+            their bank — and a chargeback costs the vendor the sale, the fee
+            and a mark on their Digistore24 account. It is also a platform
+            requirement of the reseller this whole template bills through.
+
+            It therefore may not wait for the IPN: the buyer is standing here
+            straight out of a payment page, which is the one moment the
+            question "who just charged me" is actually being asked. The order
+            arriving is irrelevant to it, so it sits outside the branch that
+            waits for one, quietly, under the card.
+
+            `node run.mjs legal-check` refuses an app whose thank-you page has
+            lost this (`lib/legal/digistore-claims.mjs` → RESELLER_NOTICE) —
+            both halves, the key AND this mount, because either alone is a
+            check that passes while the buyer reads nothing. */}
+        <p className="text-muted-foreground text-center text-xs">
+          {t("reseller")}
+        </p>
       </div>
     </main>
   );

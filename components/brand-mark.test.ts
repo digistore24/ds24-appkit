@@ -33,6 +33,7 @@ import { blankComments } from "@/scripts/lib/source-text.mjs";
 import { mediaConfig } from "@/lib/media/config";
 import { sniffMime } from "@/lib/media/sniff";
 import { brand, NO_BRAND } from "@/lib/brand";
+import { notChecked } from "@/lib/test-not-checked";
 import brandConfig from "@/config/brand.json";
 
 const ROOT = process.cwd();
@@ -263,9 +264,25 @@ describe("config/brand.json does not lie", () => {
     expect(config.logoHeight).toBeGreaterThan(0);
   });
 
-  it("ships with no logo — the letter tile is the shipped state", () => {
-    // Not a preference: `node run.mjs brand icons --apply` fills this in, and a
-    // template that shipped somebody's logo would ship it into every app.
+  it("ships with no logo — the letter tile is the shipped state", (ctx) => {
+    // Not a preference: a template that shipped somebody's logo would ship it
+    // into every app, so `config/brand.json` leaves it null.
+    //
+    // 🚨 But `node run.mjs brand icons --logo … --apply` is exactly what an app
+    // is TOLD to run, and it fills this file in. Asserted flatly, this was a
+    // shipped test that went red the moment a customer used a shipped feature —
+    // and a red test is the commit condition in `CLAUDE.md`, so it stopped them
+    // committing. Once the file names a logo there is no shipped state left to
+    // check, and saying so out loud is the answer: the three assertions above
+    // become live at the same moment and carry the claim from here on.
+    if (config.logo) {
+      return notChecked(
+        ctx,
+        `config/brand.json names a logo (${config.logo}), so this app is past ` +
+          "the shipped state — `brand icons --apply` has run. What the TEMPLATE " +
+          "ships cannot be measured from inside an app that has changed it.",
+      );
+    }
     expect(brand()).toEqual(NO_BRAND);
   });
 });

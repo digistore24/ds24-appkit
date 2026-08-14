@@ -55,6 +55,9 @@
 // Verdict:
 //   5xx                          → FAILURE, exit code 1
 //   3xx to /login WHILE SIGNED IN → FAILURE: the session did not take
+//   3xx to a LOOPBACK origin      → FAILURE on a deployed app: a correct status
+//                                  code sending a customer to an address only
+//                                  the server can reach (lib/auth/auth-url.mjs)
 //   other 2xx/3xx/4xx            → answered. A signed-in page redirecting to
 //                                  /plans is a hasPlan() gate doing its job.
 //   an error in the log          → FAILURE, even when the page answered 200.
@@ -76,6 +79,7 @@ import { findErrors, markLog } from "./log-errors.mjs";
 import { diagnosticsCredentials, readRemoteFindings, describeWindow } from "./errors-remote.mjs";
 import { collectPageRoutes } from "./routes.mjs";
 import { renderFindings } from "../../lib/diagnostics/parse.mjs";
+import { strandedRedirect } from "../../lib/auth/auth-url.mjs";
 import { signInAsOwner, signInAsSmokeMember } from "./sign-in.mjs";
 import { runDynamicRoutes } from "./smoke-dynamic.mjs";
 import { runModuleSmoke } from "../modules/inventory.mjs";
@@ -171,6 +175,24 @@ async function callPage(route, cookie = "") {
       failures++;
       console.log(`  ✗ ${status}  ${route} — sent to /login despite a session`);
       return { toLogin: true };
+    }
+
+    // 🚨 A redirect that sends a customer to an address only the server can
+    // reach. It is a correct status code on a correct path, so every other line
+    // of this sweep is happy with it — measured: a deployed app answered
+    // `location: /login?callbackUrl=https%3A%2F%2Flocalhost%3A8080%2Fdashboard`,
+    // this script printed that line and ticked it, and every buyer since the
+    // deploy got a sign-in mail they could not use. The rule and why it is only
+    // about LOOPBACK addresses: lib/auth/auth-url.mjs → strandedRedirect().
+    const stranded = strandedRedirect(url, location);
+    if (stranded) {
+      failures++;
+      console.log(
+        `  ✗ ${status}  ${route} — redirects to ${stranded.origin}, which only this\n` +
+          `         server can reach (${stranded.url}). The app's own address is what\n` +
+          "         it must hand out: check APP_URL, not AUTH_TRUST_HOST (docs/auth-setup.md).",
+      );
+      return { toLogin };
     }
 
     // A signed-in page redirecting somewhere ELSE is not a defect: that is what

@@ -133,7 +133,8 @@
     "onboardingTokensTitle": "Top up your balance",
     "onboardingTokensBody": "With tokens you pay for what you actually use.",
     "onboardingTokensCta": "Buy credit",
-    "onboardingTokensDone": "{balance} tokens on your account."
+    "onboardingTokensDone": "{balance} tokens on your account.",
+    "purchaseReseller": "Your payment is processed by Digistore24 GmbH — that is the name that appears on your statement."
   },
   "onboarding": {
     "title": "Your first steps",
@@ -516,7 +517,8 @@
     "received": "Your order has been received.",
     "signInBody": "Sign in with the email address you paid with — your purchase is then attached to your account automatically.",
     "signInCta": "Sign in now",
-    "dashboardCta": "Go to the app"
+    "dashboardCta": "Go to the app",
+    "reseller": "Your payment is processed by Digistore24 GmbH — that is the name you will see on your statement."
   },
   "ds24Connected": {
     "title": "Access approved",

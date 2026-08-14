@@ -118,6 +118,33 @@ over — `// @vitest-environment jsdom` at the top of that test. A tree-wide
 change would put a DOM under 349 files that neither need one nor are written
 for one, and slow every run to buy it.
 
+## 🚨 In a `"use server"` file, a type re-export needs its `from`
+
+```ts
+export type { ActionState };                          // ❌ every action 500s
+export type { ActionState } from "@/lib/action-state"; // ✅
+```
+
+Turbopack's `"use server"` transform collects a module's exports into a runtime
+list and registers each as a Server Action. A type-only re-export of a **local**
+binding survives that collection as a bare identifier: the emitted chunk holds
+`ensureServerEntryExports([i, j, ActionState])`, nothing in it defines
+`ActionState`, and the first POST to **any** action in the file dies with
+`ReferenceError: ActionState is not defined`.
+
+Nothing else in this repo can see it. `npm run typecheck` is clean — the
+TypeScript is correct. The suite is green — no test evaluates a built chunk.
+`node run.mjs smoke` only makes GETs, and an action is a POST. It reaches a
+customer as "every button is broken", and it did: measured in the template's own
+production build, in six files, one of them `app/dashboard/chat/actions.ts` —
+which hangs in the dashboard LAYOUT, so it took every action on every page under
+it down with it.
+
+Both other forms are erased correctly and stay allowed — `export type X = …` and
+`export type { X } from "…"`. So the rule is narrow and the fix is one clause.
+`scripts/server-actions.test.ts` refuses the form; `node run.mjs errors` is what
+found it.
+
 ## A `.mjs` beside a `.ts` — always import it by its extension
 
 Some rules live in a `.mjs` rather than a `.ts` because a plain-Node script has to

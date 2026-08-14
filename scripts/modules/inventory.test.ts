@@ -17,6 +17,7 @@ import nextConfig, { CORE_TRACING_INCLUDES } from "@/next.config";
 import { blankComments } from "@/scripts/lib/source-text.mjs";
 import {
   SETUP_TRACING_ROUTE,
+  composedMessages,
   mergeTracingIncludes,
   moduleCronJobs,
   moduleNavAreas,
@@ -521,5 +522,72 @@ describe("the greeting really uses them", () => {
       expect(match, `${name} is no longer readable as a plain literal`).not.toBeNull();
       expect(match![1], `${name} has a spread inside the literal`).not.toContain("...");
     }
+  });
+});
+
+// 🚨 The catalogue a checker judges must be the one the APP renders.
+//
+// `node run.mjs legal-check` used to read `messages/<locale>.json` and nothing
+// else, so it reported a missing Art. 50 notice in every app that had installed
+// the `companion` module — for a sentence the app was showing perfectly, out of
+// `modules/companion/messages/de.json`. A false alarm on a legal check is worse
+// than none: it teaches the reader that this command is wrong about things.
+describe("composedMessages — the texts a customer really sees", () => {
+  /** Adds a catalogue file to a fixture module. */
+  function catalogue(root: string, id: string, locale: string, body: unknown) {
+    mkdirSync(join(root, "modules", id, "messages"), { recursive: true });
+    writeFileSync(
+      join(root, "modules", id, "messages", `${locale}.json`),
+      JSON.stringify(body),
+    );
+  }
+
+  it("merges an installed module's own namespace in", () => {
+    const root = app(["alpha"], { alpha: withTables("alpha") });
+    catalogue(root, "alpha", "de", { alpha: { disclaimer: "Eine KI antwortet hier." } });
+
+    const merged = composedMessages("de", { chat: { disclaimer: "core" } }, root);
+    expect(merged.alpha).toEqual({ disclaimer: "Eine KI antwortet hier." });
+    // And the core's own is untouched — the failure this replaces was a
+    // catalogue that had one half of the app in it.
+    expect(merged.chat).toEqual({ disclaimer: "core" });
+  });
+
+  it("merges INTO a shared namespace rather than over it", () => {
+    // The same rule `mergeModuleMessages()` carries, asserted through this
+    // reader: a shallow spread here would take every core error message out.
+    const root = app(["alpha"], { alpha: withTables("alpha") });
+    catalogue(root, "alpha", "de", { errors: { alphaBroke: "Kaputt." } });
+
+    const merged = composedMessages("de", { errors: { unknown: "Unbekannt." } }, root);
+    expect(merged.errors).toEqual({ unknown: "Unbekannt.", alphaBroke: "Kaputt." });
+  });
+
+  it("ignores a module that is present but NOT installed", () => {
+    // Uninstalled means the code is not in the app at all; its texts are not
+    // either, and a checker that read them would judge a page nobody can reach.
+    const root = app([], { alpha: withTables("alpha") });
+    catalogue(root, "alpha", "de", { alpha: { disclaimer: "Eine KI." } });
+
+    expect(composedMessages("de", { chat: {} }, root).alpha).toBeUndefined();
+  });
+
+  it("says nothing about a locale a module does not carry", () => {
+    // The core decides which languages exist; a module adds keys, never a
+    // language. A missing file here is silence, not a throw — `i18n/
+    // messages.test.ts` is where a missing key is a finding.
+    const root = app(["alpha"], { alpha: withTables("alpha") });
+    catalogue(root, "alpha", "de", { alpha: { disclaimer: "Eine KI." } });
+
+    expect(composedMessages("fr", { chat: {} }, root)).toEqual({ chat: {} });
+  });
+
+  it("leaves the core catalogue object alone", () => {
+    const root = app(["alpha"], { alpha: withTables("alpha") });
+    catalogue(root, "alpha", "de", { alpha: { disclaimer: "Eine KI." } });
+
+    const core = { chat: { disclaimer: "core" } };
+    composedMessages("de", core, root);
+    expect(core).toEqual({ chat: { disclaimer: "core" } });
   });
 });

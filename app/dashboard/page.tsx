@@ -211,6 +211,25 @@ export default async function DashboardPage({
         />
       )}
 
+      {/* 🚨 Who took the money — and a Callout rather than a second toast,
+          because this is the one thing on the screen that must not drift past
+          (CLAUDE.md → UI: what must stay is a Callout, what may drift is a
+          toast). Digistore24 GmbH is the RESELLER: theirs is the name on the
+          buyer's bank statement, and a line nobody recognises becomes a call to
+          their bank rather than a mail to the vendor.
+
+          It is HERE as well as on /optin because a signed-in buyer never sees
+          /optin at all — `app/optin/[orderId]/page.tsx` redirects them straight
+          here with `?purchase=…`, which is right (it takes them to what they
+          paid for) and would otherwise mean the notice reaches only the buyers
+          who had no account. It shows exactly while that parameter does, so it
+          is gone on the next click. */}
+      {notice && (
+        <Callout variant="info" className="mb-6">
+          {t("purchaseReseller")}
+        </Callout>
+      )}
+
       <PageHeader
         title={t("welcome")}
         description={t("signedInAs", { email: session.user.email ?? "" })}

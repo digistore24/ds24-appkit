@@ -259,6 +259,15 @@ export async function buildMemberExport(
     chatRows,
     usageRows,
     impersonationRows,
+    // 🚨 One name per query, in the query's own order. A destructuring with too
+    // FEW names is legal TypeScript and silently shifts everything after the
+    // gap: this list was missing `setupActRows`, so `mediaRows` received the
+    // setup-audit rows, the member's own uploads fell out of the answer
+    // entirely, and `setupActs` — which `MEMBER_EXPORT_SECTIONS` promises —
+    // never reached the returned object at all. Typecheck was clean and the
+    // parity test compared two DECLARATIONS, so nobody ever called this
+    // function. `lib/privacy/export-shape.test.ts` now does.
+    setupActRows,
     mediaRows,
   ] = await Promise.all([
     orderIds.length
@@ -451,6 +460,7 @@ export async function buildMemberExport(
     aiUsage: usageRows,
     impersonations: impersonationRows,
     media: mediaRows,
+    setupActs: setupActRows,
 
     // 🚨 And whatever the installed modules hold about this person — the
     // community's thirteen sections among them, since Epic 24 moved them into

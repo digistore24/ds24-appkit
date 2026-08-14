@@ -57,6 +57,42 @@ export async function signInVerdict(id: string): Promise<SignInVerdict> {
   return row.blockedAt !== null ? "blocked" : "allowed";
 }
 
+/** What a RUNNING session is worth right now, as the database sees it. */
+export interface AccountState {
+  blocked: boolean;
+  /** `null` only when there is no row — an account deleted mid-session. */
+  role: string | null;
+}
+
+/**
+ * The two facts a guard needs about a signed-in account, in ONE query.
+ *
+ * 🚨 The role is here because it must not come out of the token. A JWT carries
+ * what somebody WAS when they signed in, and this app's sessions last thirty
+ * days with idle refresh — so taking `owner` away used to leave the admin
+ * surface open to them for weeks: plans, token balances, deleting users,
+ * impersonation, appointing moderators. The block took effect immediately and
+ * the role change did not, although `CLAUDE.md` promised both.
+ *
+ * Reading it beside `blockedAt` is what makes that free: `requireActiveUser()`
+ * already paid for this row on every protected page load. One column more is
+ * no round trip more.
+ *
+ * ⚠️ It is asked about `session.user.id`, which during an impersonation is the
+ * MEMBER's id — deliberately (AD-23), and the answer is then the member's role,
+ * which is the same statement the session already made and now makes freshly.
+ */
+export async function accountState(id: string): Promise<AccountState> {
+  const [row] = await db
+    .select({ blockedAt: users.blockedAt, role: users.role })
+    .from(users)
+    .where(eq(users.id, id));
+  // No hit means the account was deleted while the session was running. That
+  // access belongs terminated too — "not found" is not "may come in".
+  if (!row) return { blocked: true, role: null };
+  return { blocked: row.blockedAt !== null, role: row.role };
+}
+
 /**
  * Is this account blocked? Unknown IDs count as blocked.
  *
@@ -64,14 +100,7 @@ export async function signInVerdict(id: string): Promise<SignInVerdict> {
  * maySignIn() above for why.
  */
 export async function isUserBlocked(id: string): Promise<boolean> {
-  const [row] = await db
-    .select({ blockedAt: users.blockedAt })
-    .from(users)
-    .where(eq(users.id, id));
-  // No hit means the account was deleted while the session was running. That
-  // access belongs terminated too — "not found" is not "may come in".
-  if (!row) return true;
-  return row.blockedAt !== null;
+  return (await accountState(id)).blocked;
 }
 
 /**

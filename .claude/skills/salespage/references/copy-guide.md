@@ -37,7 +37,11 @@ half promised that what you buy once you may use for all time — and a worked
 example is copied rather than read, so the promise travelled into real pages.
 The forbidden sentence is not reproduced here for the same reason. **No sales
 sentence puts a duration on access to a members' area**: not "für immer", not
-"lebenslang", not "lifetime", not "dauerhaft", not "unbegrenzt". A one-off
+"lebenslang", not "lifetime", not "dauerhaft", not "unbegrenzt" — nor the five
+others Digistore24 names ([`docs/courses.md`](../../../../docs/courses.md) →
+*Shape 1*). **`node run.mjs legal-check` refuses them**, matched as stems and
+only where the sentence also names access — so write the page, then run it, and
+believe it: it caught "Einmal kaufen, dauerhaft nutzen" in a real app. A one-off
 purchase has no end date because no event ends it, which is a fact about the
 grant and not a term anybody may promise; the reasoning, and the Digistore24
 rule behind it, are [`docs/courses.md`](../../../../docs/courses.md) →

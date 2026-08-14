@@ -48,12 +48,20 @@ Then the questions that apply to all of them, and to every server action:
   asks the live domain for exactly these headers, the cookie flags and every
   `/dashboard` route with no session, and prints what each one is set to. The
   command is described in the skill's §7; do not restate its ratings here.
-- **HTTPS everywhere**, `APP_URL` on `https://`, valid certificate. All four
-  hosts in `docs/DEPLOY.md` do this for you; verify rather than assume.
+- **HTTPS everywhere**, `APP_URL` on `https://` **and equal to the domain
+  customers actually use**, valid certificate. All four hosts in `docs/DEPLOY.md`
+  do the certificate for you; verify rather than assume. `AUTH_URL` is derived
+  from `APP_URL`, so one on the wrong domain is where every sign-in link points.
+  🚨 **`AUTH_TRUST_HOST=true` is neither a finding nor a mitigation** — it says
+  which `Host` values are accepted, never which origin the app hands out. If
+  `AUTH_URL`/`NEXTAUTH_URL` is set at the host at all, ask why: it has to name
+  the same origin as `APP_URL`, or the app will not start.
 - **Secrets live in the host's secret store**, not in a committed file, not in
   the build image. `AUTH_SECRET` is different in production than locally.
 - **`APP_ENV`** is `production` on the live instance. `lib/env-guard.ts` refuses
-  to start without a mail transport there — that refusal is a feature.
+  to start there without a mail transport, without `APP_URL`, on a sender off the
+  app's own domain and on `MEDIA_DRIVER=local` — those refusals are features, and
+  a host that starts anyway is a host running an older image.
 - **The database is not on the public internet** without a password and TLS, and
   the deploy runs migrations before the new version serves traffic
   (`docs/DEPLOY.md` → Migrations).

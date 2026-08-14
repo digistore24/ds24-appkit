@@ -133,7 +133,8 @@
     "onboardingTokensTitle": "Guthaben aufladen",
     "onboardingTokensBody": "Mit Tokens bezahlst du, was du wirklich nutzt.",
     "onboardingTokensCta": "Guthaben kaufen",
-    "onboardingTokensDone": "{balance} Tokens auf deinem Konto."
+    "onboardingTokensDone": "{balance} Tokens auf deinem Konto.",
+    "purchaseReseller": "Die Abbuchung erfolgt über die Digistore24 GmbH — unter diesem Namen erscheint die Zahlung auf deinem Kontoauszug."
   },
   "onboarding": {
     "title": "Deine ersten Schritte",
@@ -516,7 +517,8 @@
     "received": "Deine Bestellung ist eingegangen.",
     "signInBody": "Melde dich mit der E-Mail-Adresse an, mit der du bezahlt hast — dein Kauf wird deinem Konto dann automatisch zugeordnet.",
     "signInCta": "Jetzt anmelden",
-    "dashboardCta": "Zur App"
+    "dashboardCta": "Zur App",
+    "reseller": "Die Abbuchung erfolgt über die Digistore24 GmbH — unter diesem Namen erscheint die Zahlung auch auf deinem Kontoauszug."
   },
   "ds24Connected": {
     "title": "Freigabe erteilt",

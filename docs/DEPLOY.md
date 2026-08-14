@@ -119,7 +119,7 @@ sign in to):
 | `DATABASE_URL` | from the host's Postgres — usually injected for you |
 | `AUTH_SECRET` | `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 | `AUTH_TRUST_HOST` | `true` — all four run the app behind a proxy |
-| `APP_URL` | the live domain, `https://…`, no trailing slash |
+| `APP_URL` | the live domain, `https://…`, no trailing slash. **This is where the sign-in link points** — `AUTH_TRUST_HOST` only says which `Host` values are accepted, and behind a router that is `localhost:8080`. `AUTH_URL` is derived from this and must not be set to anything else (`docs/auth-setup.md`) |
 | `APP_ENV` | `production` (or `staging`) |
 | **mail — one of the two** | `POSTMARK_SERVER_TOKEN` + `POSTMARK_SENDER`, **or** `SMTP_HOST` + `SMTP_USER` + `SMTP_PASSWORD` (+ `SMTP_FROM`) |
 | `EMAIL_FROM` | the sender address (fallback when no `SMTP_FROM`/`POSTMARK_SENDER`) — **must live on the app's own domain** (boot-enforced; `docs/auth-setup.md` → the sender rule; deliberate exception: `EMAIL_FROM_FOREIGN_DOMAIN`) |

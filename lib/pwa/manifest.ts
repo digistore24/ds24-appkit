@@ -123,9 +123,15 @@ export function shortAppName(name: string, max = 12): string {
  * is compared by the BROWSER against the origin of the page that calls
  * `getInstalledRelatedApps()`. A stale `APP_URL` would not produce a broken
  * link — it would produce a silent empty answer, i.e. an install hint that
- * never goes away, with nothing anywhere saying why. It is the same stance the
- * sign-in link takes (`trustHost: true`, no `AUTH_URL`); `APP_URL` is for
- * addresses that get mailed OUT.
+ * never goes away, with nothing anywhere saying why.
+ *
+ * 🚨 This is the EXCEPTION and not the house style, and it used to cite the
+ * sign-in link as its precedent — which was exactly backwards. `APP_URL` is for
+ * addresses that get mailed OUT, and the sign-in link is the address that gets
+ * mailed out; deriving it from the request put `https://localhost:8080/…` in
+ * real customers' sign-in mails until `lib/auth/auth-url.mjs` was written. The
+ * rule is *who reads the value*: a browser holding this page → the request, a
+ * recipient holding a mail → `APP_URL`.
  */
 export function originFrom(headers: {
   host?: string | null;

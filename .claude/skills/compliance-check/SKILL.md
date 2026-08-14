@@ -64,9 +64,12 @@ node run.mjs legal-check
 ```
 
 It reports what is still a placeholder, whether the AI notice is in place,
-whether a declared consent purpose has its wording, which evidence documents are
-missing, and — the one nothing else can tell you — whether the retention jobs
-have actually run.
+**whether the app promises how long access lasts and whether the buyer is told
+who charged them** (the two Digistore24 platform rules — not law, and the only
+two findings here whose consequence is an account rather than a fine), whether a
+declared consent purpose has its wording, which evidence documents are missing,
+and — the one nothing else can tell you — whether the retention jobs have
+actually run.
 
 ## What counts as a finding
 
@@ -133,6 +136,13 @@ trace on disk:
    contracting party themselves. Offer that as evidence, never as the verdict —
    the contract decides, and this question is the one place in this skill where
    guessing wrong changes which legal texts the app has to carry.
+   ⚠️ **The answer does not change the post-purchase notice, and that catches
+   people out.** Whoever the contracting party is, the money is COLLECTED by
+   Digistore24 and their name is what turns up on the buyer's statement — so
+   the thank-you page and the purchase confirmation say so either way.
+   `node run.mjs legal-check` refuses an app where either has lost the sentence
+   or the mount; there are two surfaces because a signed-in buyer never sees
+   the thank-you page at all.
 2. **How many people work in the business, and what is the annual turnover?**
    Two thresholds hang off this and nothing else: BFSG (under 10 **and**
    ≤ €2m → exempt for services) and the DSA transparency report (under 50

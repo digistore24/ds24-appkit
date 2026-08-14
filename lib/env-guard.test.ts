@@ -83,11 +83,92 @@ describe("checkEnvironment", () => {
     expect(problems.some((m) => /email delivery/.test(m))).toBe(true);
     expect(problems.some((m) => /AUTH_SECRET/.test(m))).toBe(true);
     expect(problems.some((m) => /MEDIA_DRIVER/.test(m))).toBe(true);
-    expect(problems).toHaveLength(3);
+    expect(problems.some((m) => /APP_URL is not set/.test(m))).toBe(true);
+    expect(problems).toHaveLength(4);
   });
 
   it("is satisfied when everything is set", () => {
     expect(checkEnvironment(complete)).toEqual([]);
+  });
+});
+
+describe("the origin of outgoing links in a real environment", () => {
+  // The DigitalOcean failure, as a start condition: with no APP_URL to derive
+  // from, Auth.js takes its origin from the request headers — and behind a
+  // hosting router those say what the container calls itself. The app stays
+  // green in every other way; the only symptom is a customer who cannot sign
+  // in. Measured 2026-08-14 on an app whose sign-in mails said
+  // "https://localhost:8080/api/auth/callback/email?…".
+  const complete = {
+    APP_ENV: "production",
+    AUTH_SECRET: "secret",
+    emailConfigured: true,
+    APP_URL: "https://fangfertig.de",
+    emailFrom: "login@fangfertig.de",
+    MEDIA_DRIVER: "s3",
+    mediaBucketConfigured: true,
+  };
+
+  it("lets DEV run without an APP_URL at all", () => {
+    // Somebody is still setting the machine up, and a local origin derived
+    // from the request is the same address anyway.
+    expect(
+      checkEnvironment({ APP_ENV: "development", emailConfigured: false }),
+    ).toEqual([]);
+  });
+
+  it("refuses to start without APP_URL", () => {
+    const p = checkEnvironment({ ...complete, APP_URL: undefined });
+    expect(p.some((m) => /APP_URL is not set/.test(m))).toBe(true);
+  });
+
+  it("refuses an APP_URL that is not a URL", () => {
+    const p = checkEnvironment({ ...complete, APP_URL: "fangfertig.de" });
+    expect(p.some((m) => /is not a URL/.test(m))).toBe(true);
+  });
+
+  it("accepts a local APP_URL — the staging rungs run on one", () => {
+    expect(
+      checkEnvironment({
+        ...complete,
+        APP_ENV: "staging",
+        APP_URL: "http://localhost:41234",
+        emailFrom: "login@localhost",
+      }),
+    ).toEqual([]);
+  });
+
+  it("refuses an AUTH_URL that disagrees with APP_URL", () => {
+    const p = checkEnvironment({
+      ...complete,
+      AUTH_URL: "https://localhost:8080",
+    });
+    expect(p).toHaveLength(1);
+    expect(p[0]).toMatch(/AUTH_URL says this app lives at/);
+  });
+
+  it("accepts the value auth.config.ts derives, and one carrying the base path", () => {
+    // `applyAuthUrl()` writes APP_URL's origin into AUTH_URL, and the two run
+    // in an order nobody controls — so the guard must never fire on its own
+    // derivation.
+    expect(
+      checkEnvironment({ ...complete, AUTH_URL: "https://fangfertig.de" }),
+    ).toEqual([]);
+    expect(
+      checkEnvironment({
+        ...complete,
+        AUTH_URL: "https://fangfertig.de/api/auth",
+      }),
+    ).toEqual([]);
+  });
+
+  it("sees a disagreeing NEXTAUTH_URL too", () => {
+    const p = checkEnvironment({
+      ...complete,
+      NEXTAUTH_URL: "https://old-domain.de",
+    });
+    expect(p).toHaveLength(1);
+    expect(p[0]).toMatch(/old-domain\.de/);
   });
 });
 

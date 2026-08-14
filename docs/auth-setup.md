@@ -92,6 +92,25 @@ APP_URL=https://your-domain.de
 # APP_NAME=My App      # optional override; the mails fall back to NEXT_PUBLIC_APP_NAME
 ```
 
+🚨 **`APP_URL` is where the sign-in link points, and the two lines above it are
+not.** `AUTH_TRUST_HOST=true` says which `Host` values Auth.js ACCEPTS — behind
+a PaaS router it has to accept whatever that router sends. What goes INTO the
+mail is a different question, and the answer is `APP_URL`: it is derived into
+`AUTH_URL` at startup (`lib/auth/auth-url.mjs`), so the magic link, the
+`callbackUrl` of a redirect and the OAuth return address all carry the address
+you declared.
+
+Read as one thing, they produce the worst-shaped failure this template has had:
+on DigitalOcean App Platform the container sees itself as `localhost:8080`, no
+`x-forwarded-host` with the public domain arrives, and the sign-in mails of a
+perfectly healthy app carry
+`https://localhost:8080/api/auth/callback/email?…` — every page 200, every
+gate green, and no customer can enter their account
+([`docs/troubleshooting.md`](troubleshooting.md) → *The sign-in link points at
+`localhost`*). Hence: STAGING and PROD do not start without `APP_URL`, and if
+you set `AUTH_URL` yourself it must name the same origin or the app refuses
+rather than picking one.
+
 ## Mail delivery — option A: Postmark (recommended, simple)
 
 1. Create an account at [postmarkapp.com](https://postmarkapp.com), create a
@@ -395,6 +414,28 @@ deliberate; do not tidy it away.
 from the session.** A JWT carries what somebody was when they signed in, so
 `session.user.role === "moderator"` would keep working for hours after the role was
 taken away.
+
+**Where that happens is `currentActiveUser()` (`lib/authz.ts`), and it is one
+place on purpose.** It already reads the account's row for the block check, so
+the role travels back on the same query — one column, no second round trip — and
+the session it hands out carries the DATABASE's role rather than the token's.
+Every guard, page, action and route handler in the app reaches its session
+through that function, which is why the rule holds everywhere without forty call
+sites agreeing to it.
+
+⚠️ **It was a promise before it was code.** Measured 2026-08-14: the block was
+read fresh and the role was not, `setUserRole()` writes the column and nothing
+else (no session invalidation, no token bump), and Auth.js's default session is
+thirty idle-refreshing days. So taking `owner` away took nothing away — plans,
+token balances, deleting users, impersonation, appointing moderators all stayed
+open for weeks. `lib/authz-fresh-role.test.ts` drives the real guard against a
+session and a database that disagree, because the two agreeing is exactly the
+state in which that was invisible.
+
+Two consequences worth knowing. A **promotion** takes effect on the next page
+load too, so nobody has to sign out and in again. And during an impersonation
+the id in the session is the MEMBER's (AD-23), so the fresh role is the member's
+— the same statement the session already made, now actually current.
 
 ## Changing the email address
 

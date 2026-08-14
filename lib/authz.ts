@@ -3,7 +3,10 @@
 
 // Role-based access control.
 //
-// The role lives in the session (see auth.config.ts → session.user.role).
+// 🚨 The role is read from the DATABASE on every act, never taken from the
+// session token — `currentActiveUser()` below, and the reasoning is there.
+// `auth.config.ts` puts a role in the JWT at sign-in; that value is what the
+// app shows before a guard has spoken, and it is never what a guard believes.
 // Convention (db/schema.ts): "owner" = SAAS operator (admin), "member" = customer.
 //
 // `proxy.ts` only guards "signed in vs. not" — the *role* check happens
@@ -63,10 +66,32 @@ export async function currentActiveUser(): Promise<ActiveUser> {
   const session = await auth();
   if (!session?.user) return { state: "anonymous" };
 
-  const { isUserBlocked } = await import("@/lib/users/blocked");
-  if (await isUserBlocked(session.user.id)) return { state: "blocked" };
+  const { accountState } = await import("@/lib/users/blocked");
+  const account = await accountState(session.user.id);
+  if (account.blocked) return { state: "blocked" };
 
-  return { state: "active", session };
+  // 🚨 The role comes back from the DATABASE, and the session every caller gets
+  // carries THAT one rather than the token's.
+  //
+  // This is the single place it can be done, and it is why the fix is one
+  // function rather than forty call sites: every guard, page, action and route
+  // handler in the app reaches its session through here. Before it, a JWT
+  // signed at sign-in carried the role for thirty idle-refreshing days —
+  // `setUserRole()` writes the column and nothing else, so taking `owner` away
+  // took nothing away. `CLAUDE.md` → *Users & roles* has promised the opposite
+  // for as long as it has existed; this is the code catching up with it.
+  //
+  // The row was already being read for the block, so the fresh role costs
+  // nothing: one column, no second round trip.
+  const role = account.role ?? session.user.role;
+  if (role === session.user.role) return { state: "active", session };
+
+  // Copied rather than mutated: `auth()` may hand out a cached object, and a
+  // guard that rewrote it would be changing what an unrelated caller sees.
+  return {
+    state: "active",
+    session: { ...session, user: { ...session.user, role } },
+  };
 }
 
 /**
@@ -98,6 +123,10 @@ export async function requireActiveUser() {
  * You could additionally gate path prefixes in auth.config.ts:authorized();
  * this is deliberately server-side so that role and block are checked fresh
  * against the database — the JWT would only hold the state from sign-in time.
+ *
+ * That sentence was a claim before it was true: the block was read fresh and
+ * the ROLE was not, so this guard was judging a thirty-day-old token. It is
+ * `currentActiveUser()` that makes it true, for every caller at once.
  */
 export async function requireOwner() {
   const session = await requireActiveUser();

@@ -29,6 +29,7 @@ import {
   isPrunedPath,
   readAgentProfile,
 } from "@/scripts/dev/agent-configs.mjs";
+import { CONTENT_MEDIA_TYPES } from "@/lib/content-media/rules.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const EXEMPT = "portability-ok";
@@ -224,6 +225,34 @@ describe("the tooling runs on Linux, macOS and Windows", () => {
 // .gitattributes is what stops it, and it is one file that a refactor could
 // delete without anybody developing on Linux ever noticing.
 
+/**
+ * Extensions that are not text and must not be read as text.
+ *
+ * 🚨 The media half is DERIVED from the app's own declaration of what a product
+ * file may be, never typed out here. A hand-kept list was the whole defect:
+ * this walk knew `png` and `pdf` and had never heard of `mp4`, so the first app
+ * that shipped a lesson video — which is what `content-media-sync` is FOR — read
+ * it into a JS string and reported it as a file with CRLF and NUL bytes in it.
+ * Two shipped tests going red because a customer did what the template told
+ * them to do. Deriving means a new media type joins this walk on the day
+ * `CONTENT_MEDIA_TYPES` gains it.
+ *
+ * The rest are what the template itself carries: icons, fonts and archives.
+ */
+const BINARY_EXTENSIONS = new Set<string>([
+  ...Object.keys(CONTENT_MEDIA_TYPES).filter((ext) => ext !== "vtt"),
+  "gif",
+  "ico",
+  "woff",
+  "woff2",
+  "avif",
+  "mov",
+  "m4a",
+  "otf",
+  "ttf",
+  "eot",
+]);
+
 /** Everything shipped, minus what is generated or genuinely binary. */
 function shippedFiles(dir: string, found: string[] = []): string[] {
   const SKIP = new Set([".git", "node_modules", ".next", ".dev", "dist", "out"]);
@@ -231,7 +260,9 @@ function shippedFiles(dir: string, found: string[] = []): string[] {
     if (SKIP.has(entry)) continue;
     const full = path.join(dir, entry);
     if (statSync(full).isDirectory()) shippedFiles(full, found);
-    else if (!/\.(png|jpg|jpeg|gif|ico|woff2?|pdf|zip)$/i.test(entry)) found.push(full);
+    else if (!BINARY_EXTENSIONS.has(path.extname(entry).slice(1).toLowerCase())) {
+      found.push(full);
+    }
   }
   return found;
 }

@@ -256,6 +256,16 @@ data, and the changes that matter are already recorded elsewhere.
 - `/account/confirm-email` is authenticated by its single-use token, not by a
   session — the mail is read wherever the inbox is. Do not "fix" it into
   `/dashboard`.
+- 🚨 **Where a mailed link POINTS is `APP_URL`, and it is not negotiable.**
+  `applyAuthUrl()` ([`lib/auth/auth-url.mjs`](../../../lib/auth/auth-url.mjs))
+  runs at the top of `auth.config.ts` so that Auth.js cannot take its origin
+  from a request header. Do not remove that call; do not answer a sign-in
+  problem by turning `AUTH_TRUST_HOST` off, which is a different question
+  (which hosts are *accepted*); and do not set `AUTH_URL` to anything but
+  `APP_URL`'s origin — STAGING/PROD refuse to start on the disagreement rather
+  than picking one. It ships this way because the alternative shipped first: a
+  live app mailed every buyer a link to `https://localhost:8080` with every
+  gate green.
 
 ## STOP — involve a human here
 

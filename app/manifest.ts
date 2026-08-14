@@ -23,8 +23,10 @@ import { buildManifest, originFrom } from "@/lib/pwa/manifest";
 export default async function manifest(): Promise<MetadataRoute.Manifest> {
   // Reading a header opts this route out of static generation, deliberately:
   // `related_applications[].url` has to name THIS origin, and the app has no
-  // build-time knowledge of its own address — the same stance the sign-in link
-  // takes (`trustHost: true`, no AUTH_URL). One small response per install check.
+  // build-time knowledge of its own address. One small response per install
+  // check. ⚠️ NOT the stance the sign-in link takes — that one comes from
+  // `APP_URL` (lib/auth/auth-url.mjs), because it is read by somebody holding a
+  // mail rather than by a browser standing on this page.
   const requestHeaders = await headers();
   return buildManifest(
     originFrom({

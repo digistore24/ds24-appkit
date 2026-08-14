@@ -65,6 +65,12 @@ export async function register() {
     AUTH_SECRET: process.env.AUTH_SECRET,
     emailConfigured: hasEmailConfig(process.env),
     APP_URL: process.env.APP_URL,
+    // Where outgoing links take their origin from. Normally nobody sets these
+    // — `auth.config.ts` derives AUTH_URL from APP_URL — and they are read here
+    // so an operator's own value is compared against APP_URL instead of
+    // silently winning (lib/auth/auth-url.mjs).
+    AUTH_URL: process.env.AUTH_URL,
+    NEXTAUTH_URL: process.env.NEXTAUTH_URL,
     emailFrom: resolvedFrom(process.env),
     emailFromForeignDomain: process.env.EMAIL_FROM_FOREIGN_DOMAIN,
     MEDIA_DRIVER: process.env.MEDIA_DRIVER,

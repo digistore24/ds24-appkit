@@ -161,7 +161,7 @@ line flags, raw SQL, dates — are **[`docs/conventions.md`](docs/conventions.md
 - **No secrets in the code.** Read from `process.env` and add new variables to `.env.example`; the operator's Digistore24 credentials are read via `lib/digistore/settings.ts` — never from the database.
 - **No mock/demo fallback** on Digistore API errors — throw errors.
 - **Database changes only via migration.** `db/schema.ts` → `node run.mjs db-generate` → `node run.mjs db-migrate`; the file in `drizzle/` is checked in and never edited again after it has been applied. `db:push` only against an empty local DB, never against staging or production — [`docs/database.md`](docs/database.md).
-- **Environments are binding: DEV / STAGING / PROD** (`APP_ENV`). In STAGING and PROD mail delivery is a start condition and the sign-in mails' sender must live on the app's own domain; the development sign-in (`lib/auth/dev-login.ts`) applies in DEV, on localhost, and only while no mail delivery is configured — never soften those three, it is an auth bypass. An unknown `APP_ENV` counts as production, and each environment sells its own Digistore24 product set.
+- **Environments are binding: DEV / STAGING / PROD** (`APP_ENV`). In STAGING and PROD mail delivery is a start condition, `APP_URL` is another — 🚨 **every link the app MAILS OUT takes its origin from it, never from the request** (`AUTH_URL` is derived from it; `AUTH_TRUST_HOST` says which hosts are *accepted*, which behind a PaaS router is `localhost:8080`) — and the sign-in mails' sender must live on the app's own domain; the development sign-in (`lib/auth/dev-login.ts`) applies in DEV, on localhost, and only while no mail delivery is configured — never soften those three, it is an auth bypass. An unknown `APP_ENV` counts as production, and each environment sells its own Digistore24 product set.
 - **Use the design system — never rebuild anything yourself.** No raw `<button>`, `<input>`, `<select>` or `<table>`, no hand-picked colour classes; what is missing gets fetched with `npx shadcn@latest add <component>`. See **UI**.
 - **All visible text goes through i18n.** Every sentence lives in `messages/de.json` **and** `messages/en.json`. See **Languages**.
 - **Messages always as a `Callout`** with one of its four intents, never with hand-picked colour classes. What must stay on screen is a `Callout`, what may drift past is a toast — three mechanisms, never a fourth. See **UI**.
@@ -253,16 +253,16 @@ node run.mjs errors               # what the log picked up — including on a 20
 ```
 
 `smoke` finds the pages itself under `app/` and calls them in **two passes**: first
-anonymously, then signed in, so the pages carrying the real queries get rendered
-rather than counted as redirects. Its verdicts:
+anonymously, then signed in, so the pages with the real queries get rendered rather than
+counted as redirects. **When the second pass is unavailable it says so, in one line —
+read it**: "9 protected page(s) NOT checked" is not a pass. Its verdicts:
 
 - **5xx** → error. Fix it, don't argue it away, don't pass it on as a "known issue".
 - **307 to `/login` without a session** → correct, and says nothing about the page; the second pass is what renders it.
 - **307 to `/login` *with* a session** → error. The session did not take.
 - **307 anywhere else while signed in** → fine; a `hasPlan()` gate from the outside.
+- **a redirect to a `localhost` origin, on a DEPLOYED app** → error, and the one with no second symptom: a correct code on a correct path handing the customer an address only the server can reach (`location: /login?callbackUrl=https%3A%2F%2Flocalhost%3A8080%2Fdashboard` — the origin sits one level down, in the query). It means `APP_URL` at the host, never `AUTH_TRUST_HOST`.
 - **2xx** → fine.
-
-**The second pass can be unavailable, and then it says so** — one line naming the reason. **Read that line**: "9 protected page(s) NOT checked" is not a pass.
 
 **A 200 is not proof that the page rendered, and green means it loaded, not that it is
 correct.** A bad date, a missing translation, a hydration mismatch and an unawaited promise
@@ -684,7 +684,16 @@ that replaces it is **`salespage`**; the reference is
   "dauerhaft", "unbegrenzt" and five more words Digistore24 names. A one-off
   grant has no end date because no event ends it, which is not the same as a
   term the page may promise; two years is the most that may be offered
-  ([`docs/courses.md`](docs/courses.md) → *Shape 1*).
+  ([`docs/courses.md`](docs/courses.md) → *Shape 1*). 🚨 **`node run.mjs
+  legal-check` refuses it now** — all ten as STEMS, in every language file, the
+  product registry and every page, and only where the sentence also names
+  access, so "unbegrenzt viele Notizen" stays allowed.
+- 🚨 **The buyer is told WHO charged them, on both post-purchase surfaces.**
+  Digistore24 GmbH is the reseller and the name on the bank statement; a line
+  nobody recognises becomes a call to their bank, not a mail to you. Two
+  surfaces because a signed-in buyer never sees the thank-you page — `/optin`
+  redirects them to `/dashboard`. `legal-check` refuses a missing key AND a
+  missing mount.
 - **One price, one place** — `formatPrice()` off the registry, and the buy button
   through `checkoutLinksFor()`, which says "checkout unavailable" instead of
   rendering a dead link.

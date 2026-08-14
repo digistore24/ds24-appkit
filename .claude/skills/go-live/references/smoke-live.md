@@ -53,8 +53,12 @@ node run.mjs smoke --url https://YOUR-DOMAIN
 ```
 
 No 5xx, or the launch is not finished — production runs into errors that never showed
-up locally (a missing env value, a migration that was never applied). Then **read the
-sign-in line of its output**: *"N protected page(s) NOT checked"* is not a pass, it
+up locally (a missing env value, a migration that was never applied). And no line
+saying a route *"redirects to `http://localhost:…`, which only this server can
+reach"* — that check exists because the failure it names is a correct 307 to a
+correct path on an origin no customer's browser can resolve, which this very script
+used to print and tick ([`lib/auth/auth-url.mjs`](../../../../lib/auth/auth-url.mjs)
+→ `strandedRedirect()`). Then **read the sign-in line of its output**: *"N protected page(s) NOT checked"* is not a pass, it
 names what to fix. And a green remote run is the smaller half of smoke — owner-only
 pages count as redirects there, and the server log is not read unless
 `DIAGNOSTICS_SECRET` is set. Both are said in the output; keep running smoke locally
@@ -70,8 +74,11 @@ never copied into a page footer;
 [`docs/compliance.md`](../../../../docs/compliance.md) § 4.)
 
 Three failures read straight off it: a generic "Sign in" means
-`NEXT_PUBLIC_APP_NAME` is missing at the host, a footer without links means `APP_URL`
-is, and a mail footer without the Impressum block means the Impressum still carries
+`NEXT_PUBLIC_APP_NAME` is missing at the host; a **button pointing anywhere but the
+live domain** — `localhost`, the host's internal name — means `APP_URL` at the host is
+wrong, and not `AUTH_TRUST_HOST`, which decides nothing about what goes into a mail
+(a *missing* `APP_URL` can no longer produce this: STAGING/PROD refuse to boot without
+one); and a mail footer without the Impressum block means the Impressum still carries
 the shipped placeholder — which `legal-check` in the pre-flight already refuses.
 
 ## Domain reputation

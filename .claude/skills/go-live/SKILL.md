@@ -19,7 +19,7 @@ really sell once it is up.
 
 ## 1. Pre-flight (before the deploy)
 
-Seven checks, each a **stop condition**, and you run them yourself. Four the host
+Eight checks, each a **stop condition**, and you run them yourself. Four the host
 enforces anyway at boot, where the same fault reads as a broken deploy. What each
 costs when skipped, and the one no boot guard can catch:
 [`references/preflight.md`](references/preflight.md).
@@ -31,15 +31,19 @@ costs when skipped, and the one no boot guard can catch:
 3. **The sender address is on the app's own domain** and verified at the provider
    (DKIM/SPF), and `NEXT_PUBLIC_APP_NAME` is set **at the host**.
    `node run.mjs doctor --deploy` gives the verdict from this machine.
-4. **Somewhere for files to live — *if the app takes files*.** `config/media.json` →
+4. **The app's own address is set at the host** — `APP_URL=https://YOUR-DOMAIN`,
+   no trailing slash, and no `AUTH_URL`/`NEXTAUTH_URL` beside it. STAGING/PROD abort
+   at startup without it, because everything the app MAILS OUT takes its origin from
+   it — the sign-in link above all (`setup-hosting` step 7).
+5. **Somewhere for files to live — *if the app takes files*.** `config/media.json` →
    `enabled` first; if yes, `node run.mjs media-check`. Booking the bucket was
    `setup-hosting` step 6b; this is the check that it happened.
-5. **The home page sells the product, not the template** — a still-placeholder
+6. **The home page sells the product, not the template** — a still-placeholder
    `app/page.tsx` is the skill **`salespage`**.
-6. **The icons are the app's** — the three under `public/icons/` against
+7. **The icons are the app's** — the three under `public/icons/` against
    `app/icon.png`; they land on a customer's home screen and stay. The skill is
    **`design`**.
-7. **Migrations and the law** — `drizzle/` up to date (`node run.mjs db-generate`),
+8. **Migrations and the law** — `drizzle/` up to date (`node run.mjs db-generate`),
    and `node run.mjs legal-check` green **before** the deploy: a placeholder Impressum
    on a live domain is both a legal problem and the first thing a visitor reads. What
    fixes it is **`compliance-check`**.
@@ -117,8 +121,10 @@ filling — is [`references/smoke-live.md`](references/smoke-live.md).
   `node run.mjs smoke-account --apply` gave it a way in. No 5xx, and "N protected
   page(s) NOT checked" is not a pass.
 - **The sign-in mail itself is right**, not only the page it leads to: the product's
-  name, a working button, footer links on the live domain, the Impressum's text in the
-  **mail's** footer.
+  name, a **button whose link is on the live domain** — not `localhost`, not the
+  host's internal name; that is `APP_URL` at the host, and the boot guard can only
+  prove it is *a* URL, never that it is *yours* — footer links on the live domain,
+  the Impressum's text in the **mail's** footer.
 - **The domain is verified in Google Search Console** — now, not when something goes
   wrong: it is where Google reports a Safe-Browsing flag and the only place a review
   can be asked for ([`docs/troubleshooting.md`](../../../docs/troubleshooting.md)).

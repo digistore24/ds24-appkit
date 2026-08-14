@@ -43,6 +43,23 @@ That does **not** make your obligations disappear. It moves them:
 | **Privacy policy for your app** | **yours** | **yours** |
 | **Terms of USE of the app** | **yours** | **yours** |
 | **Controller for the data in your database** | **yours** | **yours** |
+| **Naming Digistore24 after the purchase** | **yours** | **yours** |
+
+🚨 **The last row surprises people, so it is spelled out: the notice does not
+depend on the answer.** Whoever the contracting party is, the money is COLLECTED
+by Digistore24 and their name is what appears on the buyer's bank statement. A
+line nobody recognises becomes a call to the bank rather than a mail to you, and
+a chargeback costs the sale, the fee and a mark on the account — which is why it
+is also a platform requirement, not only good manners.
+
+**Two surfaces carry it, and `node run.mjs legal-check` refuses an app that has
+lost either.** The thank-you page (`/optin`, which is what `thankyou_url` points
+at) and the purchase confirmation on the dashboard — because a buyer who was
+already signed in never sees the thank-you page at all: `/optin` sends them
+straight to what they paid for. Each is checked in both halves, the message key
+AND the mount, since a key nobody renders is a sentence in a JSON file and a
+mount with no key shows the key to a customer. The registry is
+`RESELLER_SURFACES` in `lib/legal/digistore-claims.mjs`.
 
 Read your Digistore24 contract before you let a generator decide this for you.
 The two rows people get wrong are the last two: whoever takes the payment does
@@ -337,6 +354,15 @@ neither half may do is leave one out: `lib/ai/disclosure.test.ts` and
 `node run.mjs legal-check` walk **both**, so a module that ships a transcript
 without a notice fails the build rather than a regulator's reading.
 
+⚠️ **And the TEXT of a module's notice lives in the module too**
+(`modules/companion/messages/de.json`), which is why `legal-check` judges the
+COMPOSED catalogue — the core's plus every installed module's, merged exactly as
+the running app merges it (`composedMessages()` in
+`scripts/modules/inventory.mjs`). Reading `messages/<locale>.json` alone reported
+an Art. 50 violation in every app that had installed the companion, for a notice
+the app was rendering perfectly. A false alarm on a legal check is worse than
+none: it teaches the next reader that this command is wrong about things.
+
 Each surface mounts `<AiDisclosure surface="…" />` above its transcript,
 **unconditionally** — never behind a switch, a role or a "first visit" flag.
 
@@ -430,6 +456,37 @@ duties are theirs (§ 0).
   account — none of that is in Digistore24's purchase terms.
 
 ---
+
+## 5b. Two rules that are not law — the reseller's own
+
+Digistore24 is a platform, and a platform has criteria. Breaking one produces no
+error, no failing test and no unhappy customer: it produces a product refused at
+approval, or an account closed after months of selling. Nothing in the app can
+feel that, which is why both are checked.
+
+**No promise about how long access lasts.** Their product criteria forbid
+promising a members' area "lebenslangen" access and name ten words —
+*lifetime, lebenslanger, unlimitierter, dauerhafter, unbegrenzter,
+unbefristeter, unbeschränkter, permanenter, auf unbestimmte Zeit, für immer* —
+while allowing access to be limited to **at most two years**. Their reason costs
+money: an offer that is gone after 24 months can oblige the vendor to refund the
+full price. `node run.mjs legal-check` matches them as **stems**, because German
+inflects and the sentence that was found in a real app —
+**"Einmal kaufen, dauerhaft nutzen"** — contains none of the ten as they are
+spelled and every one of them as they are meant. It only counts where the same
+sentence also names ACCESS, so a generous feature ("unbegrenzt viele Notizen")
+stays allowed; the number of set-aside sentences is printed, so the tick cannot
+be read as "the words do not occur".
+
+**The buyer is told who charged them** — §0 above, and it does not depend on who
+the contracting party is.
+
+⚠️ Both bind whoever sells through **Digistore24 GmbH**. Check your own contract
+before treating the two years as universal. What to write instead is
+[`docs/courses.md`](courses.md) → *Shape 1* and
+[`docs/salespage.md`](salespage.md) → *The offer block*: what is TRUE, which is
+"pay once, no subscription" for a one-off and "as long as your plan runs" for a
+subscription.
 
 ## 6. The map — what else can reach you
 

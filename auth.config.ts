@@ -18,6 +18,23 @@ import { devCookies } from "@/lib/auth/cookie-names";
 // It only reads a value out of the signed token, which is exactly what this
 // file is allowed to do.
 import { impersonationState } from "@/lib/impersonation/claim";
+// Pure, zero imports (lib/auth/auth-url.mjs) — edge-safe by construction.
+import { applyAuthUrl } from "@/lib/auth/auth-url.mjs";
+
+// 🚨 BEFORE anything else in this file, and before `NextAuth()` anywhere sees
+// this config: the origin of every link Auth.js MAILS OUT or redirects to comes
+// from `APP_URL`, not from the request.
+//
+// `trustHost` below stays on and is a different question. This is the one that
+// decides what a customer finds in their sign-in mail — behind a PaaS router
+// the container's own view of itself is `localhost:8080`, and that is what used
+// to be in the mail. The whole reasoning, and why the PWA manifest deliberately
+// does the opposite, is in lib/auth/auth-url.mjs.
+//
+// It sets `AUTH_URL` (the only lever Auth.js offers) and leaves an operator's
+// own value alone; `lib/env-guard.ts` refuses to start in STAGING/PROD when
+// that value and `APP_URL` disagree.
+applyAuthUrl(process.env);
 
 const providers: NextAuthConfig["providers"] = [];
 
@@ -119,5 +136,10 @@ export default {
   },
   // PaaS platforms set the Host header dynamically — prevents the
   // "untrusted host" error.
+  //
+  // ⚠️ It says which Host values are ACCEPTED, never which one outgoing links
+  // carry — that is `AUTH_URL`, set from `APP_URL` at the top of this file. The
+  // two were read as one thing once, and the result was a sign-in mail pointing
+  // at `localhost:8080` on a perfectly healthy deployment.
   trustHost: true,
 } satisfies NextAuthConfig;

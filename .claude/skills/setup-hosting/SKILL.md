@@ -250,8 +250,18 @@ throwaway object, reads it back, compares the bytes and deletes it. Credentials
 that look right and a bucket that does not exist are indistinguishable until
 something tries. Reference: [`docs/visuals.md`](../../../docs/visuals.md).
 
-If the app takes no files at all today, it still needs this — the check runs at
-startup and does not ask what the app happens to use.
+⚠️ **There is one exemption, and it is the reason this is a step here rather
+than something the boot guard settles.** An app whose `config/media.json` says
+`"enabled": false` accepts no files at all, and `mediaProblem()`
+(`lib/env-guard.ts`) lets it start with no bucket — requiring one before such an
+app could deploy would be a bill for nothing. The cost of that exemption:
+**switching media ON later without a bucket is a state nothing refuses at
+startup**, which is why `media-check` and `go-live` say so loudly instead
+([`references/preflight.md`](../go-live/references/preflight.md) § 5). So: does
+this app take files (`enabled`, and whether anything calls `acceptUpload()`)? If
+yes, book the bucket now and prove it — the boot guard will hold you to it. If
+no, it may deploy without one, and the day somebody turns media on is the day
+this step comes back.
 
 ## 7. Deploy
 
@@ -265,14 +275,24 @@ checking them as five separate questions:
    goes stale the day the database is rotated.
 3. **Every required environment variable is set** — the table in `docs/DEPLOY.md`.
    Go through it as a list; missing one produces an app that starts and then
-   fails at the one thing the user tests first. Mail and the media bucket are
-   the two that stop it starting at all (steps 6 and 6b).
+   fails at the one thing the user tests first. Mail, the media bucket and
+   `APP_URL` are the three that stop it starting at all (steps 6 and 6b, and
+   point 5 below).
 4. **The migration runs before the new version takes traffic** — the pre-deploy
    command / `release_command` / `PRE_DEPLOY` job, running `npm run db:migrate`.
    Not "I will run it by hand after each deploy": that is the step that gets
    skipped, and it is skipped on the deploy that needed it.
 5. **`APP_URL` is the address the app is actually reachable at**, https, no
-   trailing slash.
+   trailing slash — and STAGING/PROD **do not start without it**
+   (`lib/env-guard.ts`). 🚨 It is not cosmetic: everything the app MAILS OUT
+   takes its origin from it, the sign-in link above all (`AUTH_URL` is derived
+   from it at startup, `lib/auth/auth-url.mjs`). `AUTH_TRUST_HOST=true` says
+   only which `Host` values are ACCEPTED, and behind a PaaS router that is
+   `localhost:8080` — which is how a live app once mailed
+   `https://localhost:8080/api/auth/callback/email?…` to every buyer with every
+   gate green. Do not set `AUTH_URL` or `NEXTAUTH_URL` at the host at all: one
+   naming a different origin than `APP_URL` refuses the start rather than being
+   picked between.
 
 ## 8. The operator account — before anyone else signs in
 
@@ -323,6 +343,12 @@ variable, a migration that did not run — and this is where they surface. A
 remote run does not read the server log and never renders owner-only pages
 (the output says both) — the local `node run.mjs smoke` remains the fuller
 half.
+
+🚨 **And no line saying a route *"redirects to `http://localhost:…`, which only
+this server can reach"*.** That one is a correct status code on a correct path,
+handing a customer an address that exists only inside the container — the shape
+this script used to print and tick. It means `APP_URL` at the host is wrong,
+never `AUTH_TRUST_HOST`.
 
 Then read the host's log once with your own eyes (`railway logs`, `fly logs`, the
 dashboard). `✓ Environment: PRODUCTION` in it means the environment check passed;

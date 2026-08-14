@@ -25,6 +25,22 @@ import {
   disclosureProblems,
   mountFor,
 } from "../../lib/ai/disclosure.mjs";
+// 🚨 The catalogue this command judges must be the one the APP renders. A
+// module owns whole namespaces and carries its own texts — the companion's
+// Art. 50 notice is in `modules/companion/messages/de.json` — so reading
+// `messages/<locale>.json` alone reported a missing disclosure in every app
+// with that module installed, for a sentence the app was showing perfectly.
+// `composedMessages()` is the same merge `i18n/catalogue.ts` performs.
+import { composedMessages } from "../modules/inventory.mjs";
+// The two Digistore24 PLATFORM rules — not law, and that is what makes them
+// worth a machine: breaking one produces no error and no unhappy customer, only
+// a product refused at approval or an account closed months into selling.
+import {
+  RESELLER_SURFACES,
+  durationClaims,
+  namesReseller,
+} from "../../lib/legal/digistore-claims.mjs";
+import { blankComments } from "../lib/source-text.mjs";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -84,6 +100,17 @@ function locales() {
   return readdirSync(dir)
     .filter((f) => f.endsWith(".json"))
     .map((f) => f.replace(/\.json$/, ""));
+}
+
+/**
+ * The texts a customer really sees in one locale: the core's catalogue with
+ * every installed module's merged in, exactly as the running app composes it.
+ *
+ * Every catalogue read in this file goes through here. The locales themselves
+ * stay the CORE's — a module adds keys, never a language.
+ */
+function messagesFor(locale) {
+  return composedMessages(locale, readJson(`messages/${locale}.json`) ?? {}, ROOT);
 }
 
 // ── 1. The legal pages ─────────────────────────────────────────────────────
@@ -148,7 +175,7 @@ console.log("\nAI transparency (Art. 50(1) EU AI Act, since 2 August 2026)");
 const problemsBySurface = new Map();
 for (const problem of disclosureProblems({
   locales: locales(),
-  messagesFor: (locale) => readJson(`messages/${locale}.json`),
+  messagesFor,
   sourceOf: readSource,
   configFor: readJson,
 })) {
@@ -176,7 +203,7 @@ for (const surface of DISCLOSURE_SURFACES) {
   const troubled = new Set(found.map((problem) => problem.locale).filter(Boolean));
   for (const locale of locales()) {
     if (troubled.has(locale)) continue;
-    const line = readJson(`messages/${locale}.json`)?.[surface.id]?.disclaimer;
+    const line = messagesFor(locale)?.[surface.id]?.disclaimer;
     if (line) ok(`${surface.label} (${locale}): "${line}"`);
   }
 
@@ -227,7 +254,219 @@ for (const surface of DISCLOSURE_SURFACES) {
   }
 }
 
-// ── 3. Consent ─────────────────────────────────────────────────────────────
+// ── 3. What the app PROMISES about access (Digistore24 product criteria) ──
+//
+// Digistore24 forbids promising a members' area "lebenslangen" access and names
+// ten words to avoid, while allowing access to be limited to at most two years.
+// Their reason costs money: an offer that is gone after 24 months can oblige
+// the vendor to refund the full price.
+//
+// 🚨 The words are matched as STEMS with an ACCESS word in the same sentence —
+// `lib/legal/digistore-claims.mjs` carries both halves and the reasoning. A bare
+// word list would report "unbegrenzt viele Notizen", which is allowed, and a
+// check that opens with a wall is one somebody switches off.
+console.log("\nWhat this app promises about access (Digistore24 criteria)");
+
+/** Everything a CUSTOMER reads, and where it comes from. */
+function customerText() {
+  const sources = [];
+
+  for (const locale of locales()) {
+    // 🚨 One entry per STRING, never the file as one blob. A message value is
+    // the unit a customer reads, and a stringified catalogue makes the end of
+    // one key and the start of the next into one "sentence": measured, that
+    // reported five findings on this template — "unbegrenzt" from a grant hint
+    // meeting "Zugriff" from the label two keys away. The composed catalogue,
+    // so a module's own sales copy is judged too.
+    for (const [path, value] of flatten(messagesFor(locale))) {
+      sources.push([`messages/${locale}.json → ${path}`, value]);
+    }
+  }
+
+  // The registry: name, tagline, description and the feature bullets are what
+  // /plans renders. The `_comment` keys are not — they are notes to the
+  // app-builder, and one of them says "unbegrenzt" about a rate limit.
+  const registry = readJson("config/digistore-products.json");
+  for (const [key, def] of Object.entries(registry?.products ?? {})) {
+    const copy = [def?.name, def?.tagline, def?.description, ...(def?.features ?? [])]
+      .filter((part) => typeof part === "string")
+      .join("\n");
+    if (copy) sources.push([`config/digistore-products.json → ${key}`, copy]);
+  }
+
+  for (const dir of ["content/legal", "content/knowledge"]) {
+    for (const file of markdownUnder(dir)) {
+      sources.push([file, readSource(file) ?? ""]);
+    }
+  }
+
+  // Pages and components, with comments blanked — this app's own rule is that
+  // there is no visible text in code, but a salespage is exactly where somebody
+  // writes one anyway, and that is the page this rule is about.
+  for (const file of sourceUnder(["app", "components", "modules"])) {
+    sources.push([file, blankComments(readSource(file) ?? "")]);
+  }
+
+  return sources;
+}
+
+/**
+ * Every string in a nested object, with the key path that leads to it.
+ *
+ * @param {unknown} value
+ * @param {string} [prefix]
+ * @returns {[string, string][]}
+ */
+function flatten(value, prefix = "") {
+  if (typeof value === "string") return [[prefix, value]];
+  if (!value || typeof value !== "object") return [];
+  return Object.entries(value).flatMap(([key, inner]) =>
+    flatten(inner, prefix ? `${prefix}.${key}` : key),
+  );
+}
+
+/** Every `.md` below a directory, relative to the app root. */
+function markdownUnder(relative) {
+  const found = [];
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = readdirSync(join(ROOT, dir), { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const next = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) walk(next);
+      else if (entry.name.endsWith(".md")) found.push(next);
+    }
+  };
+  walk(relative);
+  return found;
+}
+
+/** Every `.ts`/`.tsx` below the given directories, tests excluded. */
+function sourceUnder(dirs) {
+  const found = [];
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = readdirSync(join(ROOT, dir), { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const next = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) {
+        if (entry.name !== "node_modules") walk(next);
+      } else if (/\.tsx?$/.test(entry.name) && !entry.name.includes(".test.")) {
+        found.push(next);
+      }
+    }
+  };
+  for (const dir of dirs) walk(dir);
+  return found;
+}
+
+let promises = 0;
+let unjudged = 0;
+for (const [where, text] of customerText()) {
+  for (const claim of durationClaims(text)) {
+    if (!claim.aboutAccess) {
+      unjudged++;
+      continue;
+    }
+    promises++;
+    fail(
+      `${where}: "${claim.term}" promises how long access lasts`,
+      `"${claim.sentence.trim().slice(0, 160)}"\n     Digistore24's product ` +
+        `criteria refuse this wording for a members' area, and access may be ` +
+        `limited to at most two years. Write what is TRUE instead — "pay once, ` +
+        `no subscription" for a one-off, "as long as your plan runs" for a ` +
+        `subscription. docs/courses.md → Shape 1 carries their list and the reason.`,
+    );
+  }
+}
+if (promises === 0) {
+  ok(
+    `no promise about how long access lasts, in ${locales().length} language(s)`,
+  );
+}
+// Said out loud rather than counted silently: these are the sentences carrying
+// one of the ten words WITHOUT naming access — "unbegrenzt viele Notizen", a
+// "Lifetime in days" form label. They are allowed, and the number is here so
+// that nobody reads the tick above as "the words do not occur".
+if (unjudged > 0) {
+  console.log(
+    `  … ${unjudged} sentence(s) carry one of the words about something other ` +
+      `than access (a feature, a form label). Not a finding.`,
+  );
+}
+
+// ── 3b. Who took the money (Digistore24 is the reseller) ──────────────────
+//
+// 🚨 Two halves, and either alone is a check that passes while the buyer reads
+// nothing: the KEY in every language, and the MOUNT in the page. The same shape
+// as the Art. 50 disclosure above, and for the same reason.
+console.log("\nThe thank-you page names who charged (Digistore24 is the reseller)");
+
+let unnamed = 0;
+for (const surface of RESELLER_SURFACES) {
+  const [namespace, key] = surface.key.split(".");
+  const source = readSource(surface.rendersIn);
+
+  if (source === null) {
+    unnamed++;
+    fail(
+      `${surface.label}: ${surface.rendersIn} is missing`,
+      `There is nothing left to carry the notice — and, on the thank-you page, ` +
+        `nothing to catch the buyer at all.`,
+    );
+    continue;
+  }
+
+  // Comments blanked: the file explains the rule at length right above the
+  // mount, and a checker that reads that as the mount would pass a page that
+  // only TALKS about showing it.
+  if (!blankComments(source).includes(surface.mount)) {
+    unnamed++;
+    fail(
+      `${surface.label}: ${surface.rendersIn} no longer renders ${surface.mount}`,
+      `The sentence is in the message files and nobody shows it. Digistore24 ` +
+        `GmbH is the name on the buyer's bank statement, not yours: a line ` +
+        `nobody recognises becomes a call to their bank rather than a mail to ` +
+        `you, and a chargeback costs the sale, the fee and a mark on your account.`,
+    );
+    continue;
+  }
+
+  for (const locale of locales()) {
+    const line = messagesFor(locale)?.[namespace]?.[key];
+    if (typeof line !== "string" || !line.trim()) {
+      unnamed++;
+      fail(
+        `${surface.label} (${locale}): ${surface.key} is missing`,
+        `The page would render the key itself at a buyer.`,
+      );
+    } else if (!namesReseller(line)) {
+      unnamed++;
+      fail(
+        `${surface.label} (${locale}): ${surface.key} does not name Digistore24`,
+        `"${line}" — the one job of this sentence is the name that turns up on ` +
+          `the bank statement. Any wording is fine as long as it says whose it is.`,
+      );
+    }
+  }
+}
+if (unnamed === 0) {
+  ok(
+    `${RESELLER_SURFACES.length} surface(s) name Digistore24, in ` +
+      `${locales().length} language(s) — a signed-in buyer never sees the ` +
+      `thank-you page, which is why there are two`,
+  );
+}
+
+// ── 4. Consent ─────────────────────────────────────────────────────────────
 console.log("\nConsent (config/consent.json)");
 
 const consent = readJson("config/consent.json");
@@ -262,7 +501,7 @@ if (!consent) {
     // wording forgotten, and the dialog rendering "consent.marketing_email.title"
     // at a customer.
     for (const locale of locales()) {
-      const messages = readJson(`messages/${locale}.json`);
+      const messages = messagesFor(locale);
       for (const part of ["title", "body"]) {
         if (typeof messages?.consent?.[key]?.[part] !== "string") {
           fail(
@@ -276,7 +515,7 @@ if (!consent) {
   if (problems === 0) ok(`${purposes.length} purpose(s) declared, all with wording`);
 }
 
-// ── 4. The evidence pack ───────────────────────────────────────────────────
+// ── 5. The evidence pack ───────────────────────────────────────────────────
 console.log("\nEvidence (docs/compliance/) — GDPR Art. 5(2), accountability");
 
 const evidenceDir = join(ROOT, "docs", "compliance");

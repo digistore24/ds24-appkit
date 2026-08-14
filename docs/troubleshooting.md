@@ -511,6 +511,47 @@ If the foreign sender is a deliberate, informed decision, set
 `node run.mjs doctor --deploy` gives the same verdict on your own machine,
 before a deploy ever runs into it.
 
+## The sign-in link points at `localhost` — a deployed app nobody can enter
+
+The symptom, and it is the worst-looking one in this file because nothing is
+broken: the app is live, every page answers, the checkout goes through — and
+the sign-in mail contains
+`https://localhost:8080/api/auth/callback/email?…`. The buyer has paid and
+cannot get into their account. A redirect shows the same thing without waiting
+for a mail:
+
+```
+$ curl -s -i https://your-domain.de/dashboard
+location: /login?callbackUrl=https%3A%2F%2Flocalhost%3A8080%2Fdashboard
+```
+
+The cause is one line of the hosting setup meeting one line of Auth.js.
+`AUTH_TRUST_HOST=true` lets Auth.js work out its own address from the request
+headers, which is right for accepting a dynamic Host and wrong for building a
+link. Behind DigitalOcean App Platform's router the container sees itself as
+`localhost:8080` and no `x-forwarded-host` with the public domain arrives — so
+that is what went into the mail. Every gate stays green: it is a correct 307 to
+a correct path on the wrong origin.
+
+**On template 0.28.0 and newer this cannot happen**: `AUTH_URL` is derived from
+`APP_URL` at startup (`lib/auth/auth-url.mjs`), so everything the app mails out
+carries the address the app says it has, and STAGING/PROD refuse to start with
+no `APP_URL` at all. On an older app, set `AUTH_URL` on the host to the same
+value as `APP_URL` — origin only, no path, no trailing slash — or bring the code
+forward. `AUTH_TRUST_HOST` stays as it is; it answers a different question.
+
+**If you set `AUTH_URL` by hand, it must match `APP_URL`.** Two variables
+naming the app's address and disagreeing is refused at startup rather than
+picked between: one decides where sign-in links point, the other the mails'
+legal links, the checkout return and the IPN target.
+
+The same rule has one visible consequence locally, and it is the honest cost of
+not having a DEV-only branch here: **open the app on the address `APP_URL`
+names.** With `APP_URL=http://localhost:3000`, signing in on
+`http://127.0.0.1:3000` sends you to `localhost:3000` mid-flow — a different
+origin as far as cookies are concerned, so the session lands somewhere you are
+not looking. `node run.mjs start` prints the address it means.
+
 ## The app went live empty — content that only ever existed on your machine
 
 The symptom: locally the app is finished — the course renders, the videos

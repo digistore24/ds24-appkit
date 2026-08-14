@@ -8,6 +8,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import { findTool, type ToolContext } from "./tools";
 import { createLinkLedger, type LinkLedger } from "./content-links";
+import { loadKnowledge } from "./knowledge";
+import { notChecked } from "@/lib/test-not-checked";
 
 /**
  * A context whose ledger can be inspected afterwards. The default `ctx` below
@@ -21,6 +23,39 @@ function contextWith(links: LinkLedger): ToolContext {
     offerLink: (url, anchor, label) => links.offer(url, anchor, label),
   };
 }
+
+/**
+ * A query built from the handbook THIS app has.
+ *
+ * 🚨 It was the literal `"account password"`, with a comment naming the file it
+ * came from — `content/knowledge/10-reference/account.md`, one of the six
+ * examples the skill `ai-chat-knowledge` tells the user to REPLACE. So five
+ * tests in this file went red in every app that used the feature they test, two
+ * of them by dereferencing `hits[0]` of an empty array. A test that names
+ * shipped example data is a test with an expiry date.
+ *
+ * The most frequent long word in the handbook is a query that hits whatever
+ * that handbook is about, in any language, without knowing anything about it.
+ */
+const HANDBOOK_QUERY = (() => {
+  const counts = new Map<string, number>();
+  for (const doc of loadKnowledge().docs) {
+    for (const word of `${doc.title} ${doc.body}`.toLowerCase().match(/\p{L}{5,}/gu) ?? []) {
+      counts.set(word, (counts.get(word) ?? 0) + 1);
+    }
+  }
+  const [best] = [...counts.entries()].sort(
+    (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+  );
+  return best?.[0] ?? null;
+})();
+
+/** The reason the handbook tests print when there is nothing to search. */
+const NO_HANDBOOK =
+  "content/knowledge/ holds no document with a searchable word in it — this " +
+  "app has emptied the handbook (or has not written one yet), so what these " +
+  "tools return for a real query cannot be measured here. `node run.mjs " +
+  "kb-check` is where an empty handbook is a finding.";
 
 let ledger = createLinkLedger();
 let ctx: ToolContext = contextWith(ledger);
@@ -51,9 +86,9 @@ describe("content_search", () => {
     }
   });
 
-  it("finds the shipped handbook and reports truncation honestly", async () => {
-    // "account" occurs in the template's own handbook (10-reference/account.md).
-    const result = await search.run({ query: "account password" }, ctx);
+  it("finds the shipped handbook and reports truncation honestly", async (t) => {
+    if (!HANDBOOK_QUERY) return notChecked(t, NO_HANDBOOK);
+    const result = await search.run({ query: HANDBOOK_QUERY }, ctx);
     expect(result.isError).not.toBe(true);
     const data = dataOf(result);
     const hits = data.hits as { sourceId: string; url: string | null }[];
@@ -63,9 +98,10 @@ describe("content_search", () => {
     expect(typeof data.truncated).toBe("boolean");
   });
 
-  it("absolutizes urls only when APP_URL is set — and never invents one", async () => {
+  it("absolutizes urls only when APP_URL is set — and never invents one", async (t) => {
+    if (!HANDBOOK_QUERY) return notChecked(t, NO_HANDBOOK);
     process.env.APP_URL = "https://app.example.com";
-    const result = await search.run({ query: "account password" }, ctx);
+    const result = await search.run({ query: HANDBOOK_QUERY }, ctx);
     const hits = dataOf(result).hits as { url: string | null }[];
     for (const hit of hits) {
       // Handbook hits have no page; a null url must survive absolutization.
@@ -75,8 +111,9 @@ describe("content_search", () => {
 });
 
 describe("content_get", () => {
-  it("round-trips a ref from content_search", async () => {
-    const found = await search.run({ query: "account password" }, ctx);
+  it("round-trips a ref from content_search", async (t) => {
+    if (!HANDBOOK_QUERY) return notChecked(t, NO_HANDBOOK);
+    const found = await search.run({ query: HANDBOOK_QUERY }, ctx);
     const hits = dataOf(found).hits as { ref: string }[];
     const result = await get.run({ source: "handbook", ref: hits[0].ref }, ctx);
     expect(result.isError).not.toBe(true);
@@ -141,8 +178,9 @@ describe("the shipped template offers no links at all", () => {
   // nothing is offered, the ledger stays empty, and the parser's empty set
   // denies every marker the model could invent. There is deliberately no
   // `config/content-links.json` — this "off" is a consequence of the content.
-  it("no search hit carries a link field", async () => {
-    const result = await search.run({ query: "account password" }, ctx);
+  it("no search hit carries a link field", async (t) => {
+    if (!HANDBOOK_QUERY) return notChecked(t, NO_HANDBOOK);
+    const result = await search.run({ query: HANDBOOK_QUERY }, ctx);
     const hits = dataOf(result).hits as Record<string, unknown>[];
     expect(hits.length).toBeGreaterThan(0);
     for (const hit of hits) {
@@ -165,8 +203,9 @@ describe("the shipped template offers no links at all", () => {
     expect(ledger.markers()).toEqual([]);
   });
 
-  it("a fetched document and its sections carry no link field", async () => {
-    const found = await search.run({ query: "account password" }, ctx);
+  it("a fetched document and its sections carry no link field", async (t) => {
+    if (!HANDBOOK_QUERY) return notChecked(t, NO_HANDBOOK);
+    const found = await search.run({ query: HANDBOOK_QUERY }, ctx);
     const hits = dataOf(found).hits as { ref: string }[];
     const result = await get.run({ source: "handbook", ref: hits[0].ref }, ctx);
     const doc = dataOf(result);

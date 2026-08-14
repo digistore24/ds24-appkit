@@ -21,6 +21,7 @@
 export type AppEnv = "development" | "staging" | "production";
 
 import { senderDomainProblem } from "./email-from.mjs";
+import { authUrlProblem } from "./auth/auth-url.mjs";
 
 // --- Detecting the mail transport ----------------------------------------
 // Deliberately here and not in lib/email.ts: these checks only read env values
@@ -56,8 +57,19 @@ export interface EnvCheckInput {
   NODE_ENV?: string;
   AUTH_SECRET?: string;
   emailConfigured: boolean;
-  /** The declared public URL — what the sender-domain rule compares against. */
+  /**
+   * The declared public URL — what the sender-domain rule compares against,
+   * and where outgoing auth links take their origin from (`authOriginProblem()`
+   * below).
+   */
   APP_URL?: string;
+  /**
+   * AUTH_URL / NEXTAUTH_URL — normally nobody sets these: `auth.config.ts`
+   * derives AUTH_URL from APP_URL. They are read here so that an operator's own
+   * value can be compared against APP_URL rather than silently winning.
+   */
+  AUTH_URL?: string;
+  NEXTAUTH_URL?: string;
   /**
    * The From address the app would send with (`resolvedFrom(process.env)`,
    * `lib/email-from.mjs`) — null when a transport is configured but no sender
@@ -134,6 +146,9 @@ export function checkEnvironment(env: EnvCheckInput): string[] {
     );
   }
 
+  const authOrigin = authOriginProblem(environment, env);
+  if (authOrigin) problems.push(authOrigin);
+
   // Only when a transport IS configured — without one, the "no email delivery"
   // problem above already covers the case, and two messages for one missing
   // setup read like two faults.
@@ -146,6 +161,86 @@ export function checkEnvironment(env: EnvCheckInput): string[] {
   if (media) problems.push(media);
 
   return problems;
+}
+
+/**
+ * The origin of the links the app MAILS OUT, on a real environment: taken from
+ * `APP_URL`, or the app does not start.
+ *
+ * ── Why this is a refusal and not a warning ────────────────────────────────
+ * The same shape as the sender rule below, one step further along: nothing
+ * breaks on the day it is misconfigured. The app starts, every page answers
+ * 200, `smoke` is green, the log is clean — and the sign-in mail carries a link
+ * to an address that exists only inside the container. It was measured on a
+ * real deployment (DigitalOcean App Platform, `http_port: 8080`): the mail said
+ * `https://localhost:8080/api/auth/callback/email?…` and the customer could not
+ * reach their own account. The only symptom is somebody telling you, and by
+ * then it is every customer since the deploy.
+ *
+ * Without `APP_URL` there is nothing to derive the origin from and Auth.js
+ * falls back to the request headers — which is exactly the state the failure
+ * above was in. So a real environment does not start without it, which is what
+ * `docs/DEPLOY.md` has been promising in its "refuses to start without them"
+ * table all along.
+ *
+ * ── Why an operator's own AUTH_URL is compared rather than overruled ───────
+ * `auth.config.ts` derives `AUTH_URL` from `APP_URL` and leaves an existing
+ * value alone — a deployment that worked around this by hand must keep
+ * working. But two variables meaning "where this app lives" and disagreeing is
+ * a state nobody chose; one of them is then wrong, and which one it is cannot
+ * be guessed from here. Origins are compared, so an `AUTH_URL` that merely
+ * carries Auth.js's base path is not a disagreement.
+ */
+function authOriginProblem(environment: AppEnv, env: EnvCheckInput): string | null {
+  const problem = authUrlProblem(env);
+  if (!problem) return null;
+
+  const head = `APP_ENV=${environment}: `;
+
+  if (problem.code === "missingAppUrl") {
+    return (
+      head +
+      "APP_URL is not set. It is the app's own address, and everything the app " +
+      "MAILS OUT takes its origin from it — the sign-in link above all. " +
+      "Without it Auth.js falls back to the request headers, and behind a " +
+      "hosting router those say what the container calls itself " +
+      '("localhost:8080" on DigitalOcean App Platform), so sign-in mails go ' +
+      "out with a link nobody outside the container can open — while the app " +
+      "itself looks perfectly healthy. Set APP_URL to the public domain, " +
+      "https://, no trailing slash (docs/DEPLOY.md)."
+    );
+  }
+
+  if (problem.code === "badAppUrl") {
+    return (
+      head +
+      `APP_URL ("${problem.appUrl}") is not a URL, so the app cannot say ` +
+      "where it lives. Sign-in links would then be built from the request " +
+      "headers and point wherever the hosting router happens to say. It needs " +
+      "the scheme too: https://your-domain.de, no trailing slash."
+    );
+  }
+
+  if (problem.code === "badAuthUrl") {
+    return (
+      head +
+      `AUTH_URL ("${problem.authUrl}") is not a URL. Normally nobody sets it — ` +
+      `it is derived from APP_URL (${problem.appOrigin}) at startup. Remove ` +
+      "it, or give it the app's own address."
+    );
+  }
+
+  return (
+    head +
+    `AUTH_URL says this app lives at ${problem.authOrigin}, APP_URL says ` +
+    `${problem.appOrigin}. One of the two is wrong, and which one cannot be ` +
+    "guessed from here: AUTH_URL decides where sign-in links point, APP_URL " +
+    "decides the mails' legal links, the checkout return and the IPN target — " +
+    "so a running app would send half its customers to one address and half " +
+    "to the other. Normally AUTH_URL is not set at all; it is derived from " +
+    `APP_URL. Delete it (value: "${problem.authUrl}") unless you know why it ` +
+    "is there."
+  );
 }
 
 /**

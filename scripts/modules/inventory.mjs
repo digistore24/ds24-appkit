@@ -18,7 +18,15 @@
 // absence of a greeting is the one signal `CLAUDE.md` says never to read as
 // "fine". `node run.mjs module check` is where a broken arrangement is
 // diagnosed.
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { mergeModuleMessages } from "../../lib/modules/messages-merge.mjs";
 import { loadModules } from "./registry.mjs";
+
+/** The app root, from this file's own location — never `process.cwd()`. */
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 /**
  * The installed modules, or none at all if the arrangement cannot be read.
@@ -325,6 +333,48 @@ export function moduleDeclaredSections(root) {
       ? r.manifest.privacy.sections
       : [],
   );
+}
+
+/**
+ * The composed message catalogue for one locale — the core's texts plus every
+ * installed module's, exactly as the RUNNING app composes them.
+ *
+ * 🚨 This exists because a checker that reads `messages/<locale>.json` alone is
+ * reading half the app. A module owns whole namespaces and puts its own texts
+ * there — `modules/companion/messages/de.json` carries the companion's Art. 50
+ * notice — so `legal-check` used to report a missing AI disclosure in every app
+ * that had installed the module, for a notice the app was rendering perfectly.
+ * A false alarm on a legal check is worse than none: it teaches the next reader
+ * that this command is wrong about things.
+ *
+ * The merge rule is NOT reimplemented here — `mergeModuleMessages()` is the one
+ * the app itself uses, which is why it lives in `.mjs`
+ * (`lib/modules/messages-merge.mjs` says why).
+ *
+ * ⚠️ It reads the modules' catalogue files straight off disk rather than the
+ * generated `lib/modules/messages.ts`, because that file is TypeScript with
+ * `@/` imports and this half of the world has neither. `module sync` generates
+ * the one from the same manifests this reads, and
+ * `scripts/modules/generated.test.ts` keeps them in step.
+ *
+ * @param {string} locale        e.g. "de"
+ * @param {Record<string, unknown>} core  the app's own catalogue for that locale
+ * @param {string} [root]
+ * @returns {Record<string, unknown>} the merged catalogue
+ */
+export function composedMessages(locale, core, root = ROOT) {
+  let merged = { ...core };
+  for (const { dir, manifest } of safeModules(root)) {
+    const declared = manifest.messages;
+    if (!declared || typeof declared.dir !== "string") continue;
+    const file = join(root, dir, declared.dir, `${locale}.json`);
+    // A module without this locale is not a fault — the core decides which
+    // languages exist, and `i18n/messages.test.ts` is where a missing key is a
+    // finding. Here it simply contributes nothing.
+    if (!existsSync(file)) continue;
+    merged = mergeModuleMessages(merged, JSON.parse(readFileSync(file, "utf8")));
+  }
+  return merged;
 }
 
 /**
