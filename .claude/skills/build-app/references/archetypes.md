@@ -27,6 +27,39 @@ shipped a tool — it has shipped a form. What the buyer paid for was the readin
 the judgement or the draft. [`docs/ai-providers.md`](../../../../docs/ai-providers.md)
 → *Working alongside your customer* is the reference for that half.
 
+## The activation event — step 1f's one question
+
+**What has a customer done when you would bet they stay?** Read it off the row
+you just chose, put it to the user as a sentence, and confirm. Not a menu: it is
+not customer-visible surface, and a fourth menu here would break the 1b–1d trias.
+
+| Archetype | Activation — the first success | Return — the same thing, repeated |
+|---|---|---|
+| Content-Access | finished the first lesson (a `unit_completions` row) | finishes another, weekly, until the course runs out |
+| Drip/Automation | **answered** the first message, not merely received it | answers the one that arrived, per drip step |
+| Gated-Tool | produced their first real result | produces another, as often as the job occurs |
+| Membership | did the first member thing — post, booking, whatever it is for | does it again, weekly |
+| Usage/Tokens | completed the first metered run (a spend on `token_ledger`) | spends again — a balance nobody spends is a refund waiting |
+
+Three properties rule a bad answer out, and the full reasoning is
+[`docs/onboarding.md`](../../../../docs/onboarding.md) §1: **it is theirs, not
+yours** ("visited the dashboard" is your page, not their success), **it is
+narrow** (one row, one moment, one date), and **it is the last step of the
+dashboard checklist** — if the checklist ends short of it, the checklist is
+decoration.
+
+**The second column only applies to an app that bills again.** For a one-off
+purchase the honest answer is that nothing repeats: record `Return: — one-off,
+nothing recurs` and do not invent a rhythm the product does not have
+([`docs/retention.md`](../../../../docs/retention.md) §1).
+
+Both lines go into the product block of `docs/app.md` at step 4b
+([`app-md-template.md`](app-md-template.md)). 🚨 **Step 2 owes the first one a
+table**: the event has to be a dated row somewhere in the model you are about to
+create. If no table can carry it, either the event is wrong or the model is
+missing one — and finding that out here is the whole reason the question is
+asked before the data model rather than after the pages.
+
 ## The billing mode that follows from the archetype
 
 The last four rows above are plans, the **Usage/Tokens** row is tokens, and an

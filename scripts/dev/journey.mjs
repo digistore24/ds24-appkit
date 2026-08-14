@@ -241,8 +241,10 @@ export const JOURNEY_STATES = [
 // `scripts/docs-coverage.test.ts` caps it at six, and the direction to move that
 // number is DOWN: `go-to-market` was the ninth and is now a `file` row, because
 // the skill writes `docs/go-to-market.md` at the end of its run; `visuals` and
-// `user-onboarding` were the seventh and eighth and are now `note` rows, because
-// the line they were asking about was in `docs/app.md` all along.
+// `user-onboarding` were the seventh and eighth and became `note` rows, because
+// the line they were asking about was in `docs/app.md` all along. (`visuals`
+// still is one. `user-onboarding` moved on to `placeholder` once `build-app`
+// began writing that line itself — see its row.)
 //
 // **One row is settled by a LATER row instead of by a trace of its own —
 // `impliedBy`, and there is exactly one.** It is not a tenth kind and it is not
@@ -699,20 +701,42 @@ export const JOURNEY = [
     recurring: false,
     requires: "0.4.0",
     module: null,
-    // 🚨 **The same inversion as 2.3a, and here the two are not merely
-    // indistinguishable — the no does not exist.** This was `{ kind: "ask" }` with
-    // `declined: { file: "docs/app.md", marker: "Activation" }`, and `Activation:`
-    // is the line `decide` writes when the step was DONE (`docs/onboarding.md` §1
-    // quotes the shape). So a designed onboarding read "you said no to it".
+    // 🚨 **This was a `note` row on `docs/app.md`'s `Activation:` line, and
+    // `build-app` writing that line is exactly what took the question away from
+    // it.** Step 1f now asks for the activation event and step 4b writes it into
+    // the product block, so the line is there on every app this template builds —
+    // and a `note` row would have read `done` for all of them while the dashboard
+    // checklist was still the shipped blueprint. A predicate that answers "done"
+    // where nothing happened is the fault the four vacuous rows above were fixed
+    // for; moving the trace is how that fault is not merely avoided but relocated
+    // to the question that is still open.
     //
-    // `declined` is `null` because this step has no refusal of its own to record:
-    // `user-onboarding`'s `decide` writes an `Activation:` line for every outcome,
-    // *"including every 'no'"* — the nos there are nos to PATTERNS (no survey, no
-    // gamification), never to naming the event. So the line IS the answer, and an
-    // app that never designed an onboarding leaves no line at all and reads
-    // `unknown` — *nobody recorded this*, which is the honest column and not the
-    // same claim as *this was not done*.
-    trace: { kind: "note", path: "docs/app.md", label: "Activation:" },
+    // **What is still open is the checklist**, so that is what the row asks now:
+    // are the shipped blueprint steps GONE from `app/dashboard/page.tsx`? The
+    // markers are the message keys the two steps render with, and the choice
+    // between them is the usual one — `onboardingPlanDone` is exclusive to the
+    // plan step, while `onboardingTokensTitle` is shared with the offer card two
+    // blocks up (`page.tsx`, the `offer` empty state). Both are listed anyway:
+    // `some(marked) → open`, so an app that replaced one step and kept the other
+    // stays open, and an app that kept the offer card reads open although its
+    // steps are its own. That is the safe direction, the same one the knowledge
+    // row takes — an onboarding wrongly called unfinished costs a conversation,
+    // one wrongly called finished costs the customer their first five minutes.
+    //
+    // 🚨 **The marker may not be the comment.** `THIS IS THE BLUEPRINT` stands
+    // right above those steps and reads like the obvious marker; `facts.text`
+    // runs source through `blankComments()`, so it is never there and the row
+    // would read `done` for every app, for ever. Same trap the salespage row
+    // documents one screen down, from the other side.
+    //
+    // `declined` stays `null`: this step has no refusal of its own to record. The
+    // nos `user-onboarding` writes are nos to PATTERNS (no survey, no
+    // gamification), never to having a first session at all.
+    trace: {
+      kind: "placeholder",
+      path: "app/dashboard/page.tsx",
+      markers: ["onboardingPlanDone", "onboardingTokensTitle"],
+    },
     declined: null,
     alsoFrom: [],
     handsTo: null,

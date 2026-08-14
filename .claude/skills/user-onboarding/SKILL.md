@@ -19,6 +19,10 @@ mechanics of the shipped checklist — derived state, no dismiss — are
 [`docs/ux.md`](../../../docs/ux.md) §1 and `lib/onboarding/rules.ts`; where
 anything here seems to disagree with those two, they win.
 
+**Item 6 has a second reference, [`docs/retention.md`](../../../docs/retention.md)**
+— the same relationship: the first session is `onboarding.md`, the second visit
+is that one. Read whichever the item names.
+
 ## How to use this skill
 
 | | What it does | Roughly |
@@ -28,6 +32,7 @@ anything here seems to disagree with those two, they win.
 | **3 · `survey`** | a 2–4 question welcome survey whose answers change something | 20–30 min |
 | **4 · `nudge`** | one reminder for the customer whose activation never happened | 20 min |
 | **5 · `check`** | the onboarding that already exists: does it mean this app? | 10 min |
+| **6 · `return`** | the SECOND visit: the recurring action, and whether this app owes a comeback mail | 20–30 min |
 
 - If the user already said which one ("nobody finishes the setup" → `steps`;
   "can we ask new users what they want?" → `survey`), **start that one and skip
@@ -37,6 +42,10 @@ anything here seems to disagree with those two, they win.
 - "My customers sign up and never come back" with nothing else → **`decide`**.
   It is ten minutes, and the answer to that sentence is almost never another
   feature — it is an activation event nobody ever named.
+- **One question separates `decide` from `return`, so ask it**: did these
+  customers ever get going at all? *Never started* is `decide` — there is no
+  activation event. *Started, then went quiet* is `return`, and it is a
+  different defect: the product does not repeat.
 - **You run the commands and you open the pages** — through your Bash tool and
   the browser, never by handing the user a command to run.
 
@@ -49,9 +58,12 @@ so that most cells can say "skip it".
 
 **First, always — look before you ask:**
 
-- `docs/app.md` → an `Activation:` line under the decisions, and any recorded
-  "no" (no survey, no gamification). **A recorded no is an answer** — say you
-  found it and move on; do not propose it again as if it were new.
+- `docs/app.md` → the `Activation:` and `Return:` lines in the product block,
+  and any recorded "no" under the decisions (no survey, no gamification).
+  **A recorded no is an answer** — say you found it and move on; do not propose
+  it again as if it were new. On an older app the `Activation:` line may sit
+  under *Decisions worth remembering* instead; that is the same answer, read it
+  there and do not move it for its own sake.
 - `app/dashboard/page.tsx` → are the checklist steps still the two shipped
   blueprint ones? That single glance separates "was never designed" from "was
   designed and may need revisiting".
@@ -90,9 +102,17 @@ set the same way — which checklist steps, whether a survey or a nudge earns it
 place here, whether the wizard test (§5 there) even applies. Most cells should
 stay unbuilt, and saying so is part of the proposal.
 
-Whatever is decided — including every "no" — goes into `docs/app.md` under
-*Decisions worth remembering*, with the `Activation:` line in the shape §1
-shows. That line is the contract every other item below reads.
+**The `Activation:` line goes into `docs/app.md`'s PRODUCT BLOCK**, beside
+`Output artifact:`, in the shape §1 shows — it is a property of the product, not
+a decision about a pattern, and `build-app` leaves the slot there for it. The
+**nos to patterns** (no survey, no gamification) go under *Decisions worth
+remembering*, where the reason can be written down with them. One fact, one
+place: do not put the line in both.
+
+That line is the contract every other item below reads. **On an app built by
+`build-app` it is usually already there** — then this item is a re-reading, not
+a first naming: say what it says, ask whether the app still agrees with it, and
+spend the ten minutes on the patterns instead.
 
 ## 2 · `steps` — the checklist becomes this app's
 
@@ -179,6 +199,7 @@ severity ladder from `docs/guidance.md` → *How a skill works*:
 | ⚠️ | **MEDIUM** | A step with no `href`, or steps that do not end at the activation event, or more than 5 of them |
 | ⚠️ | **MEDIUM** | Sample data that ticks a step or counts toward activation (§8 there) — the checklist is lying |
 | ⚠️ | **MEDIUM** | A survey column nothing reads (§4's test, failed after the fact) |
+| ⚠️ | **MEDIUM** | An `Activation:` line but no `Return:` on an app that bills **recurring** (`billingMode` is `subscriptions` or `both`, `lib/billing-mode.ts`) — the plan renews every month and nobody named what brings the customer back. Fix: item `return`. On a one-off product this is not a finding, and `Return: — one-off` is why the two are distinguishable |
 
 Also run the §12 measurement once with the user — activation rate as one SQL
 query over grants × the event's table — and put the number in the verdict, so
@@ -188,6 +209,54 @@ The verdict is written, dated, to **`docs/reports/onboarding-YYYY-MM-DD.md`**
 (create the folder if it is missing): findings, the number, what was fixed,
 what stays open. A check that found nothing writes that down too — that is
 what makes "did we already look?" answerable.
+
+## 6 · `return` — the second visit
+
+The reference is [`docs/retention.md`](../../../docs/retention.md); this item
+only sequences it. Needs an `Activation:` line — an app whose first success
+nobody named has no repeat of it either, so run `decide` first.
+
+1. **Name the recurring action and its cadence** (§1 there). Read the app's own
+   tables, then put 2–3 candidates to the user as a numbered menu with a default
+   and a `0` row, exactly as `decide` does — and 🚨 **offer "one-off, nothing
+   recurs" as a real option every time.** A tool used once or a file bought and
+   downloaded has no recurring action, and `Return: — one-off, nothing recurs`
+   ends this item well. Do not talk an app into a rhythm it does not have.
+2. **Write it into `docs/app.md`'s product block**, beside `Activation:`, in the
+   shape §1 shows. That line is what item `check` and the job in step 4 read.
+3. **Then ask what the customer comes back FOR** — §5 there. For most apps the
+   answer is a surface, not a message, and it belongs to another skill:
+   `courses`, `learning-activities`, `community` or `ai-companion`. **Say so and
+   hand over.** A comeback mail into an app with no reason to return is a mail
+   that works once.
+4. **Only then the mail**, and only if step 3 found a real reason: §4 there plus
+   [`docs/cron.md`](../../../docs/cron.md), one job, `claimSend()` before the
+   send, one mail per silence. **STOP before anything mails: consent** — say in
+   one sentence that a single service reminder about a purchased product is the
+   defensible shape and that anything past it needs a purpose in
+   `config/consent.json`, then let the user decide. `compliance-check` owns that
+   line; do not settle it yourself.
+5. **Check the paused-access surface while you are here** (§3 there) — one
+   `<Callout>`, both language files, naming Digistore24. It is ten minutes and
+   it catches the customer who did not decide to leave.
+6. Verify like the nudge: `node run.mjs cron --job <id>` twice — the second run
+   sends nothing and says so in numbers — then `node run.mjs cron --list`.
+7. `docs/app.md`: the `Return:` line, the job id, the threshold, and every "no".
+
+⚠️ **What this item does NOT do**, because [`docs/retention.md`](../../../docs/retention.md)
+§2 forbids it: a cancellation flow, an exit survey, a pause or downgrade offer,
+your own dunning mails, or a win-back sequence. The subscription lives at
+Digistore24; this app never sees the cancellation. If the user asks for one,
+say that in one sentence rather than building something that cannot work.
+
+**Where it stops and a neighbour starts:**
+
+| | |
+|---|---|
+| `ux-gateway` | judges the first five minutes as a stranger; this item is about the second week |
+| `operate` | asks whether the **app** is still healthy; this asks whether the **customer** comes back |
+| `community`, `learning-activities`, `courses`, `ai-companion` | **build** the surfaces people return for; this item decides whether this app needs one, and what the recurring action is |
+| `go-to-market` | finds new buyers; this keeps the ones there are |
 
 ## The rules
 
@@ -204,6 +273,11 @@ what makes "did we already look?" answerable.
 
 - Steps, survey or nudge built → **`ux-gateway`** (check `first-run`) looks at
   the result the way a paying stranger does.
+- The activation event is named and the app bills recurring → item **`return`**,
+  because a plan that renews needs a reason to, and nothing else here asks that.
+- `return` found that the app has nothing to come back FOR → the skill that
+  builds it: **`courses`**, **`learning-activities`**, **`community`** or
+  **`ai-companion`**. Name the one that fits and offer to start it.
 - The app is a course whose activation is a finished lesson → the elements the
   customer DOES are the skill **`learning-activities`**.
 - The nudge raised the consent question → **`compliance-check`** (check

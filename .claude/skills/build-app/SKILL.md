@@ -242,7 +242,10 @@ paths, and what a `0` records: [`references/menus.md`](references/menus.md).
 
 Before Step 2 touches the data model: the pages, what a buyer does, what they
 pay, what is not in it — plain words, no file paths — then **wait for a yes**
-(not for an experiment). [`references/intake.md`](references/intake.md). **Then
+(not for an experiment). [`references/intake.md`](references/intake.md).
+
+**One question belongs in that picture: what has a customer done when you would
+bet they stay?** A sentence to confirm, not a menu; per archetype it is [`references/archetypes.md`](references/archetypes.md). **Then
 write the agreed picture into `docs/plan.md`** — the shape is
 [`references/plan-md-template.md`](references/plan-md-template.md). Nothing else
 on disk says what is still TO be built, and a plan that lives in the transcript
@@ -261,8 +264,8 @@ is gone when the session is.
   are referenced **by path, never by media id**. The transport rules are
   [`docs/content.md`](../../../docs/content.md), the reasoning and the go-live
   proof are in [`references/content-rules.md`](references/content-rules.md).
-- New tables in `db/schema.ts` (or a separate file that is re-exported there —
-  model to follow: `db/schema-digistore.ts`).
+- New tables in `db/schema.ts` (model: `db/schema-digistore.ts`) — **one of them
+  must be able to date Step 1f's activation event**, or the event was wrong.
 - Link purchase-dependent content to the **Member** (`users.id`, the same id
   `orders.memberId` carries) — never to a column that is not the buyer: content
   keyed on anything else is content every customer can see. What the Member may
@@ -432,9 +435,11 @@ in there gets invented a second time — a second table beside the first, a seco
 way of gating access, a page that does what one two folders over already did.
 
 The shape — the product block (sells / for / archetype / output artifact /
-alongside the customer), one entry per feature, and *Decisions worth
-remembering* — is in [`references/app-md-template.md`](references/app-md-template.md);
-copy it when creating the file, and keep it, so every entry reads the same.
+alongside the customer / activation / return), one entry per feature, and
+*Decisions worth remembering* — is in
+[`references/app-md-template.md`](references/app-md-template.md); copy it when
+creating the file, and keep it, so every entry reads the same. The last two
+slots are Step 1f's answer, written down rather than left in the transcript.
 
 Three rules about it:
 

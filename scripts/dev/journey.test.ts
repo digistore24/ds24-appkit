@@ -644,13 +644,17 @@ describe("a recorded no is an answer, not an absence", () => {
     const state = journeyState(facts(noIdentity));
     expect(state.rows.find((row) => row.skill === "design")?.state).toBe("declined");
     expect(state.rows.find((row) => row.skill === "setup-monitoring")?.state).toBe("unknown");
-    // 🚨 The two `note` rows read the same file for their own line. A refusal about
-    // the LOOK must not answer them, in either direction.
-    for (const skill of ["visuals", "user-onboarding"]) {
-      const row = state.rows.find((entry) => entry.skill === skill)!;
-      expect(row.state, skill).toBe("unknown");
-      expect(row.state, skill).not.toBe("declined");
-    }
+    // 🚨 The `note` row reads the same file for its own line. A refusal about the
+    // LOOK must not answer it, in either direction.
+    const note = state.rows.find((entry) => entry.skill === "visuals")!;
+    expect(note.state).toBe("unknown");
+    expect(note.state).not.toBe("declined");
+    // And the row that USED to read this file — `user-onboarding`, until its
+    // question moved to the dashboard checklist — must not be answered by it
+    // either. It reads `open` here because no `app/dashboard/page.tsx` was
+    // supplied, which is that kind's honest answer to an absent file.
+    const moved = state.rows.find((entry) => entry.skill === "user-onboarding")!;
+    expect(moved.state).not.toBe("declined");
   });
 });
 
@@ -908,6 +912,11 @@ describe("go-to-market writes something down", () => {
     // both were asking about a line that was in `docs/app.md` all along, and both
     // carried a `declined` marker that was the string the POSITIVE answer is
     // written with. Six now, and four of them are real steps.
+    //
+    // `user-onboarding` has since moved on again — to a `placeholder` on the
+    // dashboard checklist, because `build-app` now writes the `Activation:` line
+    // itself and a row asking about it would answer `done` for every app. Neither
+    // move brought anything BACK to this list, which is the only direction it goes.
     const asks = JOURNEY.filter((row) => row.trace?.kind === "ask").map((row) => row.skill);
     expect(asks).toEqual([
       "setup-machine",
@@ -1036,10 +1045,20 @@ describe("a decision recorded in prose is read as the answer it is", () => {
     },
   };
 
-  /** What each row was decided about, in the words the fixture's user wrote. */
+  /**
+   * What each row was decided about, in the words the fixture's user wrote.
+   *
+   * 🚨 **`user-onboarding` was the second entry here and is deliberately gone.**
+   * Once `build-app` step 1f asks for the activation event and step 4b writes it
+   * into the product block, the `Activation:` line is there on every app this
+   * template builds — so a `note` row on it would have read `done` for all of
+   * them while the dashboard checklist was still the shipped blueprint, which is
+   * the vacuity this whole file exists to refuse. Its trace moved to a
+   * `placeholder` on `app/dashboard/page.tsx`, and the block at the foot of this
+   * describe is where the moved question is measured instead.
+   */
   const DECIDED: Record<string, string> = {
     visuals: "a finished sales page with a hero image",
-    "user-onboarding": "the member has completed their first lesson",
   };
 
   it("🚨 reads a recorded YES as done — and never, in any word, as a refusal", () => {
@@ -1113,9 +1132,9 @@ describe("a decision recorded in prose is read as the answer it is", () => {
     const noFile = journeyState(facts({})).rows.find((row) => row.skill === "visuals")!;
     expect(noFile.evidence).toBe("no docs/app.md yet");
     const noLine = journeyState(facts({ text: { [NOTEBOOK]: "# Bloom\n" } })).rows.find(
-      (row) => row.skill === "user-onboarding",
+      (row) => row.skill === "visuals",
     )!;
-    expect(noLine.evidence).toBe("no Activation: line in docs/app.md");
+    expect(noLine.evidence).toBe("no Output artifact: line in docs/app.md");
   });
 
   it("🚨 reads `visuals`'s recorded NO as declined — the format was the fix, not a regex", () => {
@@ -1160,29 +1179,83 @@ describe("a decision recorded in prose is read as the answer it is", () => {
     expect(yes.evidence).not.toContain("you said no");
   });
 
-  it("🚨 finds no recorded NO for `user-onboarding` — and that is a finding about the FORMAT", () => {
-    // This row carries `declined: null`, and it is deliberate rather than forgotten:
-    // it has no refusal shape at ALL. `user-onboarding`'s `decide` step writes an
-    // `Activation:` line for every outcome, *"including every 'no'"*, so the refusal
-    // IS the positive answer's slot and the `note` predicate already reads it. A
-    // refusal written some other way reads `unknown` here — the honest column, and
-    // not a state to paper over with a cleverer regex.
-    const refused = {
+  it("🚨 asks `user-onboarding` about the CHECKLIST, not about the line build-app writes", () => {
+    // THE NEEDLE for the moved trace, and the reason it moved. `build-app` now
+    // writes `Activation:` itself (step 1f asks, step 4b records), so the notebook
+    // answers that question for every app this template builds. A `note` row on it
+    // would therefore have read `done` on an app whose dashboard still shows the two
+    // shipped blueprint steps — "done" where nothing happened, which is the exact
+    // fault the four vacuous rows elsewhere in this file were fixed for.
+    //
+    // So the row asks what is still open: are the blueprint steps GONE?
+    const DASHBOARD = "app/dashboard/page.tsx";
+    const withActivation = {
       text: {
-        [NOTEBOOK]: [
-          "## Decisions worth remembering",
-          "",
-          "- No onboarding designed, deliberately, 2026-08-09: the tool is one screen.",
-        ].join("\n"),
+        [NOTEBOOK]: "- Activation: the member has completed their first lesson.",
+        [DASHBOARD]: 'const steps = [{ id: "plan", title: t("onboardingPlanDone") }];',
       },
     };
-    expect(stateOf(refused, "user-onboarding")).toBe("unknown");
-    expect(stateOf(refused, "user-onboarding")).not.toBe("done");
-    // Non-vacuity for the paragraph above: the mechanism works, in the same file,
-    // for a row whose skill writes a load-bearing string.
+    expect(stateOf(withActivation, "user-onboarding")).toBe("open");
+    expect(stateOf(withActivation, "user-onboarding")).not.toBe("done");
+
+    // And it turns over when the steps really are the app's own.
+    const replaced = {
+      text: {
+        [NOTEBOOK]: "- Activation: the member has completed their first lesson.",
+        [DASHBOARD]: 'const steps = [{ id: "firstLesson", title: t("stepsFirstLesson") }];',
+      },
+    };
+    expect(stateOf(replaced, "user-onboarding")).toBe("done");
+
+    // 🚨 One marker surviving is enough to hold it open — an app that replaced the
+    // plan step and kept the token one has half a blueprint, which is not a
+    // designed onboarding. `some(marked) → open`, and this is that assertion.
+    const halfReplaced = {
+      text: {
+        [NOTEBOOK]: "- Activation: the member has completed their first lesson.",
+        [DASHBOARD]: 'const steps = [{ id: "tokens", title: t("onboardingTokensTitle") }];',
+      },
+    };
+    expect(stateOf(halfReplaced, "user-onboarding")).toBe("open");
+
+    // A missing page is not a rewritten one, exactly as `salespage` pins it.
+    expect(stateOf({}, "user-onboarding")).toBe("open");
+
+    // `declined: null` still holds, and it is deliberate rather than forgotten: this
+    // step has no refusal shape at all — the nos `user-onboarding` records are nos to
+    // PATTERNS (no survey, no gamification), never to having a first session. A
+    // refusal written in prose must therefore not answer this row.
+    const refused = {
+      text: {
+        [NOTEBOOK]: "- No onboarding designed, deliberately, 2026-08-09: one screen.",
+        [DASHBOARD]: 'const steps = [{ id: "plan", title: t("onboardingPlanDone") }];',
+      },
+    };
+    expect(stateOf(refused, "user-onboarding")).not.toBe("declined");
+    // Non-vacuity for that paragraph: the refusal mechanism does work, in the same
+    // file, for a row whose skill writes a load-bearing string.
     expect(
       stateOf({ text: { [NOTEBOOK]: "- **No custom identity.** Decided on 2026-08-09." } }, "design"),
     ).toBe("declined");
+  });
+
+  it("🚨 keeps the blueprint markers off the COMMENT that describes them", () => {
+    // The trap this row walked into once, from the other side of the same lesson the
+    // `salespage` row documents. `app/dashboard/page.tsx` carries a comment reading
+    // "THIS IS THE BLUEPRINT" directly above the two steps, and it is the obvious
+    // marker to reach for — but `journeyFacts()` runs source through
+    // `blankComments()`, so a comment-only marker is never present and the row would
+    // read `done` for every app that exists, for ever.
+    //
+    // Asserting the markers are real CODE strings is the cheap guard: each one has to
+    // appear in the shipped page somewhere a comment blanker cannot reach.
+    const row = JOURNEY.find((entry) => entry.skill === "user-onboarding")!;
+    expect(row.trace.kind).toBe("placeholder");
+    const markers = row.trace.markers ?? [];
+    expect(markers.length).toBeGreaterThan(0);
+    for (const marker of markers) {
+      expect(marker, marker).not.toMatch(/^[A-Z ]+$/);
+    }
   });
 
   it("🚨 keeps every `note` row pointed at a doc, never at the .env", () => {
@@ -1192,7 +1265,7 @@ describe("a decision recorded in prose is read as the answer it is", () => {
     // a secret. The `env` rows print keys and never values for that reason; this kind
     // cannot be given the chance.
     const notes = JOURNEY.filter((row) => row.trace?.kind === "note");
-    expect(notes.map((row) => row.skill)).toEqual(["visuals", "user-onboarding"]);
+    expect(notes.map((row) => row.skill)).toEqual(["visuals"]);
     for (const row of notes) {
       expect(row.trace.path, row.skill!).toMatch(/^docs\/[a-z-]+\.md$/);
       expect(row.trace.label, row.skill!).toMatch(/:$/);

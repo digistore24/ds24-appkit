@@ -25,6 +25,14 @@ moment the feature works._
 - **Alongside the customer:** <what the app does with them while they work — the
   line from the product brief, or the answer from step 1c. "reads each day's
   answer and replies", not "AI-supported">
+- **Activation:** <what a customer has done when you would bet they stay — one
+  event, readable from this app's own tables. The shape and the per-archetype
+  candidates are docs/onboarding.md §1. "has completed their first lesson
+  (unit_completions row exists)", not "is engaged with the content">
+- **Return:** <the recurring action and its cadence — docs/retention.md §1.
+  "completes a lesson each week (unit_completions row in the last 7 days)". For
+  a product nothing repeats in, the honest answer is written out: "— one-off,
+  nothing recurs">
 
 ## Features
 

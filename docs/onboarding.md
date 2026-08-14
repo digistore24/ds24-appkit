@@ -242,9 +242,41 @@ The recipe, and each line is load-bearing:
   a purpose in `config/consent.json` — [`compliance.md`](compliance.md) owns
   that line, and the skill stops there rather than deciding it for you.
 
+### The welcome mail — the same machinery, one step earlier
+
+**The app sends its buyer nothing.** Digistore24 sends the receipt; the app puts
+a toast on `/dashboard` (`/optin/[orderId]` → `components/flash-toast.tsx`) and
+that is all — so a customer who closes the tab has no written way back in. One
+mail fixes it, and it is the same recipe as the nudge with two differences:
+
+- **It names the first undone step and links to it** — the step the checklist
+  would show (§2), not a feature list and not a welcome letter about you.
+- 🚨 **It does NOT hang off the IPN.** Digistore24 redelivers the notification
+  until it gets a 200, so anything on that path runs again — and a send cannot be
+  taken back. `lib/digistore/payment-event.ts` already holds the rule for that
+  door: nothing may endanger the order write. So the mail is a **job**, like the
+  nudge: it selects the grants of the last N hours that carry no welcome mark,
+  and `claimSend()` names the WINDOW (`welcome-mail:<YYYY-MM-DD>`) because a send
+  key names a piece of work and never a person (`lib/notify/sent-once.ts`). The
+  per-customer "already sent" is a column beside your own tables, exactly like
+  the nudge's `nudgedAt`.
+- ⚠️ **`lib/notify/*` addresses operators today.** A recipient path to the member
+  is part of this work, not something already there.
+- **Consent is the same STOP**, and this one sits closer to transactional than
+  the nudge does: a single service message about a product somebody just bought.
+  Say so, then let the user decide — [`compliance.md`](compliance.md) owns it.
+
+**It is not shipped, deliberately.** A mail the app sends in the operator's name,
+carrying their imprint (`lib/email.ts` puts it in the footer), from a decision
+nobody made, would start sending the moment somebody configures mail delivery for
+the *login*. Anything the customer will see is proposed, never assumed.
+
 What NOT to build: a sequence, a campaign table, an open-rate tracker. The
-first is churn management, the second is a product decision, the third is a
-tracking question — none of them is onboarding.
+second is a product decision, the third is a tracking question — and the first
+is churn management, which is a real subject with its own file rather than an
+extension of this one: **[`retention.md`](retention.md)** covers the second
+visit, what Digistore24 owns and this app must not rebuild, and the single extra
+mail that is licensed there.
 
 ## 10. Which patterns for which archetype
 
@@ -293,6 +325,12 @@ step runs it with you.
 What the number is for: **comparing you to you.** Measure before and after an
 onboarding change, on the same window (say, accounts older than 7 days). An
 absolute number without that context mostly produces anxiety.
+
+**There is a second number, and it is the one that says whether the first one
+mattered** — the return rate, built the same way out of the same two tables:
+[`retention.md`](retention.md) §6. An app whose activation rate rises while its
+return rate does not has got better at first impressions and no better at the
+product.
 
 What NOT to add for it: an analytics tool, a tracking cookie, an events table
 written on every page view. The shipped answer to "this app sets no tracking
