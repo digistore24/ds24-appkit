@@ -74,11 +74,13 @@ node run.mjs ds24-sync
 
 🚨 **The first run refuses, on purpose.** It prints every product that would be
 NEW at Digistore24, says that creating them cannot be undone from here, and
-stops — nothing is created and the IPN is not registered yet. Read the list out
-to the user; then either park what they do not sell with `"sell": false` and run
-it again, or confirm with `node run.mjs ds24-sync --create-new`. Once an
-offering carries an id nothing is being created and later runs pass straight
-through; updates are never gated. *(Needs template 0.30.0.)*
+stops — nothing is created (and nothing is updated: the refusal ends the whole
+run), and the IPN is not registered yet. Read the list out to the user; park
+what they do not sell with `"sell": false`, and confirm what remains with
+`node run.mjs ds24-sync --create-new` — parking alone only gets through when
+nothing NEW is left on the list, so a run that still creates anything needs the
+flag. Once every offering carries an id nothing is being created and later runs
+pass straight through without it. *(Needs template 0.30.0.)*
 
 That writes the id(s) back into `productIds.<env>` (one Digistore24 product
 per offer, language **and environment** — a DS24 product carries exactly one

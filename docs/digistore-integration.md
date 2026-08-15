@@ -341,7 +341,7 @@ shape; paste it beside `starter` and adjust:
 "pro": {
   "name": "Pro Tokens",
   "tagline": "For regular use",
-  "description": "5,000 tokens as a one-off balance. Best price per token.",
+  "description": "5,000 tokens as a one-off balance. No subscription.",
   "kind": "token",
   "credits": 5000,
   "priceCents": 3900,

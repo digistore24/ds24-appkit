@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect } from "vitest";
+import { notChecked } from "@/lib/test-not-checked";
 import {
   allProducts,
   findProduct,
@@ -459,13 +460,18 @@ describe("isSold", () => {
 });
 
 describe("sellableProducts", () => {
-  it("holds every product of the shipped registry", () => {
-    // Nothing ships parked, so the two lists agree — and saying so here is
-    // what makes the divergence below a statement about `sell` rather than
-    // about this registry.
-    expect(sellableProducts().map((p) => p.key)).toEqual(
-      allProducts().map((p) => p.key),
-    );
+  it("drops exactly the entries parked with a literal false", () => {
+    // Registry-independent on purpose, like everything else in this file
+    // (see `someProduct` at the top): this test travels into the customer's
+    // app, and parking an entry is the DOCUMENTED move — the sync gate's own
+    // option 2 says `"sell": false`. An equality against `allProducts()`
+    // here would go red the moment they do what they were told, in an app
+    // with no line of their own code. What holds in EVERY registry state:
+    // parking is the only way out of the sellable list.
+    const sellable = new Set(sellableProducts().map((p) => p.key));
+    for (const p of allProducts()) {
+      expect(sellable.has(p.key)).toBe(p.sell !== false);
+    }
   });
 
   it("drops a parked offering", () => {
@@ -487,15 +493,20 @@ describe("a parked offering is still ANSWERED for", () => {
     expect(productByDs24Id("9002", [PARKED])?.key).toBe(PARKED.key);
   });
 
-  it("findProduct answers for a parked key in the real registry", () => {
+  it("findProduct and getProduct read the raw registry, not a filtered list", (ctx) => {
     // Against the shipped registry rather than the fixture, because
     // findProduct/getProduct read the raw file and take no list: the claim is
     // that they are unaffected BY CONSTRUCTION, and only the real one shows
-    // that.
-    const sold = allProducts()[0];
-    if (!sold) return;
-    expect(findProduct(sold.key)?.key).toBe(sold.key);
-    expect(getProduct(sold.key).key).toBe(sold.key);
+    // that. (The parked half of the claim needs a parked entry and lives in
+    // sell-seam.test.ts, on the mocked registry.)
+    const any = allProducts()[0];
+    if (!any) {
+      // An empty registry is a legitimate mid-setup state — but "green
+      // because it skipped" must not look like "green because it checked".
+      return notChecked(ctx, "config/digistore-products.json holds no products at all");
+    }
+    expect(findProduct(any.key)?.key).toBe(any.key);
+    expect(getProduct(any.key).key).toBe(any.key);
   });
 
   it("is what sellableProducts refuses — the counter-proof", () => {

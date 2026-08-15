@@ -16,14 +16,15 @@
 // computed its list of new products separately from the loop that then
 // creates them would eventually disagree with it, and a gate that lies about
 // what is coming is worse than no gate.
-import { idOf } from "./_products.mjs";
+// FALLBACK_LANGUAGE from the same module `languagesOf()` lives in, never a
+// private copy: the rows this file matches were BUILT with that constant, and
+// two definitions drifting apart would make `findExisting` stop adopting a
+// pre-0.6.0 product and create a duplicate beside one carrying real sales.
+import { FALLBACK_LANGUAGE, idOf } from "./_products.mjs";
 import { internalName } from "./_env.mjs";
 
 /** A `name_intern` that already belongs to an environment's set. */
 export const ENV_SCOPED_INTERN = /__(dev|staging|prod)$/;
-
-/** The language a pre-0.6.0 entry is assumed to be in when it names none. */
-const FALLBACK_LANGUAGE = "de";
 
 /**
  * Find a product this script (or a hand) created earlier: first via the stable

@@ -48,7 +48,13 @@ import {
   writeApprovalCache,
 } from "./_approval.mjs";
 import { ds24Call, requireApiKey, parseArgs } from "./_client.mjs";
-import { extractProducts, productTargets, readProducts } from "./_products.mjs";
+import {
+  extractProducts,
+  isSold,
+  productTargets,
+  readProducts,
+  sellFieldProblems,
+} from "./_products.mjs";
 import { isKnownLanguage, isReseller, resolveReseller } from "./_resellers.mjs";
 
 const args = parseArgs(process.argv.slice(2));
@@ -140,6 +146,19 @@ if (flagged || envSiteowner) {
 
 const apiKey = requireApiKey();
 const config = readProducts();
+
+// The same refusal `ds24-sync` and the app's own registry loader make, for
+// the same reason: `"sell": "false"` — the string — is truthy, so without
+// this the entry would count as sold HERE and be submitted for marketplace
+// approval while every other surface refuses the registry.
+const sellProblems = sellFieldProblems(config);
+if (sellProblems.length > 0) {
+  console.error(
+    `config/digistore-products.json:\n` +
+      sellProblems.map((line) => `  - ${line}`).join("\n"),
+  );
+  process.exit(2);
+}
 // ONE ROW PER DIGISTORE24 PRODUCT — per offering AND language. An offering
 // sold in German and English is two products, and they belong to two different
 // marketplaces; approving one says nothing about the other.
@@ -308,7 +327,23 @@ try {
 }
 
 if (!synced) {
-  console.error("No synchronized products found. Run 'sync-products.mjs --apply' first.");
+  // Three states, three sentences — the sync's own convention. A parked key
+  // used to get "No synchronized products found" with the advice to sync,
+  // which cannot help: `productTargets` skips parked rows for BOTH commands.
+  // And the way to sync is `node run.mjs ds24-sync`, never the raw script —
+  // that one skips the IPN hookup.
+  if (onlyKey && config.products[onlyKey] && !isSold(config.products[onlyKey])) {
+    console.error(
+      `"${onlyKey}" is marked "sell": false in config/digistore-products.json — a parked\n` +
+        `offering is neither synced nor submitted for approval. Set "sell": true there first.`,
+    );
+  } else if (!onlyKey && targets.length === 0 && Object.keys(config.products).length > 0) {
+    console.error(
+      `Every product in config/digistore-products.json is marked "sell": false — nothing to approve.`,
+    );
+  } else {
+    console.error("No synchronized products found. Run 'node run.mjs ds24-sync' first.");
+  }
   process.exit(1);
 }
 if (!apply) console.log("\nTo execute, call again with --apply.");

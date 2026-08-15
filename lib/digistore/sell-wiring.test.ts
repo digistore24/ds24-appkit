@@ -45,10 +45,19 @@ describe("the plans page offers only what is on sale", () => {
 describe("the checkout action refuses a parked offering", () => {
   const source = code("../../app/plans/actions.ts");
 
-  it("calls isSold on the resolved product", () => {
+  it("throws on NOT sold — the polarity is the guard", () => {
     // A server action is an HTTP endpoint: the button is gone, the route is
     // not. Without this, a kept form field still buys a withdrawn product.
-    expect(source).toContain("isSold(def)");
+    //
+    // `toContain("isSold(def)")` alone would also hold for an inverted
+    // `if (isSold(def)) throw` — which refuses every LEGITIMATE checkout
+    // while the catch swallows the throw and the page stays 200. So the
+    // negation and the throw are pinned, not the call.
+    const refused = source.indexOf("if (!isSold(def))");
+    expect(refused).toBeGreaterThan(-1);
+    const thrown = source.indexOf("throw", refused);
+    expect(thrown).toBeGreaterThan(refused);
+    expect(thrown - refused).toBeLessThan(120);
   });
 
   it("does so between getProduct and the checkout link", () => {

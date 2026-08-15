@@ -73,10 +73,14 @@ describe("the offer side is filtered", () => {
     expect(sellableProducts().map((p) => p.key)).toEqual(["live"]);
   });
 
-  it("productsByKind drops a parked token package", () => {
-    // Goes through allProducts(), so it follows the ANSWER side — the parked
-    // package is still a token package, it is just not on offer. What decides
-    // the offer is `listTokenPackages()`, one file over.
+  it("productsByKind KEEPS a parked token package — it follows the answer side", () => {
+    // Deliberately in the "offer side" block as its boundary: this one is
+    // NOT filtered. It goes through allProducts() — the parked package is
+    // still a token package, it is just not on offer. What decides the offer
+    // is the plans page building its sections from `sellableProducts()`
+    // (app/plans/page.tsx → planSections). `listTokenPackages()` one file
+    // over applies the same filter, but nothing in the app renders from it
+    // today — do not hunt the offer path there.
     expect(productsByKind("token").map((p) => p.key)).toEqual(["retired_tokens"]);
   });
 });

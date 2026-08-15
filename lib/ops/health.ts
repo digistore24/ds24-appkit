@@ -53,7 +53,7 @@ import { ipnEvents, orders } from "@/db/schema";
 import { desc, gte } from "drizzle-orm";
 
 import { appEnv } from "@/lib/env-guard";
-import { sellableProducts, productIdsOf, type SyncEnv } from "@/lib/digistore/products";
+import { allProducts, productIdsOf, type SyncEnv } from "@/lib/digistore/products";
 import { IPN_LOG_RETENTION_DAYS } from "@/lib/digistore/ipn-log";
 import { localDirFromEnv } from "@/lib/media/local";
 import { driverFromEnv, mediaStore, mediaStoreProblems, type MediaDriver } from "@/lib/media/store";
@@ -225,11 +225,15 @@ export const defaultProbes: OpsProbes = {
   localStoreWritable: () => access(localDirFromEnv(process.env), constants.W_OK),
   sellingProducts: () => {
     const environment = syncEnvOf(process.env.APP_ENV);
-    // Parked offerings are not counted: the question this probe asks is "does
-    // this app sell anything", and a plan taken off sale is not on offer even
-    // though its Digistore24 product is still there. Counting it would keep
-    // the IPN alarm armed on an app that deliberately sells nothing.
-    return sellableProducts().filter((def) => Object.keys(productIdsOf(def, environment)).length > 0)
+    // The FULL list, not `sellableProducts()`: this feeds probeIpn, and the
+    // question there is "does this app expect payment events", not "is it
+    // still selling". A parked offering that carries ids was synced while it
+    // was on sale — its buyers' rebills, refunds and chargebacks keep
+    // arriving (lib/digistore/products.ts → sellableProducts), so its broken
+    // IPN is exactly as much a finding as a live one's. An app that
+    // deliberately sells nothing and never synced has no ids and still
+    // counts 0.
+    return allProducts().filter((def) => Object.keys(productIdsOf(def, environment)).length > 0)
       .length;
   },
   recentOrderCount: async (since) => {

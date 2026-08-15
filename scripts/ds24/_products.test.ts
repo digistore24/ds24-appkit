@@ -384,6 +384,31 @@ describe("sellFieldProblems (script side)", () => {
     expect(sellFieldProblems(registry)).toEqual(appSellFieldProblems(allProducts()));
     expect(sellFieldProblems(registry)).toEqual([]);
   });
+
+  it("agrees with the app side on what gets REFUSED", () => {
+    // The shipped-registry line above compares two EMPTY arrays — agreement
+    // shows only on defective input. Same fixtures through both twins: each
+    // must refuse exactly the same keys. (Only the keys are compared — the
+    // twins deliberately speak different languages, German where the app
+    // refuses to load, English beside the sync's other messages.)
+    const defective = [
+      { key: "s", sell: "false" },
+      { key: "n", sell: 0 },
+      { key: "t", sell: "true" },
+      { key: "u", sell: null },
+      { key: "ok", sell: true },
+      { key: "off", sell: false },
+      { key: "none" },
+    ];
+    const json = {
+      products: Object.fromEntries(defective.map(({ key, ...def }) => [key, def])),
+    };
+    const quotedKey = (line: string) => line.slice(0, line.indexOf(":"));
+    expect(sellFieldProblems(json).map(quotedKey)).toEqual(
+      appSellFieldProblems(defective).map(quotedKey),
+    );
+    expect(sellFieldProblems(json).map(quotedKey)).toEqual(['"s"', '"n"', '"t"', '"u"']);
+  });
 });
 
 describe("productTargets skips a parked offering", () => {

@@ -290,8 +290,15 @@ if (targets.length === 0) {
   } else if (onlyKey) {
     console.error(`No product "${onlyKey}" in the config.`);
   } else if (Object.keys(config.products).length > 0) {
+    // The IPN hookup is bundled behind this exit (run.mjs runs ipn-setup.mjs
+    // only after a clean sync), and a fully parked app still NEEDS it: the
+    // parked ids stay in the IPN scope because their buyers' refunds and
+    // cancellations keep arriving. So the way to maintain that connection
+    // without a sellable product is named here, or it is unreachable.
     console.error(
-      `Every product in config/digistore-products.json is marked "sell": false — nothing to sync.`,
+      `Every product in config/digistore-products.json is marked "sell": false — nothing to sync.\n` +
+        `The IPN hookup for already-synced products can still be maintained on its own:\n` +
+        `    node run.mjs ds24-ipn --auto --apply`,
     );
   } else {
     console.error("No products in the config.");
@@ -348,6 +355,12 @@ const creations = rows.filter((r) => r.action === "create");
 // same argument the two refusals above make.
 if (apply && creations.length > 0 && !args["create-new"]) {
   const updates = rows.length - creations.length;
+  // The re-run is spelled WITH the refused run's scope. A bare
+  // `ds24-sync --create-new` after an `--env prod` refusal would run against
+  // APP_ENV's default set — confirming the wrong environment — and after a
+  // `--key`-scoped refusal it would create EVERY new product instead of the
+  // one that was asked about.
+  const rerun = `node run.mjs ds24-sync --env ${env}${onlyKey ? ` --key ${onlyKey}` : ""} --create-new`;
   console.error(
     `\nSTOP — ${creations.length} NEW product(s) would be created at Digistore24 (${env.toUpperCase()}).\n\n` +
       creations
@@ -362,12 +375,13 @@ if (apply && creations.length > 0 && !args["create-new"]) {
       `Digistore24 — it has to be deactivated over there, by hand.\n\n` +
       `Two ways on:\n\n` +
       `  1. This IS what you sell — run it again with:\n` +
-      `         node run.mjs ds24-sync --create-new\n\n` +
-      `  2. It is not. The list above still holds the example plans this template\n` +
-      `     ships with. Open config/digistore-products.json and set\n` +
-      `     "sell": false on every entry you do not sell — the entry stays in the\n` +
-      `     file as a template, no product is created, and it does not show up on\n` +
-      `     /plans. Then run the command again.\n\n` +
+      `         ${rerun}\n\n` +
+      `  2. Some of it is not — on a fresh app the list above is the example\n` +
+      `     plans this template ships with. Open config/digistore-products.json\n` +
+      `     and set "sell": false on every entry you do not sell — the entry\n` +
+      `     stays in the file as a template, no product is created, and it does\n` +
+      `     not show up on /plans. Then run the command again (with --create-new\n` +
+      `     if anything NEW is left on the list).\n\n` +
       `Nothing was created. Nothing was changed.\n`,
   );
   process.exit(2);

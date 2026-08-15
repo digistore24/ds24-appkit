@@ -64,7 +64,10 @@ becomes something people skip.
   it ran and stopped at its own gate**: it refuses to CREATE anything until the
   run is repeated with `--create-new`, so "no ids" is as often an unanswered
   question as a forgotten command. ⚠️ An entry parked with `"sell": false`
-  carries no ids by design and is not a finding at all. No passphrase → no IPN,
+  and no ids is not a finding at all — nothing was meant to be created for it.
+  One parked WITH ids is just as legitimate: it was synced while it was on
+  sale, and the sync itself warns that it stays buyable at Digistore24 until
+  deactivated over there. No passphrase → no IPN,
   so purchases arrive nowhere; both → **`setup-digistore`**.
   A product id for only *some* of the app's languages → the missing ones get an
   order form in the wrong language: re-run `node run.mjs ds24-sync`, read the

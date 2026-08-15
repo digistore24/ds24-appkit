@@ -83,9 +83,14 @@ describe("the gate hangs on apply, so the preview stays open", () => {
 
   it("does not gate updates", () => {
     // Updates are reversible; gating them would train the reflex the gate
-    // depends on not existing.
-    const gate = source.slice(at("apply && creations.length > 0"));
-    expect(gate.slice(0, 400)).not.toContain("updateProduct");
+    // depends on not existing. Pinned POSITIVELY: the count the gate fires
+    // on is `creations`, never the full `rows` — and the refusal accounts
+    // for the rows that pass as mere updates. (An earlier version asserted
+    // the absence of `updateProduct` in an arbitrary slice, which a gate
+    // that DID block updates would also have satisfied.)
+    expect(source).toContain('rows.filter((r) => r.action === "create")');
+    expect(source).not.toContain("apply && rows.length");
+    expect(source).toContain("would only be updated");
   });
 });
 
@@ -98,8 +103,18 @@ describe("the refusal says what happened and how to go on", () => {
     // A refusal that only says "no" gets worked around. One way is to accept
     // the list, the other is to park what is not wanted — and the second only
     // exists because `sell` does.
-    expect(source).toContain("ds24-sync --create-new");
+    expect(source).toContain("--create-new`");
     expect(source).toContain('"sell": false');
+  });
+
+  it("the suggested re-run keeps the refused run's scope", () => {
+    // A bare `ds24-sync --create-new` after an `--env prod` refusal would
+    // confirm the wrong environment's set, and after a `--key`-scoped one it
+    // would create every new product instead of the one that was asked
+    // about — the mass creation the gate exists to prevent, with the
+    // confirmation flag attached.
+    const rerun = at("node run.mjs ds24-sync --env ${env}");
+    expect(source.indexOf("--key ${onlyKey}", rerun)).toBeGreaterThan(rerun);
   });
 
   it("says that nothing was changed", () => {
