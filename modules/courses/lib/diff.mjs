@@ -189,7 +189,11 @@ const carried = (rows, field) => rows.length === 0 || rows.some((row) => Object.
  * @param {{ slug: string, title: string, summary?: string|null, position: number,
  *           releaseAfterDays?: number, units?: object[] }[]} localBlocks
  *        `readBlocks()`'s output — already refused for duplicate slugs and positions
- * @param {{ blocks?: object[] } | null | undefined} outlineData
+ * @param {{ courses?: object[], blocks?: object[] } | null | undefined} outlineData
+ *   `courses_outline`'s `data`. `courses` is what it answers today (one entry
+ *   per course, each with its blocks); `blocks` is the flat shape a deploy made
+ *   before 2026-08-13 still answers, and both are read — see the note in the
+ *   body for what reading only the old one cost.
  *        `courses_outline`'s `data`
  * @returns {{ blocks: DiffLists, units: DiffLists, notCompared: string[],
  *             fingerprintMismatch: {here: string, there: string | null} | null }}
@@ -200,10 +204,54 @@ const carried = (rows, field) => rows.length === 0 || rows.some((row) => Object.
  *   versions of it; `there: null` is a deploy that predates the tag.
  */
 export function compareCourse(localBlocks, outlineData) {
-  const targetBlocks = outlineData?.blocks ?? [];
+  // 🚨 The payload moved one level up on 2026-08-13 and this reader did not.
+  // `courses_outline` answers `{ fingerprintVersion, courses: [{ slug, blocks }] }`
+  // — it used to answer `{ …, blocks }` — and reading the old field gave
+  // `targetBlocks = []` against every app, so a PROD holding the course whole
+  // reported "everything is NEW", `0 untouched`, `0 only there`, `0 refused`,
+  // and NOT ONE warning line (`notCompared` is about missing FIELDS, and an
+  // empty list carries none). Measured 2026-08-15 with identical content on both
+  // sides: 1 new block, 1 new lesson, nothing else. 35.2 AC4 forbids exactly
+  // that answer in those words. Nothing caught it because the fixtures were
+  // written in the old shape and the command's own test only reads its source.
+  //
+  // Both shapes are accepted: the old one is what a deploy made before that day
+  // still answers, and telling an operator "everything is new" is the one thing
+  // this command may not do, whichever end is behind.
+  const targetCourses = Array.isArray(outlineData?.courses) ? outlineData.courses : null;
+  const targetBlocks = targetCourses
+    ? targetCourses.flatMap((course) =>
+        (course?.blocks ?? []).map((block) => ({ ...block, course: course?.slug })),
+      )
+    : (outlineData?.blocks ?? []);
+
   const blocks = emptyLists();
   const units = emptyLists();
 
+  // 🚨 **Keyed on the SLUG alone**, and the composite key that stood here for a
+  // day was wrong in both directions — worth writing out, because it is the
+  // tempting shape once an app holds several courses.
+  //
+  // It cannot buy anything: a block slug and a lesson slug are unique across the
+  // WHOLE app, twice over — `courses_blocks_slug` / `courses_units_slug` are
+  // unique indexes, and `readCourseContent()` refuses a duplicate across course
+  // folders with one global `seenSlug` map. Two courses sharing `einstieg` is
+  // not a state this app can reach.
+  //
+  // And it broke two states that ARE reachable:
+  //
+  //  · **the old payload.** `readBlocks()` sets `course` on every local block
+  //    unconditionally, while a deploy from before 2026-08-13 sends blocks with
+  //    no course at all — so nothing paired and the report said "everything is
+  //    new" again, which is exactly what the composite key was added to stop.
+  //    Measured: `{new: 1, untouched: 0, targetOnly: 1}` on identical content.
+  //  · **a block moved between courses.** The applier upserts ON THE SLUG
+  //    (`on conflict (slug) do update set course_id = …`), so it MOVES the row —
+  //    a change. Keyed by course it read as `new` plus `targetOnly`, and
+  //    `sameSubjectPairs()` then offered a pair whose slugs are identical under
+  //    a heading that says DIFFERENT SLUG.
+  //
+  // The slug is what the applier keys on; so is this.
   const targetBlockBySlug = new Map(targetBlocks.map((block) => [block.slug, block]));
   /** Every target lesson, with the block it sits in — the payload nests them. */
   const targetUnitBySlug = new Map();

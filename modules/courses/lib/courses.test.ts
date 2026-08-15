@@ -19,7 +19,7 @@ import { describe, expect, it } from "vitest";
 
 import { keysOrSkip, planShapedKey, tokenKey } from "@/lib/digistore/test-product-keys";
 
-import { courseProblems, type Course } from "./courses";
+import { courseBlocking, courseProblems, type Course } from "./courses";
 
 const PLAN = planShapedKey();
 const TOKEN = tokenKey();
@@ -38,6 +38,46 @@ function course(over: Partial<Course> = {}): Course {
     ...over,
   };
 }
+
+describe("🚨 a RETIRED key is skipped, not fatal (44.1 AC 5)", () => {
+  // The half of that AC that only the media layer kept. `mayAccess()` filters a
+  // dead key out of a media row's list in so many words — "an ordinary registry
+  // edit must not become a refusal for people who paid" — and the course path
+  // dropped the whole course instead.
+  //
+  // Measured 2026-08-15: a course sold monthly AND yearly, the monthly product
+  // removed from `config/digistore-products.json` (a normal registry edit), and
+  // the YEARLY buyers got 404 on the list, the overview, every lesson and
+  // `/api/v1/courses/<slug>` — while the video in the same lesson was still
+  // being served, because one layer skipped the dead key and the other did not.
+  it("keeps the course alive while ONE key still sells it", (ctx) => {
+    keysOrSkip(ctx, PLAN);
+    const mixed = course({ planKeys: ["kurs_der_nie_existierte", PLAN.key!] });
+
+    // The operator is still told — that half must not go quiet.
+    expect(courseProblems(mixed).join(" ")).toContain("kurs_der_nie_existierte");
+    // …and the member still gets the course.
+    expect(courseBlocking(mixed)).toEqual([]);
+  });
+
+  it("🚨 …and dies when NOTHING sells it any more", (ctx) => {
+    // The counter-proof. Without it the rule above would pass against a
+    // function that answers `[]` unconditionally — which reads as tolerance and
+    // would open a course nobody can buy.
+    keysOrSkip(ctx, PLAN);
+    expect(courseBlocking(course({ planKeys: ["kurs_der_nie_existierte"] })).length).toBeGreaterThan(
+      0,
+    );
+    expect(courseBlocking(course({ planKeys: [] })).length).toBeGreaterThan(0);
+  });
+
+  it("a problem that is not about a key stays fatal", (ctx) => {
+    // Skipping is for a key the registry forgot. An unreadable `shape` is not
+    // that: nothing about it becomes right by ignoring it.
+    keysOrSkip(ctx, PLAN);
+    expect(courseBlocking(course({ shape: null })).length).toBeGreaterThan(0);
+  });
+});
 
 describe("the course's Product Keys have to be ones hasPlan() can answer", () => {
   it("is happy with a product this app really sells", (ctx) => {

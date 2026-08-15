@@ -41,6 +41,7 @@ import {
   disclosureProblems,
   mountFor,
 } from "./disclosure.mjs";
+import { blankComments } from "@/scripts/lib/source-text.mjs";
 import { moduleDisclosureSurfaces } from "@/scripts/modules/inventory.mjs";
 import { MODULE_MESSAGES } from "@/lib/modules/messages";
 import { mergeModuleMessages } from "@/lib/modules/messages-merge";
@@ -70,7 +71,15 @@ const MESSAGES = {
 // omission rather than an `any`.
 const LOCALES = Object.keys(MESSAGES) as (keyof typeof NAMES_A_MACHINE)[];
 
-const sourceOf = (relative: string) => readFileSync(join(ROOT, relative), "utf8");
+// Blanked, and at the one place every assertion below reads a file through.
+// Each of them hunts a NEEDLE in a component's text — the mount, `overflow-y-auto`,
+// the shared block — and a component that SPELLS one out while explaining itself
+// ("the notice goes above the overflow-y-auto column") would answer for a line
+// nobody renders. Only the components named in `rendersIn` come through here, so
+// they are code by construction and the plain form is the right one.
+// (CLAUDE.md → a checker that reads source as TEXT goes through `blankComments()`.)
+const sourceOf = (relative: string) =>
+  blankComments(readFileSync(join(ROOT, relative), "utf8"));
 
 describe("the registry is real, so the loops below can fail", () => {
   // Non-vacuity, first and for the whole file: a loop over an empty list passes

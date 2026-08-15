@@ -349,6 +349,23 @@ describe("the newest round, read out of a file NAME and never out of a file", ()
     // "never run" about a file somebody can see would be the worse lie.
     expect(newestRoundDate(["operations-2126-01-01.md"], NOW)).toBe("2126-01-01");
   });
+
+  it("🚨 …and the fact SAYS so instead of falling silent for a century", () => {
+    // The half this pair was missing, measured 2026-08-15. `newestRoundDate()`
+    // hands the future date back on purpose (above) — and `roundFact()` then
+    // fell through its `now - at <= MAX_ROUND_AGE` test and returned `null`, so
+    // the greeting said nothing about the operating round at all. In this
+    // template the ABSENCE of that line is a state ("nothing is open"), so
+    // silence was the one answer this case could not be given. A first round
+    // report with a mistyped year is exactly where the typo happens.
+    const fact = roundFact("2126-01-01", { now: NOW, appUnderWay: true });
+    expect(fact).not.toBeNull();
+    expect(fact?.text).toContain("in the future");
+    expect(fact?.text).toContain("2126-01-01");
+    // The ordinary recent report is still silence — otherwise this would be a
+    // line that fires always, which is a line nobody reads.
+    expect(roundFact("2026-08-01", { now: NOW, appUnderWay: true })).toBeNull();
+  });
 });
 
 describe("when the round fact appears, and when it stays quiet", () => {

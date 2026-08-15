@@ -4,6 +4,8 @@
 import { readFileSync } from "node:fs";
 
 import { describe, it, expect } from "vitest";
+
+import { blankComments } from "@/scripts/lib/source-text.mjs";
 import {
   buildIdentity,
   parseCustom,
@@ -305,7 +307,16 @@ describe("custom.ts stays a leaf module", () => {
     // a tracking[custom] string. `import type` is erased at compile time; one
     // future edit dropping the `type` breaks the property silently, which is
     // why this reads the source (the leak-guard convention).
-    const source = readFileSync(new URL("./custom.ts", import.meta.url), "utf8");
+    //
+    // Through `blankComments()` (`CLAUDE.md` → *Rules*): a checker reading
+    // source as TEXT must count IMPORTS, not sentences about them. A
+    // commented-out `import { getProduct } from "./products";` — the natural
+    // way somebody records what was tried and rejected — would otherwise make
+    // this file report itself, and a comment spelling the type-only form out
+    // would just as wrongly excuse a real value import.
+    const source = blankComments(
+      readFileSync(new URL("./custom.ts", import.meta.url), "utf8"),
+    );
     const productImports = (source.match(/^import .*"\.\/products";?$/gm) ?? []);
     expect(productImports).toHaveLength(1);
     expect(productImports[0]).toMatch(/^import type /);

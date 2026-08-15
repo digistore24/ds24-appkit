@@ -82,6 +82,8 @@ export async function guardSetup(args: {
   //    The DNS-rebinding guard `/api/v1` already makes, for the same reason.
   const origin = request.headers.get("origin");
   if (origin && !originAllowed(origin)) {
+    // Counted: see step 3 — every refusal a stranger can reach writes a row.
+    record(AUTH_BUCKET, callerKey, AUTH_FAIL_LIMIT);
     return { ok: false, response: setupError("badRequest", "Origin not allowed.") };
   }
 
@@ -92,24 +94,49 @@ export async function guardSetup(args: {
     return { ok: false, response: setupError("setupDisabled") };
   }
 
-  // 3. 🚨 The server's own environment, refusing the empty case. `appEnv("")`
+  // 3. 🚨 The failed-authentication meter, BEFORE every refusal that a stranger
+  //    can reach — not only before the key lookup.
+  //
+  //    It used to sit at step 5, and the four refusals above and below it
+  //    (foreign origin, APP_ENV unset, an unparseable env claim, an env
+  //    mismatch) are all reachable with NO credential at all — while
+  //    `lib/setup/dispatch.ts` writes an audit row for every refusal code
+  //    except `setupDisabled`. So an outsider who has learned the surface is on
+  //    (the first non-404 answer tells them) could POST `{"tool":"x","env":"…"}`
+  //    in a loop and write into the production `setup_audit` table without
+  //    limit, pushing the real acts out of `listActs()` and off the operator's
+  //    page. `dispatch.ts` names exactly that danger for the switched-OFF state
+  //    — "a row per probe would let an outsider fill this table from outside" —
+  //    and nobody closed it for the switched-ON one.
+  //
+  //    ⚠️ `callerKey` comes from a header and is forgeable, which `lib/rate-limit.ts`
+  //    admits in its own docstring. A bound that a determined attacker can
+  //    sidestep still turns "unlimited by anybody" into "work per row", and it
+  //    is what this layer can do without a session.
+  if (isLimited(AUTH_BUCKET, callerKey, AUTH_FAIL_LIMIT)) {
+    return { ok: false, response: setupError("rateLimited", undefined, { "retry-after": "900" }) };
+  }
+
+  // 4. 🚨 The server's own environment, refusing the empty case. `appEnv("")`
   //    is "development", so a deployed host that lost APP_ENV from its secrets
   //    would otherwise be handed every DEV relaxation this surface grants —
   //    single-call mutations and owner promotion included.
   const appEnv = serverEnv(process.env.APP_ENV);
   if (!appEnv) {
+    record(AUTH_BUCKET, callerKey, AUTH_FAIL_LIMIT);
     return {
       ok: false,
       response: setupError("envUnset", "APP_ENV is not set on this host."),
     };
   }
 
-  // 4. The caller's CLAIM — validated against a closed set, never normalised.
+  // 5. The caller's CLAIM — validated against a closed set, never normalised.
   //    Running it through appEnv() would make appEnv("banana") === "production"
   //    true and wave a garbled claim through on exactly the environment this
   //    check protects. Validating and normalising are opposite acts.
   const claimed = parseEnvClaim(body.env);
   if (!claimed) {
+    record(AUTH_BUCKET, callerKey, AUTH_FAIL_LIMIT);
     return {
       ok: false,
       response: setupError(
@@ -119,6 +146,7 @@ export async function guardSetup(args: {
     };
   }
   if (claimed !== appEnv) {
+    record(AUTH_BUCKET, callerKey, AUTH_FAIL_LIMIT);
     return {
       ok: false,
       response: setupError(
@@ -126,11 +154,6 @@ export async function guardSetup(args: {
         `This app is ${appEnv}; the call was addressed to ${claimed}.`,
       ),
     };
-  }
-
-  // 5. The failed-authentication meter, before the lookup.
-  if (isLimited(AUTH_BUCKET, callerKey, AUTH_FAIL_LIMIT)) {
-    return { ok: false, response: setupError("rateLimited", undefined, { "retry-after": "900" }) };
   }
 
   // 6/7. The key. `authenticateKey()` refuses by prefix before any query, and

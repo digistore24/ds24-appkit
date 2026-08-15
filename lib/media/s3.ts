@@ -72,7 +72,8 @@ export function createS3Store(settings: S3Settings): MediaStore {
     body?: Uint8Array,
     contentType?: string,
     extraHeaders?: Record<string, string>,
-  ): Promise<Response> => sendS3(settings, method, key, body, contentType, extraHeaders);
+    signal?: AbortSignal,
+  ): Promise<Response> => sendS3(settings, method, key, body, contentType, extraHeaders, signal);
 
   return {
     driver: "s3",
@@ -100,8 +101,8 @@ export function createS3Store(settings: S3Settings): MediaStore {
       }
     },
 
-    async head(key) {
-      const response = await send("HEAD", key);
+    async head(key, signal) {
+      const response = await send("HEAD", key, undefined, undefined, undefined, signal);
       if (response.status === 404) return null;
       if (!response.ok) throw new Error(`media: HEAD ${key} failed (${response.status})`);
       return { bytes: Number(response.headers.get("content-length") ?? 0) };

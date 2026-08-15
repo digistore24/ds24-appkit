@@ -226,6 +226,15 @@ export function readCourseContent(dir = CONTENT_DIR) {
     if (typeof block.slug !== "string" || !block.slug) {
       throw new Error(`content/course/${block.file}: a block needs a slug`);
     }
+    // The same grammar its parent directory and its lessons are held to. It was
+    // the one level in between that only checked "non-empty string", so
+    // `"Übung 1"` reached `courses_blocks.slug`, the `/api/v1` outline and the
+    // diff's grouping key — a slug breaking the rule that applies two lines down
+    // to its own children.
+    const blockSlugProblem = slugProblem(block.slug);
+    if (blockSlugProblem) {
+      throw new Error(`content/course/${block.file}: block slug ${blockSlugProblem}`);
+    }
     if (seenSlug.has(block.slug)) {
       throw new Error(
         `two blocks share the slug "${block.slug}": ${seenSlug.get(block.slug)} and ${block.file}`,

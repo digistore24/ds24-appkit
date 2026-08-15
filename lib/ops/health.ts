@@ -47,6 +47,7 @@
 // that ever turns out to matter, the honest answer is a `--deep` flag on the
 // COMMAND that writes — never a scheduled writer.
 import { access, constants } from "node:fs/promises";
+import { dirname } from "node:path";
 
 import { db } from "@/db";
 import { ipnEvents, orders } from "@/db/schema";
@@ -55,6 +56,7 @@ import { desc, gte } from "drizzle-orm";
 import { appEnv } from "@/lib/env-guard";
 import { allProducts, productIdsOf, type SyncEnv } from "@/lib/digistore/products";
 import { IPN_LOG_RETENTION_DAYS } from "@/lib/digistore/ipn-log";
+import { isMediaEnabled } from "@/lib/media/config";
 import { localDirFromEnv } from "@/lib/media/local";
 import { driverFromEnv, mediaStore, mediaStoreProblems, type MediaDriver } from "@/lib/media/store";
 
@@ -75,13 +77,19 @@ export type OpsComponentState = "ok" | "finding" | "unchecked";
  *   localDirUnwritable    `MEDIA_DRIVER=local` and the directory is gone or
  *                         read-only. Its own code because the fix is a disk,
  *                         not a credential
+ *   disabled              media are switched OFF for this app, so there is no
+ *                         store to be unwell. The same shape as the IPN probe's
+ *                         `noProducts`, and for the same reason: a subsystem
+ *                         nobody switched on is not a finding, and mailing an
+ *                         operator about one teaches them to ignore the mail
  */
 export type MediaCode =
   | "answered"
   | "misconfigured"
   | "unreachable"
   | "timedOut"
-  | "localDirUnwritable";
+  | "localDirUnwritable"
+  | "disabled";
 
 /**
  * Why the IPN component answered what it did — closed.
@@ -208,6 +216,8 @@ export interface OpsProbes {
   /** Everything wrong with the store's configuration — empty when it is usable. */
   mediaProblems: () => string[];
   mediaDriver: () => MediaDriver;
+  /** Is the media subsystem switched on at all? A switched-off one is not a fault. */
+  mediaEnabled: () => boolean;
   /** A `HEAD` against the store. Resolves (with anything) when it answered. */
   headObject: (key: string, signal: AbortSignal) => Promise<unknown>;
   /** Throws when the local media directory is absent or read-only. */
@@ -221,8 +231,22 @@ export interface OpsProbes {
 export const defaultProbes: OpsProbes = {
   mediaProblems: () => mediaStoreProblems(process.env),
   mediaDriver: () => driverFromEnv(process.env),
-  headObject: (key) => mediaStore().head(key),
-  localStoreWritable: () => access(localDirFromEnv(process.env), constants.W_OK),
+  mediaEnabled: () => isMediaEnabled(),
+  headObject: (key, signal) => mediaStore().head(key, signal),
+  localStoreWritable: async () => {
+    const dir = localDirFromEnv(process.env);
+    try {
+      await access(dir, constants.W_OK);
+    } catch (error) {
+      // 🚨 "Not there" is not "not writable". `lib/media/local.ts` creates the
+      // directory on the FIRST `put()`, so every app that has never stored a
+      // file answers ENOENT here — and this probe's finding mails the operator.
+      // What decides is whether the store will be ABLE to create it, so the
+      // parent is asked; anything else is reported as it was.
+      if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") throw error;
+      await access(dirname(dir), constants.W_OK);
+    }
+  },
   sellingProducts: () => {
     const environment = syncEnvOf(process.env.APP_ENV);
     // The FULL list, not `sellableProducts()`: this feeds probeIpn, and the
@@ -273,6 +297,21 @@ async function probeMedia(probes: OpsProbes): Promise<MediaState> {
   const since = () => Date.now() - started;
 
   let driver: MediaDriver | "unknown" = "unknown";
+
+  // 🚨 FIRST, before anything is read or asked. `lib/env-guard.ts` deliberately
+  // lets `MEDIA_DRIVER=local` start in PROD while media are OFF — so without
+  // this an app that switched them off answers `localDirUnwritable`, which
+  // `collectFindings()` raises to HIGH and `ops-watchdog` MAILS. An operator
+  // told about a subsystem they turned off is an operator who stops reading.
+  try {
+    if (!probes.mediaEnabled()) {
+      return { state: "ok", driver, code: "disabled", ms: since() };
+    }
+  } catch (error) {
+    console.error("[ops] media switch could not be read:", error);
+    return { state: "finding", driver, code: "misconfigured", ms: since() };
+  }
+
   try {
     const problems = probes.mediaProblems();
     if (problems.length > 0) {

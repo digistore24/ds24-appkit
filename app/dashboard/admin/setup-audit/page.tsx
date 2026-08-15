@@ -31,9 +31,11 @@ export async function generateMetadata() {
  * nobody reads is not a control at all — so the trail has a page, and
  * `node run.mjs setup-check` prints the same rows for whoever is in a terminal.
  *
- * Read-only by construction: `setup_audit` has no update and no delete path
- * anywhere in this application, and there is deliberately nothing here that
- * would need one.
+ * Read-only by construction: nothing on this page writes, and nothing that
+ * writes an act ever rewrites one. The two other writers that DO exist — the
+ * retention sweep and the erasure of a deleted member's `reason` — are named at
+ * `db/schema-setup.ts` and held to the tree by
+ * `lib/setup/audit-writers.test.ts`.
  */
 export default async function SetupAuditPage() {
   await requireOwner();

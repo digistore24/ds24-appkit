@@ -308,6 +308,25 @@ export function outcomeFrom(rung, result) {
   const state = result?.state;
   const findings = result?.findings ?? [];
   const accepted = result?.accepted ?? [];
+  // 🚨 The two refusals `aggregate()` makes, made HERE as well — and that is the
+  // whole point rather than a duplicate. `aggregate()` runs inside
+  // `recordFrom()`, which `securityCheck()` calls OUTSIDE the per-rung `try`: a
+  // single rung answering `skipped` with no reason therefore threw past every
+  // other rung's result, past `writeVerdict()`, and left the PREVIOUS run's
+  // record on disk — which the greeting then reports as today's "ok" for up to
+  // seven days. Refused here, the same mistake becomes one honest skip.
+  if (!RUNG_STATES.includes(state)) {
+    throw new Error(
+      `rung "${rung?.id}" reported the state ${JSON.stringify(state)} — ` +
+        `it has to be one of: ${RUNG_STATES.join(", ")}`,
+    );
+  }
+  if (state === "skipped" && !String(result?.reason ?? "").trim()) {
+    throw new Error(
+      `rung "${rung?.id}" skipped without a reason. A skip that cannot say why is ` +
+        `indistinguishable from a pass — give the RungResult a reason, or do not skip.`,
+    );
+  }
   if (state === "clean" && findings.length > 0) {
     throw new Error(
       `rung "${rung?.id}" reported clean while handing over ${findings.length} finding(s)`,
@@ -315,6 +334,22 @@ export function outcomeFrom(rung, result) {
   }
   if (state === "found" && findings.length === 0) {
     throw new Error(`rung "${rung?.id}" reported found while handing over no findings`);
+  }
+  // 🚨 The same refusal for the SEVERITY, which `aggregate()` has for the state
+  // and did not have for this. Measured 2026-08-15 with `severity: "moderate"` —
+  // npm's own word, which `npm-audit.mjs` passes through raw as `npmSeverity`:
+  // the finding was PRINTED, counted in nothing, `failing` stayed false, exit 0,
+  // and that same zero travelled into the record and from there into the
+  // greeting's line. A word this code does not know must not be able to make a
+  // finding weightless — thrown here, it becomes an honest skip through the
+  // per-rung catch rather than a silent pass.
+  for (const finding of [...findings, ...accepted]) {
+    if (!SEVERITIES.includes(finding?.severity)) {
+      throw new Error(
+        `rung "${rung?.id}" reported a finding with severity "${finding?.severity}", ` +
+          `which is not one of ${SEVERITIES.join(", ")} — it would be counted nowhere`,
+      );
+    }
   }
   return {
     id: rung?.id,
@@ -513,11 +548,28 @@ export const MAX_RECORD_AGE = 7 * DAY;
  * the PATH", "the registry did not answer"), never about a person, and no rung
  * may put a member id or anything somebody typed into one. The cap is here so
  * that a tool's own error message, pasted in verbatim, stays one line.
+ *
+ * 🚨 **"By construction" stopped being true when the HEALTH probes started
+ * writing records in this shape.** Theirs are about a DEPLOYED app, and their
+ * transport failure reads `${url} did not answer (…)` — so the production
+ * address travelled into a record whose own header forbids exactly that, and
+ * would travel on into `cron_runs.lastDetail`. The claim is now KEPT rather than
+ * assumed: the address is removed here, at the one door both producers pass
+ * through, instead of in each probe where the next one would forget.
  */
 export const MAX_REASON_LENGTH = 120;
 
+/** What replaces an address, so the sentence still reads as a sentence. */
+const ADDRESS_PLACEHOLDER = "the address";
+
 const shorten = (text) => {
-  const line = String(text ?? "").replace(/\s+/g, " ").trim();
+  const line = String(text ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    // Everything up to whitespace or a closing bracket: an address ends where
+    // the sentence resumes. Case-insensitive because a copied `.env` block
+    // spells the scheme in capitals often enough to matter.
+    .replace(/\bhttps?:\/\/[^\s)\]]*/gi, ADDRESS_PLACEHOLDER);
   return line.length <= MAX_REASON_LENGTH ? line : `${line.slice(0, MAX_REASON_LENGTH - 1)}…`;
 };
 

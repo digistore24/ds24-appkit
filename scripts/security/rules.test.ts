@@ -141,14 +141,30 @@ describe("a rung reports one of exactly three states", () => {
     expect(RUNG_STATES).toEqual(["clean", "found", "skipped"]);
   });
 
-  it("refuses a skip that carries no reason, naming the rung", () => {
-    const blank = outcome("advisories", { state: "skipped", findings: [] });
-    expect(() => aggregate([blank])).toThrow(/advisories/);
-    expect(() => aggregate([blank])).toThrow(/without a reason/);
+  it("refuses a skip that carries no reason, naming the rung — at INTAKE", () => {
+    // 🚨 The refusal moved from `aggregate()` to `outcomeFrom()` on 2026-08-15,
+    // and that is the whole fix: `aggregate()` runs inside `recordFrom()`, which
+    // `securityCheck()` calls OUTSIDE the per-rung `try`. One rung skipping
+    // without a reason therefore threw past every other rung's result and past
+    // `writeVerdict()`, leaving the PREVIOUS run's record on disk — which the
+    // greeting reports as today's "ok" for up to seven days. Refused here, the
+    // same mistake is caught by the per-rung `catch` and becomes one honest skip.
+    expect(() => outcome("advisories", { state: "skipped", findings: [] })).toThrow(/advisories/);
+    expect(() => outcome("advisories", { state: "skipped", findings: [] })).toThrow(
+      /without a reason/,
+    );
     // Whitespace is not a reason either — that is the shape a placeholder takes.
-    expect(() =>
-      aggregate([outcome("advisories", { state: "skipped", reason: "   ", findings: [] })]),
-    ).toThrow(/without a reason/);
+    expect(() => outcome("advisories", { state: "skipped", reason: "   ", findings: [] })).toThrow(
+      /without a reason/,
+    );
+  });
+
+  it("…and `aggregate()` still refuses one, for an outcome built by hand", () => {
+    // Defence in depth, deliberately kept: `aggregate()` is exported and the
+    // health command builds outcomes of its own. A guard at the door does not
+    // excuse the guard at the till.
+    const byHand = { id: "advisories", state: "skipped", reason: "", findings: [] };
+    expect(() => aggregate([byHand])).toThrow(/without a reason/);
   });
 
   it("refuses a state nobody has defined, naming the rung", () => {

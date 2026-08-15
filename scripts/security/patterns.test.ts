@@ -242,6 +242,72 @@ describe("🚨 a comment is not a blind spot", () => {
   });
 });
 
+describe("🚨 the allowlist judges the SECRET, never the rest of the match", () => {
+  // The sharpest defect this rung has had. `sandbox-marker` and
+  // `placeholder-value` were handed the whole connection string, so an ordinary
+  // production hostname carried the marker and excused a live password — and
+  // `secrets.mjs` then dropped accepted rows entirely, so the finding appeared in
+  // no block, no counter, no `--json` and no record. Both halves are pinned here.
+  const dsn = (user: string, password: string, host: string) =>
+    `const u = "${["postgres:", "//"].join("")}${user}:${password}@${host}/app";`;
+
+  it("does not excuse a live password because the HOST looks like a sandbox", () => {
+    const rows = scanText(dsn("svc", "Pr0dPassw0rdXY", "test-eu.db.mycompany.com"), {
+      path: "lib/a.ts",
+      blank: true,
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ ruleId: "dsn-password", accepted: false });
+  });
+
+  it("still excuses one when the PASSWORD itself is the sandbox value", () => {
+    // The counter-proof. Without it the assertion above passes against an
+    // allowlist that was simply switched off, which is the shape a nervous fix
+    // produces and which reads as strictness while excusing nothing on purpose.
+    const sandbox = scanText(dsn("u", "sandbox-password-xy", "db.company.com"), {
+      path: "lib/a.ts",
+      blank: true,
+    });
+    expect(sandbox[0]).toMatchObject({ accepted: true, allowlistId: "sandbox-marker" });
+
+    const placeholder = scanText(dsn("u", "your-password-here", "db.company.com"), {
+      path: "lib/a.ts",
+      blank: true,
+    });
+    expect(placeholder[0]).toMatchObject({ accepted: true, allowlistId: "placeholder-value" });
+  });
+
+  it("🚨 matches an IPv6 literal host and an upper-case scheme at all", () => {
+    // Both produced NO match before 2026-08-15 — the detector answered "nothing
+    // here", which is worse than "I could not look". `[2001:db8::5]` is what a
+    // managed Postgres and a Docker network hand out; the capitalised scheme is
+    // what a copied `.env` block or a JDBC habit produces.
+    const v6 = `const u = "${["postgres:", "//"].join("")}app:Pr0dPassw0rdXY@[2001:db8:1::5]:5432/app";`;
+    expect(scanText(v6, { path: "lib/a.ts", blank: true })).toHaveLength(1);
+
+    const upper = `const u = "${["POSTGRES:", "//"].join("")}svc:Pr0dPassw0rdXY@db.mycompany.com/app";`;
+    expect(scanText(upper, { path: "lib/a.ts", blank: true })).toHaveLength(1);
+
+    // …and a local one is still not reported, which is the whole point of the
+    // `holds` predicate this widening had to leave intact.
+    const local = dsn("svc", "Pr0dPassw0rdXY", "localhost:5432");
+    expect(scanText(local, { path: "lib/a.ts", blank: true })).toEqual([]);
+  });
+
+  it("🚨 blanks the comments of EVERY source extension, not five of them", () => {
+    // `.jsx`, `.mts` and `.cts` were scanned raw: the same explanatory comment
+    // was `medium, in a comment` in a `.ts` and 🚨 CRITICAL in a `.jsx`, with the
+    // wrong Why/Fix prose and exit 1. `scripts/dev/routes.mjs` accepts `page.jsx`
+    // as a page, so this was reachable. The answer now comes from the one owner.
+    for (const ext of ["ts", "tsx", "mjs", "js", "cjs", "jsx", "mts", "cts"]) {
+      expect(isSourceFile(`lib/a.${ext}`), `${ext} is source and must be blanked`).toBe(true);
+    }
+    for (const ext of ["md", "json", "yaml", "txt"]) {
+      expect(isSourceFile(`docs/a.${ext}`), `${ext} is not source`).toBe(false);
+    }
+  });
+});
+
 describe("the allowlist is a set of reasons", () => {
   // ⚠️ Nothing here asserts HOW MANY entries there are, and that is a rule rather
   // than an omission — the same one `scripts/security/accepted.mjs` carries.

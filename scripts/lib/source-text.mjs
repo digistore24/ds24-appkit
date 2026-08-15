@@ -74,8 +74,82 @@ export function blankComments(source) {
       // Non-greedy, so two blocks on one line do not merge. JSX's `{/* … */}`
       // needs no rule of its own: the braces left behind are not a needle any
       // checker here looks for, and blanking their contents is the whole job.
-      .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, " "))
+      //
+      // 🚨 **A RECURSIVE GLOB is not a comment, and it carries TWO false
+      // openers** — one where the path's slash meets the two stars, one where
+      // the stars meet the trailing `/` and the final star.
+      //
+      // `**/` is how every `outputFileTracingIncludes` entry, every
+      // vitest pattern and every `tsconfig` include is written, and the plain
+      // regex read both slashes in it as comment syntax. Measured 2026-08-15 on
+      // `next.config.ts`: `"./content/knowledge-media/**/*"` came back
+      // `"./content/knowledge-media    *"`, which turned the assertion that the
+      // knowledge-media disk leg is traced into a standalone build RED on a tree
+      // where it is traced. Same family as the phantom block above, in the other
+      // direction: there a comment looked like data, here data looks like code.
+      //
+      // Two guards, and each is safe for its own reason rather than by
+      // allowlist:
+      //
+      //  · `(?!\*\/)` — an EMPTY block (`/**/`) is left alone. It has no
+      //    content, so a checker reading past one cannot find a needle in it;
+      //    declining to blank it removes no protection, whatever a file writes.
+      //  · `[^*]` before the opener — the second one. A real comment opener
+      //    directly after a `*` means multiplication written against a comment
+      //    with no space (`x*/* note */`), and the cost there is a comment left
+      //    VISIBLE — the noisy direction, which somebody sees.
+      //
+      // The guard consumes one character, so it is put back, exactly as in the
+      // line-comment rule above; and the blanking still goes character by
+      // character so NEWLINES survive, which is what keeps a reported line
+      // number pointing at the line it names.
+      .replace(/(^|[^*])\/\*(?!\*\/)[\s\S]*?\*\//g, (match, before) =>
+        before + match.slice(before.length).replace(/[^\n]/g, " "),
+      )
   );
+}
+
+/**
+ * The formats read here as PROSE or DATA rather than as code.
+ *
+ * Everything not listed is treated as code, and that direction is the decision:
+ * a new code extension that nobody remembered to add would silently stop being
+ * blanked, which is exactly the hole this module exists to close. A new DATA
+ * format that nobody remembered gets blanked instead — and that shows up as a
+ * red assertion over the text it damaged, which is a thing somebody can see.
+ *
+ * `example` is in the list for `.env.example`, whose extension is the last dot.
+ */
+const NOT_CODE = /\.(md|mdx|markdown|txt|json|ya?ml|toml|csv|html?|env|example)$/i;
+
+/**
+ * `blankComments()`, but only where the file IS code.
+ *
+ * 🚨 **For the checkers that read a MIXED corpus through one `read()`.** Six in
+ * this tree do — `scripts/setup.test.ts` reads four `.md` files, `.env.example`,
+ * `package.json` AND `lib/env-guard.ts`; `scripts/docs-coverage.test.ts` reads
+ * every doc plus `run.mjs`. A blind wrapper there is wrong in both directions at
+ * once: the source half keeps reporting a file for explaining itself, and the
+ * markdown half gets its PROSE blanked — a doc that writes `http://` in a fenced
+ * example, or spells a block comment out to teach it, loses the sentence the
+ * assertion is about.
+ *
+ * So the question is asked per FILE, at the one place the path is still known.
+ * Callers pass the same string they read: `read(rel)` becomes
+ * `blankCommentsFor(rel, readFileSync(…))`, and nothing downstream changes.
+ *
+ * ⚠️ Markdown is not blanked at all, deliberately — not even inside a fenced
+ * code block. A fence is a lexer's job, and a checker that needs one wants a
+ * markdown parser rather than this. What it means in practice: an assertion
+ * hunting a needle in a doc still sees every occurrence, which is what the docs
+ * checks want, because in a doc the prose IS the subject.
+ *
+ * @param {string} file path or name of the file the source came from
+ * @param {string} source
+ * @returns {string} blanked when `file` is code, unchanged otherwise
+ */
+export function blankCommentsFor(file, source) {
+  return NOT_CODE.test(file) ? source : blankComments(source);
 }
 
 /**

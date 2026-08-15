@@ -6,6 +6,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
+import { blankComments } from "@/scripts/lib/source-text.mjs";
+
 import { LOCALES } from "@/i18n/config";
 import de from "@/messages/de.json";
 
@@ -28,9 +30,14 @@ const ROOT = fileURLToPath(new URL("../../", import.meta.url));
  * owner-only — read off the source, the way `components/app-shell.test.ts`
  * does it. Importing the module would drag React and lucide into a node test
  * for the sake of five strings.
+ *
+ * Through `blankComments()` (`CLAUDE.md` → *Rules*): this reads source as TEXT,
+ * and a sidebar entry that is only DISCUSSED in a comment — a commented-out
+ * entry, an `ownerOnly` named in a note beside its own braces — must not be
+ * counted as one that exists.
  */
 const NAVIGATION_KEYS = (() => {
-  const shell = readFileSync(join(ROOT, "components", "app-shell.tsx"), "utf8");
+  const shell = blankComments(readFileSync(join(ROOT, "components", "app-shell.tsx"), "utf8"));
   const start = shell.indexOf("export const NAVIGATION");
   const end = shell.indexOf("\n];", start);
   if (start < 0 || end < 0) throw new Error("cannot find NAVIGATION in app-shell.tsx");
@@ -137,7 +144,13 @@ describe("the labels handed to the model", () => {
       MODULE_GATES.filter((gate) => gate.state() !== "on").map((gate) => gate.id),
     );
 
-    const shell = readFileSync(join(ROOT, "components", "app-shell.tsx"), "utf8");
+    // Blanked for the same reason as `NAVIGATION_KEYS` above: the `featureKey:`
+    // this looks for has to be the one the shell really carries. A comment
+    // EXPLAINING that an entry has no feature key would otherwise excuse a
+    // withholding nobody declared.
+    const shell = blankComments(
+      readFileSync(join(ROOT, "components", "app-shell.tsx"), "utf8"),
+    );
     for (const key of withheld) {
       const owned = moduleItems.find(({ item }) => item.labelKey === key);
       if (owned) {

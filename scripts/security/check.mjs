@@ -107,10 +107,14 @@ export async function runRungs(rungs, context) {
     try {
       outcomes.push(outcomeFrom(rung, await rung.run(context)));
     } catch (error) {
+      const reason = error?.message ? String(error.message) : String(error);
       outcomes.push(
         outcomeFrom(rung, {
           state: "skipped",
-          reason: error?.message ? String(error.message) : String(error),
+          // Never empty: `outcomeFrom()` refuses a reasonless skip, and this is
+          // the one place that could hand it one — an error whose message is
+          // the empty string would otherwise throw out of the catch itself.
+          reason: reason.trim() || `${rung?.id} threw something with no message`,
           findings: [],
         }),
       );

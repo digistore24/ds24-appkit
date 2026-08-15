@@ -129,8 +129,21 @@ export const setupConfirmations = pgTable(
 /**
  * Every setup act, once, append-only.
  *
- * There is no update path and no delete path in this application, and that is
- * the table's whole value. It is the compensating control for a surface that
+ * Append-only in the sense that matters: **nothing that writes an act ever
+ * rewrites one.** There are exactly TWO other writers in this application, both
+ * named here because an absolute claim that a reader can disprove in one grep
+ * teaches them to distrust the rest of this comment:
+ *
+ *   · `lib/setup/manage.ts` — the retention sweep (`prune-setup-audit`), which
+ *     DELETES rows older than the bound. Ageing out is not rewriting history.
+ *   · `lib/users/manage.ts` — erasure, which nulls `reason` when the member the
+ *     row is about deletes their account (§ 14g). The ACT stays; the prose
+ *     somebody wrote about a person goes. A trail with a way to erase yourself
+ *     out of it is not a trail, and a trail that keeps free text about a deleted
+ *     member is not lawful — this is the seam between the two.
+ *
+ * `lib/setup/audit-writers.test.ts` holds that list to the tree. Anything else
+ * touching this table is the failure this comment exists to make visible. It is the compensating control for a surface that
  * takes ids: the answer to "what touched production?" is a query rather than an
  * investigation.
  *

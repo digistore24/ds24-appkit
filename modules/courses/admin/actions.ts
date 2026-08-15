@@ -47,7 +47,6 @@ import {
   unitCountFor,
   unitPositions,
   unitSlugTaken,
-  unitSlugsIn,
   updateBlock,
   updateUnit,
 } from "../lib/manage";
@@ -134,10 +133,24 @@ function releaseDays(formData: FormData, shape: CourseShape | null): number {
  * or its block's release moved, because that page renders the lesson AND the
  * unlock decision built on `releaseAfterDays`.
  */
-function revalidate(unitSlugs: readonly string[] = []) {
+/**
+ * 🚨 The whole `/dashboard/course` SEGMENT, not one path under it.
+ *
+ * Until 2026-08-15 this revalidated `${COURSE}/${unitSlug}` — the shape from
+ * before Story 44.2, when a lesson lived directly under `/dashboard/course`.
+ * Since then the lesson is at `/dashboard/course/<courseSlug>/<unitSlug>`, so
+ * that call named a route that does not exist, and neither the course overview
+ * nor the lesson page was ever invalidated by an admin write. `pages/actions.ts`
+ * had been doing it correctly all along — two halves of one module disagreeing.
+ *
+ * `"layout"` invalidates the segment and everything beneath it, which is right
+ * without threading a course slug through every caller: an admin write is rare,
+ * and invalidating one course too many costs a render, while invalidating none
+ * costs a member the answer they were told they would see.
+ */
+function revalidate() {
   revalidatePath(PAGE);
-  revalidatePath(COURSE);
-  for (const slug of unitSlugs) revalidatePath(`${COURSE}/${slug}`);
+  revalidatePath(COURSE, "layout");
 }
 
 export async function createBlockAction(
@@ -216,7 +229,7 @@ export async function updateBlockAction(
       releaseAfterDays: releaseDays(formData, blockCourse?.shape ?? null),
     });
     // Its lessons too: `releaseAfterDays` is what their pages lock against.
-    revalidate(await unitSlugsIn(block.id));
+    revalidate();
     const t = await getTranslations("coursesAdmin");
     return { error: null, ok: t("blockSaved", { slug: block.slug }) };
   } catch (error) {
@@ -294,7 +307,7 @@ export async function createUnitAction(
     if (tooLong) return refuse(tooLong);
 
     const unit = await createUnit({ blockId: block.id, slug, position, ...fields });
-    revalidate([unit.slug]);
+    revalidate();
     const t = await getTranslations("coursesAdmin");
     return { error: null, ok: t("unitCreated", { slug: unit.slug }) };
   } catch (error) {
@@ -326,7 +339,7 @@ export async function updateUnitAction(
     if (tooLong) return refuse(tooLong);
 
     await updateUnit(unit.id, fields);
-    revalidate([unit.slug]);
+    revalidate();
     const t = await getTranslations("coursesAdmin");
     return { error: null, ok: t("unitSaved", { slug: unit.slug }) };
   } catch (error) {
@@ -350,7 +363,7 @@ export async function deleteUnitAction(
     }
 
     await deleteUnit(unit.id);
-    revalidate([unit.slug]);
+    revalidate();
     const t = await getTranslations("coursesAdmin");
     return { error: null, ok: t("unitDeleted", { slug: unit.slug }) };
   } catch (error) {
@@ -390,7 +403,7 @@ export async function moveAction(_prev: ActionState, formData: FormData): Promis
       if (taken) return refuse(taken, { position });
 
       await setBlockPosition(block.id, position);
-      revalidate(await unitSlugsIn(block.id));
+      revalidate();
       return { error: null, ok: t("moved", { slug: block.slug, position }) };
     }
 
@@ -406,7 +419,7 @@ export async function moveAction(_prev: ActionState, formData: FormData): Promis
       if (taken) return refuse(taken, { position });
 
       await setUnitPosition(unit.id, position);
-      revalidate([unit.slug]);
+      revalidate();
       return { error: null, ok: t("moved", { slug: unit.slug, position }) };
     }
 

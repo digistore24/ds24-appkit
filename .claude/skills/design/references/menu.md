@@ -20,7 +20,7 @@ How should this app look?
   2  nothing yet — I look at two or three comparable products and put
      named directions to you
   3  just one thing — a colour, a serif headline. Nothing else moves
-  0  keep the shipped look (petrol on warm grey, Figtree)
+  0  keep the shipped look (petrol on warm grey, Figtree with Source Serif 4 headings, a monogram tile in ink)
 
 A number, please. Nothing here is marked ✅: whether you already have a
 brand is not something I can read off your product. "You choose" takes 2.
@@ -60,8 +60,8 @@ differing only in where the line broke. Both read it from here now. Write it int
 `docs/app.md` under *Decisions worth remembering*, with the real date:
 
 ```md
-- **No custom identity.** Decided on <date>: the shipped look (petrol on
-  warm grey, Figtree) stays. If it comes back, the way in is the skill `design`.
+- **No custom identity.** Decided on <date>: the shipped look (petrol on warm grey, Figtree with Source Serif 4 headings, a monogram tile in ink)
+  stays. If it comes back, the way in is the skill `design`.
 ```
 
 🚨 **The string `No custom identity` is load-bearing** — it is the marker that

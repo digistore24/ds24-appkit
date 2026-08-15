@@ -5,9 +5,17 @@
 // spending confirmations, and writing the one row that every act leaves behind.
 //
 // Everything that is a DECISION lives in `rules.ts` and is tested without a
-// database. What is here is the writing — and the one property worth stating
-// twice: **the act and its audit row share a transaction**, so "it succeeded
-// but was not recorded" is not a reachable state.
+// database. What is here is the writing.
+//
+// ⚠️ **This paragraph used to claim that the act and its audit row share a
+// transaction. They do not, and saying so was worse than the gap.** A tool
+// commits inside its own domain function; `lib/setup/dispatch.ts` then writes
+// the row from an `after()` callback. So a connection lost between the two
+// leaves the act standing with no trace of it — rare, and reachable. It is
+// written down here rather than smoothed over because the sentence is what a
+// later reader would have relied on. Closing it for real means threading a
+// transaction through every tool, which is a change to the tool contract and
+// belongs in a story, not in a comment.
 
 import { randomBytes } from "node:crypto";
 import { newSetupKey, setupKeyPrefixOf } from "./key.mjs";

@@ -14,7 +14,8 @@ steps have to happen in, and step 5 is the one that gets skipped.
 ## 0. Is there already a course?
 
 `node run.mjs module list` says whether `courses` is installed;
-`config/course.json` says whether it is switched on and which shape.
+`config/course.json` says whether it is switched on — and only that; each
+course's own shape is in `content/course/<course-slug>/course.json`.
 
 If it is there, this is a CHANGE, not a build: read `docs/app.md`, ask what
 should change, and stop.
@@ -54,8 +55,13 @@ Say the cost out loud: the `api_keys` table and the App-keys card on
 `config/api.json` — a course does not need it switched on; a mobile companion
 does ([`docs/api.md`](../../../docs/api.md)).
 
-Then `config/course.json`: `shape`, and `planKeys` once step 3 has created the
-products.
+🚨 **`config/course.json` holds only the SWITCH.** `shape` and `planKeys` belong
+to the course itself, in `content/course/<course-slug>/course.json` — an app
+holds several courses now, and a shape that lives in the app's config could only
+describe one of them. Writing either of them here is not a harmless extra: the
+switch file's reader knows exactly two keys, so an unknown one makes the whole
+module answer `brokenConfig`, and the day somebody sets `enabled: true` every
+course page and every `/api/v1/courses` route answers 404 at once.
 **Leave `enabled` at `false`.** It ships off on purpose — a course whose pages
 answer before it has lessons is an empty product behind a clean 200. Step 6
 switches it on.
@@ -65,7 +71,9 @@ switches it on.
 One entry in `config/digistore-products.json`, `kind: "one_time"` for all three
 shapes unless the vendor says otherwise. Then the skill `setup-digistore`.
 
-Put those keys in `config/course.json` → `planKeys`, a **list**.
+Put those keys in the COURSE's own file — `content/course/<course-slug>/course.json`
+→ `planKeys`, a **list**. (Not `config/course.json`: that one holds the switch and
+nothing else. See step 2.)
 
 🚨 **It is a list because one offering is one Digistore24 product per billing
 interval.** A course a vendor sells "monthly or yearly" is TWO registry entries,

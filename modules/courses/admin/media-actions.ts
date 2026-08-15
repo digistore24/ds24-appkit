@@ -108,10 +108,12 @@ function text(formData: FormData, key: string): string {
 }
 
 /** Everything a slot change may have altered, told to Next. */
-function revalidate(unitSlug: string) {
+function revalidate() {
   revalidatePath(PAGE);
-  revalidatePath(COURSE);
-  revalidatePath(`${COURSE}/${unitSlug}`);
+  // The segment, not a path under it — see the note in `./actions.ts`. The old
+  // `${COURSE}/${unitSlug}` has not been a route since Story 44.2, so a swapped
+  // video never reached the lesson page that shows it.
+  revalidatePath(COURSE, "layout");
 }
 
 /**
@@ -210,7 +212,7 @@ async function attach(
   }
 
   await setUnitMedia(unit.id, slot, stored.id);
-  revalidate(unit.slug);
+  revalidate();
   const t = await getTranslations("coursesAdmin");
   return { error: null, ok: t("slotAttached", { slot: t(`slot${label(slot)}`) }) };
 }
@@ -451,7 +453,7 @@ export async function confirmVideoAction(input: {
     }
 
     await setUnitMedia(unit.id, "video", stored.id);
-    revalidate(unit.slug);
+    revalidate();
     const t = await getTranslations("coursesAdmin");
     return { error: null, ok: t("slotAttached", { slot: t("slotVideo") }) };
   } catch (error) {
@@ -513,7 +515,7 @@ export async function detachSlotAction(
     if (!isCourseSlotId(slot)) return refuse("coursesSlotNotAttachable", { types: "" });
 
     await setUnitMedia(unit.id, slot, null);
-    revalidate(unit.slug);
+    revalidate();
     const t = await getTranslations("coursesAdmin");
     return { error: null, ok: t("slotDetached", { slot: t(`slot${label(slot)}`) }) };
   } catch (error) {

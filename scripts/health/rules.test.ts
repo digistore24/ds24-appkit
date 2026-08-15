@@ -164,15 +164,28 @@ describe("AC3 — an unreachable app is one finding and five skips", () => {
 });
 
 describe("AC2 — nothing is green while something was unanswered", () => {
-  it("🚨 refuses a skip that cannot say why — inherited, not caught", async () => {
-    // `aggregate()`'s own throw. This command does not rescue it: a blank skip
-    // is a tick with a different glyph, and that is the failure the whole
-    // ladder exists to prevent.
+  it("🚨 refuses a skip that cannot say why — and now it is that probe's own skip", async () => {
+    // ⚠️ This behaviour CHANGED on 2026-08-15 and the change is the point. The
+    // refusal used to come out of `aggregate()`, which runs after every probe —
+    // so one blank skip threw past all the others AND past the record being
+    // written, leaving the previous run's record to be read as today's answer.
+    // It is now refused at intake, where the per-probe `catch` turns it into one
+    // honest skip that names the mistake. A blank skip is still never a pass;
+    // it just no longer takes the whole run with it.
     const outcomes = await runProbes(
-      [probe("liveness", () => ({ state: "skipped", reason: "   ", findings: [] }))],
+      [
+        probe("liveness", () => ({ state: "skipped", reason: "   ", findings: [] })),
+        probe("errors", () => ranClean("200 ok")),
+      ],
       CONTEXT,
     );
-    expect(() => aggregate(outcomes)).toThrow(/skipped without a reason/);
+    expect(() => aggregate(outcomes)).not.toThrow();
+    expect(outcomes[0]).toMatchObject({ id: "liveness", state: "skipped" });
+    expect(outcomes[0].reason).toMatch(/without a reason/);
+    // The second probe survived, which is the half that was lost before.
+    expect(outcomes[1]).toMatchObject({ id: "errors", state: "clean" });
+    // And the run is still not complete — a skip is never a tick.
+    expect(aggregate(outcomes).complete).toBe(false);
   });
 
   it("a probe that THROWS becomes that probe's skip and does not end the run", async () => {
@@ -208,6 +221,30 @@ describe("AC2 — nothing is green while something was unanswered", () => {
     // journey into a scheduled job's one line of numbers (docs/cron.md).
     expect(JSON.stringify(record)).not.toContain("app.example.com");
     expect(JSON.stringify(record)).not.toContain("200 ok");
+  });
+
+  it("🚨 strips the address out of a reason that really carries one", async () => {
+    // The test above proves nothing about this: its reason never held an
+    // address. `_transport.mjs` writes `${url} did not answer (…)` on EVERY
+    // transport failure, so the production address travelled into a record whose
+    // own header forbids it — and would travel on into `cron_runs.lastDetail`,
+    // which `docs/cron.md` restricts to numbers. This is the needle for that.
+    const outcomes = await runProbes(
+      [
+        probe("jobs", () =>
+          notAsked("https://app.example.com/api/cron did not answer (fetch failed)"),
+        ),
+      ],
+      CONTEXT,
+    );
+    const record = recordFrom(outcomes, { now: Date.parse("2026-08-10T12:00:00Z"), template: "0.24.0" });
+
+    expect(JSON.stringify(record)).not.toContain("app.example.com");
+    expect(JSON.stringify(record)).not.toContain("https://");
+    // …and the sentence still says what happened, which is the half that keeps
+    // this from being a redaction nobody can read.
+    expect(record.rungs[0].reason).toContain("did not answer");
+    expect(record.rungs[0].reason).toContain("the address");
   });
 });
 

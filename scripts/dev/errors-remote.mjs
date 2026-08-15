@@ -24,6 +24,9 @@ import "../lib/env.mjs";
 
 import { renderFindings } from "../../lib/diagnostics/parse.mjs";
 import { hostOf, isLocalHost, matchHostScope, notAUsableUrl } from "../lib/host-env.mjs";
+// The ONE bound, imported rather than restated — a second constant is a second
+// thing that can be right here and wrong there.
+import { TIMEOUT_MS } from "../health/probes/_transport.mjs";
 
 /**
  * Which `.env` names hold the address and the secret for each environment.
@@ -146,6 +149,14 @@ export async function readRemoteFindings({ baseUrl, secret, after }) {
     answer = await fetch(url, {
       headers: { authorization: `Bearer ${secret}` },
       redirect: "manual",
+      // 🚨 The bound `scripts/health/probes/_transport.mjs` promises for "every
+      // request in this whole command" — this one is the exception it did not
+      // know about, because the source assertion that guards it walks
+      // `scripts/health/**` and this file is not there. A host that accepts the
+      // connection and never answers otherwise hangs `health --url`,
+      // `errors --url` and the remote half of `smoke` for ever, and the check
+      // somebody then abandons is the one they do not run again.
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch (error) {
     return { ok: false, reason: `${base} did not answer — ${error.message}` };

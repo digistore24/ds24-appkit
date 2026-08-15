@@ -4,6 +4,8 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+
+import { blankComments } from "@/scripts/lib/source-text.mjs";
 import {
   isPlansPreviewAllowed,
   wantsPlansPreview,
@@ -147,9 +149,14 @@ describe("plansRenderMode", () => {
 // planSections(). Without this, the pure function above could stay green while
 // the page grew its own copy of the rule.
 describe("app/plans/page.tsx is wired to this module", () => {
-  const source = readFileSync(
-    path.join(process.cwd(), "app/plans/page.tsx"),
-    "utf8",
+  // Through `blankComments()` (`CLAUDE.md` → *Rules*): every assertion below
+  // reads source as TEXT, and the page EXPLAINS this gate in its own comments —
+  // `isPlansPreviewActive` appears in one of them. A checker that counted those
+  // would clear a page whose gate had been deleted from the code and survived
+  // only in the sentence describing it, which is the one failure this file is
+  // here to prevent.
+  const source = blankComments(
+    readFileSync(path.join(process.cwd(), "app/plans/page.tsx"), "utf8"),
   );
 
   it("takes the render decision from plansRenderMode()", () => {

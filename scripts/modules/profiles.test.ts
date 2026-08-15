@@ -812,6 +812,54 @@ describe("all four modules' tables coexist with the core's", () => {
     ).toEqual([]);
   });
 
+  it("🚨 declares every table its own migrations CREATE — the list nobody re-reads", () => {
+    // The direction nothing asked. Both rules above ask whether a DECLARED table
+    // is legitimate; neither asks whether a table that EXISTS was declared.
+    //
+    // Measured 2026-08-15: `courses_courses` arrived with Story 35.3 (migration
+    // `0002`) and never reached `module.json`. `tablesOf()` in
+    // `scripts/modules/cli.mjs` feeds BOTH `countModuleRows()` and
+    // `dropModuleTables()`, so the consequences were: `module remove courses`
+    // counted no rows in it — a course with title and plan keys did not hold the
+    // removal back — and then did not drop it, while the drizzle journal WAS
+    // dropped. A later `module add` + `db-migrate` replays `0002` and dies on
+    // *relation already exists*. That is the silent failure `docs/modules.md`
+    // names, one table further along.
+    //
+    // Read out of the SQL rather than out of a second list: `moduleTypes()`
+    // argues in its own docstring that the list a human maintains is the one
+    // that goes stale, and this is that argument applied to itself.
+    const created = (record: { dir: string }): string[] => {
+      const dir = join(ROOT, record.dir, "drizzle");
+      if (!existsSync(dir)) return [];
+      return readdirSync(dir)
+        .filter((name) => name.endsWith(".sql"))
+        .flatMap((name) => [
+          ...readFileSync(join(dir, name), "utf8").matchAll(/CREATE TABLE\s+"([^"]+)"/gi),
+        ])
+        .map((match) => match[1]);
+    };
+
+    const missing: string[] = [];
+    let seen = 0;
+    for (const record of load(ALL)) {
+      const declared = new Set(record.manifest.tables ?? []);
+      for (const table of created(record)) {
+        seen += 1;
+        if (!declared.has(table)) missing.push(`${record.id} creates "${table}" and does not declare it`);
+      }
+    }
+    // A walk that reads no CREATE TABLE at all would make this green over
+    // everything — the same count guard every other walk in this tree carries.
+    expect(seen, "no CREATE TABLE was read from any module's migrations").toBeGreaterThan(10);
+    expect(
+      missing,
+      "a module creates a table its manifest does not list. `module remove` neither " +
+        "counts its rows nor drops it, so customer data cannot hold the removal back " +
+        "and a re-install replays the migration onto a table that is still there.",
+    ).toEqual([]);
+  });
+
   it("re-exports every module's schema into one barrel", () => {
     const barrel = expectedGenerated(ROOT, ALL).get("db/schema-modules.ts")!;
     const withSchema = load(ALL).filter((r) => (r.manifest as { schema?: string }).schema);

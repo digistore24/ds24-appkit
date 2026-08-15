@@ -245,6 +245,29 @@ export function normalisePlan(label: string, module: string | null, raw: unknown
   const report = raw as Record<string, unknown>;
   const problems = strings(report.problems).map((problem) => `${label}: ${problem}`);
 
+  // 🚨 The paragraph above says "never `created: 0`", and only the non-object
+  // branch kept it. `count()` turns anything that is not a finite number into a
+  // 0, so a planner with a typo in a field name (`createdRows`) answered
+  // `1 of 1 applier(s) answered; 0 row(s) would be created` — and an operator
+  // reading "there is nothing to publish" skips the go-live step. Measured
+  // 2026-08-15: `{created: "12"}` came back `answered: true, created: 0`.
+  for (const field of ["created", "reasserted"] as const) {
+    const value = report[field];
+    if (value !== undefined && !Number.isFinite(value)) {
+      return {
+        label,
+        module,
+        answered: false,
+        note: `${label}'s plan(sql) returned a report this cannot read`,
+        problems: [
+          ...problems,
+          `${label}: plan(sql) answered \`${field}\` as ${describe(value)} — it has to be ` +
+            `a number, and a count nobody can read is not a zero (docs/content.md)`,
+        ],
+      };
+    }
+  }
+
   return {
     label,
     module,

@@ -117,10 +117,23 @@ function planFor(agent) {
 
   const present = drop.filter(({ file }) => existsSync(abs(file)));
 
+  // 🚨 `yours` used to be computed from `drop` alone — so a file this profile
+  // KEEPS, whose content the developer had changed, went straight into `write`
+  // and was overwritten. Somebody who had added a `permissions` block to
+  // `.claude/settings.json` or a hook to `.codex/config.toml` lost it, reported
+  // as a bare `+ .claude/settings.json`, indistinguishable from creating a file
+  // that was not there. The header of this file promises the opposite in so many
+  // words. A kept file is written only when it is ABSENT.
+  const changedKeep = keep.filter(
+    ({ file, content }) => content !== undefined && existsSync(abs(file)) && read(file) !== content,
+  );
+
   return {
-    write: keep.filter(({ content, file }) => content !== undefined && read(file) !== content),
+    write: keep.filter(
+      ({ content, file }) => content !== undefined && !existsSync(abs(file)),
+    ),
     remove: present.filter(({ file, content }) => read(file) === content),
-    yours: present.filter(({ file, content }) => read(file) !== content),
+    yours: [...present.filter(({ file, content }) => read(file) !== content), ...changedKeep],
   };
 }
 
@@ -193,7 +206,11 @@ if (undo) {
       Object.entries(files).map(([file, content]) => ({ file, content })),
     ),
     ...stubFiles(),
-  ].filter(({ file, content }) => read(file) !== content);
+    // 🚨 Only what is ABSENT. The filter used to be `read(file) !== content` —
+    // i.e. "the developer changed it" was the very REASON to write over it, with
+    // no `yours` branch anywhere on this path. `--undo` means "put back what was
+    // pruned", never "discard what you wrote".
+  ].filter(({ file }) => !existsSync(abs(file)));
 
   if (restore.length === 0) {
     console.log("✓ Already wired up for all four programs — nothing to do.");

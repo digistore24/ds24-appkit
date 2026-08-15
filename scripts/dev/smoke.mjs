@@ -83,6 +83,7 @@ import { strandedRedirect } from "../../lib/auth/auth-url.mjs";
 import { signInAsOwner, signInAsSmokeMember } from "./sign-in.mjs";
 import { runDynamicRoutes } from "./smoke-dynamic.mjs";
 import { runModuleSmoke } from "../modules/inventory.mjs";
+import { hostOf, isLocalHost } from "../lib/host-env.mjs";
 
 const args = process.argv.slice(2);
 const wantSignedIn = !args.includes("--no-signed-in");
@@ -108,7 +109,10 @@ console.log(`Checking ${routes.length} page(s) on ${baseUrl}\n`);
 // smoke` always passes --url (so that it cannot green-light another project
 // answering on 3000), which is why the test is "is this host local", not "was
 // --url given".
-const isLocal = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::|\/|$)/.test(baseUrl);
+// Through `isLocalHost()`, never a second regex: that is the ONE answer to "is
+// this host local" (it also knows `::1`, which this file's own pattern did not,
+// so a local app on IPv6 took the remote path and reported its log as NOT read).
+const isLocal = isLocalHost(hostOf(baseUrl) ?? "");
 // Taken before the first request: everything after this mark was caused by us.
 const logMark = isLocal ? markLog() : 0;
 

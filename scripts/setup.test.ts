@@ -20,9 +20,19 @@ import { DEPLOY_HOSTS, FIXES, PLATFORMS, fixLine } from "./dev/doctor.mjs";
 import { DB_DRIVERS } from "./db/driver.mjs";
 import { PROFILE_FILE, readAgentProfile } from "./dev/agent-configs.mjs";
 import { notChecked } from "@/lib/test-not-checked";
+import { blankCommentsFor } from "@/scripts/lib/source-text.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
-const read = (file: string) => readFileSync(path.join(ROOT, file), "utf8");
+
+/**
+ * 🚨 A MIXED corpus through one door — four `.md` files, `.env.example`,
+ * `package.json` and `lib/env-guard.ts` — so the blanking question is asked per
+ * FILE. `blankComments()` here would be wrong in both directions at once: the
+ * source half would keep reporting a file for explaining itself, and the docs
+ * half would lose the very sentences these assertions are about, several of
+ * which are POSITIVE (`toContain`) and would then go quietly green.
+ */
+const read = (file: string) => blankCommentsFor(file, readFileSync(path.join(ROOT, file), "utf8"));
 
 describe("every tool can be installed on all three systems", () => {
   it.each(Object.keys(FIXES))("%s has an entry per platform", (tool) => {

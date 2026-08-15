@@ -36,6 +36,16 @@ import { courseAccessFor } from "../lib/access";
 import { courseOffReason } from "../lib/config";
 import { usableCourses } from "../lib/courses";
 
+// ⚠️ The segment config every sibling route on this surface carries, and the
+// only one added in Story 44.2 that did not. The guard in
+// `modules/boundary.test.ts` compares the handler's declarations against its
+// wrapper's and bails when NEITHER side declares anything — so a route with no
+// config at all is the one shape it cannot see. That is the same class as the
+// commit that found 19 handlers declaring these and no route carrying them,
+// only from the other end.
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request): Promise<Response> {
   const g = await guardApi(request);
   if (!g.ok) return g.response;

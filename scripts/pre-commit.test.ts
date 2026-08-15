@@ -19,10 +19,21 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { capture } from "./lib/proc.mjs";
+import { blankComments } from "./lib/source-text.mjs";
 import { HOOKS_PATH, hookAction, isRepoRoot } from "./dev/hooks.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
-const read = (relative: string) => readFileSync(path.join(ROOT, relative), "utf8");
+
+// Blanked at the reader, so the rule covers whatever gets pinned here next. The
+// three files below are read as TEXT for needles they also TALK about: the runner
+// explains its own no-install rule and its way past the gate in a header comment,
+// so `toContain("--no-verify")` and `existsSync("node_modules")` could both be
+// answered by the paragraph ABOUT the code rather than by the code — and the
+// `.not.toMatch()` beside them could fire on a comment warning against the very
+// thing it forbids. Everything read here is code (`run.mjs`, a `.mjs`, and the
+// `sh` shim, which has no extension but is not prose either).
+// (CLAUDE.md → a checker that reads source as TEXT goes through `blankComments()`.)
+const read = (relative: string) => blankComments(readFileSync(path.join(ROOT, relative), "utf8"));
 
 describe("the hook file", () => {
   const hook = read(".githooks/pre-commit");

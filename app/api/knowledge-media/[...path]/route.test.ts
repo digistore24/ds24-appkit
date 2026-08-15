@@ -17,10 +17,14 @@ import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 
 import { isValidMediaPath } from "@/lib/knowledge-media/rules.mjs";
+import { blankComments } from "@/scripts/lib/source-text.mjs";
 
-const route = readFileSync(
-  fileURLToPath(new URL("./route.ts", import.meta.url)),
-  "utf8",
+// 🚨 Blanked, and this file needs it more than most: the order assertion below
+// compares `indexOf` POSITIONS, so a comment naming `readFile(` or `signedUrl(`
+// above the real call does not merely add a match — it reorders the guards this
+// test exists to pin, and the route would pass while its checks ran backwards.
+const route = blankComments(
+  readFileSync(fileURLToPath(new URL("./route.ts", import.meta.url)), "utf8"),
 );
 
 describe("the route's shape (AD-53)", () => {
@@ -81,9 +85,14 @@ describe("the route's shape (AD-53)", () => {
 
 describe("what carries the disk leg into a standalone build (AC 5)", () => {
   it("next.config.ts traces content/knowledge-media for this route", () => {
-    const config = readFileSync(
-      fileURLToPath(new URL("../../../../next.config.ts", import.meta.url)),
-      "utf8",
+    // Blanked too: the tracing entry is what makes the disk leg survive a
+    // standalone build, and `toContain` over raw text would be satisfied by a
+    // comment that merely names the glob it no longer traces.
+    const config = blankComments(
+      readFileSync(
+        fileURLToPath(new URL("../../../../next.config.ts", import.meta.url)),
+        "utf8",
+      ),
     );
     expect(config).toContain("./content/knowledge-media/**/*");
   });

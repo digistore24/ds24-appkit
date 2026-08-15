@@ -33,12 +33,28 @@ import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
+import { blankCommentsFor } from "./lib/source-text.mjs";
 import { JOURNEY } from "./dev/journey.mjs";
 import { requiresFrom } from "./dev/update-plan.mjs";
 import { availableModules } from "./modules/registry.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
-const read = (rel: string) => readFileSync(path.join(ROOT, rel), "utf8");
+
+/**
+ * 🚨 A MIXED corpus through one door, so the blanking question is asked per
+ * FILE. Almost everything here is markdown — `CLAUDE.md`, every `docs/*.md`,
+ * every `SKILL.md` — where the prose IS the subject and blanking would delete
+ * the sentences these checks are about. But `commands()` below reads `run.mjs`,
+ * and that one is source: it slices from `const TASKS = {` and matches command
+ * names out of the text, so a comment naming either would move the slice or add
+ * a command that does not exist.
+ *
+ * Measured on 2026-08-15: `run.mjs` loses 247 comment lines this way and
+ * `.template-version` — read through the same helper and then `JSON.parse`d —
+ * comes back byte-identical, because a version stamp has nothing a comment
+ * could look like.
+ */
+const read = (rel: string) => blankCommentsFor(rel, readFileSync(path.join(ROOT, rel), "utf8"));
 const list = (dir: string, ext: string) =>
   readdirSync(path.join(ROOT, dir))
     .filter((entry) => entry.endsWith(ext))

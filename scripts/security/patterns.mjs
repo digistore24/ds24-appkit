@@ -77,7 +77,7 @@
 // in four places, and `./patterns.test.ts` is what notices the day it does not.
 //
 // Plain Node, no dependency — Linux, macOS and Git Bash on Windows.
-import { blankComments } from "../lib/source-text.mjs";
+import { blankComments, blankCommentsFor } from "../lib/source-text.mjs";
 import { isLocalDatabaseUrl } from "../lib/media-env.mjs";
 
 // `media-env.mjs` reaches `node:path`, `node:url` and `scripts/ds24/_env.mjs`,
@@ -225,12 +225,21 @@ export const SECRET_RULES = [
     // host neither local nor a documentation domain. Quotes and backticks are
     // excluded from every part so a match cannot run past a string literal's end.
     pattern: new RegExp(
-      "(?<![A-Za-z0-9+.-])([a-z][a-z0-9+.-]*)://" +
+      "(?<![A-Za-z0-9+.-])([A-Za-z][A-Za-z0-9+.-]*)://" +
         "([^\\s:@/\"'`]+):" +
         `([^\\s@/"'\`]{${DSN_PASSWORD},})@` +
-        "([^\\s/:?#\"'`$<>{}\\\\]+)",
+        // The host, or an IPv6 literal in its brackets. Both measured missing on
+        // 2026-08-15: `postgres://u:pw@[2001:db8::5]:5432/app` — the form a
+        // managed Postgres and a Docker network hand out — produced NO match at
+        // all, because the class excluded `:`; and `POSTGRES://…`, the form a
+        // copied `.env` block or a JDBC habit produces, missed the lower-case
+        // scheme class. A detector that answers "nothing here" is worse than one
+        // that answers "I could not look".
+        "(\\[[^\\]\\s]+\\]|[^\\s/:?#\"'`$<>{}\\\\]+)",
       "g",
     ),
+    /** Group 3 is the password — the allowlist must judge THAT, never the host. */
+    secretGroup: 3,
     severity: "critical",
     holds: ({ value, host }) =>
       !isLocalDatabaseUrl(`x://${host}`) && !isDocumentationHost(host) && value.length > 0,
@@ -355,8 +364,10 @@ export const ALLOWLIST = [
       "A value carrying _test_, _sandbox_, test- or sandbox-. A sandbox key moves no " +
       "money and opens no live account; it is the same skip list the skill's own " +
       "reference carries (references/checks-secrets-and-deps.md:16-29), so the " +
-      "command and the human pass agree about it. The marker is read off the MATCHED " +
-      "VALUE, never off the line — a file called `token-test.ts` excuses nothing.",
+      "command and the human pass agree about it. The marker is read off the SECRET, " +
+      "never off the line and never off the rest of the match — a file called " +
+      "`token-test.ts` excuses nothing, and neither does a host called " +
+      "`test-eu.db.company.com` (measured 2026-08-15: it used to).",
     when: ({ value }) => /(?:_test_|_sandbox_|test-|sandbox-)/i.test(String(value ?? "")),
   },
   {
@@ -435,7 +446,19 @@ function matchesIn(text) {
         continue;
       }
       if (rule.holds && !rule.holds({ value: match[0], host: match[4] })) continue;
-      out.push({ ruleId: rule.id, index: match.index, value: match[0] });
+      // 🚨 The SECRET, separately from the whole match — and the difference is a
+      // measured hole, not tidiness. `sandbox-marker` and `placeholder-value` ask
+      // "is this credential a fake one", and they were being handed the entire
+      // connection string: a perfectly ordinary production hostname
+      // (`test-eu.db.company.com`, `ci-test-runner…`) then carried the marker and
+      // excused a REAL password. Measured 2026-08-15: a `postgres://` URL whose
+      // password was a live one and whose HOST began `test-eu.` came back
+      // accepted. (The example is described rather than written out: this file
+      // scans itself, and `patterns.test.ts` requires that no complete match
+      // exists in its own text.) A rule says which group holds the secret; the
+      // default is the whole match, which is what every single-value rule wants.
+      const secret = rule.secretGroup ? (match[rule.secretGroup] ?? match[0]) : match[0];
+      out.push({ ruleId: rule.id, index: match.index, value: match[0], secret });
     }
   }
   return out;
@@ -497,7 +520,12 @@ export function scanText(text, { path = "", blank = false } = {}) {
     const rule = SECRET_RULES.find((entry) => entry.id === match.ruleId);
     const line = lineAt(starts, match.index);
     const inComment = inCode !== null && !inCode.has(keyOf(match));
-    const entry = allowlistFor({ ruleId: match.ruleId, value: match.value, path });
+    // The allowlist sees the SECRET, never the whole match — see `matchesIn()`.
+    const entry = allowlistFor({
+      ruleId: match.ruleId,
+      value: match.secret ?? match.value,
+      path,
+    });
 
     rows.push({
       ruleId: match.ruleId,
@@ -527,7 +555,25 @@ export function countSecrets(text, options = {}) {
 /** The rule behind a row, for composing a finding. Never throws over a lookup. */
 export const ruleFor = (ruleId) => SECRET_RULES.find((rule) => rule.id === ruleId) ?? null;
 
-/** Is this a file whose comments have to be blanked before it is scanned? */
+/**
+ * Is this a file whose comments have to be blanked before it is scanned?
+ *
+ * 🚨 **The list used to be `ts|tsx|mjs|js|cjs` and it was a SEVENTEENTH
+ * hand-kept answer to the question `scripts/lib/source-text.mjs` already owns.**
+ * Measured 2026-08-15, the same source text with only the extension changed:
+ * `lib/a.ts` → medium, in a comment; `lib/a.jsx`, `lib/a.mts`, `lib/a.cts` →
+ * 🚨 CRITICAL, not in a comment. `.jsx` is not hypothetical here —
+ * `scripts/dev/routes.mjs` accepts `page.jsx` as a page — so an
+ * `// example only: sk-…` in one produced a critical finding with the wrong
+ * `Why:` and `Fix:` prose and exit 1: the finding that teaches an operator to
+ * stop reading this rung.
+ *
+ * It now asks the one owner, whose default direction is the safe one (unknown
+ * extension counts as code). Kept as a named function because the rung reads
+ * better for it, and because `blank:` is a per-call option here rather than a
+ * wrapper.
+ */
 export function isSourceFile(path) {
-  return /\.(?:ts|tsx|mjs|js|cjs)$/i.test(normalisePath(path));
+  const probe = "//x\n";
+  return blankCommentsFor(normalisePath(path), probe) !== probe;
 }

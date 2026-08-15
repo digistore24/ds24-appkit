@@ -27,10 +27,14 @@ import { describe, expect, it } from "vitest";
 import { db } from "@/db";
 import { grants } from "@/db/schema";
 
+import { blankComments } from "@/scripts/lib/source-text.mjs";
+
 import { PLAN_START, activeFor } from "./manage";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
-const SOURCE = readFileSync(join(ROOT, "lib", "entitlements", "manage.ts"), "utf8");
+const SOURCE = blankComments(
+  readFileSync(join(ROOT, "lib", "entitlements", "manage.ts"), "utf8"),
+);
 
 /** The statement `planStartedAt` runs, built from the same exported parts. */
 function statement() {
@@ -83,14 +87,32 @@ describe("the statement behind planStartedAt", () => {
 });
 
 describe("what planStartedAt must not become", () => {
+  // 🚨 **Both ends of this slice are CODE, and the closing one used to be a
+  // comment.** It was `"* One grant row, whole"` — the first line of `GrantRow`'s
+  // JSDoc — so the moment `manage.ts` is read through `blankComments()` the
+  // marker is gone, `indexOf` answers -1, and `slice(start, -1)` runs to the end
+  // of the file: measured 2026-08-15, the guarded body went from 379 to 30 266
+  // characters.
+  //
+  // ⚠️ And it did NOT go red. `not.toContain("entitlementsFor")` still held,
+  // because the four later mentions of that name in `manage.ts` are themselves
+  // in comments and were blanked with it — so the assertion stayed true about
+  // half a file instead of one function, which is a different claim wearing the
+  // same green. That is the silent form this whole pass is about, produced by
+  // the pass itself.
   const body = SOURCE.slice(
     SOURCE.indexOf("export async function planStartedAt"),
-    SOURCE.indexOf("* One grant row, whole"),
+    SOURCE.indexOf("export interface GrantRow"),
   );
 
   it("found the function it is guarding", () => {
     expect(body).toContain("PLAN_START");
     expect(body.length).toBeGreaterThan(100);
+    // The other end of the same probe, and the one the comment marker had no
+    // way to give: a slice that ran past its function is not a stricter test,
+    // it is a test about something else. One function is hundreds of
+    // characters; `manage.ts` is tens of thousands.
+    expect(body.length).toBeLessThan(2000);
   });
 
   it("🚨 does not go through entitlementsFor()", () => {

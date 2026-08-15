@@ -48,7 +48,14 @@ export interface MediaStore {
   readonly driver: MediaDriver;
   put(key: string, body: Uint8Array, contentType: string): Promise<void>;
   remove(key: string): Promise<void>;
-  head(key: string): Promise<{ bytes: number } | null>;
+  /**
+   * ⚠️ `signal` is honoured by the drivers that make a REQUEST — `local` reads a
+   * local `stat()` and ignores it. It exists because a caller that wants to bound
+   * its wait has to be able to: `lib/ops/health.ts` had built the signal and had
+   * nowhere to pass it, so its `timedOut` answer could never be produced and the
+   * watchdog could hang on a bucket that accepts a connection and never replies.
+   */
+  head(key: string, signal?: AbortSignal): Promise<{ bytes: number } | null>;
   getBytes(key: string): Promise<Uint8Array | null>;
   /** An address anybody may fetch, or null when this driver has none. */
   publicUrl(key: string): string | null;

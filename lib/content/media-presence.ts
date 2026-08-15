@@ -39,6 +39,9 @@ import { mediaStore, mediaStoreProblems } from "@/lib/media/store";
 import type { PresenceItem } from "./presence";
 
 /** `content/<topic>/<file>` → the deterministic key it lands at everywhere. */
+/** One HEAD per declared file, bounded. Ten seconds is a metadata read, not a download. */
+const HEAD_TIMEOUT_MS = 10_000;
+
 const keyFor = (path: string) => CONTENT_MEDIA_BUCKET_PREFIX + path.replace(/^\/+/, "");
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -51,7 +54,16 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
  * nine-hundred-megabyte video to find out whether it is there.
  */
 export interface PresenceStore {
-  head(key: string): Promise<{ bytes: number } | null>;
+  /**
+   * 🚨 `signal` is not optional decoration — the loop below BOUNDS its wait, and
+   * it could not until this parameter existed. `MediaStore.head()` has carried
+   * it since a bucket that accepts the connection and never answers was found
+   * hanging the operations watchdog; the same bucket hangs `content-check --env
+   * prod` here, once per declared file, and that command is the go-live's exit
+   * condition. The existing `catch` turns the timeout into the third state
+   * (`notChecked`) by itself.
+   */
+  head(key: string, signal?: AbortSignal): Promise<{ bytes: number } | null>;
 }
 
 /**
@@ -187,7 +199,7 @@ export async function mediaPresence(
   if (store) {
     for (const path of withRow) {
       try {
-        const object = await store.head(keyFor(path));
+        const object = await store.head(keyFor(path), AbortSignal.timeout(HEAD_TIMEOUT_MS));
         asked += 1;
         if (object) confirmed += 1;
         else missing.push(`${path} (a media row, but no object in the store)`);

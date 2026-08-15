@@ -31,6 +31,21 @@ import {
 import { notChecked } from "@/lib/test-not-checked";
 
 const ROOT = path.join(import.meta.dirname, "..");
+
+/**
+ * ⚠️ **This one does NOT go through `blankComments()`, and that is the answer
+ * rather than an omission.** The rule in `CLAUDE.md` is about a checker that
+ * reads source as TEXT and then hunts a needle in it. Nothing here does: the
+ * two disk reads over code compare BYTES (`toBe(content)`, against what
+ * `agent-configs.mjs` would generate) and parse JSON, and the two that really
+ * do scan text read `CLAUDE.md`, `AGENTS.md` and `docs/setup-mcp.md` — markdown,
+ * where the prose IS the subject.
+ *
+ * Measured on 2026-08-15, because "it would be harmless" was the tempting
+ * answer and it is false: `.opencode/plugins/session-start.js` carries 19
+ * comment lines, so blanking one side of an identity comparison turns a
+ * byte-for-byte guard red on a tree where nothing is wrong.
+ */
 const read = (file: string) => readFileSync(path.join(ROOT, file), "utf8");
 const here = (file: string) => existsSync(path.join(ROOT, file));
 type Agent = keyof typeof AGENTS;

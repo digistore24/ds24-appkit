@@ -446,7 +446,16 @@ export const osv = {
     if (entries.length === 0) {
       return {
         state: "skipped",
-        reason: "package-lock.json resolved no package versions to ask about",
+        // 🚨 The reason has to say WHICH of the two it is. This reads the
+        // `packages` map only, and a lockfile npm 6 wrote has none — so a v1
+        // lockfile silenced this rung permanently while `npm audit
+        // --package-lock-only` read the very same file without trouble, and the
+        // operator was told there was nothing to ask.
+        reason:
+          Number(lock?.lockfileVersion) < 2
+            ? `package-lock.json is lockfileVersion ${lock.lockfileVersion}, which carries no ` +
+              "`packages` map — run `npm install` once with npm 7 or newer to rewrite it"
+            : "package-lock.json resolved no package versions to ask about",
         findings: [],
       };
     }

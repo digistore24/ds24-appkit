@@ -273,7 +273,7 @@
      is not Geist is the leftover the next reader trips on. Wired in
      app/layout.tsx. */
   --font-sans: var(--font-app-sans), system-ui, -apple-system, sans-serif;
-  --font-mono: var(--font-app-mono, ui-monospace), monospace;
+  --font-mono: var(--font-app-mono, var(--font-geist-mono, ui-monospace)), monospace;
 
   /* The heading face, and the nesting in that value is not a style — it is the
      only form that degrades.

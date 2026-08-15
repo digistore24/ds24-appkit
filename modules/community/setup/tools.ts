@@ -76,10 +76,35 @@ const groupUpsert: SetupTool = {
   },
   async run(context, input): Promise<SetupResult> {
     const name = String(input.name).trim();
-    const accessLevel = String(input.accessLevel ?? "open") as GroupAccessLevel;
-    const planKeys = Array.isArray(input.planKeys) ? (input.planKeys as string[]) : [];
-
     const existing = (await listGroups()).find((group) => sameName(group.name, name));
+
+    // 🚨 **An UPSERT patches; it does not overwrite what the caller left out.**
+    // `accessLevel` is optional and the schema carries `default: "open"`, so a
+    // second call that only corrects the NAME used to send `accessLevel: "open"`
+    // and `description: undefined` — and `updateGroup()` writes both
+    // unconditionally. A room the agent had created as `plan` was therefore
+    // opened to every member, and its description deleted, by a call that meant
+    // to fix a typo. `checkedGroup()` then discards `planKeys` too, because they
+    // only survive while the level is `plan`.
+    //
+    // ⚠️ The absent value and the empty one are different: `undefined` means
+    // "leave it", `""`/`[]` mean "clear it". So the check is `=== undefined`,
+    // never a falsy test.
+    //
+    // On CREATE the schema default is right and stays: a new room with no level
+    // named is open.
+    const accessLevel = (
+      input.accessLevel === undefined && existing
+        ? existing.accessLevel
+        : String(input.accessLevel ?? "open")
+    ) as GroupAccessLevel;
+    const planKeys = Array.isArray(input.planKeys)
+      ? (input.planKeys as string[])
+      : input.planKeys === undefined && existing
+        ? existing.planKeys
+        : [];
+    const description =
+      input.description === undefined && existing ? existing.description : input.description;
 
     if (context.mode === "plan") {
       return {
@@ -89,7 +114,12 @@ const groupUpsert: SetupTool = {
         changed: existing ? 1 : 0,
         subjects: [name],
         detail: existing
-          ? `the room "${name}" exists and would be updated to ${accessLevel}`
+          ? `the room "${name}" exists and would be updated to ${accessLevel}` +
+            // An archived room is invisible to every member. `listGroups()`
+            // returns archived rooms on purpose, so an upsert can land on one —
+            // and the answer used to say `updated` with nothing to tell the
+            // agent why nobody can see it.
+            (existing.archivedAt ? " — ⚠️ it is ARCHIVED, so no member sees it" : "")
           : `a room "${name}" would be created as ${accessLevel}`,
       };
     }
@@ -99,8 +129,8 @@ const groupUpsert: SetupTool = {
     // `hasPlan()` THROWS on a Product Key it does not know, so a room saved with
     // a typo would take the page down rather than mean "no access".
     const row = existing
-      ? await updateGroup(existing.id, { name, description: input.description, accessLevel, planKeys })
-      : await createGroup({ name, description: input.description, accessLevel, planKeys });
+      ? await updateGroup(existing.id, { name, description, accessLevel, planKeys })
+      : await createGroup({ name, description, accessLevel, planKeys });
 
     return {
       mode: "apply",
@@ -108,8 +138,19 @@ const groupUpsert: SetupTool = {
       found: existing ? 1 : 0,
       changed: existing ? 1 : 0,
       subjects: [name],
-      detail: existing ? `room "${name}" updated` : `room "${name}" created`,
-      data: { id: row.id, name: row.name, accessLevel: row.accessLevel },
+      detail:
+        (existing ? `room "${name}" updated` : `room "${name}" created`) +
+        (row.archivedAt ? " — ⚠️ it is ARCHIVED, so no member sees it" : ""),
+      // `archived` travels because the read tool has it and this one did not:
+      // an agent that upserts a room and is told `updated` has no way to learn
+      // that nobody can see it. Whether an upsert should UN-archive is a
+      // question about the module's design and is deliberately left alone here.
+      data: {
+        id: row.id,
+        name: row.name,
+        accessLevel: row.accessLevel,
+        archived: row.archivedAt !== null,
+      },
     };
   },
 };

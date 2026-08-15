@@ -199,6 +199,72 @@ function movesOnly(
   return report;
 }
 
+describe("🚨 the seam: the shape `courses_outline` really answers", () => {
+  // The test that was missing, and its absence cost a CRITICAL. On 2026-08-13
+  // the tool's payload moved up a level — `{ fingerprintVersion, courses: [{
+  // slug, blocks }] }` where it used to be `{ …, blocks }` — and `compareCourse`
+  // kept reading `.blocks`. Every fixture in this file was written in the OLD
+  // shape, and `courses-diff.test.ts` only reads the command's SOURCE, so
+  // nothing anywhere put the tool's answer into the comparison. Result:
+  // `courses-diff --env prod` reported EVERYTHING AS NEW against an app holding
+  // the course whole, with `0 untouched`, `0 only there`, `0 refused` and not
+  // one warning line — the answer 35.2 AC4 forbids in those words.
+  //
+  // So this describe compares against the payload as the tool builds it, not as
+  // a fixture remembers it.
+  const asCourses = (blocks: LocalBlock[]) => {
+    const old = published(blocks);
+    return {
+      fingerprintVersion: old.fingerprintVersion,
+      courses: [{ slug: "kurs", title: "Kurs", blocks: old.blocks }],
+    };
+  };
+  const inCourse = (blocks: LocalBlock[]) => blocks.map((b) => ({ ...b, course: "kurs" }));
+
+  it("is untouched everywhere — the same answer the old shape gives", () => {
+    const local = inCourse(localCourse());
+    expect(diffCounts(compareCourse(local, asCourses(localCourse())))).toEqual({
+      blocks: { new: 0, changed: 0, untouched: 2, targetOnly: 0, refused: 0 },
+      units: { new: 0, changed: 0, untouched: 3, targetOnly: 0, refused: 0 },
+    });
+  });
+
+  it("🚨 still reads a deploy that answers the OLD shape — with the REAL local form", () => {
+    // ⚠️ This test was vacuous for a day, and the way it was vacuous is the
+    // lesson: it passed `localCourse()` WITHOUT `course`, a shape `readBlocks()`
+    // cannot produce — it sets `course` on every block unconditionally
+    // (`content/appliers/course.mjs`). So it measured a pairing that never
+    // happens, stayed green, and the composite key it was meant to protect
+    // silently reintroduced "everything is new" against every pre-2026-08-13
+    // deploy. Measured then: `{new: 1, untouched: 0, targetOnly: 1}`.
+    //
+    // The local side is now what the reader really hands over.
+    expect(diffCounts(compareCourse(inCourse(localCourse()), published(localCourse())))).toEqual({
+      blocks: { new: 0, changed: 0, untouched: 2, targetOnly: 0, refused: 0 },
+      units: { new: 0, changed: 0, untouched: 3, targetOnly: 0, refused: 0 },
+    });
+  });
+
+  it("🚨 a block MOVED between courses is a change, never new-plus-only-there", () => {
+    // This replaced a test that guarded an impossible state. Two courses cannot
+    // share a block slug: `courses_blocks_slug` is a unique index and
+    // `readCourseContent()` refuses a duplicate across course folders with one
+    // global `seenSlug` map. What IS reachable is the operator moving a block
+    // file into another course folder — and the applier upserts ON THE SLUG
+    // (`on conflict (slug) do update set course_id = …`), so it MOVES the row.
+    //
+    // Keyed by course that read as `new` + `targetOnly`, and `sameSubjectPairs()`
+    // then offered a pair whose slugs are IDENTICAL under a heading that says
+    // DIFFERENT SLUG.
+    const moved = inCourse(localCourse()).map((block) => ({ ...block, course: "zweiter-kurs" }));
+    const counts = diffCounts(compareCourse(moved, asCourses(localCourse())));
+
+    expect(counts.blocks.new, "a moved block is not a new one").toBe(0);
+    expect(counts.blocks.targetOnly, "and it has not vanished from over there").toBe(0);
+    expect(counts.blocks.untouched + counts.blocks.changed).toBe(2);
+  });
+});
+
 describe("the baseline — this repo, published, compared against itself", () => {
   it("is untouched everywhere, and the lists are not empty", () => {
     const report = baseline();

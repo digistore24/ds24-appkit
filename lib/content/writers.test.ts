@@ -395,9 +395,15 @@ describe("no module writes one row class from both routes", () => {
       .slice(1)
       .map((chunk) => ({ name: chunk.slice(0, chunk.indexOf("(")).trim(), body: chunk }));
 
-    const inserts = functions.filter(({ body }) => /\.insert\(courses(Blocks|Units)\)/.test(body));
+    // ⚠️ `Courses` joined the pattern on 2026-08-15. `courses_courses` arrived
+    // with Story 44.2 and this scan still read only the two older tables — so
+    // the first admin action to write a course ROW would have been invisible to
+    // the guard that exists to keep the applier the only writer of
+    // `origin = "content"`. No such writer exists today; the pattern is the
+    // thing that has to be complete, not the tree.
+    const inserts = functions.filter(({ body }) => /\.insert\(courses(Blocks|Units|Courses)\)/.test(body));
     const mutations = functions.filter(({ body }) =>
-      /\.(update|delete)\(courses(Blocks|Units)\)/.test(body),
+      /\.(update|delete)\(courses(Blocks|Units|Courses)\)/.test(body),
     );
 
     expect(
@@ -423,7 +429,7 @@ describe("no module writes one row class from both routes", () => {
         `modules/courses/lib/manage.ts → ${name}() updates or deletes a partitioned table with ` +
           `no \`origin\` condition. That statement can reach a row a content file owns, which ` +
           `the operator's surface may never touch. The rule this breaks:\n  ${PARTITIONED.courses}`,
-      ).toMatch(/eq\(courses(Blocks|Units)\.origin,\s*"operator"\)/);
+      ).toMatch(/eq\(courses(Blocks|Units|Courses)\.origin,\s*"operator"\)/);
     }
   });
 });

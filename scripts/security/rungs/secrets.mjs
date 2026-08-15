@@ -74,7 +74,13 @@ const MAX_BYTES = 512 * 1024;
 const BINARY_PROBE = 8 * 1024;
 
 /** The `.env` files that legitimately hold live values and are never committed. */
-const LOCAL_ENV = /^\.env(?:\.local|\.[^.]+\.local)?$/;
+// ⚠️ `.env.staging` and `.env.production` are here on purpose. They are not
+// `.local` files, but they are the same THING — an untracked file on this
+// machine holding live values — and without them such a file appeared in
+// neither `tracked` nor `envFilesIn()`, so it was not even counted apart. The
+// line whose stated purpose is "so that nobody mistakes its absence for nobody
+// having looked at it" was the line that went missing.
+const LOCAL_ENV = /^\.env(?:\.local|\.[^.]+(?:\.local)?)?$/;
 
 /** The only `.env*` files that belong in git. */
 const COMMITTABLE_ENV = /^\.env\.example$|^\.env\.[^.]+\.example$/;
@@ -287,6 +293,8 @@ export const secrets = {
     const tracked = splitNul(listed.stdout);
 
     const findings = [];
+    /** Matches an allowlist entry excused — printed, never counted (`rules.mjs`). */
+    const accepted = [];
     /** `path:line:ruleId` of everything the disk pass reported — the staged pass dedupes on it. */
     const onDisk = new Set();
     let skippedFiles = 0;
@@ -301,7 +309,16 @@ export const secrets = {
         continue;
       }
       for (const row of scanText(text, { path, blank: isSourceFile(path) })) {
-        if (row.accepted) continue;
+        if (row.accepted) {
+          // 🚨 Kept, not swallowed. `rules.mjs` writes it as the contract —
+          // "never counted, always printed" — and this rung dropped it on the
+          // floor: an accepted match appeared in no ✅ block, no counter, no
+          // `--json` and no record. Combined with the allowlist reading a whole
+          // connection string, a real production password could be excused by
+          // its HOSTNAME and then leave no trace anywhere at all.
+          accepted.push(findingFrom(row, path));
+          continue;
+        }
         onDisk.add(`${path}:${row.line}:${row.ruleId}`);
         findings.push(findingFrom(row, path));
       }
@@ -321,7 +338,17 @@ export const secrets = {
     // once as `<subdir>/lib/x.ts` — because the dedup key could never line up.
     // `--relative` also scopes the diff to this app, which is the right scope.
     const staged = await capture("git", ["diff", "--cached", "--name-only", "--relative", "-z"], { cwd });
-    const stagedPaths = Number(staged.code) === 0 ? splitNul(staged.stdout) : [];
+    const stagedOk = Number(staged.code) === 0;
+    const stagedPaths = stagedOk ? splitNul(staged.stdout) : [];
+    // 🚨 A FAILED `git diff --cached` used to read exactly like a clean index:
+    // the evidence said `git diff --cached (0 staged)` either way. A running
+    // rebase, an `index.lock`, a damaged index — and the half this rung was
+    // built for ("a secret that was staged and then edited out of the working
+    // copy") silently did not happen. `skipReason()` already existed for this
+    // and was never used on this call.
+    const stagedNote = stagedOk
+      ? `git diff --cached (${stagedPaths.length} staged)`
+      : `⚠️ git diff --cached was NOT read: ${skipReason(staged)}`;
 
     for (const path of stagedPaths) {
       // `:./<path>` — the leading `./` is what makes git read the path relative
@@ -336,7 +363,15 @@ export const secrets = {
         continue;
       }
       for (const row of scanText(blob.stdout, { path, blank: isSourceFile(path) })) {
-        if (row.accepted) continue;
+        if (row.accepted) {
+          // Same rule as on disk. The dedup below is for FINDINGS; an accepted
+          // match that exists in both copies is one acceptance, so it is only
+          // kept when the disk pass did not already see it.
+          if (!onDisk.has(`${path}:${row.line}:${row.ruleId}`)) {
+            accepted.push(findingFrom(row, path, true));
+          }
+          continue;
+        }
         // The same rule at the same line, already reported off the disk copy, is
         // ONE finding rather than two — the operator fixes it once. What survives
         // is what the disk does not have: the value staged and then edited out.
@@ -371,12 +406,24 @@ export const secrets = {
       `${skippedFiles} skipped as binary or oversized` +
       (unreadable > 0 ? `, ${unreadable} unreadable` : "");
 
+    // A rung that found something must still report `found` — `aggregate()`
+    // discards a skipped outcome's findings — so the unread half travels in the
+    // evidence there, and only an otherwise-clean run becomes a skip.
+    if (findings.length === 0 && !stagedOk) {
+      return {
+        state: "skipped",
+        reason: `the staged half could not be read: ${skipReason(staged)}`,
+        findings: [],
+      };
+    }
+
     return {
       state: findings.length > 0 ? "found" : "clean",
       findings,
+      accepted,
       evidence:
         `git ls-files --cached (${tracked.length} file(s), ${skippedNote}), ` +
-        `git diff --cached (${stagedPaths.length} staged)` +
+        `${stagedNote}` +
         (localEnvs > 0 ? `, plus ${localEnvs} local .env file(s) counted apart` : "") +
         ". 🚨 Git HISTORY was NOT scanned — a value that was committed and then " +
         "deleted is invisible here; that is a rung of its own and it needs gitleaks.",

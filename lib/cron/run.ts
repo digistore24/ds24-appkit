@@ -122,7 +122,15 @@ export async function runOne(job: CronJob, now: Date, force = false): Promise<Jo
     // a provider's error text.
     const detail = error instanceof Error ? error.message : String(error);
     await finish(job.id, "failed", detail, new Date());
-    console.error(`[cron] ${job.id} FAILED after ${ms}ms:`, error);
+    // 🚨 Always an `Error` on the log line, whatever was thrown.
+    // `lib/diagnostics/parse.mjs` recognises a `[cron]` failure by the
+    // `<Word>Error` that follows the colon — so a job that throws a STRING
+    // wrote a line `node run.mjs errors` could not see, and a job has no status
+    // code to be noticed by instead: the log line is its only signal.
+    console.error(
+      `[cron] ${job.id} FAILED after ${ms}ms:`,
+      error instanceof Error ? error : new Error(String(error)),
+    );
     return { job: job.id, outcome: "failed", detail, ms };
   }
 }

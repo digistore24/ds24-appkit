@@ -45,7 +45,10 @@ vi.mock("@/db", () => ({
 }));
 
 /** The store this installation would really use, as `mediaPresence()` finds it. */
-const head = vi.fn<(key: string) => Promise<{ bytes: number } | null>>();
+// The signature the store really has since 2026-08-15 — the `signal` is not
+// optional decoration here: the loop bounds its wait with it, and typing the
+// mock without it hid that the call site had no bound at all.
+const head = vi.fn<(key: string, signal?: AbortSignal) => Promise<{ bytes: number } | null>>();
 const storeProblems = vi.fn<() => string[]>();
 
 vi.mock("@/lib/media/store", () => ({
@@ -143,8 +146,15 @@ describe("🚨 a row whose object is not in the store", () => {
     await mediaPresence({ entries: [entry("kurs/intro.mp4"), entry("kurs/cover.png")] });
 
     expect(head).toHaveBeenCalledTimes(2);
-    expect(head).toHaveBeenCalledWith(keyOf("kurs/intro.mp4"));
-    expect(head).toHaveBeenCalledWith(keyOf("kurs/cover.png"));
+    expect(head).toHaveBeenCalledWith(keyOf("kurs/intro.mp4"), expect.any(AbortSignal));
+    expect(head).toHaveBeenCalledWith(keyOf("kurs/cover.png"), expect.any(AbortSignal));
+    // 🚨 The signal is asserted, not tolerated. Without it a bucket that accepts
+    // the connection and never answers hangs `content-check --env prod` — the
+    // go-live's exit condition — once per declared file, and the third state
+    // (`notChecked`) that the catch below produces is unreachable.
+    for (const call of head.mock.calls) {
+      expect(call[1], "a HEAD with no bound can hang for ever").toBeInstanceOf(AbortSignal);
+    }
   });
 
   it("does not spend a round-trip on a declared file that has no row", async () => {
@@ -157,7 +167,7 @@ describe("🚨 a row whose object is not in the store", () => {
     });
 
     expect(head).toHaveBeenCalledTimes(1);
-    expect(head).toHaveBeenCalledWith(keyOf("kurs/intro.mp4"));
+    expect(head).toHaveBeenCalledWith(keyOf("kurs/intro.mp4"), expect.any(AbortSignal));
     expect(item.missing).toEqual(["kurs/fehlt.mp4 (no media row)"]);
   });
 

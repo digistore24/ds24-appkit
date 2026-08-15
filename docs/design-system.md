@@ -83,7 +83,7 @@ through `--font-sans` and `--font-heading` in `app/globals.css`:
 | Variable | The shipped face | Where it reaches |
 |---|---|---|
 | `--font-app-sans` | Figtree | `body`, and everything that inherits from it |
-| `--font-app-heading` | Source Serif 4 | `h1`–`h4`, through one rule in `@layer base` |
+| `--font-app-heading` | Source Serif 4 | **`h1` only**, through one rule in `@layer base` — not `h2`–`h4`, see §3 |
 
 **Both are loaded with `next/font/local` from an npm package rather than
 `next/font/google`.** That is worth knowing before you change either:
@@ -106,10 +106,15 @@ write a value where the dial already turns: the heading face reaches an `h1`
 through the rule in `@layer base`, never through a class somebody remembered.
 `node run.mjs ux-check` counts both and names the dial each one bypasses (§7).
 
-⚠️ **There is a third role variable in this file and it resolves to nothing
-today.** `--font-mono` is mapped to `--font-app-mono`, which the tree defines
-nowhere, so `font-mono` quietly inherits the body face; the note sits beside it
-in `app/globals.css`. It is **not** a fifth dial and not a third arm of the type
+⚠️ **There is a third role variable in this file, and its APP slot is empty on
+purpose.** `--font-mono` reads `--font-app-mono` first — which the tree defines
+nowhere, because a second face is a decision nobody has made — and falls through
+to the shipped `GeistMono`, then to the system monospace. The sentence that
+stood here said `font-mono` "quietly inherits the body face"; that described the
+state before the syntax was repaired, and after the repair it fell to the SYSTEM
+face while `GeistMono` was still being loaded and preloaded on every page. Both
+are fixed: the slot is still empty, and the face that ships is the face that
+renders. The note sits beside it in `app/globals.css`. It is **not** a fifth dial and not a third arm of the type
 one — a monospace face has never been something an app here turns,
 `node run.mjs brand` never writes one and `design` never asks about one. Saying so
 is what keeps §8's closed list honest: an empty slot and a missing slot are
@@ -249,7 +254,7 @@ in the mode nobody was looking at. A token that legitimately has no dark answer
 goes on `MODE_SINGLE_TOKENS` in `scripts/ux/rules.mjs` with its reason beside it;
 `--radius` is the one entry, because a corner does not change with the mode.
 
-Each green line names what it counted — `121 file(s) scanned`, `34 token(s)
+Each green line names what it counted — `N file(s) scanned`, `34 token(s)
 compared` — so that *nothing found* and *nothing looked at* are different
 sentences.
 

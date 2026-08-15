@@ -403,6 +403,14 @@ describe("the two key spaces of the direct path never meet", () => {
     { namespace: "core", category: "setup", owner: "the setup surface's media_upload tool" },
     { namespace: "core", category: "generated", owner: "generateImage()" },
     { namespace: "community", category: "profile", owner: "the community module's avatar" },
+    // ⚠️ Added 2026-08-15, and its absence is the argument. Story 26.1's own
+    // record names this list as a SAMPLE of the key space and warns that "a
+    // module contributing a slot nobody enters here is not in the loop" — and
+    // Story 26.2 then contributed exactly that (`POST_IMAGE_SLOT`), while
+    // `toBeGreaterThanOrEqual(8)` stayed green. A hand-kept list of what ships
+    // is the same shape as the hand-kept module-command list that silently
+    // skipped both `courses-*` commands for as long as they existed.
+    { namespace: "community", category: "post", owner: "the community module's post image" },
     { namespace: "courses", category: "cover", owner: "the courses module's lesson cover" },
     { namespace: "courses", category: "video", owner: "the courses module's recording" },
     { namespace: "courses", category: "subtitle", owner: "the courses module's VTT" },
@@ -428,7 +436,7 @@ describe("the two key spaces of the direct path never meet", () => {
 
     // Non-vacuity for the loop below: an empty list would report the whole key
     // space as disjoint from the sweep's prefix by finding nothing at all.
-    expect(SHIPPED_SLOTS.length).toBeGreaterThanOrEqual(8);
+    expect(SHIPPED_SLOTS.length).toBeGreaterThanOrEqual(9);
 
     for (const { namespace, category, owner } of SHIPPED_SLOTS) {
       expect(

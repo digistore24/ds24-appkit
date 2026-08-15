@@ -79,11 +79,12 @@ for (const report of reports) {
     console.log(`  ✗ ${report.owner.padEnd(12)} could not answer — ${report.unanswered}`);
     continue;
   }
-  if (report.items.length === 0) {
+  const items = report.items ?? [];
+  if (items.length === 0) {
     console.log(`  · ${report.owner.padEnd(12)} nothing of its own to hold`);
     continue;
   }
-  for (const item of report.items) {
+  for (const item of items) {
     const expected = item.expected === null ? "" : ` of ${item.expected}`;
     // 🚨 Three marks for three states, and `⏭` is the one this command was
     // missing. A named absence is a finding and outranks everything — an object

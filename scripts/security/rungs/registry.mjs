@@ -499,6 +499,8 @@ async function askAbout(
   const problems = [];
   let registryOk = 0;
   let dateOk = 0;
+  /** HTTP 404 — the service answered, and its answer is "I do not know this". */
+  let notFound = 0;
   let rateLimited = false;
 
   const note = (error) => {
@@ -514,16 +516,29 @@ async function askAbout(
       const entry = entries[index];
       const answer = { entry, doc: null, publishedAt: "" };
 
+      // 🚨 `getJson()` answers `null` on HTTP 404 rather than throwing, so a
+      // package the service does not know about used to count as ANSWERED —
+      // `complete` then meant "nothing threw", not "everything replied", and the
+      // evidence read `0 of N lookup(s) went unanswered` over exactly the
+      // packages nobody outside can check (private, internal, a version the
+      // index has not seen). `youngFinding()` fell out quietly on the empty
+      // date. A 404 is a partial answer, and 30.3 AC5 says a partial answer is
+      // never a clean pass.
       try {
         answer.doc = await registry(entry);
-        registryOk += 1;
+        if (answer.doc === null) notFound += 1;
+        else registryOk += 1;
       } catch (error) {
         note(error);
       }
       try {
         const dated = await dates(entry);
-        answer.publishedAt = typeof dated?.publishedAt === "string" ? dated.publishedAt : "";
-        dateOk += 1;
+        if (dated === null) {
+          notFound += 1;
+        } else {
+          answer.publishedAt = typeof dated?.publishedAt === "string" ? dated.publishedAt : "";
+          dateOk += 1;
+        }
       } catch (error) {
         note(error);
       }
@@ -533,7 +548,7 @@ async function askAbout(
   };
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, entries.length) }, worker));
 
-  return { answers, problems, registryOk, dateOk, rateLimited, asked: entries.length };
+  return { answers, problems, registryOk, dateOk, notFound, rateLimited, asked: entries.length };
 }
 
 // ── the rung ────────────────────────────────────────────────────────────────
@@ -610,7 +625,13 @@ export const registry = {
     if (entries.length === 0) {
       return {
         state: "skipped",
-        reason: `package-lock.json resolved no package versions to ask about (${scope})`,
+        // Same distinction as `osv.mjs` — see the note there. A v1 lockfile has
+        // no `packages` map, and "nothing to ask" is not what happened.
+        reason:
+          Number(lock?.lockfileVersion) < 2
+            ? `package-lock.json is lockfileVersion ${lock.lockfileVersion}, which carries no ` +
+              "`packages` map — run `npm install` once with npm 7 or newer to rewrite it"
+            : `package-lock.json resolved no package versions to ask about (${scope})`,
         findings: [],
       };
     }
@@ -638,7 +659,11 @@ export const registry = {
     // unreachable host is something they go and look at.
     const why = answer.rateLimited
       ? (answer.problems.find((problem) => problem.includes("429")) ?? answer.problems[0])
-      : (answer.problems[0] ?? "the requests did not all come back");
+      : (answer.problems[0] ??
+        (answer.notFound > 0
+          ? `${answer.notFound} lookup(s) came back 404 — the service does not know that ` +
+            "package or version (a private or internal one looks exactly like this)"
+          : "the requests did not all come back"));
 
     const evidence =
       `GET ${REGISTRY_BASE}/<name>/<version> and ${DEPS_DEV_BASE}/v3/… per entry, ` +

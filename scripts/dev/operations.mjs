@@ -342,11 +342,28 @@ export function roundFact(newest, { now = Date.now(), appUnderWay = false } = {}
   }
 
   const at = Date.parse(`${newest}T00:00:00.000Z`);
-  // Not a date after all, so nobody knows when the round last ran. Said rather
-  // than swallowed, because a name that does not parse is not evidence of a
-  // recent round — but never as "never", which would be a claim about a report
-  // that is plainly there.
+  // Not a date after all — unreachable from here (`newestRoundDate()` validates
+  // through a `toISOString()` round trip), kept because this function is
+  // exported and somebody may hand it a name directly. `null` is the honest
+  // answer: a name nobody can read is not evidence of a recent round, and it is
+  // not evidence of "never" either.
   if (!Number.isFinite(at)) return null;
+
+  // 🚨 A date in the FUTURE. `newestRoundDate()` deliberately hands one back
+  // when it is the only report there is — its test argues that claiming "never
+  // run" about a file somebody can see would be the worse lie — and this
+  // function then fell through `now - at <= MAX_ROUND_AGE` and said NOTHING.
+  // Measured 2026-08-15: a single `operations-2126-01-01.md`, the first round
+  // report with a mistyped year, silenced this fact for a century. The absence
+  // of the line is a STATE in this template ("nothing is open"), so silence was
+  // the one answer that could not be given.
+  if (at > now) {
+    return fact(
+      `the newest report in docs/reports/ is dated ${newest}, which is in the future — ` +
+        `so when the round last ran cannot be read off it. Check the file name`,
+    );
+  }
+
   if (now - at <= MAX_ROUND_AGE) return null;
 
   const days = Math.floor((now - at) / DAY);

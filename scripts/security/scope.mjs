@@ -434,9 +434,19 @@ export async function scope({ root = PROJECT_ROOT } = {}) {
   // one spelling counted against a total in another, and `db/schema.ts` would
   // never match `apps/shop/db/schema.ts`. With it, all four listings speak the
   // app's own paths. Where the app IS the repository root it changes nothing.
-  const committed = await gitZ(["diff", "--relative", "--name-only", "-z", base, "HEAD"], cwd);
-  const working = await gitZ(["diff", "--relative", "--name-only", "-z", "HEAD"], cwd);
-  const staged = await gitZ(["diff", "--relative", "--name-only", "-z", "--cached"], cwd);
+  // 🚨 `--no-renames`, in all three. Git's rename detection reports a moved file
+  // ONCE, under its new path — so `git mv lib/digistore/ipn.ts lib/payments/`
+  // dropped `lib/digistore/` out of the change set entirely and the money area
+  // was never pulled in. Measured 2026-08-15 against real git: with detection
+  // the diff names one path, without it names both. A move is a change to BOTH
+  // places, and this file's whole job is deciding which areas a change reaches.
+  const RENAMES = "--no-renames";
+  const committed = await gitZ(
+    ["diff", RENAMES, "--relative", "--name-only", "-z", base, "HEAD"],
+    cwd,
+  );
+  const working = await gitZ(["diff", RENAMES, "--relative", "--name-only", "-z", "HEAD"], cwd);
+  const staged = await gitZ(["diff", RENAMES, "--relative", "--name-only", "-z", "--cached"], cwd);
   const untracked = await gitZ(["ls-files", "--others", "--exclude-standard", "-z"], cwd);
   if (!committed || !working || !staged || !untracked) {
     return fullMode("git could not list what changed, so no change set could be built.");

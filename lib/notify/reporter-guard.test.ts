@@ -33,6 +33,20 @@ const ROOT = process.cwd();
 /** Everything a customer's app is built from. */
 const SCANNED = ["app", "lib", "components", "hooks", "db", "i18n", "scripts", "modules"];
 
+/**
+ * ⚠️ And the FLAT files at the root, which are not in any of those directories:
+ * `instrumentation.ts`, `proxy.ts`, `auth.config.ts`, `next.config.ts`, `run.mjs`.
+ * A `notifyOperators()` call in one of them is a second reporter and this guard
+ * would not have seen it — the same gap `scripts/lib/source-text.test.ts`
+ * records for its own walk, in the same words: a list of places to look is only
+ * as good as the place nobody thought to name. Measured at zero on the tree of
+ * the day it was added.
+ */
+const rootFiles = (): string[] =>
+  readdirSync(ROOT).filter(
+    (entry) => /\.(ts|tsx|mjs)$/.test(entry) && !statSync(join(ROOT, entry)).isDirectory(),
+  );
+
 const SKIP_DIRS = new Set(["node_modules", ".next", ".dev", "dist"]);
 
 /** The one name, spelled once, which is why this file is on the allowlist. */
@@ -104,7 +118,9 @@ function names(file: string): boolean {
 const isTest = (file: string) => /\.test\.(ts|tsx|mjs|js)$/.test(file);
 
 const perDirectory = SCANNED.map((dir) => [dir, [...sourceFiles(dir)]] as const);
-const files = perDirectory.flatMap(([, found]) => found).map((p) => p.split(sep).join("/"));
+const files = [...perDirectory.flatMap(([, found]) => found), ...rootFiles()].map((p) =>
+  p.split(sep).join("/"),
+);
 const callers = files.filter((file) => !isTest(file)).filter(names).sort();
 
 describe("one operational reporter (NFR-67)", () => {
@@ -117,6 +133,12 @@ describe("one operational reporter (NFR-67)", () => {
     for (const [dir, found] of perDirectory) {
       expect(found.length, `${dir}/ was scanned and found nothing`).toBeGreaterThan(0);
     }
+    // The root is its own count guard, for the same reason: it is a handful of
+    // files, so it disappears in the total above.
+    expect(rootFiles().length, "the repository root was scanned and found nothing").toBeGreaterThan(
+      0,
+    );
+    expect(files).toContain("proxy.ts");
     // And the needle really is one: the two files that MUST name it do.
     expect(callers).toContain("lib/notify/operators.ts");
     expect(callers).toContain("lib/ops/watchdog.ts");

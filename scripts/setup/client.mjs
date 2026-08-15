@@ -49,6 +49,18 @@
  * `scripts/mcp/server.mjs` — see the note at the top of this file for why that
  * one stays.
  */
+/**
+ * How long any setup request may take before it is abandoned.
+ *
+ * 🚨 One constant, exported, and imported by every caller — never a second
+ * number. The four requests on this path (`scripts/setup/check.mjs` twice, this
+ * file, and `scripts/mcp/server.mjs`) had NO bound at all until 2026-08-15,
+ * while every other request in this template carries one. Sixty seconds rather
+ * than the health probes' ten: a setup call runs a real tool at the far end —
+ * a publish, an upload — where ten seconds is a normal wait.
+ */
+export const SETUP_TIMEOUT_MS = 60_000;
+
 export const ENVIRONMENTS = {
   development: { urlVar: "APP_URL", keyVar: "SETUP_KEY" },
   staging: { urlVar: "APP_URL_STAGING", keyVar: "SETUP_KEY_STAGING" },
@@ -139,6 +151,7 @@ export async function callSetup(env, body, options = {}) {
   try {
     response = await send(url, {
       method: "POST",
+      signal: AbortSignal.timeout(SETUP_TIMEOUT_MS),
       headers: { authorization: `Bearer ${target.key}`, "content-type": "application/json" },
       body: JSON.stringify({ env, ...body }),
     });
@@ -147,7 +160,23 @@ export async function callSetup(env, body, options = {}) {
     return refusal("unreachable", 1, [`${target.url} did not answer (${error.message})`]);
   }
 
-  const text = await response.text();
+  // 🚨 A FOURTH exit, and it is the one this file's own doctrine forbids
+  // leaving unnamed. `send()` is wrapped; `response.text()` is not, and it
+  // throws when the body is cut off mid-stream. That escaped past all three of
+  // NFR-60's sentences as a raw undici stack trace — on the commands
+  // `content-check --env prod` and `content-publish`, which `CLAUDE.md` names
+  // as the exit condition for a go-live. Same defect as `scripts/cron/run.mjs`,
+  // measured there.
+  let text;
+  try {
+    text = await response.text();
+  } catch (error) {
+    return refusal("unreachable", 1, [
+      `${target.url} answered ${response.status} and then stopped sending (${error.message}).`,
+      `  The connection was cut while the answer was arriving, so nothing was learned`,
+      `  about that app. This is a transport fault, not a refusal — try again.`,
+    ]);
+  }
 
   // ② the surface is off there, or that app predates it. A bodiless 404 is the
   // switched-off surface saying nothing, deliberately — and from outside it is

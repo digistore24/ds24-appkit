@@ -80,8 +80,20 @@ export function contentFileIndex(dir: string = CONTENT_DIR): ContentFileIndex {
   let entries: { name: string; isDirectory: () => boolean; isFile: () => boolean }[];
   try {
     entries = readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return { courses, blocks, units, unreadable };
+  } catch (error) {
+    // 🚨 `ENOENT` is "this app has no course files yet" — a legitimate, common
+    // state, and the empty index is the right answer for it. ANY OTHER error is
+    // not, and answering it with an empty index made `content-check --env prod`
+    // print `✓ every owner answered, nothing missing` with exit 0 over an
+    // environment holding NO courses: `declaredCourses` is the only `expected`
+    // the whole check has (`presence/check.ts`), so zero declared means zero
+    // missing. `scripts/content/_appliers.mjs` refuses one layer up for exactly
+    // this — "not carried into the build IS `ENOENT`" — and one file further in
+    // the same question was being answered silently with 0.
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {
+      return { courses, blocks, units, unreadable };
+    }
+    throw error;
   }
 
   // The old layout, reported rather than swept up — see `unreadable` above.

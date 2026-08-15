@@ -35,6 +35,9 @@ import type { MediaVisibility } from "@/lib/media/rules";
 import { isRole } from "@/lib/roles";
 import { mayAssignRole } from "./rules";
 import { describeTools } from "./registry";
+// The one answer to "what prefix do this module's tools carry" — the same
+// function `moduleToolNameProblem()` enforces with, never a second substitution.
+import { toolPrefixOf } from "./rules";
 import type { SetupContext, SetupResult, SetupTool } from "./types";
 
 /** Everything a read tool answers with — nothing created, nothing changed. */
@@ -60,10 +63,26 @@ const listModules: SetupTool = {
     const installed = installedModules();
     const gates = new Map(MODULE_GATES.map((gate) => [gate.id, gate]));
 
+    // 🚨 The tools each module contributes, per module. This description has
+    // promised them since the tool existed ("…and which setup tools they
+    // contribute") and the payload carried none — the whole list lived in
+    // `list_environment`, which the description does not mention. That sentence
+    // travels to the MODEL in every `tools/list`, so an agent asking what a
+    // module brings got a module list without tools and concluded the module
+    // brings none: the empty set read as an answer, with a consequence.
+    //
+    // Read off the composed registry rather than from a second list: a tool is a
+    // module's exactly when its name carries the module's prefix, which
+    // `moduleToolNameProblem()` in `rules.ts` is what enforces.
+    const described = describeTools();
+
     const modules = installed.map((id) => {
       const gate = gates.get(id);
       return {
         id,
+        tools: described
+          .filter((tool) => tool.name.startsWith(`${toolPrefixOf(id)}_`))
+          .map((tool) => tool.name),
         // The module's OWN reader answers this, so unlike `node run.mjs module
         // list` — which reads the switch file weakly and can only be certain
         // about "off" — both directions are certain here.

@@ -428,10 +428,21 @@ export function findDialBypasses(source) {
  * next, which is why the value is prose and not `true`.
  */
 export const MODE_SINGLE_TOKENS = {
-  radius:
-    "A corner does not change with the mode. --radius is a length, not a " +
-    "colour, and the dark block has nothing to say about it — repeating it " +
-    "there would be a second place to edit the same decision.",
+  radius: {
+    // 🚨 The BLOCK it legitimately lives in, and the direction is the whole
+    // point. Written as a bare string this excused the token in BOTH
+    // directions — measured 2026-08-15: `--radius` present only in `.dark`
+    // reported nothing, and `--radius` deleted OUTRIGHT reported nothing, while
+    // the line said `✓ Every token is defined in both modes … 1 on the
+    // exception list`. Nothing else in the tree asserts that `--radius` exists,
+    // so in light mode every `rounded-*` would have lost its corner and the
+    // shipped checker would have called it clean.
+    in: ":root",
+    why:
+      "A corner does not change with the mode. --radius is a length, not a " +
+      "colour, and the dark block has nothing to say about it — repeating it " +
+      "there would be a second place to edit the same decision.",
+  },
 };
 
 /** The line a token's declaration sits on inside one of the two blocks. */
@@ -488,10 +499,15 @@ export function findUnpairedTokens(css) {
 
   const findings = [];
   for (const token of [...new Set([...Object.keys(light), ...Object.keys(dark)])].sort()) {
-    if (Object.prototype.hasOwnProperty.call(MODE_SINGLE_TOKENS, token)) continue;
     const inLight = Object.prototype.hasOwnProperty.call(light, token);
     const inDark = Object.prototype.hasOwnProperty.call(dark, token);
     if (inLight && inDark) continue;
+    // An excepted token is excused ONLY for being absent from the block it does
+    // not belong in. Absent from its OWN block — or absent everywhere, which
+    // reaches here as absent from one — is the finding the exception was never
+    // about.
+    const exception = MODE_SINGLE_TOKENS[token];
+    if (exception && (inLight ? ":root" : ".dark") === exception.in) continue;
     const presentIn = inLight ? ":root" : ".dark";
     findings.push({
       kind: "unpaired",
@@ -648,11 +664,19 @@ export function findImagesWithoutAlt(source) {
 /**
  * The shipped placeholder still sitting at `/` (app/page.tsx).
  *
- * Two markers, and either one is enough — both chosen because a re-text
- * touches neither: swapping the sentences in messages/*.json leaves the
- * shipped `features.authTitle` KEY in the page, and it leaves the shipped
- * key/cart/sparkles icon trio in the import. A page somebody genuinely
- * replaced carries neither.
+ * 🚨 **ONE marker carries this today, not two, and the difference matters.**
+ * The rule was written with two — the shipped `features.authTitle` KEY, and the
+ * key/cart/sparkles icon trio in the import — on the argument that a re-text
+ * touches neither, so either one alone would still catch the placeholder.
+ *
+ * Story 43.9 rewrote `app/page.tsx` and the trio is gone: the page imports
+ * `ArrowRight` and nothing else, which the page's own comment records ("it is
+ * the ONLY one left"). So the redundancy is not there: renaming ONE string key
+ * silences `ux-check`, `salespage` step 0, `coach` and `go-live` at the same
+ * moment. The second branch stays because a customer's page may still carry the
+ * trio, and `rules.test.ts` exercises it against a synthetic fixture — but it
+ * matches nothing in the shipped tree, and the assertion below says so rather
+ * than leaving a reader to assume a belt and braces that is one belt.
  *
  * The caller reports this as a WARNING, never a failure: a test app keeps the
  * placeholder legitimately, and so does an app before its products exist. The

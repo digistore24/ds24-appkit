@@ -48,6 +48,8 @@ import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
+import { blankCommentsFor } from "@/scripts/lib/source-text.mjs";
+
 const ROOT = path.join(import.meta.dirname, "..", "..");
 
 // Split so this file does not match its own needles — the tree moved with the
@@ -94,8 +96,17 @@ const COMMUNITY_NEEDLES = ["modules/" + "community", "commun" + "ity_"];
 const ALLOWLIST: string[] = [
   // 🚨 This file itself, and it is not a loophole — it is the consequence of the
   // move. While the community lived in `lib/`, this guard sat in `scripts/` and
-  // was outside both trees it scans. It now lives INSIDE one of them, and its
-  // own prose has to name what it forbids in order to explain it.
+  // was outside both trees it scans. It now lives INSIDE one of them.
+  //
+  // ⚠️ **Its REASON changed on 2026-08-15 and the entry did not**, which is worth
+  // more than the entry. It used to be here because the file's own PROSE names
+  // what it forbids; since `scan()` blanks comments, prose is no longer why. What
+  // keeps it here is six occurrences in real CODE, measured rather than argued:
+  // the second half of `SOURCE_DIR`, two `it(…)` titles, the path of the
+  // generated registry, one assertion message, and the planted manifest fixture.
+  // Blanking removed seven of the thirteen lines that used to match and none of
+  // the six that decide — so an entry claiming the prose is the problem would now
+  // be a false explanation standing next to a correct rule.
   //
   // Not solved with the split-string trick the needles use, deliberately: the
   // needles are matched, the PROSE is what a reader needs whole. An entry with
@@ -123,7 +134,13 @@ function scan(dir: string, needles: string[]): string[] {
     const relative = path.relative(ROOT, file).replaceAll(path.sep, "/");
     if (ALLOWLIST.includes(relative)) continue;
 
-    readFileSync(file, "utf8")
+    // Comments blanked first, per file — a community file that EXPLAINS this
+    // boundary must not become its own finding, which is how a guard turns into
+    // a thing somebody deletes. `blankCommentsFor` rather than `blankComments`
+    // because the walk takes every non-binary file: a `.json` manifest and a
+    // `.md` beside it are read for what they SAY, and blanking those would eat
+    // the very line the needle is meant to find.
+    blankCommentsFor(relative, readFileSync(file, "utf8"))
       .split(/\r?\n/)
       .forEach((line, index) => {
         for (const needle of needles) {
@@ -167,10 +184,11 @@ describe("community content feeds no AI by default (FR-217)", () => {
     // is right to — widening the scan to the folder would make this invariant
     // fire on a file that has nothing to do with it, and an invariant that
     // cries wolf is one somebody switches off.
-    const registry = readFileSync(
-      path.join(ROOT, "lib/" + "modules", "content-source-registry.ts"),
-      "utf8",
-    );
+    // Blanked like every other read here: the registry is GENERATED, and a
+    // generator that explains itself in a header would otherwise hand this
+    // assertion a finding written by the template rather than by a manifest.
+    const registryPath = path.join(ROOT, "lib/" + "modules", "content-source-registry.ts");
+    const registry = blankCommentsFor(registryPath, readFileSync(registryPath, "utf8"));
     for (const needle of COMMUNITY_NEEDLES) {
       expect(
         registry.includes(needle),
@@ -197,10 +215,11 @@ describe("community content feeds no AI by default (FR-217)", () => {
     ).toEqual(["content" + "Source"]);
 
     // …and the real manifest does not carry one today.
-    const manifest = readFileSync(
-      path.join(ROOT, COMMUNITY_DIR, "module.json"),
-      "utf8",
-    );
+    // Through the same door, which answers `.json` by leaving it alone: the
+    // needle here is a manifest KEY, and a format with no comments has nothing
+    // to blank. Asked rather than assumed, so the rule holds at every read.
+    const manifestPath = path.join(ROOT, COMMUNITY_DIR, "module.json");
+    const manifest = blankCommentsFor(manifestPath, readFileSync(manifestPath, "utf8"));
     expect(manifest).not.toContain("content" + "Source");
   });
 });

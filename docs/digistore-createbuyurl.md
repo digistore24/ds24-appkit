@@ -165,10 +165,17 @@ go — are the ones that matter:
   not decorate, and `lib/digistore/checkout.test.ts` fails the build if the call
   moves into it.
 - **It never breaks the checkout.** No API key, a DS24 error, a timeout, an
-  unwritable `.dev/`, an unknown host — every failure returns the undecorated URL
-  with one `console.warn`, and a failed fetch is not retried for ~5 minutes. The
-  host case is the one that used to be silent; it now names the host and says
-  where the list lives, once per host per process rather than once per plan card.
+  unknown host — every failure returns the undecorated URL with one
+  `console.warn`, and a failed fetch is not retried for ~5 minutes. The host case
+  is the one that used to be silent; it now names the host and says where the
+  list lives, once per host per process rather than once per plan card.
+- **An unwritable `.dev/` is not one of those failures**, and listing it as one
+  was wrong until 2026-08-15: `writeStateFile()` fails silently and the key stays
+  in memory, so the link comes back **decorated** and nothing is warned. That is
+  the better behaviour — the cache is a convenience, not the mechanism — and
+  `lib/digistore/testpay.test.ts` pins it ("survives an unwritable state file").
+  Somebody chasing an undecorated link should not be sent to look at `.dev/`
+  permissions, which is what the old sentence did.
 
 Outside DEV — a STAGING domain, or the live one before approval — the way to a
 test purchase is the vendor's

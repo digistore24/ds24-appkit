@@ -95,14 +95,23 @@ never written to the database, never written to a file by this app, and it is
 gone the moment the process ends — every deploy, crash-restart and
 host-initiated recycle empties it.
 
-**Nothing personal is retained, and that is structural rather than a promise.**
-Each line is redacted **on the way in** (`lib/diagnostics/redact.mjs`), before it
-enters the buffer: email addresses, bearer tokens, this app's own key prefixes,
-provider keys, long hex runs, UUIDs, connection strings and long digit runs are
-replaced with a class marker. So the process does not hold the original at any
-moment — a response cannot leak what was never kept. The **host's own log keeps
-the full text**, unchanged: whoever has shell access on the server sees
-everything, and only the remote reader gets the safe subset.
+**Every identifier of a KNOWN SHAPE is removed on the way in, and that half is
+structural rather than a promise.** Each line is redacted before it enters the
+buffer (`lib/diagnostics/redact.mjs`): email addresses, bearer tokens, this app's
+own key prefixes, provider keys, long hex runs, UUIDs, connection strings and
+long digit runs are replaced with a class marker. So the process does not hold
+the original at any moment — a response cannot leak what was never kept. The
+**host's own log keeps the full text**, unchanged: whoever has shell access on
+the server sees everything, and only the remote reader gets the safe subset.
+
+🚨 **What that does NOT cover: free text.** A name has no shape a pattern can
+find — `Anna Schmidt` is two words — so a message that quotes what somebody
+typed (a validation error, a database constraint naming a value) survives
+redaction and is readable to whoever holds `DIAGNOSTICS_SECRET` for as long as
+the line is in the ring. This is written down rather than fixed because it cannot
+be fixed here: the answer is that **error messages do not quote customer input**,
+which is a rule for whoever writes the message, not for the redactor. Read the
+list above as *what is removed*, never as *nothing personal can be in there*.
 
 Like the sign-in counters above, this still needs a sentence in a privacy
 policy: an error message can carry an identifier for the instant it exists, and
@@ -117,10 +126,13 @@ holds it. Without the secret the endpoint answers 404 with an empty body,
 indistinguishable from a route that was never built, which is the shipped
 state. `DIAGNOSTICS_CAPTURE=off` removes the collector entirely.
 
-**Why it is in neither Art. 15 export.** It holds no identifier by construction —
-that is what the redaction is for — and it therefore cannot be sliced per
-person: there is nothing in it that says which subject a line belongs to. An
-export section for it would be an empty section with a misleading heading.
+**Why it is in neither Art. 15 export.** It cannot be sliced per person: nothing
+in it says which subject a line belongs to, so an export section for it would be
+an empty section with a misleading heading. ⚠️ The reason is **that**, not "it
+holds no identifier" — see the free-text paragraph above. The ring is a rolling
+window in working memory that no request can address by person; that is what
+makes the export answer honest, and it is the sentence to repeat if a regulator
+asks.
 
 **The health endpoint beside it holds nothing at all.**
 `GET /api/diagnostics/health` (`lib/ops/health.ts`, behind the same

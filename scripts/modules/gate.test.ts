@@ -18,6 +18,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+import { blankComments } from "@/scripts/lib/source-text.mjs";
 import { coversSubtrees, guardableSubtrees } from "@/lib/modules/gate";
 import { MODULE_GATES } from "@/lib/modules/gate-registry";
 import { installedModules } from "./installed.mjs";
@@ -63,7 +64,16 @@ describe("what a gate covers", () => {
 });
 
 describe("the proxy loops over the gates", () => {
-  const proxy = readFileSync(join(ROOT, "proxy.ts"), "utf8");
+  // Through `blankComments()` (`CLAUDE.md` → *Rules*): everything in this block
+  // reads `proxy.ts` as TEXT, and the proxy is a heavily commented file that
+  // spells the rejected forms out by name — `!gate.enabled()` and
+  // `gate.state() !== "on"` are exactly the shapes the two `not.toMatch`
+  // assertions hunt, and a comment recording why they are wrong would report
+  // the proxy for the fault it documents. The counting assertions run the same
+  // risk the other way: a commented-out `NextResponse.rewrite(` would make the
+  // "exactly one" checks red, and a commented copy beside a deleted real one
+  // would keep them green.
+  const proxy = blankComments(readFileSync(join(ROOT, "proxy.ts"), "utf8"));
 
   it("asks every installed module's gate", () => {
     expect(proxy).toContain("for (const gate of MODULE_GATES)");

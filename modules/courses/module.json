@@ -34,6 +34,7 @@
   "tables": [
     "courses_blocks",
     "courses_completions",
+    "courses_courses",
     "courses_submissions",
     "courses_units"
   ],

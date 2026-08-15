@@ -32,6 +32,8 @@ import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
+import { blankComments } from "@/scripts/lib/source-text.mjs";
+
 const ROOT = path.join(import.meta.dirname, "..", "..", "..");
 
 /** Every `.ts`/`.tsx` under the community's client surfaces. */
@@ -48,7 +50,19 @@ const FILES = [
   ...sources("modules/community/components"),
   ...sources("modules/community/pages"),
 ];
-const read = (rel: string) => readFileSync(path.join(ROOT, rel), "utf8");
+/**
+ * The one place a scanned file is read — through `blankComments()`.
+ *
+ * The corpus is `.ts`/`.tsx` and nothing else, so the blind form is right.
+ * Every check below hunts a piece of CODE that this module's files talk ABOUT
+ * at length: the three defects of 2026-08-06 are recounted in comments beside
+ * the very mounts they were found at, and the `key=` on each of those mounts
+ * sits under four lines explaining why. A raw read would report a file for
+ * naming `fetch("/api/community/live")` in a header, and would let a `key=`
+ * written in a comment excuse a mount that has none. Blanking preserves lines
+ * and length, so the `file:line` this test prints still points at the mount.
+ */
+const read = (rel: string) => blankComments(readFileSync(path.join(ROOT, rel), "utf8"));
 
 /** The one file allowed to know how the live endpoint is called. */
 const THE_TRANSPORT = "modules/community/components/use-live-scope.ts";

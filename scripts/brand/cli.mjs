@@ -6,7 +6,7 @@
 // Two subcommands, one name (the `module add|list|check|sync` shape):
 //
 //   brand colors [--css f]… [--url https://…] [--hex #RRGGBB] [--apply] [--json]
-//   brand icons  [--logo file] [--apply] [--json]
+//   brand icons  [--logo file] [--logo-dark file] [--apply] [--json]
 //   brand        with --logo: both
 //
 // **Dry run by default; `--apply` writes.** Six committed files and a stylesheet
@@ -359,11 +359,34 @@ async function runIcons(args) {
     copyFileSync(resolve(ROOT, args.logo), target);
   }
 
+  // 🚨 The dark mark goes through the SAME two steps as the light one — copied
+  // into `public/brand/`, and named by its `/brand/…` path. It used to write the
+  // caller's raw argument straight into the config, which failed twice at once:
+  // `lib/brand.ts` silently drops anything that is not `/brand/*.{svg,png,webp}`
+  // (so the dark mark never appeared, with no word said), and
+  // `components/brand-mark.test.ts` fails on a config naming a file nobody put
+  // there — so a customer following the documented step in the `design` skill
+  // could no longer commit, on a rule `CLAUDE.md` makes the commit condition.
+  let darkRel = null;
+  if (args.logoDark) {
+    const ext = args.logoDark.match(/\.[a-z0-9]+$/i)?.[0] ?? ".png";
+    const darkTarget = join(ROOT, "public", "brand", `logo-dark${ext}`);
+    darkRel = `/brand/${darkTarget.split(/[\\/]/).pop()}`;
+    if (!/\.(svg|png|webp)$/i.test(ext)) {
+      console.error(`\n  ✗ --logo-dark must be an .svg, .png or .webp (got "${args.logoDark}")`);
+      return 1;
+    }
+    mkdirSync(dirname(darkTarget), { recursive: true });
+    if (resolve(ROOT, args.logoDark) !== darkTarget) {
+      copyFileSync(resolve(ROOT, args.logoDark), darkTarget);
+    }
+  }
+
   const config = JSON.parse(readFileSync(BRAND_CONFIG, "utf8"));
   config.logo = rel;
   config.logoWidth = logo.width;
   config.logoHeight = logo.height;
-  if (args.logoDark) config.logoDark = args.logoDark;
+  if (darkRel) config.logoDark = darkRel;
   writeFileSync(BRAND_CONFIG, `${JSON.stringify(config, null, 2)}\n`);
 
   console.log(`\n  ${ok("✓")} ${rendered.icons.length + 2} file(s) written`);
@@ -379,6 +402,8 @@ node run.mjs brand — take this app's look from your own brand
                --url <https://…>  read your own website (fetches it — see below)
                --hex "#1F6F4A"    just the colour, if you know it
   brand icons  --logo <file>      the five app icons, from one logo (png or svg)
+               --logo-dark <file> a second mark for dark mode, when the first
+                                  one disappears on a dark ground (optional)
 
   --apply   write it. Without this nothing is written and you see what would be.
   --json    the result as data, for an agent.

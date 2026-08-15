@@ -89,7 +89,10 @@ export async function replyToSubmissionAction(
     revalidatePath(`${QUEUE}/${submission.id}`);
     // The member's lesson page renders the reply and the freeze notice, and it
     // is the reason this write exists at all.
-    revalidatePath(`${COURSE}/${submission.unitSlug}`);
+    // The segment — see the note in `./actions.ts`. This is the sharpest of the
+    // three: the operator answers a submission, and the member's lesson page is
+    // exactly where that answer and the freeze notice appear.
+    revalidatePath(COURSE, "layout");
 
     // 🚨 The success sentence comes from `coursesAdmin`, NOT from `errors`. A
     // toast saying a thing worked is not a refusal.

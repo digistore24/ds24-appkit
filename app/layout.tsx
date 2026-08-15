@@ -211,7 +211,10 @@ export default async function RootLayout({
     // All three faces ship as files in npm packages (no fetch from Google Fonts
     // at build time — see the `appSans` block above) and hang off <html> as CSS
     // variables; app/globals.css wires them up via --font-sans, --font-heading
-    // and --font-mono. A variable that is not on this element is a variable
+    // and --font-mono. ⚠️ The third of those was true of the intention and not
+    // of the file until 2026-08-15: `--font-mono` read only the empty
+    // `--font-app-mono` slot, so this face was loaded and preloaded on every
+    // page and rendered nowhere. It is a fallback rung now. A variable that is not on this element is a variable
     // nothing on the page can read, which is why adding a font is two edits and
     // not one.
     <html

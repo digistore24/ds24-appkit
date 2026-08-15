@@ -273,6 +273,11 @@ export function cspWeaknesses(csp) {
   if ((directives.get("default-src") ?? "").split(/\s+/).includes("*")) {
     found.push("default-src is *");
   }
+  // 🚨 And the pair a browser really consults for scripts. The line above reads
+  // `default-src` only, so `default-src 'self'; script-src *` — a narrower
+  // default with a wide-open override, which is the way round somebody actually
+  // writes it — reported nothing. Measured 2026-08-15.
+  if (scripts.split(/\s+/).includes("*")) found.push("script-src is *");
   return found;
 }
 
@@ -318,10 +323,19 @@ export function headerFindings(headers, url) {
     });
   }
 
-  if (!get("Strict-Transport-Security")) {
+  // 🚨 Presence is not effect. `max-age=0` is a header that is THERE and that
+  // switches HSTS off — the exact thing a CDN or a reverse proxy does when
+  // somebody "disables HSTS" one layer up, and this rung exists to see what
+  // arrives after those layers. Measured 2026-08-15: `max-age=0` reported
+  // nothing at all.
+  const hsts = get("Strict-Transport-Security");
+  const maxAge = Number(/max-age\s*=\s*"?(\d+)/i.exec(hsts)?.[1] ?? NaN);
+  if (!hsts || !(maxAge > 0)) {
     findings.push({
       severity: "medium",
-      title: "No Strict-Transport-Security on the live response",
+      title: hsts
+        ? "Strict-Transport-Security arrives but switches itself off"
+        : "No Strict-Transport-Security on the live response",
       where: url,
       why:
         "Without it a browser that has only ever been told about your domain will try " +
@@ -348,7 +362,14 @@ export function headerFindings(headers, url) {
     });
   }
 
-  if (!get("X-Frame-Options") && !/(^|;)\s*frame-ancestors\b/i.test(csp)) {
+  // Same rule as HSTS above: the VALUE decides, not the presence. `ALLOWALL`
+  // and anything a browser does not understand are treated as no protection —
+  // measured 2026-08-15, both used to pass. `frame-ancestors` only counts as the
+  // alternative when its source list is not `*`, for the same reason.
+  const xfo = get("X-Frame-Options").trim();
+  const frameAncestors = /(^|;)\s*frame-ancestors\b([^;]*)/i.exec(csp);
+  const ancestorsProtect = Boolean(frameAncestors) && !/(^|\s)\*(\s|$)/.test(frameAncestors[2]);
+  if (!/^(deny|sameorigin)$/i.test(xfo) && !ancestorsProtect) {
     findings.push({
       severity: "medium",
       title: "Nothing stops this app being framed (no X-Frame-Options, no frame-ancestors)",
@@ -780,6 +801,21 @@ export const live = {
     const routes = collectPageRoutes({ cwd })
       .filter((route) => route === PROTECTED_PREFIX || route.startsWith(`${PROTECTED_PREFIX}/`))
       .sort();
+
+    // 🚨 NO route is not "every route answered correctly". `collectPageRoutes()`
+    // returns `[]` quietly on an `app/` it cannot read, and says in its own words
+    // that the decision belongs to the caller — this rung was not making one, so
+    // a renamed protected area, an `src/app` layout or a deploy copy without
+    // `app/` reported "no stranger reaches a protected page" after asking
+    // nothing at all. The empty set is the shape this whole ladder is weakest
+    // against, and here it is the third of the rung's three claims.
+    if (routes.length === 0) {
+      return {
+        state: "skipped",
+        reason: `no page route under ${PROTECTED_PREFIX} was found, so no route was asked`,
+        findings: [],
+      };
+    }
 
     const toLogin = [];
     const notFound = [];

@@ -62,6 +62,13 @@ import {
   formatRunSummary,
 } from "./run-report.mjs";
 import { cronSecretFor, hostOf } from "./remote.mjs";
+// The health probes' bound, imported rather than restated. A listing is a read
+// and gets that one; running a job really does work at the other end, so it gets
+// its own, longer bound rather than a second copy of the short one.
+import { TIMEOUT_MS } from "../health/probes/_transport.mjs";
+
+/** Running a job is work, not a read — a minute, not ten seconds. */
+const JOB_TIMEOUT_MS = 60_000;
 
 const argv = process.argv.slice(2);
 const wantsList = argv.includes("--list");
@@ -184,6 +191,11 @@ try {
     // otherwise be followed with the bearer token attached, and the 200 that came
     // back would be somebody else's page.
     redirect: "manual",
+    // 🚨 And a bound, for the same reason every health probe carries one: a host
+    // that accepts the connection and never answers otherwise leaves this
+    // command standing until somebody presses Ctrl-C. `--job` runs a real job,
+    // so the wait is longer than a probe's on purpose.
+    signal: AbortSignal.timeout(wantsList ? TIMEOUT_MS : JOB_TIMEOUT_MS),
   });
 } catch (error) {
   // `fetch` rather than curl — Node has it built in and curl is not on every
@@ -279,7 +291,26 @@ if (!response.ok && response.status !== 404) {
 // and all three modes read the same body — a second parse in one branch would
 // be a second copy of the decision, which is the shape of the defect this
 // fixes. The decision itself is pure, in scripts/cron/list-report.mjs.
-const text = await response.text();
+// 🚨 The guard has to cover the READ as well as the parse. `response.text()`
+// itself throws when the body is cut off mid-stream — a socket reset, or this
+// command's own `AbortSignal.timeout` firing while the body is arriving, since
+// the signal binds the whole fetch and not just the headers. Measured
+// 2026-08-15 against a throwaway server that sent `content-length: 500`, half a
+// body and then destroyed the socket: `TypeError: terminated` out of
+// `node:internal/deps/undici`, exit 1 — the exact frame AC1 of Story 42.1
+// forbids in those words. The story's own measurement only used bodies that
+// arrived whole.
+let text;
+try {
+  text = await response.text();
+} catch (error) {
+  console.error(`ERROR: ${called} answered ${response.status} and then stopped sending.`);
+  console.error(`  The connection was cut while the answer was arriving (${error.message}).`);
+  console.error(`  Nothing was learned about the jobs — this is a transport fault, not a`);
+  console.error(`  verdict. A proxy or a load balancer between here and the app is the`);
+  console.error(`  usual cause; try again, and read the host's own log if it repeats.`);
+  process.exit(1);
+}
 const read = readBody({ status: response.status, url: called, text });
 if (!read.ok) {
   for (const line of formatRefusal(read)) console.error(line);

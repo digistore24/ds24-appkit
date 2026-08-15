@@ -29,6 +29,8 @@ import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
+import { blankCommentsFor } from "@/scripts/lib/source-text.mjs";
+
 const ROOT = path.join(import.meta.dirname, "..");
 
 // Built from halves so this file's own needles do not flag this file — with no
@@ -48,6 +50,12 @@ const ALLOWLIST: string[] = [
   // the corpus folder EXISTS: the intake creates it, a fresh app has none. So the
   // path appears there as a `{ kind: "dir", path }` trace and in the comment
   // explaining it.
+  //
+  // ⚠️ Since 2026-08-15 only the FIRST of those two keeps the entry alive: the
+  // scan blanks comments, so `journey.mjs:225` no longer matches and the trace
+  // at `journey.mjs:352` is the whole reason. Measured rather than reasoned —
+  // those two were the ONLY needle sites under `app/`, `lib/` and `scripts/` in
+  // the tree of that day, so the entry is exactly as narrow as it looks.
   //
   // 🚨 **Why this is a decision and not a hole.** AD-51 forbids the corpus being
   // a runtime KNOWLEDGE path — the chat answering out of raw material nobody
@@ -88,7 +96,13 @@ describe("the corpus is never read at runtime (AD-51)", () => {
         const relative = path.relative(ROOT, file).replaceAll(path.sep, "/");
         if (ALLOWLIST.includes(relative)) continue;
 
-        readFileSync(file, "utf8")
+        // Comments blanked first, per file. A file under `app/`, `lib/` or
+        // `scripts/` that EXPLAINS why it must not touch the corpus is keeping
+        // the rule, not breaking it, and reporting it would train the tree to
+        // stop explaining itself. `blankCommentsFor` rather than
+        // `blankComments`: the walk takes every non-binary file, and a `.json`
+        // fixture naming the corpus path is a finding this must still see.
+        blankCommentsFor(relative, readFileSync(file, "utf8"))
           .split(/\r?\n/)
           .forEach((line, index) => {
             for (const needle of NEEDLES) {

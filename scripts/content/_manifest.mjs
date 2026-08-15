@@ -241,8 +241,22 @@ export function loadManifest(root, e = process.env) {
   let text;
   try {
     text = readFileSync(join(root, ...CONTENT_MEDIA_MANIFEST.split("/")), "utf8");
-  } catch {
-    return { missing: true };
+  } catch (error) {
+    // 🚨 Only "it is not there" is `missing`. `EACCES`, `EISDIR`, a Windows
+    // lock — every one of those used to answer `missing: true`, i.e. "this app
+    // ships no media at all", and the readers act on it: `content-apply` finds
+    // nothing to do and exits 0, `content-check --env prod` compares two
+    // absences, agrees with itself and exits 0. Green over a question nobody
+    // asked, on the command `CLAUDE.md` names as the exit condition for a
+    // go-live.
+    //
+    // This is the ruling Story 42.2 made one folder over, in
+    // `scripts/content/_appliers.mjs`: every read error is a refusal, `ENOENT`
+    // included — because "not carried into the build" IS `ENOENT`. Here the
+    // opposite half applies: a manifest that is genuinely absent is an ordinary
+    // state, and anything else is not.
+    if (error?.code === "ENOENT" || error?.code === "ENOTDIR") return { missing: true };
+    throw error;
   }
 
   let data;

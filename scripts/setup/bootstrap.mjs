@@ -88,6 +88,32 @@ const ENV_KEY =
       ? "SETUP_KEY_STAGING"
       : "SETUP_KEY";
 
+// 🚨 The same refusal `scripts/setup/mint-key.mjs` makes, and this command needs
+// it MORE: `--env` picks the VARIABLE, never the database. The owner and the key
+// are created in whatever `DATABASE_URL` points at — so `--env prod` on a
+// developer's machine created a DEV owner, minted a DEV key, and wrote it over
+// `SETUP_KEY_PROD`, destroying the real production key. That key is printed
+// exactly once and never stored, so it cannot be typed back; afterwards
+// `content-publish --env prod` fails to authenticate for a reason nothing on
+// screen explains. And the whole output said `✓ Owner created` /
+// `✓ Setup key minted … as SETUP_KEY_PROD`.
+//
+// `mint-key.mjs` carries this guard and calls bootstrap "one step further in";
+// bootstrap is the command the acceptance criterion spells with `--env prod`,
+// and it was the one without it.
+const here = (process.env.APP_ENV ?? "development").trim().toLowerCase();
+if (flag("env") !== undefined && target !== here && target !== "development") {
+  console.error(`✗ --env ${target}, but APP_ENV here is "${here}".`);
+  console.error("");
+  console.error(`  This command writes into the database DATABASE_URL points at — it cannot`);
+  console.error(`  reach another environment's. Creating the owner and writing ${ENV_KEY} from`);
+  console.error(`  this machine would overwrite a key minted there, and that one was never`);
+  console.error(`  printed either.`);
+  console.error("");
+  console.error(`  Bootstrap ${target} where ${target} runs.`);
+  process.exit(2);
+}
+
 const sql = connect();
 
 try {

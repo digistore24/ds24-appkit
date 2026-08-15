@@ -38,7 +38,10 @@ soft; both are legitimate, neither is a small change.
 
 The shipped sans is **Figtree**, loaded with `next/font/local` from
 `@fontsource-variable/figtree` — the files ship inside the npm package, so
-`npm run build` needs no network. `GeistMono` stays for monospace.
+`npm run build` needs no network. **`GeistMono` stays for monospace** — it is
+wired as the fallback behind the empty `--font-app-mono` slot, so a pairing
+change never touches it and `font-mono` renders the shipped face rather than
+whatever the machine happens to have.
 
 🚨 **Every pairing below arrives the same way: as an npm package whose files
 are already on disk.** `npm i @fontsource…`, then `next/font/local` points at
@@ -84,8 +87,10 @@ this table was written, not assumed.
 🚨 **Read the directory before writing the `src` line.** A family with two
 variable axes ships three latin cuts — `-standard-`, `-wght-`, and one named
 after its second axis — and the one to take is `-wght-`; a one-axis family ships
-`-wght-` alone. Three of the five are two-axis families (`opsz` on Inter and
-Source Serif 4, `wdth` on IBM Plex Sans), and the axis the app does not need
+`-wght-` alone. Two of the five pairings below are two-axis families
+(`opsz` on Inter, `wdth` on IBM Plex Sans) — the shipped Source Serif 4 is
+two-axis as well, but it is the heading face and not one of the five — and the
+axis the app does not need
 costs bytes on every page. `ls node_modules/<package>/files/` is the answer; the
 names differ per family and a wrong one is a build error at best.
 

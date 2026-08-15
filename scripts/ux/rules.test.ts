@@ -13,6 +13,12 @@
 // So both directions are tested, and every "must not flag" case below is a real
 // line taken out of this template.
 
+const ROOT = fileURLToPath(new URL("../../", import.meta.url));
+
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -483,11 +489,36 @@ describe("findUnpairedTokens", () => {
     // list is good news, and an entry that stops matching anything is fine.
     // What IS asserted is that every entry carries prose — an id with no reason
     // reads as an arbitrary exemption to whoever finds it next.
-    for (const [token, reason] of Object.entries(MODE_SINGLE_TOKENS)) {
+    for (const [token, entry] of Object.entries(MODE_SINGLE_TOKENS)) {
       expect(token).toMatch(/^[a-z0-9-]+$/);
-      expect(reason.length).toBeGreaterThan(30);
+      expect(entry.why.length).toBeGreaterThan(30);
+      // 🚨 And the BLOCK it belongs in. An exception without a direction
+      // excuses the token in both, which is how `--radius` could vanish from
+      // the tree entirely under a green tick.
+      expect([":root", ".dark"]).toContain(entry.in);
     }
     expect(MODE_SINGLE_TOKENS.radius).toBeDefined();
+  });
+
+  it("🚨 an excepted token is excused in ONE direction, never in both", () => {
+    // Measured 2026-08-15, before the exception carried a direction: `--radius`
+    // only in `.dark` reported nothing, and `--radius` deleted outright
+    // reported nothing — while the line said every token was defined in both
+    // modes. Nothing else in the tree asserts that `--radius` exists, so in
+    // light mode every `rounded-*` would have lost its corner.
+    // `--x` is in BOTH blocks in every case — a paired control, so the only
+    // thing any case can report is `--radius`.
+    const css = (light: string, dark: string) =>
+      `:root {\n  --x: 1;\n${light}\n}\n.dark {\n  --x: 1;\n${dark}\n}\n`;
+
+    // Where it belongs: excused.
+    expect(findUnpairedTokens(css("  --radius: 0.5rem;", ""))).toEqual([]);
+    // In the WRONG block: a finding, and it names the token.
+    const wrong = findUnpairedTokens(css("", "  --radius: 0.5rem;"));
+    expect(wrong.map((f) => f.token)).toEqual(["radius"]);
+    // Gone from both: nothing to pair, so this rule says nothing — which is why
+    // the case above is the one that matters. Stated so the gap is on record.
+    expect(findUnpairedTokens(css("", ""))).toEqual([]);
   });
 });
 
@@ -640,6 +671,19 @@ import { ArrowRight, Check } from "lucide-react";
     // trio in one import reads as the placeholder.
     const source = `import { Sparkles } from "lucide-react";`;
     expect(findPlaceholderHome(source)).toEqual([]);
+  });
+
+  it("🚨 the SHIPPED page is still caught — and by how many markers", () => {
+    // Every case above is a synthetic fixture, so all four would stay green on
+    // a tree where this rule catches nothing at all. Measured 2026-08-15: Story
+    // 43.9 rewrote `app/page.tsx` and the icon trio is gone, so the redundancy
+    // the docstring used to promise does not exist — ONE marker carries this,
+    // and renaming one string key silences `ux-check`, `salespage` step 0,
+    // `coach` and `go-live` together. The number is asserted rather than
+    // described so that the day it changes, this line says so.
+    const page = readFileSync(join(ROOT, "app", "page.tsx"), "utf8");
+    const hits = findPlaceholderHome(page);
+    expect(hits.length, "the shipped placeholder home is no longer caught at all").toBe(1);
   });
 });
 

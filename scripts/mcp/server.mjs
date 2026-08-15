@@ -40,6 +40,8 @@
 import { readFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import "../lib/env.mjs";
+// The one bound for a setup request, imported rather than restated.
+import { SETUP_TIMEOUT_MS } from "../setup/client.mjs";
 
 const MODERN = "2026-07-28";
 const SUPPORTED = [MODERN, "2025-11-25", "2025-06-18"];
@@ -138,7 +140,16 @@ async function callApp(envName, body, file) {
 
   let response;
   try {
-    response = await fetch(url, { method: "POST", headers, body: payload });
+    // 🚨 The sharpest of the four: this is a stdio MCP server. An app that
+    // accepts the TCP connection and never answers blocks `tools/list` — and
+    // with it the agent's whole session — with no output and no error. That is
+    // exactly the silence `listTools()` invented its synthetic tool against.
+    response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: payload,
+      signal: AbortSignal.timeout(SETUP_TIMEOUT_MS),
+    });
   } catch (error) {
     return { transportError: `${url} did not answer (${error?.message ?? error})` };
   }

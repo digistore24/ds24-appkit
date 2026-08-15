@@ -26,6 +26,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { blankCommentsFor } from "@/scripts/lib/source-text.mjs";
 import { MODULE_ACCOUNT_NOTES } from "@/lib/modules/account-notes-registry";
 import { MODULE_MESSAGES } from "@/lib/modules/messages";
 import { mergeModuleMessages } from "@/lib/modules/messages-merge";
@@ -35,7 +36,18 @@ import de from "@/messages/de.json";
 import en from "@/messages/en.json";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
-const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
+// 🚨 `blankCommentsFor`, not `blankComments`, because this reader takes a MIXED
+// corpus: the modules' `messages/<locale>.json` catalogues AND
+// `app/dashboard/account/privacy-ui.tsx`. The page is read as TEXT for needles it
+// could just as well mention while explaining itself — `MODULE_ACCOUNT_NOTES`, the
+// two `<ModuleNotes …/>` mounts, the ROOT `useTranslations()` — and that file is
+// dense with prose about exactly this seam, so it has to be blanked. It is also
+// where a distance-limited regex reads, and blanking keeps every offset it
+// depends on. The message files must NOT be —
+// they are data that gets `JSON.parse`d, and a sentence about somebody's data
+// rights is the subject of the assertion rather than an aside about it.
+// (CLAUDE.md → a checker that reads source as TEXT goes through `blankComments()`.)
+const read = (rel: string) => blankCommentsFor(rel, readFileSync(join(ROOT, rel), "utf8"));
 
 /** The locales a module ships text in — read, never assumed. */
 function localesOf(dir: string, messagesDir: string): string[] {

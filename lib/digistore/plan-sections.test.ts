@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, it, expect } from "vitest";
 
+import { blankComments } from "@/scripts/lib/source-text.mjs";
 import { planSections, SECTION_TEXT, type PlanSectionId } from "./plan-sections";
 import { PRODUCT_KINDS, type ProductDef, type ProductKind } from "./products";
 import de from "@/messages/de.json";
@@ -72,8 +73,17 @@ describe("planSections", () => {
     // config/digistore-products.json holds no `one_time` product, so a
     // function reading it directly could not be tested against one at all.
     // Same guard as `productByDs24Id` in products.ts.
-    const source = planSections.toString();
+    // ⚠️ Source as text again, one door over: `Function.prototype.toString()`
+    // returns the body WITH its comments, so a line explaining why this function
+    // does not read `digistore-products` would make the rule fire on the file
+    // that keeps it. Same rule as every `readFileSync` scanner in this tree —
+    // the mechanism is different, the failure is not.
+    const source = blankComments(planSections.toString());
     expect(source).not.toMatch(/allProducts|productsByKind|digistore-products/);
+    // Non-vacuity: `toString()` on a transpiled or minified binding could
+    // answer something with no body at all, and three `not.toMatch` over an
+    // empty string are three tests about nothing.
+    expect(source).toContain("sections");
   });
 
   it("gives every declared product kind a section — none can vanish", () => {
@@ -113,9 +123,14 @@ describe("the page is bound to this module", () => {
     // so smoke and deploy-test render /plans without one and cannot see the
     // page reverting. Reading the source is this repo's convention for
     // exactly this shape of risk (lib/ai/providers/leak-guard.test.ts).
-    const source = readFileSync(
-      new URL("../../app/plans/page.tsx", import.meta.url),
-      "utf8",
+    //
+    // Through `blankComments()` (`CLAUDE.md` → *Rules*): both directions are
+    // wrong without it. The page's own comment explaining WHY it no longer
+    // calls `productsByKind(` would report the page for the very reversion it
+    // warns against, and a comment merely mentioning `planSections(` would
+    // clear a page that had stopped calling it.
+    const source = blankComments(
+      readFileSync(new URL("../../app/plans/page.tsx", import.meta.url), "utf8"),
     );
     expect(source).toContain("planSections(");
     expect(source).toContain("SECTION_TEXT");

@@ -13,6 +13,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { blankComments } from "@/scripts/lib/source-text.mjs";
 import { moduleCommands } from "./tasks.mjs";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -88,7 +89,11 @@ describe("a broken arrangement does not take run.mjs down with it", () => {
 });
 
 describe("run.mjs really merges them, and guards the core", () => {
-  const source = readFileSync(join(ROOT, "run.mjs"), "utf8");
+  // 🚨 Comments blanked, and here it is the POSITIVE assertions that need it.
+  // `toContain("moduleCommands()")` goes green on a `run.mjs` that only MENTIONS
+  // the call in a comment — a merge deleted and a guard that says nothing, which
+  // is worse than the noisy direction because there is nothing to notice.
+  const source = blankComments(readFileSync(join(ROOT, "run.mjs"), "utf8"));
 
   it("merges module commands into TASKS", () => {
     expect(source).toContain("moduleCommands()");

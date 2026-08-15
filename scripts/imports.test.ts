@@ -38,9 +38,27 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { blankComments } from "@/scripts/lib/source-text.mjs";
+
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 
 const SKIP_DIRS = new Set(["node_modules", ".next", ".dev", "dist"]);
+
+/**
+ * The one place a walked file is read — and it goes through `blankComments()`.
+ *
+ * The corpus is `.mjs`/`.js` only, so it is code all the way through and the
+ * blind form is the right one. Two reasons it matters here rather than being
+ * hygiene: an import that somebody COMMENTED OUT while moving a file is not an
+ * import, and reporting it as dangling would send the next reader after a file
+ * nobody asks for; and a line comment that mentions a block-comment OPENER —
+ * 39 files in this tree do, because a glob like `messages/*` is a natural thing
+ * to write — starts a phantom block for a raw regex, which then swallows every
+ * import up to the next closing marker. That is the hole
+ * `scripts/lib/source-text.mjs` exists to close. Blanking keeps lines and
+ * length, so nothing downstream shifts.
+ */
+const read = (file: string) => blankComments(readFileSync(join(ROOT, file), "utf8"));
 
 function* sourceFiles(dir: string): Generator<string> {
   for (const entry of readdirSync(join(ROOT, dir))) {
@@ -111,7 +129,7 @@ describe("the walk is not empty", () => {
   });
 
   it("finds imports that are really there", () => {
-    const smoke = readFileSync(join(ROOT, "scripts", "dev", "smoke.mjs"), "utf8");
+    const smoke = read(join("scripts", "dev", "smoke.mjs"));
     expect(relativeImports(smoke)).toContain("./log-errors.mjs");
   });
 });
@@ -120,7 +138,7 @@ describe("every relative import resolves to a file", () => {
   it("has no dangling specifier in run.mjs or scripts/", () => {
     const dangling: string[] = [];
     for (const file of FILES) {
-      for (const specifier of relativeImports(readFileSync(join(ROOT, file), "utf8"))) {
+      for (const specifier of relativeImports(read(file))) {
         const target = resolve(dirname(join(ROOT, file)), specifier);
         if (!existsSync(target)) {
           dangling.push(`${file.split(/[\\/]/).join("/")} → ${specifier}`);

@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { blankComments } from "@/scripts/lib/source-text.mjs";
 import { SLOT_NAMES } from "@/lib/modules/slots";
 import { MODULE_SLOTS } from "@/lib/modules/slot-registry";
 import { generatedFiles } from "./generate.mjs";
@@ -33,7 +34,14 @@ function* sourceFiles(dir: string): Generator<string> {
 }
 
 const PAGES = [...sourceFiles("app"), ...sourceFiles("components")];
-const sourceOf = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
+// Blanked here, at the single door the sweep reads through, so the rule holds for
+// whatever assertion is added next. The needle is `<ModuleSlots name="…">`, and
+// the file most likely to write that sentence out is the one EXPLAINING the slot
+// mechanism — a comment naming a slot would count as a renderer and make a
+// removed `<ModuleSlots>` invisible. `sourceFiles()` yields `.tsx` and nothing
+// else, so every string that arrives here is code.
+// (CLAUDE.md → a checker that reads source as TEXT goes through `blankComments()`.)
+const sourceOf = (rel: string) => blankComments(readFileSync(join(ROOT, rel), "utf8"));
 
 describe("the walk is not empty", () => {
   it("read real files", () => {

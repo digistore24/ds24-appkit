@@ -201,6 +201,23 @@ try {
         where subject_member_id = ${memberId} order by created_at`
     : [];
 
+  // --- The setup keys they MINTED ----------------------------------------------
+  // 🚨 `docs/data-protection.md` classes this table as personal data in so many
+  // words — "the name is theirs and the row names its owner" — and it was in
+  // NEITHER Art. 15 export. It hid because `lib/privacy/export.test.ts` compares
+  // the two exports against EACH OTHER: a section missing from both is perfectly
+  // symmetric, so the parity test stayed green while the promise it exists to
+  // keep was broken.
+  //
+  // Never `token_hash`: that IS the credential. `prefix` is in because the
+  // schema says in its own comment that it is not a secret.
+  const setupKeys = memberId
+    ? await sql`
+        select name, prefix, created_at, last_used_at, expires_at, revoked_at
+        from setup_keys
+        where owner_id = ${memberId} order by created_at`
+    : [];
+
   // --- What they uploaded ------------------------------------------------------
   // The rows, not the files. An export is a JSON document; somebody who wants
   // their pictures back downloads them from the app.
@@ -286,6 +303,7 @@ try {
     aiUsage,
     impersonations,
     setupActs,
+    setupKeys,
     media: mediaRows,
     webhookEvents,
     // 🚨 And whatever the installed modules hold about this person — the same

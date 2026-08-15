@@ -15,7 +15,7 @@ something next to it.
 | **a Tailwind config or a style guide** | the same — look for `theme.extend.colors`, `$brand`, a hex on a button rule | the same |
 | **their website's address** | `node run.mjs brand colors --url https://…` | the same — **colours only**. Nothing in `scripts/brand/` looks at type, so their font is something YOU ask about and match from the five pairings, never something the command reports |
 | **just a hex code** | `node run.mjs brand colors --hex "#1F6F4A"` | the derivation and nothing else |
-| **a logo that vanishes on dark** | ask for a second file, then set `logoDark` in `config/brand.json` | both modes covered |
+| **a logo that vanishes on dark** | ask for a second file and pass it: `node run.mjs brand icons --logo <hell> --logo-dark <dunkel> --apply` | both modes covered |
 | **only a screenshot** | that is Branch B with a strong reference. Say so in one sentence and go to Step 1B | — |
 
 **Read a stylesheet yourself before running anything.** The command ranks well

@@ -188,6 +188,8 @@ function checkContrast() {
   const css = readFileSync(cssPath, "utf8");
   const tokens = parseTokens(css);
   let found = 0;
+  /** Pairs really compared — a green line that names no number is the defect. */
+  let pairsCompared = 0;
 
   for (const [mode, set] of [
     ["light", tokens.light],
@@ -210,6 +212,7 @@ function checkContrast() {
         // A token this app does not use is not a finding. A token it uses and
         // this cannot read is — see below.
         if (!set[fg] || !set[bg]) continue;
+        pairsCompared += 1;
         const a = parseHsl(set[fg]);
         const b = parseHsl(set[bg]);
         if (!a || !b) {
@@ -235,7 +238,23 @@ function checkContrast() {
     }
   }
 
-  if (found === 0) ok("Every token pair is legible in light and dark");
+  // 🚨 The number, and the refusal when it is zero. This was the ONE green line
+  // of the run that named nothing it counted — while §7 of docs/design-system.md
+  // promises the opposite in so many words, "so that *nothing found* and
+  // *nothing looked at* are different sentences". Measured 2026-08-15: deleting
+  // the whole accent dial took the comparison from 36 pairs to 26 and the line
+  // read exactly the same, because a pair whose token is missing is skipped
+  // silently one screen up.
+  if (pairsCompared === 0) {
+    fail(
+      "No token pair could be compared",
+      "Every pair named a token app/globals.css does not define. That is not a " +
+        "clean result — nothing was measured. Check that the file still has its " +
+        "colour tokens in both blocks.",
+    );
+  } else if (found === 0) {
+    ok(`Every token pair is legible in light and dark — ${pairsCompared} pair(s) compared`);
+  }
 
   // ── Both blocks, always ────────────────────────────────────────────────────
   //
@@ -615,6 +634,20 @@ function checkNavigation() {
   }
 
   const routes = dashboardRoutes(join(ROOT, "app"));
+  // 🚨 Zero routes is not "every page is reachable". `PAGE_NAMES` hangs off
+  // `modulePageExtensions(installedModules())`, so an unreadable `app/` or a
+  // module list this walk no longer understands empties the set — and an empty
+  // set has no orphans. The kit and raw-text sections already refuse this state;
+  // this one printed a tick with `0 route(s) compared` in it.
+  if (routes.length === 0) {
+    fail(
+      "No route under /dashboard was found",
+      "Nothing was compared, so nothing can be said about reachability. This is " +
+        "an empty walk rather than a clean one — check that app/ is readable and " +
+        "that config/modules.json still parses.",
+    );
+    return;
+  }
   const orphans = routes.filter((route) => !known.has(route) && !linkedFrom.has(route));
   if (orphans.length === 0) {
     // The count is said out loud: this walk's set is a function of

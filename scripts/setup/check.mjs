@@ -27,6 +27,8 @@ import {
   setupProblemsFrom,
 } from "../../lib/setup/config-shape.mjs";
 import { flagsFrom } from "../lib/args.mjs";
+// The one bound, imported rather than restated — see its docstring.
+import { SETUP_TIMEOUT_MS } from "./client.mjs";
 
 const args = process.argv.slice(2);
 const flag = flagsFrom(args);
@@ -48,6 +50,8 @@ if (target && !ENVIRONMENTS[target]) {
 }
 
 let problems = 0;
+/** Things this run could not look at. Never counted as a pass — see the foot. */
+let notChecked = 0;
 const bad = (line) => {
   problems += 1;
   console.log(`  ✗ ${line}`);
@@ -171,6 +175,7 @@ if (live && reachable.length > 0) {
     let response;
     try {
       response = await fetch(`${env.url}/api/setup`, {
+        signal: AbortSignal.timeout(SETUP_TIMEOUT_MS),
         method: "POST",
         headers: { authorization: `Bearer ${env.key}`, "content-type": "application/json" },
         body: JSON.stringify({ tool: "list_environment", env: env.name }),
@@ -218,7 +223,15 @@ if (live && reachable.length > 0) {
     }
   }
 } else if (live) {
-  console.log("\n  --live had nothing to call.");
+  // 🚨 `--live` that could call NOTHING is not a pass. It used to print this
+  // line and fall through to `✓ The setup surface is on.` with exit 0 — so
+  // "the live check ran and found nothing" and "there was nothing to run it
+  // against" printed the same tick. `node run.mjs ai-check --live`, the command
+  // this one is modelled on, answers `⏭ NOT CHECKED` and exits 1 for exactly
+  // this state; so does every rung of `security-check`.
+  console.log("\n  ⏭ NOT CHECKED — --live had nothing to call: no environment on this");
+  console.log("     machine has both a URL and a key. Nothing was asked of any app.");
+  notChecked += 1;
 }
 
 // ── 4. what has been done here ─────────────────────────────────────────────
@@ -231,8 +244,17 @@ if (live && reachable.length > 0) {
 // control that is CLAIMED and not built is worse than one that is absent,
 // because somebody stops looking for it.
 
+// ⚠️ Without `--live` this section says WHY it is empty rather than vanishing.
+// A heading with nothing under it, and a section that is simply absent, read the
+// same to somebody checking whether the trail is being watched.
+if (!live) {
+  console.log("\n  Not read — the trail lives in the app, and this run asked no app.");
+  console.log("  Add --live (needs a URL and a key for at least one environment).");
+}
+
 for (const env of live ? reachable : []) {
   const response = await fetch(`${env.url}/api/setup`, {
+    signal: AbortSignal.timeout(SETUP_TIMEOUT_MS),
     method: "POST",
     headers: { authorization: `Bearer ${env.key}`, "content-type": "application/json" },
     body: JSON.stringify({ tool: "list_acts", env: env.name, input: { limit: 10 } }),
@@ -242,11 +264,28 @@ for (const env of live ? reachable : []) {
     // Not fatal — the environment already answered above, so the surface is
     // there. Saying it plainly beats an empty section that reads as "nothing
     // happened here".
-    console.log(`\n  ${env.name}: could not read the trail`);
+    // 🚨 …and COUNTED. It used to print this line, change nothing, and let the
+    // command end on `✓ The setup surface is on.` with exit 0 — while one of
+    // the three things AC 41.4(a) asks for had not been read. This file's own
+    // foot says it: a run that could not look is never a tick.
+    console.log(
+      `\n  ⏭ ${env.name}: could NOT read the trail` +
+        (response ? ` (HTTP ${response.status})` : " (no answer)"),
+    );
+    notChecked += 1;
     continue;
   }
 
-  const { data } = JSON.parse(await response.text());
+  let data;
+  try {
+    ({ data } = JSON.parse(await response.text()));
+  } catch (error) {
+    // A 200 that is not JSON — a proxy's error page, a captive portal. A stack
+    // trace here would end the command over somebody else's HTML.
+    console.log(`\n  ⏭ ${env.name}: the trail came back unreadable (${error.message})`);
+    notChecked += 1;
+    continue;
+  }
   const acts = data?.acts ?? [];
   console.log(`\nWhat has been done in ${env.name}\n`);
 
@@ -270,6 +309,12 @@ for (const env of live ? reachable : []) {
 console.log("");
 if (problems > 0) {
   console.log(`✗ ${problems} thing(s) to look at.\n`);
+  process.exit(1);
+}
+// A run that could not look is never a tick — the rule the whole security
+// ladder is built on, applied to this command.
+if (notChecked > 0) {
+  console.log(`⏭ ${notChecked} thing(s) NOT CHECKED — see above.\n`);
   process.exit(1);
 }
 console.log(enabled ? "✓ The setup surface is on.\n" : "✓ Nothing wrong — the surface is off.\n");

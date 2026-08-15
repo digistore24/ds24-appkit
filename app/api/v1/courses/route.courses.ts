@@ -11,4 +11,11 @@
 // off, and the two are indistinguishable from outside on purpose.
 //
 // It delegates and holds no logic; `modules/boundary.test.ts` §1b enforces that.
+// 🚨 RESTATED as literals, never re-exported. Next reads these without running
+// the module, so `export { runtime } from …` is invisible to it and the route
+// simply does not carry the value — which is what `modules/boundary.test.ts`
+// §segment-config refused when this file first tried the re-export.
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export { GET } from "@/modules/courses/routes/courses";

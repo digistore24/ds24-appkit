@@ -16,7 +16,12 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { blankComments, blankEmittedCode, isQuotedMention } from "./source-text.mjs";
+import {
+  blankComments,
+  blankCommentsFor,
+  blankEmittedCode,
+  isQuotedMention,
+} from "./source-text.mjs";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -84,6 +89,84 @@ describe("blankComments", () => {
   it("does not merge two block comments on one line", () => {
     const blanked = blankComments("a /* one */ KEEP /* two */ b");
     expect(blanked).toContain("KEEP");
+  });
+
+  it("🚨 does not eat a recursive glob — an empty block is not a comment here", () => {
+    // Measured on 2026-08-15, and it had a victim. `**/` is how every
+    // `outputFileTracingIncludes` entry, every vitest pattern and every
+    // `tsconfig` include is written, and the block-comment regex read the `/`
+    // before the stars as an opener: `"./content/knowledge-media/**/*"` came
+    // back `"./content/knowledge-media    *"`, which turned the assertion that
+    // the knowledge-media disk leg is traced into a standalone build RED on a
+    // tree where it is traced.
+    //
+    // Same family as the phantom block in the header, one level down: there a
+    // comment looked like data, here data looks like a comment.
+    const glob = 'const t = { "/api/chat": ["./content/knowledge/**/*"] };';
+    expect(blankComments(glob)).toBe(glob);
+    expect(blankComments('"./a/**/b/**/c"')).toBe('"./a/**/b/**/c"');
+    // …and a real comment on the same line is still blanked, so the lookahead
+    // did not buy the glob by switching the rule off.
+    expect(blankComments('["./x/**/*"] /* gone */')).not.toContain("gone");
+    expect(blankComments('["./x/**/*"] /* gone */')).toContain("./x/**/*");
+  });
+
+  it("still blanks a JSDoc, which starts with the same two characters", () => {
+    // The lookahead is `(?!\*\/)`, not `(?!\*)` — a one-character difference
+    // that would have exempted every JSDoc in the tree and made the guard a
+    // no-op on the files that explain themselves most.
+    const doc = "/** the reason */\nconst a = 1;";
+    expect(blankComments(doc)).not.toContain("the reason");
+    expect(blankComments(doc)).toContain("const a = 1;");
+  });
+});
+
+describe("blankCommentsFor", () => {
+  // The SAME bytes through both answers, so the test is about the file name and
+  // nothing else. A doc that spells a comment out to teach it — and this tree's
+  // docs do — must come back whole; the source file must not.
+  const BYTES = "keep\n// gone\nkeep";
+
+  it("blanks a source file", () => {
+    expect(blankCommentsFor("lib/env-guard.ts", BYTES)).not.toContain("gone");
+    expect(blankCommentsFor("run.mjs", BYTES)).not.toContain("gone");
+    expect(blankCommentsFor("components/app-shell.tsx", BYTES)).not.toContain("gone");
+  });
+
+  it("🚨 leaves markdown alone — in a doc the prose IS the subject", () => {
+    // The half a blind wrapper would break. `scripts/docs-coverage.test.ts` and
+    // `scripts/setup.test.ts` assert on sentences in these files; blanking one
+    // does not make a guard noisy, it makes it read a doc that is not there.
+    expect(blankCommentsFor("docs/DEPLOY.md", BYTES)).toBe(BYTES);
+    expect(blankCommentsFor(".claude/skills/build-app/SKILL.md", BYTES)).toBe(BYTES);
+    expect(blankCommentsFor("CLAUDE.md", BYTES)).toBe(BYTES);
+  });
+
+  it("leaves the data files a mixed corpus also carries", () => {
+    // Read through the same `read()` as the source above: `setup.test.ts` reads
+    // `.env.example` and `package.json`, `docs-coverage.test.ts` reads
+    // `module.json` and `.template-version`.
+    expect(blankCommentsFor("package.json", BYTES)).toBe(BYTES);
+    expect(blankCommentsFor(".env.example", BYTES)).toBe(BYTES);
+    expect(blankCommentsFor("config/cron.yaml", BYTES)).toBe(BYTES);
+  });
+
+  it("treats an unknown extension as code, and that is the safe direction", () => {
+    // A code extension nobody added to the list would silently stop being
+    // blanked — the exact hole this module closes. An unlisted DATA format gets
+    // blanked instead, and a damaged assertion is visible where a silent guard
+    // is not. `.template-version` has no extension at all and is JSON; it is
+    // read for a version number, which no comment can contain.
+    expect(blankCommentsFor("something.cjs", BYTES)).not.toContain("gone");
+    expect(blankCommentsFor("no-extension-at-all", BYTES)).not.toContain("gone");
+  });
+
+  it("answers on the extension, not on the path around it", () => {
+    // A directory called `docs/` holding a `.ts`, and a `.md` under `lib/`.
+    expect(blankCommentsFor("docs/appliers/example.ts", BYTES)).not.toContain("gone");
+    expect(blankCommentsFor("lib/media/README.md", BYTES)).toBe(BYTES);
+    // Case, because a checker may be handed a name off a Windows disk.
+    expect(blankCommentsFor("docs/DEPLOY.MD", BYTES)).toBe(BYTES);
   });
 });
 

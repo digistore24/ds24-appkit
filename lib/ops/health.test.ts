@@ -17,9 +17,14 @@
 
 import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import {
   IPN_ACTIVE_DAYS,
   IPN_SILENCE_DAYS,
+  defaultProbes,
   operationalState,
   type OpsProbes,
 } from "./health";
@@ -34,6 +39,7 @@ function healthy(overrides: Partial<OpsProbes> = {}): OpsProbes {
   return {
     mediaProblems: () => [],
     mediaDriver: () => "s3",
+    mediaEnabled: () => true,
     headObject: async () => null,
     localStoreWritable: async () => {},
     sellingProducts: () => 1,
@@ -133,6 +139,43 @@ describe("operationalState — the media probe", () => {
     expect(gone.media).toMatchObject({ state: "finding", code: "localDirUnwritable" });
   });
 
+  it("🚨 media switched OFF is ok, and nothing is asked — not a finding to mail about", async () => {
+    // `lib/env-guard.ts` deliberately lets `MEDIA_DRIVER=local` START in PROD
+    // while media are off. Without this branch such an app answered
+    // `localDirUnwritable`, `collectFindings()` raised it to HIGH and
+    // `ops-watchdog` MAILED — about a subsystem the operator switched off.
+    // Same shape as the IPN probe's `noProducts`, and for the same reason.
+    const headObject = vi.fn(async () => null);
+    const localStoreWritable = vi.fn(async () => {});
+    const mediaProblems = vi.fn((): string[] => []);
+
+    const off = await operationalState(
+      { now: NOW },
+      healthy({ mediaEnabled: () => false, mediaDriver: () => "local", headObject, localStoreWritable, mediaProblems }),
+    );
+    expect(off.media).toMatchObject({ state: "ok", code: "disabled" });
+    // Nothing was ASKED — the switch is read before the store is touched, so a
+    // broken configuration behind a closed switch cannot produce a finding.
+    expect(headObject).not.toHaveBeenCalled();
+    expect(localStoreWritable).not.toHaveBeenCalled();
+    expect(mediaProblems).not.toHaveBeenCalled();
+
+    // The needle: with the switch ON, the very same probes ARE a finding. Without
+    // this half the branch above would pass against a probe that answers `ok`
+    // unconditionally.
+    const on = await operationalState(
+      { now: NOW },
+      healthy({
+        mediaEnabled: () => true,
+        mediaDriver: () => "local",
+        localStoreWritable: async () => {
+          throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+        },
+      }),
+    );
+    expect(on.media).toMatchObject({ state: "finding", code: "localDirUnwritable" });
+  });
+
   it("🚨 never puts a caught error's words into its answer", async () => {
     // A driver error carries the bucket URL; a Postgres error carries the
     // query's parameters. `code` is a closed union for exactly that reason.
@@ -145,6 +188,38 @@ describe("operationalState — the media probe", () => {
       }),
     );
     expect(JSON.stringify(state)).not.toContain("secret-bucket");
+  });
+});
+
+describe("defaultProbes.localStoreWritable — 'not there' is not 'not writable'", () => {
+  // The injected probes above cannot reach this: it is the DEFAULT probe, and
+  // the defect lived in it. `lib/media/local.ts` creates the media directory on
+  // the FIRST `put()`, so every app that has never stored a file answered
+  // ENOENT — which this probe reported as `localDirUnwritable`, i.e. a HIGH
+  // finding mailed to the operator of a perfectly healthy new app.
+  const tmp = () => mkdtempSync(join(tmpdir(), "ds24-media-probe-"));
+
+  it("passes when the directory is absent but its parent can create it", async () => {
+    const parent = tmp();
+    process.env.MEDIA_LOCAL_DIR = join(parent, "not-created-yet");
+    await expect(defaultProbes.localStoreWritable()).resolves.toBeUndefined();
+    rmSync(parent, { recursive: true, force: true });
+  });
+
+  it("🚨 still refuses when neither the directory nor its parent exists", async () => {
+    // The needle. Without it the branch above would pass against a probe that
+    // swallows every error, which is exactly the shape that turns a guard silent.
+    const parent = tmp();
+    process.env.MEDIA_LOCAL_DIR = join(parent, "gone", "deeper");
+    rmSync(parent, { recursive: true, force: true });
+    await expect(defaultProbes.localStoreWritable()).rejects.toThrow();
+  });
+
+  it("passes on a directory that is really there", async () => {
+    const dir = tmp();
+    process.env.MEDIA_LOCAL_DIR = dir;
+    await expect(defaultProbes.localStoreWritable()).resolves.toBeUndefined();
+    rmSync(dir, { recursive: true, force: true });
   });
 });
 
@@ -292,6 +367,9 @@ describe("operationalState — the two are independent", () => {
         throw new Error("boom");
       },
       mediaDriver: () => {
+        throw new Error("boom");
+      },
+      mediaEnabled: () => {
         throw new Error("boom");
       },
       headObject: async () => {

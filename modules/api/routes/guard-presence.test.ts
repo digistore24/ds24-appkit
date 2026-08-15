@@ -54,6 +54,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { resolveImport } from "@/scripts/lib/import-graph.mjs";
+import { blankComments } from "@/scripts/lib/source-text.mjs";
 import { availableModules, readModule } from "@/scripts/modules/registry.mjs";
 
 const V1 = __dirname;
@@ -73,9 +74,21 @@ const rel = (full: string) => path.relative(ROOT, full).split(path.sep).join("/"
  */
 const EXEMPT = ["modules/api/routes/auth-token.ts"];
 
+/**
+ * The one place a handler or a declaration is read — through `blankComments()`.
+ *
+ * Everything both blocks touch is `.ts`, so the blind form is the right one.
+ * The reason it is not hygiene: this file's needles are two lines of CODE that a
+ * handler's own header is likeliest to QUOTE — "guarded by `guardApi()`" above
+ * an unguarded handler, or a commented-out `await guardApi(req)` left behind
+ * mid-edit, would each ENTITLE a file the rule means to catch. A guard that a
+ * sentence can satisfy guards nothing (CLAUDE.md → Rules).
+ */
+const read = (file: string) => blankComments(readFileSync(file, "utf8"));
+
 /** Does this handler's source import `guardApi` and call it? */
 function guards(file: string): { imports: boolean; calls: boolean } {
-  const source = readFileSync(file, "utf8");
+  const source = read(file);
   return {
     imports: source.includes('from "@/modules/api/api/guard"'),
     calls: /await\s+guardApi\s*\(/.test(source),
@@ -176,7 +189,7 @@ function declarationsIn(dir: string): string[] {
 
 /** The `@/…` specifier a declaration re-exports its handler from. */
 function handlerSpecifier(file: string): string | null {
-  const source = readFileSync(file, "utf8");
+  const source = read(file);
   const match = source.match(/\bexport\s*\{[^}]*\}\s*from\s+["']([^"']+)["']/);
   return match ? match[1] : null;
 }

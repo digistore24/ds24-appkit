@@ -118,6 +118,38 @@ export function courseProblems(course: Course): string[] {
 }
 
 /**
+ * 🚨 What makes a course UNUSABLE, as opposed to merely worth reporting.
+ *
+ * A retired Product Key is the difference, and 44.1 AC 5 asks for exactly this
+ * split — "a retired key is skipped, not fatal". `lib/media/manage.ts` already
+ * makes it for a media row, in those words: an ordinary registry edit must not
+ * become a refusal for people who paid.
+ *
+ * Measured 2026-08-15 before this existed: a course sold monthly AND yearly, the
+ * monthly product removed from `config/digistore-products.json` — and the YEARLY
+ * buyers got 404 on the list, the overview, every lesson and
+ * `/api/v1/courses/<slug>`, while the video in the same lesson was still served,
+ * because `mayAccess()` skips a dead key and this did not.
+ *
+ * So: a dead key is dropped and logged; a course dies only when NOTHING is left
+ * to sell it under — which is the same state as an empty list. Everything that
+ * is not about a key (an unreadable `shape`, a duplicate) stays fatal.
+ */
+export function courseBlocking(course: Course): string[] {
+  const live = course.planKeys.filter((key) => {
+    if (!planProblem(key)) return true;
+    console.error(
+      `[courses] ${course.slug}: plan key "${key}" is no longer a product — ignored. ` +
+        `Fix the course file or restore the product.`,
+    );
+    return false;
+  });
+  // Every key gone is the same state as none named: nothing sells this course.
+  if (live.length === 0) return courseProblems(course);
+  return courseProblems({ ...course, planKeys: live });
+}
+
+/**
  * The courses a MEMBER may be shown — the ones with no problems.
  *
  * A course left out here is not hidden from the operator: `allCourses()` still
@@ -126,7 +158,7 @@ export function courseProblems(course: Course): string[] {
  * diagnosis page reachable) and every member-facing route.
  */
 export async function usableCourses(): Promise<Course[]> {
-  return (await allCourses()).filter((course) => courseProblems(course).length === 0);
+  return (await allCourses()).filter((course) => courseBlocking(course).length === 0);
 }
 
 /**
@@ -146,7 +178,7 @@ export async function courseBySlug(slug: string): Promise<Course | null> {
     .limit(1);
   if (!row) return null;
   const course = toCourse(row);
-  return courseProblems(course).length === 0 ? course : null;
+  return courseBlocking(course).length === 0 ? course : null;
 }
 
 /**
@@ -182,7 +214,7 @@ export async function courseById(id: string): Promise<Course | null> {
   const [row] = await db.select().from(coursesCourses).where(eq(coursesCourses.id, id)).limit(1);
   if (!row) return null;
   const course = toCourse(row);
-  return courseProblems(course).length === 0 ? course : null;
+  return courseBlocking(course).length === 0 ? course : null;
 }
 
 /** One course by its id, problems and all — the OPERATOR's lookup by id. */

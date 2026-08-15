@@ -7,10 +7,27 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+import { blankComments } from "@/scripts/lib/source-text.mjs";
+
 import { availableModules } from "./registry.mjs";
 import { CORE_PAGE_EXTENSIONS, modulePageExtensions } from "./page-extensions.mjs";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
+
+/**
+ * The three source files this test reads as TEXT, read the one sanctioned way.
+ *
+ * All three are code (`next.config.ts`, `scripts/dev/routes.mjs`,
+ * `scripts/dev/smoke.mjs`), so the blind `blankComments()` is right and
+ * `blankCommentsFor()` would only ask a question whose answer is already known.
+ * It is load-bearing in both directions here: the checks below demand a call
+ * (`modulePageExtensions(installedModules())`, `collectPageRoutes()`) and refuse
+ * a name (`readdirSync`) — and every one of those three strings is a natural
+ * thing for a comment in those files to MENTION. A sentence saying the sweep
+ * derives its names would otherwise satisfy the demand, and a sentence saying
+ * "this used to walk `app/` with readdirSync" would otherwise fail the refusal.
+ */
+const readSource = (rel: string) => blankComments(readFileSync(`${ROOT}${rel}`, "utf8"));
 
 describe("the extension list", () => {
   it("is Next's own default when nothing is installed", () => {
@@ -58,7 +75,7 @@ describe("the extension list", () => {
 describe("next.config.ts really uses it", () => {
   // A helper nothing calls is the failure this file would otherwise miss: every
   // assertion above would stay green while routes were decided somewhere else.
-  const source = readFileSync(new URL("../../next.config.ts", import.meta.url), "utf8");
+  const source = readSource("next.config.ts");
 
   it("computes pageExtensions from the installed modules", () => {
     expect(source).toMatch(/pageExtensions:\s*modulePageExtensions\(installedModules\(\)\)/);
@@ -143,8 +160,8 @@ describe("every module-suffixed route file names a module in this tree", () => {
 // first honest: the walker derives its names properly, AND smoke still uses the
 // walker instead of having quietly regrown a literal `page.tsx` of its own.
 describe("the smoke sweep finds a module's pages", () => {
-  const routes = readFileSync(`${ROOT}scripts/dev/routes.mjs`, "utf8");
-  const smoke = readFileSync(`${ROOT}scripts/dev/smoke.mjs`, "utf8");
+  const routes = readSource("scripts/dev/routes.mjs");
+  const smoke = readSource("scripts/dev/smoke.mjs");
 
   it("derives its page names from this module's extension list", () => {
     expect(

@@ -84,6 +84,66 @@ function commandSections(): string[] {
   );
 }
 
+describe("🚨 a table missing from BOTH exports is still missing", () => {
+  // The gap this whole file could not see. Every assertion below compares the
+  // two exports against EACH OTHER — so a section absent from both is perfectly
+  // symmetric and every test stays green. Measured 2026-08-15: `setup_keys` was
+  // in neither, for months, while `docs/data-protection.md` classes it as
+  // personal data in so many words ("the name is theirs and the row names its
+  // owner"). The empty set reading as clean, in its purest form.
+  //
+  // So this asks a question neither export can answer about itself: for every
+  // table in `db/schema-setup.ts`, is there a section — or a written reason why
+  // there is none? An allowlist with reasons, the house form, and the only way
+  // to add a table without deciding is to lie in a comment.
+  const NOT_PERSONAL: Record<string, string> = {
+    setup_confirmations:
+      "one-time tokens: a hash, an environment, two timestamps. No member id, " +
+      "no name, nothing anybody typed — and every row is deleted the moment it " +
+      "is spent or expires (`prune-setup-audit`).",
+  };
+
+  const setupTables = (): string[] => {
+    const source = withoutComments(
+      readFileSync(join(fileURLToPath(new URL("../../", import.meta.url)), "db/schema-setup.ts"), "utf8"),
+    );
+    return [...source.matchAll(/pgTable\(\s*"([a-z_]+)"/g)].map((match) => match[1]);
+  };
+
+  it("reads the setup tables at all", () => {
+    // Non-vacuity: a pattern that matched nothing would make the rule below
+    // pass over every table there is.
+    const tables = setupTables();
+    expect(tables.length).toBeGreaterThan(2);
+    expect(tables).toContain("setup_keys");
+    expect(tables).toContain("setup_audit");
+  });
+
+  it("every setup table is exported, or says in writing why it is not", () => {
+    // `setup_keys` → `setupKeys`, `setup_audit` → `setupActs`: the section name
+    // is not derivable from the table name, so the mapping is written out.
+    const SECTION_OF: Record<string, string> = {
+      setup_keys: "setupKeys",
+      setup_audit: "setupActs",
+    };
+
+    const undecided = setupTables().filter((table) => {
+      if (NOT_PERSONAL[table]) return false;
+      const section = SECTION_OF[table];
+      return !section || !MEMBER_EXPORT_SECTIONS.includes(section as never);
+    });
+
+    expect(
+      undecided,
+      `these tables in db/schema-setup.ts are in neither Art. 15 export and carry ` +
+        `no written reason. Add a section (to MEMBER_EXPORT_SECTIONS, to the query ` +
+        `in lib/privacy/export.ts AND to scripts/privacy/export-data.mjs), or name ` +
+        `the table in NOT_PERSONAL above with the reason. A table that is missing ` +
+        `from both exports is invisible to every other test in this file.`,
+    ).toEqual([]);
+  });
+});
+
 describe("the two exports cover the same tables", () => {
   it("reads a plausible section list out of the command", () => {
     // Non-vacuity: a regex that matched nothing would make every assertion
@@ -182,7 +242,13 @@ describe("the two exports cover the same tables", () => {
           `switched on is not a fact about what the app holds about a person: ` +
           `groups archive rather than delete, so every row written while it was ` +
           `on is still there after it is switched off.`,
-      ).not.toMatch(/isCommunityEnabled|communityEnabled\s*\(/);
+      // 🚨 `isSetupEnabled` is in the list because the surface ships switched
+      // OFF, which makes it the most plausible next hand: "why do we export
+      // setupActs when the surface is off?" — and then a subject access request
+      // answers with silence about data the app holds. The rule is not about
+      // one module; it is that an export says what the app HOLDS, so no section
+      // may be a function of a feature switch.
+      ).not.toMatch(/isCommunityEnabled|communityEnabled\s*\(|isSetupEnabled|setupEnabled\s*\(/);
     }
   });
 

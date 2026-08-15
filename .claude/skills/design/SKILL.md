@@ -146,7 +146,7 @@ None of these costs anything to run — it is about fifteen minutes of work.
                   Tool-like, dense, numbers first
   3  keep Figtree, recolour only — one colour on the shipped type, flat
 
-  0  keep the shipped look (petrol on warm grey, Figtree)
+  0  keep the shipped look (petrol on warm grey, Figtree with Source Serif 4 headings, a monogram tile in ink)
 
 Give me a number, or say "you choose" and I take the one marked ✅.
 ```
@@ -180,12 +180,15 @@ the file every later page follows. Its shape is
 
 Then apply it:
 
-1. **Tokens:** `--primary`, `--primary-foreground`, `--ring` (and `--radius`
-   if chosen) in **both** blocks of `app/globals.css` — `:root` and `.dark`.
+1. **Tokens:** `--primary`, `--primary-foreground` and `--ring` in **both**
+   blocks of `app/globals.css` — `:root` and `.dark`. ⚠️ `--radius`, if you
+   changed it, goes in `:root` **only**: a corner has no dark answer, repeating
+   it would be a second place to edit one decision, and `ux-check` excuses it in
+   exactly that one direction.
    Branch A: `node run.mjs brand colors … --apply` did this. Branch B: by hand,
    or `--hex` with the colour you agreed.
    The exact edits are [`references/tokens.md`](references/tokens.md).
-2. **Type:** the wiring in that same file, if the pairing changed — the package
+2. **Type:** the wiring in `app/layout.tsx`, if the pairing changed — the package
    is installed first, and `next/font/local` points at a file inside it.
 3. **Elevation:** `--elevation-raised` and `--elevation-overlay`, in **both**
    blocks, and only when the chosen row says `lifted`. The two value sets are

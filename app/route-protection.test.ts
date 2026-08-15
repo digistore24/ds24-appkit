@@ -33,6 +33,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { blankComments } from "@/scripts/lib/source-text.mjs";
 import { modulePublicRoutes } from "@/scripts/modules/inventory.mjs";
 import { installedModules } from "@/scripts/modules/installed.mjs";
 import { modulePageExtensions } from "@/scripts/modules/page-extensions.mjs";
@@ -258,7 +259,14 @@ describe("every route has a decided answer to who may reach it", () => {
     // If somebody ever flips protection to opt-out, the sweep above turns into
     // theatre: every route would be safe and this file would still be nodding
     // along. So it reads the two places the rule lives and fails loudly instead.
-    const authConfig = readFileSync(path.join(APP, "..", "auth.config.ts"), "utf8");
+    // Through `blankComments()`, because this reads SOURCE as text and the two
+    // needles are pieces of code that `auth.config.ts` — of all files — is
+    // likeliest to also SPELL OUT in a comment explaining the opt-in rule. A
+    // sentence describing the fall-through is not the fall-through
+    // (CLAUDE.md → Rules).
+    const authConfig = blankComments(
+      readFileSync(path.join(APP, "..", "auth.config.ts"), "utf8"),
+    );
     expect(
       /path\.startsWith\("\/dashboard"\)/.test(authConfig),
       "auth.config.ts no longer decides on the /dashboard prefix — this test's whole classification is built on that. Re-read it before adjusting.",

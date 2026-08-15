@@ -50,6 +50,7 @@ import {
   grants,
   impersonations,
   setupAudit,
+  setupKeys,
   invoices,
   media,
   orders,
@@ -81,6 +82,7 @@ export const MEMBER_EXPORT_SECTIONS = [
   "impersonations",
   "media",
   "setupActs",
+  "setupKeys",
   // ⚠️ **A module's sections are NOT in this list, and they are not optional
   // either.** The community's thirteen used to be spelled out here; they now
   // live in `modules/community/privacy/sections.ts` beside the queries that
@@ -268,6 +270,7 @@ export async function buildMemberExport(
     // parity test compared two DECLARATIONS, so nobody ever called this
     // function. `lib/privacy/export-shape.test.ts` now does.
     setupActRows,
+    setupKeyRows,
     mediaRows,
   ] = await Promise.all([
     orderIds.length
@@ -383,6 +386,32 @@ export async function buildMemberExport(
       .where(eq(setupAudit.subjectMemberId, memberId))
       .orderBy(asc(setupAudit.createdAt)),
 
+    // 🚨 The setup keys this person MINTED. `docs/data-protection.md` classes the
+    // table as personal data in so many words — "the name is theirs and the row
+    // names its owner" — and it was in NEITHER Art. 15 export.
+    //
+    // The way it hid is worth keeping: `lib/privacy/export.test.ts` compares the
+    // two exports against EACH OTHER, and a section missing from both is
+    // perfectly symmetric. The parity test stayed green while the promise it
+    // exists to keep was broken — the empty set reading as clean, in its purest
+    // form.
+    //
+    // Never `tokenHash`: that is the credential itself. `prefix` is in because
+    // the schema says in its own comment that it is not a secret, and because it
+    // is the only way a reader can tell which key a row is.
+    db
+      .select({
+        name: setupKeys.name,
+        prefix: setupKeys.prefix,
+        createdAt: setupKeys.createdAt,
+        lastUsedAt: setupKeys.lastUsedAt,
+        expiresAt: setupKeys.expiresAt,
+        revokedAt: setupKeys.revokedAt,
+      })
+      .from(setupKeys)
+      .where(eq(setupKeys.ownerId, memberId))
+      .orderBy(asc(setupKeys.createdAt)),
+
     // What this person uploaded. `owner`-visible rows only: those are theirs.
     // Product imagery an operator uploaded carries their id too, and it belongs
     // to the app rather than to them — which is why the foreign key is
@@ -461,6 +490,7 @@ export async function buildMemberExport(
     impersonations: impersonationRows,
     media: mediaRows,
     setupActs: setupActRows,
+    setupKeys: setupKeyRows,
 
     // 🚨 And whatever the installed modules hold about this person — the
     // community's thirteen sections among them, since Epic 24 moved them into

@@ -12,7 +12,17 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
+import { blankComments } from "@/scripts/lib/source-text.mjs";
+
+// Blanked at the reader rather than at each assertion, so a check added later
+// inherits it. Both assertions below hunt a needle in code — a `.references(…,
+// { onDelete: "cascade" })`, a `state: null`, a column name — and every one of
+// those is a thing a file is likely to NAME while explaining what it does: the
+// comment above `eraseFor()` describing what it empties would satisfy the check
+// on its own, after somebody had deleted the update. Only `.ts` and `.mjs` come
+// through here.
+// (CLAUDE.md → a checker that reads source as TEXT goes through `blankComments()`.)
+const read = (rel: string) => blankComments(readFileSync(new URL(rel, import.meta.url), "utf8"));
 
 describe("what survives an account deletion", () => {
   it("activity_results still cascades from the member — member_id specifically", () => {

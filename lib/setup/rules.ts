@@ -343,10 +343,27 @@ export function moduleToolNameProblem(moduleId: string, name: string): string | 
   if (!isValidToolName(name)) {
     return `"${name}" is not a tool name — lower case, digits and single underscores`;
   }
-  if (!name.startsWith(`${moduleId}_`)) {
-    return `"${name}" must start with "${moduleId}_" — a module's tools carry its id, so nobody has to guess where one came from`;
+  const prefix = toolPrefixOf(moduleId);
+  if (!name.startsWith(`${prefix}_`)) {
+    return `"${name}" must start with "${prefix}_" — a module's tools carry its id, so nobody has to guess where one came from`;
   }
   return null;
+}
+
+/**
+ * The prefix a module's tools carry.
+ *
+ * 🚨 A hyphen becomes an underscore, and without that a module id with a hyphen
+ * could have NO legal tool at all: `isValidToolName()` forbids `-`, while the
+ * prefix rule demanded `acme-crm_`. `scripts/modules/manifest.mjs` allows
+ * hyphens in an id expressly, and both `sqlName()` (for table names) and
+ * `generate.mjs` (for the import alias) already make exactly this substitution —
+ * this is the third place that needs it, and the first that did not have it.
+ * The first foreign module with a hyphen would have been told to use a name the
+ * other half of the rule forbids.
+ */
+export function toolPrefixOf(moduleId: string): string {
+  return String(moduleId).replace(/-/g, "_");
 }
 
 // ── the policies that are decisions rather than checks ──────────────────────

@@ -594,7 +594,13 @@ async function askNpmCi(cwd) {
       const from = join(cwd, name);
       if (existsSync(from)) copyFileSync(from, join(scratch, name));
     }
-    return await capture("npm", ["ci", "--dry-run"], { cwd: scratch });
+    // 🚨 A bound, like every other rung that talks to something. `npm ci
+    // --dry-run` resolves against the REGISTRY, and `capture()` has no default
+    // timeout — a proxy that swallows packages instead of refusing them left the
+    // whole ladder standing. `writeVerdict()` runs only after every rung, so a
+    // Ctrl-C there loses the measurement of ALL of them, which is the argument
+    // `live.mjs` writes out and this rung was the only one to break.
+    return await capture("npm", ["ci", "--dry-run"], { cwd: scratch, timeout: 60_000 });
   } catch (error) {
     // A temp folder that cannot be made is not a finding about this app.
     return { code: 1, stdout: "", stderr: String(error?.message ?? error) };
@@ -635,6 +641,30 @@ export const posture = {
 
     const lockPath = join(cwd, "package-lock.json");
     const lock = jsonOf(lockPath);
+    // 🚨 `jsonOf()` answers `null` for "absent" AND for "there but unparseable",
+    // and all four questions below read a `null` lock as "nothing to complain
+    // about". Measured 2026-08-15: `lockfileSyncFindings(pkg, null)`,
+    // `installScriptPackages(null)` and `lockfileCommittedFindings(true, …)` all
+    // return `[]`. An unresolved merge conflict makes a lockfile invalid JSON —
+    // so this rung reported `clean`, exit 0, over the exact state in which
+    // `npm ci` fails on the host. Thrown rather than skipped, like the
+    // `package.json` case above: `check.mjs` turns it into a skip that says why.
+    if (lock === null && existsSync(lockPath)) {
+      throw new Error(
+        "package-lock.json is there but could not be parsed (an unresolved merge " +
+          "conflict looks exactly like this), so the lockfile questions were not asked",
+      );
+    }
+    // A lockfile npm 6 wrote has no `packages` map, and two other rungs read
+    // ONLY that map — they then skip saying "no package versions to ask about",
+    // which is false. It is named here, once, where the file is read.
+    if (lock && Number(lock.lockfileVersion) < 2) {
+      throw new Error(
+        `package-lock.json is lockfileVersion ${lock.lockfileVersion}, which carries no ` +
+          "`packages` map — run `npm install` once with npm 7 or newer to rewrite it, " +
+          "or this and two other rungs can only guess",
+      );
+    }
     const npmrc = textOf(join(cwd, ".npmrc"));
     const gitignore = textOf(join(cwd, ".gitignore"));
     // 🚨 Read RAW — the reasons ARE the comments. See this file's header before

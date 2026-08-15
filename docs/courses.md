@@ -201,20 +201,29 @@ TARGET; never the reverse. Giving an existing lesson a **new** slug orphans ever
 completion that pointed at the old one — the state tables key on the slug, which
 is exactly what makes the update direction safe.
 
-⚠️ **And "a second one" does not mean "sold separately" in this app.** Measured
-against the tree rather than assumed: `config/course.json` holds **one** `shape`,
-**one** `planKeys` list and **one** `enabled`, and `courses_blocks` is flat — so a
-second set of blocks is served by the same pages and gated by the same list, and
-it is visible to exactly the **same** buyers as the first.
+⚠️ **"A second one" DOES mean "sold separately" in this app — since Story 44.2.**
+The paragraph that stood here said the opposite, and it kept saying it after the
+capability was built: an agent asked "can I sell a second course separately?"
+read the doc that `CLAUDE.md` condenses and answered no, or built it by hand
+beside the thing that was already there. A capability that is present must not
+read like one that is absent, which is the same rule as the other way round.
 
-🚨 **`planKeys` being a list does NOT make this a second course.** It answers a
-different question — *which products unlock THIS course* — and it exists because
-one offering is one Digistore24 product per billing interval, so a single course
-sold monthly and yearly names two keys. Selling a second course SEPARATELY would
-need a course row above `courses_blocks`, its own list, and the module's gate to
-pick one per block; no part of this is that, and the agent says so rather than
-letting it be implied. A capability that is absent must not read like one that is
-present.
+What it takes: a second folder under `content/course/`, with its own
+`course.json` carrying that course's `shape` and its own `planKeys`. Each course
+is a row in `courses_courses`; `courses_blocks.courseId` is NOT NULL, so a block
+belongs to exactly one; and the gate resolves the course before it resolves
+access.
+
+🚨 **`planKeys` being a list is still NOT what makes a second course.** It
+answers a different question — *which products unlock THIS course* — and it
+exists because one offering is one Digistore24 product per billing interval, so
+a single course sold monthly and yearly names two keys. Two courses are two
+folders, not two keys in one list; conflating them is how somebody ends up
+selling one course twice.
+
+⚠️ And `config/course.json` holds the SWITCH and nothing else. `shape` and
+`planKeys` there are unknown keys, which makes the module answer `brokenConfig`
+— the whole course area 404s the moment `enabled` goes true.
 
 When the target row's `origin` is not `content`, the update choice is not
 available at all, and the report says so instead of offering it: renaming onto

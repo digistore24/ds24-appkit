@@ -156,7 +156,8 @@ the module owning its own handlers instead of the core learning about courses.
 
 | Endpoint | Method | What it answers | Module |
 |---|---|---|---|
-| `/api/v1/courses` | GET | the course's shape: blocks, lessons, what has opened, what this member ticked off. **Structure only** — no lesson text and no media ids, exactly as the overview page resolves no media | `courses` |
+| `/api/v1/courses` | GET | 🚨 **the CATALOGUE** since Story 44.2: every course this app holds, each with `entitled`. It answers a caller who holds nothing — an empty catalogue and a catalogue of things you have not bought are different answers. It used to return one course's blocks; that is a **breaking change on the wire**, and it is the only one in that story | `courses` |
+| `/api/v1/courses/{course}` | GET | one course's shape: blocks, lessons, what has opened, what this member ticked off. **Structure only** — no lesson text and no media ids, exactly as the overview page resolves no media | `courses` |
 | `/api/v1/courses/units/{slug}` | GET | one lesson: text, task prompt, media **ids**, this member's own hand-in. `403` while the block has not opened | `courses` |
 | `/api/v1/courses/units/{slug}/completion` | POST ✎ | `{ "done": true \| false }` — tick a lesson off, idempotent both ways | `courses` |
 | `/api/v1/courses/units/{slug}/submission` | POST ✎ | `{ "body": "…" }` — hand work in, for the accompanied workshop | `courses` |
