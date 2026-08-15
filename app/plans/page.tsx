@@ -5,7 +5,7 @@ import { getLocale, getTranslations } from "next-intl/server";
 import { Check } from "lucide-react";
 
 import {
-  allProducts,
+  sellableProducts,
   formatPrice,
   intervalKey,
   type ProductDef,
@@ -211,7 +211,12 @@ export default async function PlansPage({
   // Every kind the registry holds, grouped and ordered in ONE place
   // (lib/digistore/plan-sections.ts). Enumerating the kinds here is what once
   // left `one_time` off the page entirely.
-  const sections = planSections(allProducts());
+  //
+  // `sellableProducts()`, never `allProducts()`: this page IS the offer, so a
+  // parked entry (`"sell": false`) belongs off it. The rest of the app keeps
+  // the full list — somebody who bought a plan that has since been taken off
+  // sale still has it (lib/digistore/products.ts → sellableProducts).
+  const sections = planSections(sellableProducts());
 
   // A signed-in visitor gets buttons instead of links; the URL is then built
   // on click (app/plans/actions.ts). auth() is safe here even though this page

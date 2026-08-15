@@ -45,7 +45,7 @@ export type CheckoutLink =
  *
  * Three details that are easy to get wrong:
  *  - **`key` carries the language, and it has to.** It is the buy-URL cache
- *    key (`buy_url_cache.offerKey`, one row per key), so `pro` for both
+ *    key (`buy_url_cache.offerKey`, one row per key), so `starter` for both
  *    languages would let the German and the English checkout URL evict each
  *    other on every page view — and, in the window between, serve the German
  *    form to an English buyer out of the cache. `offerHash` alone does not

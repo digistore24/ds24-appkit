@@ -285,12 +285,17 @@ language, which is exactly the moment a purchase gets abandoned.
 "basic_monthly": {
   "name": "Basic (monthly)",
   "priceCents": 1900,
+  "sell": true,
   "productIds": {
     "dev":  { "de": null, "en": null },
     "prod": { "de": null, "en": null }
   }
 }
 ```
+
+(`sell` is optional and defaults to sold — see *Keeping an entry without
+selling it* below. It is written out in the shipped entries so the switch is
+visible rather than something you have to know about.)
 
 `node run.mjs ds24-sync` creates one Digistore24 product per entry — with
 `data[language]` set — and writes the ids back, **per environment**: `--env
@@ -300,6 +305,86 @@ all of the app's products sit in one Digistore24 product group — see
 `docs/environments.md`). At checkout the visitor's locale picks which of the
 running environment's products they are sent to
 (`lib/digistore/products.ts` → `checkoutProductFor`).
+
+### Nothing is created without your yes
+
+🚨 **Creating a Digistore24 product cannot be undone from this repo.** Removing
+the entry from `config/digistore-products.json` afterwards does not unpublish
+it — the product stays in the vendor account and an existing checkout link
+keeps working until somebody deactivates it in the Digistore24 backend, by
+hand.
+
+So `ds24-sync` refuses the first time it would create something. It prints
+every row that would be NEW, says the step is irreversible, and stops without
+writing anything — no product, no product group, and no IPN registration
+either, so `APP_URL` being local does not put a Cloudflare tunnel up for a run
+that was declined. Two ways on:
+
+- `node run.mjs ds24-sync --create-new` — yes, that is the list.
+- `"sell": false` on the entries you do not sell, then run it again.
+
+**It only fires while something would be created.** An offering that has been
+synced carries an id, so every later run passes straight through and updates
+what is there; updates are reversible and are never gated. A sixth product
+added next year asks again, because the irreversible step is per product.
+
+### The two token packages the template used to ship
+
+`config/digistore-products.json` ships three example offerings — two
+subscription intervals and one token package — because that is the smallest set
+that still demonstrates the two rules the rest of this file is about: one
+product per language, and monthly-and-yearly naming both keys. It used to ship
+five, and the other two were a price ladder. If you want one, this is the
+shape; paste it beside `starter` and adjust:
+
+```json
+"pro": {
+  "name": "Pro Tokens",
+  "tagline": "For regular use",
+  "description": "5,000 tokens as a one-off balance. Best price per token.",
+  "kind": "token",
+  "credits": 5000,
+  "priceCents": 3900,
+  "currency": "EUR",
+  "features": ["5,000 tokens", "No subscription", "Balance does not expire"],
+  "imageUrl": null,
+  "sell": true,
+  "productIds": {
+    "dev":  { "de": null, "en": null },
+    "prod": { "de": null, "en": null }
+  }
+}
+```
+
+A `business` tier was 15,000 credits at 9,900 cents. Note that `/plans` lays
+token packages out in a three-column grid
+(`lib/digistore/plan-sections.ts`), so a ladder of three fills it; one package
+on its own is a single card, which is also fine.
+
+### Keeping an entry without selling it — `"sell"`
+
+An entry with `"sell": false` stays in the registry as a shape to copy from,
+and nothing offers it: no Digistore24 product is created, `/plans` leaves it
+out, and the checkout Server Action refuses it — which matters because that
+Action is an HTTP endpoint, so removing a card from the page does not remove
+the route behind it.
+
+**A missing `sell` means SOLD.** Every registry written before the field
+existed keeps selling, and only a literal `false` parks an entry; anything else
+(`"false"` as a string, `0`, `null`) is refused when the registry loads rather
+than guessed at, because the truthy reading would put a product on sale.
+
+🚨 **Parking is about SELLING, never about ACCESS.** Whoever bought the
+offering keeps it: `hasPlan()` and `entitlementsFor()` still answer for it, the
+IPN's reverse lookup still resolves its product ids, and the IPN connection is
+still scoped to include them — so rebills, refunds, chargebacks and missed
+payments all keep arriving. An automatic top-up armed on a parked token package
+also keeps running: the member asked to be charged while it was on offer, and
+taking it off offer is not a reason to stop.
+
+It is also the gentler answer to a `billingMode` contradiction. Switching an
+app to `"subscriptions"` used to mean DELETING its token packages to get past
+the refusal; parking them does the same and keeps the text.
 
 Four things follow, and none of them is optional reading:
 
@@ -426,8 +511,8 @@ above), and there is one Digistore24 product per key — so **an offering sold
 in both languages is submitted to both marketplaces**, each product where it
 belongs, and each gets its own verdict. Submitted is always the **prod set**:
 approval is a go-live step, and `[DEV]`/`[STAGING]` products have no business
-on a marketplace. `node run.mjs ds24-approval` lists them as `pro (de)` and
-`pro (en)`; an offering with a single language keeps its bare key.
+on a marketplace. `node run.mjs ds24-approval` lists them as `basic_monthly (de)` and
+`basic_monthly (en)`; an offering with a single language keeps its bare key.
 
 That is not a feature of the approval command. It falls out of the registry
 already holding one product per language, for the order-form reason above.

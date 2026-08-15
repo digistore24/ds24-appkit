@@ -93,10 +93,26 @@ bundle. Resolve it on the server and pass the boolean down as a prop.
    one-directional: an enabled mode with no products yet is fine, and is the
    normal state while the app is still being built.
 
-Deleting the products you do not sell is part of setting the mode — but note
-that removing one from the JSON does **not** unpublish it. A product
-`ds24-sync` has already created stays at Digistore24 until you deactivate it
-there.
+Taking the products you do not sell out of the offer is part of setting the
+mode, and there are two ways to do it:
+
+- **`"sell": false`** on the entry — it stays in the file as a shape to copy
+  from, no product is created for it, `/plans` leaves it out, and it no longer
+  counts as a contradiction here. This is usually what you want when the mode
+  might change back.
+- **Delete the entry** — when you are sure you will never need it.
+
+⚠️ Neither of them unpublishes anything. A product `ds24-sync` has already
+created stays at Digistore24 until you deactivate it there, by hand, and an old
+checkout link keeps working until you do.
+
+🚨 **`sell` and `billingMode` are not two words for the same thing.** The mode
+is about a whole HALF of the model — it hides the surfaces of subscriptions or
+of prepaid credit, and it is purely cosmetic (see the two rules at the top of
+this file). `sell` is about ONE offering and it is not cosmetic: it decides
+whether a Digistore24 product gets created for it and whether anybody can buy
+it. What they have in common is that neither takes access away from anybody who
+has already bought.
 
 **And that is safe for the shipped test suite.** Every test here that needs a
 Product Key reads one out of THIS file through `lib/digistore/test-product-keys.ts`
@@ -137,11 +153,11 @@ Checkout:
 
 ```ts
 import { checkoutLinksFor } from "@/lib/digistore/checkout";
-import { allProducts } from "@/lib/digistore/products";
+import { sellableProducts } from "@/lib/digistore/products";
 
-const links = await checkoutLinksFor(allProducts(), { buyer: { email } });
+const links = await checkoutLinksFor(sellableProducts(), { buyer: { email } });
 
-const link = links.get("pro");
+const link = links.get("starter");
 // { url } → render the buy button
 // { url: null, blocker } → "notSynced" | "notConnected" | "error"
 ```
@@ -191,10 +207,10 @@ checkout** is needed. That is exactly what carries buying more tokens and the au
 
 ```
 Customer has purchase_id ──▶ createBillingOnDemand(apiKey, {purchaseId, productId,
-                                                     priceCents, custom:"m:…;t:…;p:pro"})
+                                                     priceCents, custom:"m:…;t:…;p:starter"})
       │                         (charges; does NOT credit)
       ▼
-DS24 processes payment ──▶ IPN on_payment (custom = "m:…;t:…;p:pro")
+DS24 processes payment ──▶ IPN on_payment (custom = "m:…;t:…;p:starter")
       ▼
 IPN handler ──▶ creditTokens(...)  (idempotent via order_id → balance +credits)
                  only once the payment is attributed to a member; an
@@ -216,8 +232,8 @@ The **first** purchase runs through the normal checkout link:
 import { checkoutLinksFor } from "@/lib/digistore/checkout";
 import { getProduct } from "@/lib/digistore/products";
 
-const links = await checkoutLinksFor([getProduct("pro")], { buyer: { email } });
-const link = links.get("pro");
+const links = await checkoutLinksFor([getProduct("starter")], { buyer: { email } });
+const link = links.get("starter");
 // -> if link.url, open it for the buyer.
 ```
 

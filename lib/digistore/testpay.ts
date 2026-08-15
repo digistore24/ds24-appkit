@@ -22,6 +22,16 @@
 //
 // You can always turn it off hard: DS24_TESTPAY=off in .env.
 //
+// A FOURTH condition is about the target rather than the environment: the key
+// is only ever appended to a host on DIGISTORE_CHECKOUT_HOSTS
+// (lib/digistore/config.mjs), because it must not travel to a host we did not
+// fetch it for. ⚠️ Note that the checkout does NOT run on the API domain —
+// createBuyUrl answers with www.checkout-ds24.com, a different registrable
+// domain from digistore24.com. An allowlist that knew only the latter dropped
+// the parameter from every link in DEV, silently, and the developer met "Das
+// Produkt wurde noch nicht genehmigt." instead of a test purchase. That is why
+// the refusal now warns (warnUndecorated below) rather than saying nothing.
+//
 // Two more properties are load-bearing:
 //   - The key is fetched via the undocumented DS24 API function
 //     `getTestpayKey` and cached in `.dev/testpay.json` — gitignored and
@@ -42,6 +52,7 @@ import path from "node:path";
 import { isLocalUrl } from "@/lib/auth/dev-login";
 import { appEnv } from "@/lib/env-guard";
 import { ds24Post } from "./client";
+import { DIGISTORE_CHECKOUT_HOSTS } from "./config.mjs";
 import { ds24ApiKey, hasDigistoreApiKey } from "./settings";
 
 export interface TestpayEnv {
@@ -126,9 +137,32 @@ export function isTestpayFresh(
 }
 
 /**
- * Appends the testpay parameter — but only onto a Digistore24 URL. Any other
- * host (or an unparseable URL) gets the input back untouched: the key must
- * never travel to a host we did not fetch it for.
+ * Is this the host of a Digistore24 checkout?
+ *
+ * The list is `DIGISTORE_CHECKOUT_HOSTS` in `lib/digistore/config.mjs` and
+ * lives there rather than here on purpose: WHEN the parameter may exist is
+ * policy and belongs in this file; WHICH hosts are Digistore24's is a fixed
+ * fact about the vendor, and that file is where the other ones already are.
+ *
+ * ⚠️ The dot is the security property. `host.endsWith("digistore24.com")` also
+ * accepts `notdigistore24.com`, and a plain `includes` would accept
+ * `digistore24.com.evil.example`. Both are pinned by tests.
+ */
+export function isCheckoutHost(hostname: string): boolean {
+  const host = hostname.trim().toLowerCase();
+  return DIGISTORE_CHECKOUT_HOSTS.some(
+    (domain) => host === domain || host.endsWith(`.${domain}`),
+  );
+}
+
+/**
+ * Appends the testpay parameter — but only onto a Digistore24 checkout URL. Any
+ * other host (or an unparseable URL) gets the input back untouched: the key
+ * must never travel to a host we did not fetch it for.
+ *
+ * The caller cannot tell those two refusals from a successful decoration by the
+ * return value alone, which is why `withTestpayParam()` compares and warns —
+ * this function stays pure.
  */
 export function decorateCheckoutUrl(
   url: string,
@@ -137,10 +171,7 @@ export function decorateCheckoutUrl(
 ): string {
   try {
     const u = new URL(url);
-    const host = u.hostname.toLowerCase();
-    if (host !== "digistore24.com" && !host.endsWith(".digistore24.com")) {
-      return url;
-    }
+    if (!isCheckoutHost(u.hostname)) return url;
     u.searchParams.set(paramName, key);
     return u.toString();
   } catch {
@@ -159,12 +190,43 @@ export interface TestpayOptions {
 let memory: TestpayState | null = null;
 let inflight: Promise<TestpayState | null> | null = null;
 let failedUntil = 0;
+const warnedHosts = new Set<string>();
 
 /** The module memoizes across requests; tests reset it between cases. */
 export function resetTestpayForTests(): void {
   memory = null;
   inflight = null;
   failedUntil = 0;
+  warnedHosts.clear();
+}
+
+/**
+ * The gate was open and a key was really there — and the URL came back
+ * undecorated anyway. That is a host we do not recognise (or a URL that does not
+ * parse), and until this existed it was the ONE failure of this whole path that
+ * said nothing at all: `docs/digistore-createbuyurl.md` promised "every failure
+ * returns the undecorated URL with one console.warn", and this one returned it
+ * with none. Digistore24 moving the checkout to a domain this list does not know
+ * looks exactly like a working app in which nobody can test-buy anything.
+ *
+ * Once per host per process: the plans page resolves every card in parallel, and
+ * eight identical lines are how a developer learns to skim past them.
+ */
+function warnUndecorated(url: string): void {
+  let host: string;
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    host = "(unparseable URL)";
+  }
+  if (warnedHosts.has(host)) return;
+  warnedHosts.add(host);
+  console.warn(
+    `[testpay] ${host} is not a known Digistore24 checkout host — the ` +
+      "test-payment parameter was NOT appended, so this link buys for real " +
+      "and an unapproved product will refuse it. The list is " +
+      "DIGISTORE_CHECKOUT_HOSTS in lib/digistore/config.mjs.",
+  );
 }
 
 function defaultStateFile(): string {
@@ -274,7 +336,9 @@ export async function withTestpayParam(
         ? memory
         : await loadOrFetch(now, opts);
     if (!state) return url;
-    return decorateCheckoutUrl(url, state.paramName, state.testpayKey);
+    const decorated = decorateCheckoutUrl(url, state.paramName, state.testpayKey);
+    if (decorated === url) warnUndecorated(url);
+    return decorated;
   } catch (err) {
     console.warn("[testpay] disabled for this request:", err);
     return url;

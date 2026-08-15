@@ -53,7 +53,7 @@
 //   node scripts/ds24/sync-products.mjs                 # dry run (all, env from APP_ENV)
 //   node scripts/ds24/sync-products.mjs --apply         # create/update
 //   node scripts/ds24/sync-products.mjs --env prod --apply   # the LIVE set (needs APP_URL_PROD)
-//   node scripts/ds24/sync-products.mjs --key pro --apply
+//   node scripts/ds24/sync-products.mjs --key starter --apply
 //   node scripts/ds24/sync-products.mjs --dry-run       # never writes, beats --apply
 //   [--thankyou "https://app.example.de/optin/[ORDER_ID]"]  # otherwise from the env's app URL
 // Env: DIGISTORE_API_KEY (writable); APP_URL (dev), APP_URL_PROD / APP_URL_STAGING
@@ -69,10 +69,11 @@ import {
   extractProducts,
   idOf,
   contradictingProducts,
+  sellFieldProblems,
+  parkedTargets,
   adoptLegacyAsProd,
   appLanguages,
   languagesOf,
-  FALLBACK_LANGUAGE,
   productTargets,
   setProductId,
 } from "./_products.mjs";
@@ -84,6 +85,7 @@ import {
   overlongKeys,
   NAME_INTERN_MAX,
 } from "./_env.mjs";
+import { classifyTargets } from "./_match.mjs";
 import { isKnownLanguage } from "./_resellers.mjs";
 import { publicUrlFor } from "./_public-url.mjs";
 import { DIGISTORE_REDIR_URL } from "../../lib/digistore/config.mjs";
@@ -255,15 +257,64 @@ if (contradicting.length > 0) {
   process.exit(2);
 }
 
+// A `sell` that is neither true nor false nor absent. Refused here rather
+// than shrugged at, because the string "false" — the shape a hand-edited JSON
+// produces most easily — is TRUTHY, so the entry would count as on sale and
+// the product would be created at Digistore24. Same refusal the app makes
+// when it loads the registry (lib/digistore/products.ts).
+const sellProblems = sellFieldProblems(config);
+if (sellProblems.length > 0) {
+  console.error(
+    `config/digistore-products.json:\n` +
+      sellProblems.map((line) => `  - ${line}`).join("\n"),
+  );
+  process.exit(2);
+}
+
 const apiKey = requireApiKey();
 // ONE ROW PER DIGISTORE24 PRODUCT — per offering AND language. That is what
-// exists over there, and it is what this loop creates.
+// exists over there, and it is what this loop creates. Parked offerings
+// ("sell": false) are not in here at all — productTargets leaves them out.
 const targets = productTargets(config.products, env).filter(
   ({ key }) => !onlyKey || key === onlyKey,
 );
 if (targets.length === 0) {
-  console.error(onlyKey ? `No product "${onlyKey}" in the config.` : "No products in the config.");
+  // Three different states, three different sentences. "No product X" for a
+  // key that IS in the file but parked used to send the vendor looking for a
+  // typo in a line that is spelled perfectly.
+  if (onlyKey && config.products[onlyKey]) {
+    console.error(
+      `"${onlyKey}" is marked "sell": false in config/digistore-products.json — nothing was synced.\n` +
+        `Set "sell": true there if you want to sell it.`,
+    );
+  } else if (onlyKey) {
+    console.error(`No product "${onlyKey}" in the config.`);
+  } else if (Object.keys(config.products).length > 0) {
+    console.error(
+      `Every product in config/digistore-products.json is marked "sell": false — nothing to sync.`,
+    );
+  } else {
+    console.error("No products in the config.");
+  }
   process.exit(2);
+}
+
+// Parked, but already over there. Said out loud once, because "sell": false
+// reads like "not for sale any more" and is not: the Digistore24 product
+// lives on, and an old checkout link in a mail or on an affiliate page keeps
+// working until somebody deactivates it in the vendor backend, by hand.
+const parked = parkedTargets(config.products, env);
+if (parked.length > 0) {
+  console.warn(
+    `! ${parked.length} product(s) are marked "sell": false but already exist at Digistore24 (${env.toUpperCase()}):\n` +
+      parked
+        .map((r) => `    ${r.key} (${r.language})   product_id=${r.productId}`)
+        .join("\n") +
+      `\n  They are no longer offered on /plans and this sync leaves them alone — but they are` +
+      `\n  STILL BUYABLE at Digistore24. Deactivate them THERE if that is what you meant;` +
+      `\n  removing them here does not unpublish them. Existing buyers keep their access` +
+      `\n  either way, and their refunds and cancellations keep arriving.`,
+  );
 }
 
 // Load the product list once (for matching by name).
@@ -273,6 +324,54 @@ const list = extractProducts(
     process.exit(1);
   }),
 );
+
+// ONE classification for the whole run — the gate below and the loop at the
+// foot read the same rows, so the gate cannot promise something the loop then
+// does differently (scripts/ds24/_match.mjs).
+const rows = classifyTargets(targets, list, env);
+const creations = rows.filter((r) => r.action === "create");
+
+// 🚨 THE GATE. Creating a Digistore24 product cannot be undone from here, and
+// the registry ships with example plans — so the first sync of a fresh app
+// would otherwise put every one of them into the vendor's account before
+// anybody looked at the list.
+//
+// It hangs on `apply`, so `--dry-run` is untouched: that run prints exactly
+// the "would create" lines this refusal sends the reader to. And it only
+// fires while something would be CREATED, which is what keeps it from
+// becoming a flag people type without reading — once an offering is synced it
+// carries an id, and every later run passes straight through. Updates are
+// reversible and are never gated.
+//
+// Placed BEFORE resolveProductGroup(): a refusal must not leave a product
+// group behind. "Half a synced registry is worse than a named refusal" is the
+// same argument the two refusals above make.
+if (apply && creations.length > 0 && !args["create-new"]) {
+  const updates = rows.length - creations.length;
+  console.error(
+    `\nSTOP — ${creations.length} NEW product(s) would be created at Digistore24 (${env.toUpperCase()}).\n\n` +
+      creations
+        .map(
+          (r) =>
+            `  ${r.key} (${r.language})   "${displayName(r.def.name, env)}"`,
+        )
+        .join("\n") +
+      `\n\n  (${updates} product(s) already exist and would only be updated.)\n\n` +
+      `Creating them cannot be undone from here: deleting an entry from\n` +
+      `config/digistore-products.json afterwards does NOT remove the product at\n` +
+      `Digistore24 — it has to be deactivated over there, by hand.\n\n` +
+      `Two ways on:\n\n` +
+      `  1. This IS what you sell — run it again with:\n` +
+      `         node run.mjs ds24-sync --create-new\n\n` +
+      `  2. It is not. The list above still holds the example plans this template\n` +
+      `     ships with. Open config/digistore-products.json and set\n` +
+      `     "sell": false on every entry you do not sell — the entry stays in the\n` +
+      `     file as a template, no product is created, and it does not show up on\n` +
+      `     /plans. Then run the command again.\n\n` +
+      `Nothing was created. Nothing was changed.\n`,
+  );
+  process.exit(2);
+}
 
 // --- The product group: ONE per application, every environment together. ----
 // Identified by the stored id first (the registry is the source of truth,
@@ -339,77 +438,10 @@ if (!groupId && !apply) {
   );
 }
 
-/**
- * Find a product this script (or a hand) created earlier: first via the stable
- * internal name, then via the display name — the latter catches products that
- * were already created by hand in DS24 before this convention existed.
- *
- * `claimed` is what keeps the language split honest. The display name is the
- * SAME for every language of one offering (product copy is deliberately not
- * translated), so without it the English row would happily match the German
- * product and both languages would end up pointing at one id — silently
- * undoing the whole point of the split. A product already taken by an earlier
- * row of this run is therefore skipped, and the second language gets created.
- *
- * The bare-key lookup is the same guard from the other side: it is the
- * pre-0.6.0 internal name, so it may only answer for the FIRST language, which
- * is the one that product was created as.
- *
- * EVERY fallback below the env-scoped internal name is prod-only. The
- * pre-environment products (bare `key__lang`, bare `key`, a hand-created
- * display name) are the ones that may carry real sales and approvals, and
- * prod is the set they belong to — a dev or staging row that is not found
- * under its own internal name gets CREATED, never adopted. That is the
- * guarantee that a dev sync cannot rename a live product into "[DEV]".
- */
-const ENV_SCOPED_INTERN = /__(dev|staging|prod)$/;
-
-function findExisting({ key, def, language }, claimed) {
-  const free = (p) => (p && !claimed.has(String(idOf(p))) ? p : null);
-  const byInternal = list.find(
-    (p) => p.name_intern === internalName(key, language, env),
-  );
-  if (byInternal) return free(byInternal);
-
-  if (env !== "prod") return null;
-
-  // Another environment's product is never a legacy candidate — it already
-  // belongs to a set.
-  const unscoped = (p) => !ENV_SCOPED_INTERN.test(String(p.name_intern ?? ""));
-
-  // The pre-environment internal name (template < 0.14.0): one shared product
-  // per key and language.
-  const byPreEnv = list.find(
-    (p) => unscoped(p) && p.name_intern === `${key}__${language}`,
-  );
-  if (byPreEnv) return free(byPreEnv);
-
-  // Everything below is the pre-0.6.0 world, where an offering had ONE product
-  // whose internal name was the bare key. Such a product is in exactly one
-  // language — the one the old registry named in `language` — so only that row
-  // may claim it. Anchoring on the legacy field rather than on "the first
-  // language in the map" is what makes this independent of how the JSON
-  // happens to be ordered: reorder `{en, de}` to `{de, en}` and an
-  // order-based rule would hand the German product to the English row.
-  const legacyLanguage = def.language || FALLBACK_LANGUAGE;
-  if (language !== legacyLanguage) return null;
-
-  const byLegacyKey = list.find((p) => unscoped(p) && p.name_intern === key);
-  if (byLegacyKey) return free(byLegacyKey);
-  const byName = list.find(
-    (p) =>
-      unscoped(p) &&
-      (p.name === def.name || p.name_intern === def.name || p.product_name === def.name),
-  );
-  return free(byName);
-}
-
 let warnings = 0;
 const seenKeys = new Set();
-// Ids already used by an earlier row of this run — see findExisting.
-const claimed = new Set();
-for (const target of targets) {
-  const { key, def, language, label } = target;
+for (const target of rows) {
+  const { key, def, language, label, existingId } = target;
   // Once per offering, not once per language: the price, the interval and the
   // credits are shared, and saying it twice reads as two separate problems.
   if (!seenKeys.has(key)) {
@@ -418,10 +450,8 @@ for (const target of targets) {
   }
 
   const data = productData(key, def, language);
-  const existingId = target.productId || idOf(findExisting(target, claimed) || {});
 
   if (existingId) {
-    claimed.add(String(existingId));
     if (!apply) {
       console.log(`DRY-RUN — would update: "${label}" (product_id=${existingId}, language=${language})`);
     } else {
@@ -447,7 +477,6 @@ for (const target of targets) {
     console.error(`✗ createProduct returned no product_id for "${label}".`);
     process.exit(1);
   }
-  claimed.add(String(newId));
   setProductId(config, key, language, newId, env);
   changed = true;
   console.log(`✓ created: "${label}" (product_id=${newId}, language=${language})`);

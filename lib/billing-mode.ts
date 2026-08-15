@@ -43,7 +43,7 @@
 // server and pass the boolean down as a prop — the same treatment
 // `grantableProducts()` gets in `app/dashboard/admin/users/[id]/page.tsx`.
 import registry from "@/config/digistore-products.json";
-import { allProducts } from "@/lib/digistore/products";
+import { sellableProducts } from "@/lib/digistore/products";
 
 export const BILLING_MODES = ["subscriptions", "tokens", "both"] as const;
 
@@ -119,9 +119,16 @@ export function sellsTokens(): boolean {
  * Deliberately one-directional: an enabled mode with no products yet is FINE.
  * That is the normal intermediate state — `build-app` sets the mode, and
  * `billing-modes` declares the products afterwards.
+ *
+ * It reads `sellableProducts()` and not `allProducts()`, because every word of
+ * the paragraph above is about a product that gets SYNCED and is BUYABLE. A
+ * parked entry is neither. That is also what makes parking useful here: an app
+ * switching to `"subscriptions"` used to have to DELETE its token packages to
+ * get past this check — now it can set `"sell": false` and keep them as a
+ * shape to come back to.
  */
 export function contradictingProducts(): string[] {
-  return allProducts()
+  return sellableProducts()
     .filter((p) =>
       p.kind === "token" ? !sellsTokens() : !sellsPlans(),
     )

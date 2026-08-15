@@ -79,7 +79,7 @@ export const PRODUCT_KINDS = ["subscription", "token", "one_time"] as const;
 export type ProductKind = (typeof PRODUCT_KINDS)[number];
 
 export interface ProductDef {
-  /** Stable key (e.g. "pro"). */
+  /** Stable key (e.g. "starter"). */
   key: string;
   /** DS24 product name (also used as name_intern for matching). */
   name: string;
@@ -104,6 +104,30 @@ export interface ProductDef {
   highlight?: boolean;
   /** Product image for Digistore24 (publicly reachable URL). */
   imageUrl?: string | null;
+  /**
+   * Is this offering on sale? **Absent means yes** — only a literal `false`
+   * parks it.
+   *
+   * A parked entry stays in the registry as a template: `ds24-sync` creates
+   * no Digistore24 product for it, `/plans` does not show it, and the
+   * checkout Action refuses it. That is the difference from DELETING the
+   * entry, and it is why the field exists — the shipped example plans are
+   * worth keeping as a shape to copy from.
+   *
+   * 🚨 **Parked is about SELLING, never about ACCESS.** Somebody who bought
+   * this offering keeps it: `hasPlan()`, `entitlementsFor()`,
+   * `productByDs24Id()` (the IPN's reverse lookup) and the IPN scope all read
+   * the FULL list and know nothing about this field. Parking a plan does not
+   * end a single subscription, and refunds for it keep arriving. The seam is
+   * `sellableProducts()` below, and which reader needs which list is spelled
+   * out there.
+   *
+   * ⚠️ It also does not unpublish the product at Digistore24. One that was
+   * synced before stays buyable over there through an old checkout link until
+   * it is deactivated in the vendor backend, by hand — `ds24-sync` says so
+   * when it meets one.
+   */
+  sell?: boolean;
   /**
    * **One product set per ENVIRONMENT, one Digistore24 product per language
    * inside each set** — the id, keyed by env and by the language its order
@@ -275,6 +299,49 @@ export function allProducts(): ProductDef[] {
 }
 
 /**
+ * Is this offering on sale? Absent `sell` means yes — see `ProductDef.sell`.
+ *
+ * Written as `!== false` rather than a truthiness test on purpose: every
+ * registry that exists today has no `sell` field at all, and the answer for
+ * those must be "sold". A default of "parked" would take every product of
+ * every running app off `/plans` and out of the sync the moment they update.
+ */
+export function isSold(def: Pick<ProductDef, "sell">): boolean {
+  return def.sell !== false;
+}
+
+/**
+ * The offerings this app is currently SELLING — `allProducts()` minus the
+ * parked ones.
+ *
+ * 🚨 **The seam of the whole `sell` field, and the direction matters.**
+ * `allProducts()` is deliberately NOT filtered, because most of its readers
+ * answer questions about a purchase that already happened, and a filter there
+ * would reach them through a default argument nobody sees at the call site.
+ * The dividing line: **a new purchase decision may be refused, an existing
+ * payment relationship never is.**
+ *
+ * Four readers want this list — the plans page, `contradictingProducts()`
+ * (which is about what gets synced and is buyable), the ops probe counting
+ * whether this app sells anything, and the token packages on offer. Plus
+ * `productTargets()` on the script side, which is the sync and the
+ * marketplace approval in one.
+ *
+ * Everything else keeps the full list, and three of them would cost real
+ * money otherwise: `productByDs24Id()` (the IPN could no longer tell which
+ * offering a payment, refund or chargeback belongs to — and
+ * `orders.productKey` is never reconstructed), `syncedProductIds()` in
+ * `scripts/ds24/_products.mjs` (a parked id dropping out of the IPN scope
+ * stops its buyers' refunds and cancellations arriving at all), and
+ * `getTokenPackage()` (an automatic top-up runs on a mandate somebody already
+ * armed). `getProduct()`/`findProduct()` read the raw registry directly and
+ * are unaffected by construction, which is what keeps `hasPlan()` honest.
+ */
+export function sellableProducts(): ProductDef[] {
+  return allProducts().filter(isSold);
+}
+
+/**
  * The registry entries whose `kind` is not one this app knows — as messages,
  * one per offending entry. Pure and takes the list, so the typo case is
  * asserted by tests rather than trusted (the shipped registry is always
@@ -292,6 +359,28 @@ export function unknownKindProblems(
     );
 }
 
+/**
+ * The registry entries whose `sell` is neither a boolean nor absent — the
+ * twin of `unknownKindProblems()`, and pure for the same reason.
+ *
+ * 🚨 **Refused rather than ignored, and the trade is the same one the `kind`
+ * block below spells out: there is no harmless direction.** `"sell": "false"`
+ * — the string, which is what a hand-edited JSON file produces most easily —
+ * is truthy, so `isSold()` would answer "sold" and the sync would go and
+ * create the product at Digistore24. That is precisely the damage this field
+ * was added to prevent, and it cannot be undone from here.
+ */
+export function sellFieldProblems(
+  products: ReadonlyArray<{ key: string; sell?: unknown }>,
+): string[] {
+  return products
+    .filter((p) => p.sell !== undefined && typeof p.sell !== "boolean")
+    .map(
+      (p) =>
+        `"${p.key}": "sell" muss true oder false sein (oder ganz fehlen) — steht auf ${JSON.stringify(p.sell)}`,
+    );
+}
+
 // The cast above (`as unknown as ProductsFile`) is a claim, and the registry
 // is a JSON file the vendor edits by hand — so the claim is checked here,
 // once, when the module loads, and a `"kind": "one-time"` (hyphen typo)
@@ -306,8 +395,16 @@ export function unknownKindProblems(
 // unchecked value does not mean "not shown", it takes the app down at the
 // first `node run.mjs start`, which is the cheapest moment anybody can learn
 // about it.
+//
+// `sell` is checked in the same breath and for the same reason, one step
+// sharper: a `kind` typo drops the product from the page, a `sell` typo puts
+// a product the vendor did not want on sale INTO their Digistore24 account,
+// and that cannot be undone from here.
 {
-  const problems = unknownKindProblems(allProducts());
+  const problems = [
+    ...unknownKindProblems(allProducts()),
+    ...sellFieldProblems(allProducts()),
+  ];
   if (problems.length > 0) {
     throw new Error(`config/digistore-products.json: ${problems.join("; ")}`);
   }

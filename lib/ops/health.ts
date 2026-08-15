@@ -53,7 +53,7 @@ import { ipnEvents, orders } from "@/db/schema";
 import { desc, gte } from "drizzle-orm";
 
 import { appEnv } from "@/lib/env-guard";
-import { allProducts, productIdsOf, type SyncEnv } from "@/lib/digistore/products";
+import { sellableProducts, productIdsOf, type SyncEnv } from "@/lib/digistore/products";
 import { IPN_LOG_RETENTION_DAYS } from "@/lib/digistore/ipn-log";
 import { localDirFromEnv } from "@/lib/media/local";
 import { driverFromEnv, mediaStore, mediaStoreProblems, type MediaDriver } from "@/lib/media/store";
@@ -225,7 +225,11 @@ export const defaultProbes: OpsProbes = {
   localStoreWritable: () => access(localDirFromEnv(process.env), constants.W_OK),
   sellingProducts: () => {
     const environment = syncEnvOf(process.env.APP_ENV);
-    return allProducts().filter((def) => Object.keys(productIdsOf(def, environment)).length > 0)
+    // Parked offerings are not counted: the question this probe asks is "does
+    // this app sell anything", and a plan taken off sale is not on offer even
+    // though its Digistore24 product is still there. Counting it would keep
+    // the IPN alarm armed on an app that deliberately sells nothing.
+    return sellableProducts().filter((def) => Object.keys(productIdsOf(def, environment)).length > 0)
       .length;
   },
   recentOrderCount: async (since) => {

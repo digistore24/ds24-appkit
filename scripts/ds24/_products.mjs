@@ -22,6 +22,35 @@ const MESSAGES_DIR = fileURLToPath(new URL("../../messages", import.meta.url));
 export const FALLBACK_LANGUAGE = "de";
 
 /**
+ * Is this offering on sale? Absent `sell` means yes — the twin of `isSold()`
+ * in `lib/digistore/products.ts`, where the field is documented in full.
+ *
+ * `!== false` and not a truthiness test: every registry written before this
+ * field existed has no `sell` at all, and those products must keep selling.
+ */
+export function isSold(def) {
+  return def?.sell !== false;
+}
+
+/**
+ * The registry entries whose `sell` is neither a boolean nor absent — the
+ * twin of `sellFieldProblems()` in `lib/digistore/products.ts`.
+ *
+ * 🚨 The string `"false"` is truthy, so without this check `isSold()` would
+ * answer "sold" for it and the sync would create the product at Digistore24 —
+ * the one outcome this field exists to prevent, and the one that cannot be
+ * undone from here.
+ */
+export function sellFieldProblems(json) {
+  return Object.entries(json.products ?? {})
+    .filter(([, def]) => def?.sell !== undefined && typeof def.sell !== "boolean")
+    .map(
+      ([key, def]) =>
+        `"${key}": "sell" must be true or false (or absent) — it is ${JSON.stringify(def.sell)}`,
+    );
+}
+
+/**
  * The languages the APP speaks, read off `messages/<code>.json`.
  *
  * The truth is `LOCALES` in `i18n/config.ts`, and these scripts are plain
@@ -107,6 +136,10 @@ export function languagesOf(def) {
 export function productTargets(products, env) {
   const targets = [];
   for (const [key, def] of Object.entries(products)) {
+    // Parked offerings are not on offer, so nothing is created for them and
+    // nothing is submitted for approval — this one filter covers the sync AND
+    // the marketplace request, because both build their work list here.
+    if (!isSold(def)) continue;
     const ids = productIdsOf(def, env);
     const languages = languagesOf(def);
     for (const language of languages) {
@@ -120,6 +153,32 @@ export function productTargets(products, env) {
     }
   }
   return targets;
+}
+
+/**
+ * The rows `productTargets` just left out that ALREADY EXIST at Digistore24 —
+ * parked offerings carrying a live id for this environment.
+ *
+ * They are what the sync warns about, and the warning is not a formality: a
+ * vendor who writes `"sell": false` believes the thing is no longer for sale.
+ * It is — the Digistore24 product lives on, and an old checkout link in a
+ * mail, on an affiliate page or in a search result keeps working until it is
+ * deactivated in the vendor backend, by hand. Removing the entry from this
+ * file does not do it either.
+ *
+ * A parked offering with no id was never created and is not mentioned: there
+ * is nothing over there to deactivate.
+ */
+export function parkedTargets(products, env) {
+  const rows = [];
+  for (const [key, def] of Object.entries(products)) {
+    if (isSold(def)) continue;
+    const ids = productIdsOf(def, env);
+    for (const [language, id] of Object.entries(ids)) {
+      if (id) rows.push({ key, language, productId: String(id) });
+    }
+  }
+  return rows;
 }
 
 /**
@@ -177,6 +236,16 @@ export function adoptLegacyAsProd(config) {
  * the IPN connection for that environment is scoped to (ipn-setup.mjs).
  * Live ids only: a `null` declaration is a product that does not exist yet
  * and cannot be named in `product_ids`.
+ *
+ * 🚨 **`sell` is deliberately NOT read here, and this is the one place in the
+ * file where that looks like an oversight.** It is not. Taking a plan off
+ * sale says nothing about the people who already bought it: their rebills,
+ * refunds, chargebacks and missed payments all arrive as IPNs naming that
+ * product id, and an id missing from this list is an IPN the app never hears.
+ * The consequence is silent — access that should have ended does not end, and
+ * a refunded customer keeps their plan. Whoever "tidies up" by filtering this
+ * list breaks the money path for exactly the customers who are still owed
+ * something. `lib/digistore/sell-seam.test.ts` and `_products.test.ts` pin it.
  */
 export function syncedProductIds(config, env) {
   const ids = [];
@@ -217,6 +286,10 @@ export function contradictingProducts(json) {
   // harmless direction: a typo must not block a sync.
   if (mode !== "subscriptions" && mode !== "tokens") return [];
   return Object.entries(json.products)
+    // A parked offering is neither synced nor buyable, so it cannot be the
+    // money hole this check is about — and parking is the gentler answer the
+    // refusal message itself now offers, next to deleting the entry.
+    .filter(([, p]) => isSold(p))
     .filter(([, p]) =>
       p.kind === "token" ? mode === "subscriptions" : mode === "tokens",
     )

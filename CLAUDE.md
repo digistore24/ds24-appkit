@@ -156,7 +156,7 @@ line flags, raw SQL, dates — are **[`docs/conventions.md`](docs/conventions.md
 
 - **Sign-in is opt-in, not opt-out: the refusal is `authorized()` in `auth.config.ts`**, which returns true for every path outside `/dashboard` — so **any new route outside `/dashboard` is public until you protect it there.** ⚠️ The `matcher` in `proxy.ts` says where the proxy RUNS, not what is protected. `app/route-protection.test.ts` is the backstop: a page outside `/dashboard` is either protected or carries a line saying what guards it instead, so a forgotten route fails the build rather than a customer. The three things a new protected area needs and the public-by-design list: **[`docs/auth-setup.md`](docs/auth-setup.md)**.
 - **IPN signature verification (SHA512) is mandatory.** Never switch off `lib/digistore/ipn.ts`, and set order status only through IPN events. 🚨 **Anything you hang off that event must be safe to receive TWICE** — the signature is checked, a timestamp and a nonce are not, so a redelivery (which Digistore24 makes until it gets a 200) replays the whole handler. Today's writes survive it because three UNIQUE constraints say so, not because the webhook deduplicates; a mail, a module hook or a table of your own inherits nothing. Same rule as a scheduled job, one door over — [`docs/digistore-integration.md`](docs/digistore-integration.md).
-- 🚨 **A test purchase in DEV needs no approval and no cookie — the checkout link decorates ITSELF.** `checkoutLinkFor()` / `checkoutLinksFor()` end in `withTestpayParam()` (`lib/digistore/testpay.ts`), which fetches the vendor's test-payment key from Digistore24 (`getTestpayKey`) and caches it in gitignored `.dev/`; `node run.mjs ds24-testpay` shows it, `--recreate` rotates it. So a path of your OWN on `getOrCreateBuyUrl` returns an UNFINISHED URL and has to end the same way — on the return value, after the cache. **Never append that key by hand and never re-implement its gate:** it is ACCOUNT-level, so on a URL a customer can open it hands the product out for free and the IPN grants real entitlements. Outside DEV it is a no-op by design — [`docs/digistore-createbuyurl.md`](docs/digistore-createbuyurl.md).
+- 🚨 **A test purchase in DEV needs no approval and no cookie — the checkout link decorates ITSELF.** `checkoutLinkFor()` / `checkoutLinksFor()` end in `withTestpayParam()` (`lib/digistore/testpay.ts`), which fetches the vendor's test-payment key from Digistore24 (`getTestpayKey`) and caches it in gitignored `.dev/`; `node run.mjs ds24-testpay` shows it, `--recreate` rotates it. So a path of your OWN on `getOrCreateBuyUrl` returns an UNFINISHED URL and has to end the same way — on the return value, after the cache. **Never append that key by hand and never re-implement either of its two gates:** WHEN it may exist is the environment allowlist, WHERE it may go is `DIGISTORE_CHECKOUT_HOSTS` (`lib/digistore/config.mjs` — ⚠️ the checkout runs on `www.checkout-ds24.com`, **not** on the API domain). It is ACCOUNT-level, so on a URL a customer can open it hands the product out for free and the IPN grants real entitlements. A link arriving without it leaves a `[testpay]` line in the log saying which gate declined — read that before concluding the product needs approval. Outside DEV it is a no-op by design — [`docs/digistore-createbuyurl.md`](docs/digistore-createbuyurl.md).
 - **Access comes from the entitlement API.** What a Member may use is answered by `hasPlan(memberId, productKey)` / `entitlementsFor(memberId)` (`lib/entitlements/manage.ts`) — never by reading a billing table. See **Access** below.
 - **No secrets in the code.** Read from `process.env` and add new variables to `.env.example`; the operator's Digistore24 credentials are read via `lib/digistore/settings.ts` — never from the database.
 - **No mock/demo fallback** on Digistore API errors — throw errors.
@@ -167,7 +167,7 @@ line flags, raw SQL, dates — are **[`docs/conventions.md`](docs/conventions.md
 - **Messages always as a `Callout`** with one of its four intents, never with hand-picked colour classes. What must stay on screen is a `Callout`, what may drift past is a toast — three mechanisms, never a fourth. See **UI**.
 - **Light and dark both count.** Every new piece of UI MUST be readable in both, which follows by itself as long as colours come from the tokens.
 - **Tests are mandatory, and green is the commit condition rather than a courtesy** — nothing runs them for you after a push, so a red test that gets committed stays red until somebody looks. `.githooks/pre-commit` refuses on red, and a shipped test that fails is a finding about your change, never an obstacle to weaken or delete.
-- **⚠️ A SKIPPED test is not a passed one.** `⏭ <file>: NOT CHECKED — <reason>` on stderr has exactly three legitimate causes — `node run.mjs agent-setup --apply`; deleted example products emptying `config/digistore-products.json`; and **a foreign tool this machine does not have**, because `scripts/foreign-config.test.ts` asks whether gitleaks, ESLint, PostCSS and drizzle-kit ACCEPT the config files written for them, and a tool that is absent cannot be asked. Anything else is a question nobody answered. Needs template 0.25.0
+- **⚠️ A SKIPPED test is not a passed one.** `⏭ <file>: NOT CHECKED — <reason>` on stderr has exactly three legitimate causes — `node run.mjs agent-setup --apply`; a registry that no longer holds the SHAPE a test needs, because the example products were deleted or parked with `"sell": false`; and **a foreign tool this machine does not have**, because `scripts/foreign-config.test.ts` asks whether gitleaks, ESLint, PostCSS and drizzle-kit ACCEPT the config files written for them, and a tool that is absent cannot be asked. Anything else is a question nobody answered. Needs template 0.25.0
 - **Call up the app yourself before you say "done", then ask the log.** Green tests are no proof that the page loads, and a page that loads is no proof that it rendered. See **Never ship a broken page** below.
 - **Linux, macOS and Windows all count.** Every command in `run.mjs` and every script under `scripts/` MUST work on all three — a developer on Windows who cannot start the app has no way around it. See **Three systems**.
 - **Commit your work — a finished change is a commit, every time.** Unfinished work too: `git commit --no-verify`, saying so in the message, and that is the flag's only legitimate use. Session artifacts (screenshots, throwaway scripts) live in `.dev/` or get deleted, never committed; at the end of a unit of work `git status` is empty and every commit was made on green. (`AGENTS.md` is generated from this file — never edit it.)
@@ -701,41 +701,41 @@ that replaces it is **`salespage`**; the reference is
 ## Plans & Digistore products
 
 **One fork comes before every other billing question: whose Digistore24 account
-gets paid.** The default — the operator is the only vendor — is fully built and is
-what everything else assumes; the **platform** shape (the app's own users connect
-*their* accounts) is NOT built and is not a setting. Do not build it "just in
-case". Both shapes: **[`docs/digistore-integration.md`](docs/digistore-integration.md)**.
+gets paid.** The default — the operator is the only vendor — is fully built and
+is what everything else assumes; the **platform** shape (the app's own users
+connect *their* accounts) is NOT built, is not a setting, and is not to be built
+"just in case". Both: **[`docs/digistore-integration.md`](docs/digistore-integration.md)**.
 
 `config/digistore-products.json` is the **single source** — it feeds the plans
 page *and* the sync script. **One price, one place: never a second price list in
 the code**, and prices do not belong on the DS24 product at all (the API discards
 `data[amount]`; `priceCents` travels with every `createBuyUrl` call). One
-offering is one product **per language** and there is one product SET **per
-environment** — [`docs/environments.md`](docs/environments.md).
+offering is one product **per language**, one product SET **per environment** —
+[`docs/environments.md`](docs/environments.md).
 
-What this app sells is `billingMode` in that same file
-(`"subscriptions" | "tokens" | "both"`, read through `lib/billing-mode.ts`, never
-by re-reading the JSON). Two rules make it safe to flip on a live app; the rest
-is **[`docs/digistore-billing-modes.md`](docs/digistore-billing-modes.md)**:
+What this app sells is `billingMode` in that same file (`"subscriptions" |
+"tokens" | "both"`, read through `lib/billing-mode.ts`, never by re-reading the
+JSON). Two rules make it safe to flip on a live app; the rest is
+**[`docs/digistore-billing-modes.md`](docs/digistore-billing-modes.md)**:
 
 - 🚨 **It is COSMETIC. It never decides access.** `hasPlan()`,
-  `entitlementsFor()`, `consumeTokens()` and the IPN behave identically in every
-  mode.
+  `entitlementsFor()`, `consumeTokens()` and the IPN behave identically in every mode.
 - **A mode may hide an empty thing, never a non-empty one.** Every call site is
   written `!sellsTokens() && balance === 0`, never `!sellsTokens()` alone.
 
-🚨 **To LOOK at the buy forms before the products exist, open
-`/plans?preview=checkout`** (DEV + localhost only) — never by writing dummy
-product ids into `config/digistore-products.json`. That file is tracked by
-git, so the leftover gets committed and the next `ds24-sync` updates a product
-that is not there. The preview asks Digistore24 nothing and buys nothing.
+🚨 **Creating a DS24 product cannot be undone from here** — deleting the entry
+does not unpublish it. So `ds24-sync` lists what would be NEW and refuses:
+`--create-new` is the yes, `"sell": false` parks the entry as a template (no
+product, off `/plans`, refused at checkout) **without touching ACCESS** — its
+buyers keep it and its IPNs keep arriving. To LOOK at the buy forms first, open
+`/plans?preview=checkout` (DEV + localhost); never dummy ids in the registry,
+git tracks it and the next sync updates a product that is not there.
 
 **Leave `APP_URL` alone** — a non-local value switches off the development login
-(`lib/auth/dev-login.ts`) and locks you out of your own app; the deployed domain
-a locally-run `ds24-sync --env prod|staging` needs goes into `APP_URL_PROD` /
-`APP_URL_STAGING`. **"Paid, but nothing happened in the app" has a command, not a
-theory:** `node run.mjs ds24-purchase --order ABC12345`, and a *rejected* IPN is
-`node run.mjs ds24-ipn-verify`.
+(`lib/auth/dev-login.ts`) and locks you out of your own app; a locally-run
+`ds24-sync --env prod|staging` reads `APP_URL_PROD` / `APP_URL_STAGING`.
+**"Paid, but nothing happened" has a command, not a theory:** `node run.mjs
+ds24-purchase --order ABC12345`, and a *rejected* IPN is `ds24-ipn-verify`.
 
 ## Local commands
 

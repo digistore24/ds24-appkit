@@ -36,7 +36,7 @@
 //   node scripts/ds24/request-approval.mjs --lang en --apply   # force USA reseller (2)
 //   node scripts/ds24/request-approval.mjs --reseller US --apply
 //   node scripts/ds24/request-approval.mjs --siteowner <id> --apply  # any marketplace
-//   [--key pro] [--force]
+//   [--key starter] [--force]
 // Env: DIGISTORE_API_KEY (writable), optionally APP_LANG,
 //      DIGISTORE_SITEOWNER_ID, DIGISTORE_APPROVAL_CHECK.
 import {

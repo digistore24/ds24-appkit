@@ -8,12 +8,14 @@ import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 
 import {
   isTestpayAllowed,
   isTestpayFresh,
+  isCheckoutHost,
   decorateCheckoutUrl,
   withTestpayParam,
   resetTestpayForTests,
   type TestpayEnv,
   type TestpayState,
 } from "./testpay";
+import { DIGISTORE_CHECKOUT_HOSTS } from "./config.mjs";
 
 // The testpay parameter is an unlock for free "purchases". These tests are the
 // guard in front of it: each individual condition must be able to switch it
@@ -130,11 +132,16 @@ describe("decorateCheckoutUrl", () => {
     expect(out).toContain("some_other_name=k");
   });
 
+  // Literals on purpose, ALONGSIDE the derived cases below. A derived test and a
+  // literal one fail differently: if the derivation itself were wrong, the
+  // derived cases would happily agree with it and this one would not.
   it("never puts the key onto a foreign host", () => {
     for (const url of [
       "https://example.com/product/1",
       "https://digistore24.com.evil.example/product/1",
       "https://notdigistore24.com/product/1",
+      "https://checkout-ds24.com.evil.example/product/1",
+      "https://notcheckout-ds24.com/product/1",
     ]) {
       expect(decorateCheckoutUrl(url, "p", "k")).toBe(url);
     }
@@ -147,6 +154,62 @@ describe("decorateCheckoutUrl", () => {
     expect(
       decorateCheckoutUrl("https://checkout.digistore24.com/product/1", "p", "k"),
     ).toContain("p=k");
+  });
+
+  // The checkout does NOT run on the API domain. `createBuyUrl` answers with
+  // www.checkout-ds24.com, and an allowlist that knew only digistore24.com
+  // dropped the parameter from every link in DEV — no error, no warning, and a
+  // developer meeting "Das Produkt wurde noch nicht genehmigt." on a product
+  // that is simply not approved yet.
+  it("accepts the checkout domain Digistore24 actually answers with", () => {
+    expect(
+      decorateCheckoutUrl("https://www.checkout-ds24.com/product/12345", "p", "k"),
+    ).toContain("p=k");
+  });
+
+  // Derived from the list rather than from today's two entries, so a third
+  // domain is measured on the day it is added instead of silently skipped.
+  describe.each(DIGISTORE_CHECKOUT_HOSTS)("%s", (domain) => {
+    it("decorates the bare domain and a subdomain of it", () => {
+      for (const host of [domain, `www.${domain}`, `checkout.${domain}`]) {
+        expect(isCheckoutHost(host), host).toBe(true);
+        expect(
+          decorateCheckoutUrl(`https://${host}/product/1`, "p", "k"),
+          host,
+        ).toContain("p=k");
+      }
+    });
+
+    it("refuses a lookalike of it — the dot is the whole property", () => {
+      for (const host of [
+        `not${domain}`,
+        `${domain}.evil.example`,
+        `x${domain}`,
+        `${domain}x`,
+      ]) {
+        expect(isCheckoutHost(host), host).toBe(false);
+        const url = `https://${host}/product/1`;
+        expect(decorateCheckoutUrl(url, "p", "k"), host).toBe(url);
+      }
+    });
+
+    it("matches case-insensitively", () => {
+      expect(isCheckoutHost(domain.toUpperCase())).toBe(true);
+    });
+  });
+
+  // 🚨 The derived cases above cover a domain being ADDED and cannot cover one
+  // being REMOVED: they are generated FROM the list, so deleting an entry makes
+  // its cases disappear rather than fail — measured, the needle dropped the file
+  // from 36 tests to 33 and only the two literal cases went red. A length guard
+  // does not help either (1 is still > 0). So the known entries are pinned as
+  // literals, which is the half that fails when the list shrinks.
+  it("holds the domains Digistore24 is known to serve a checkout from", () => {
+    expect(DIGISTORE_CHECKOUT_HOSTS).toContain("digistore24.com");
+    expect(DIGISTORE_CHECKOUT_HOSTS).toContain("checkout-ds24.com");
+    // Not an equality assertion: a THIRD domain is an addition, not a defect,
+    // and it is already covered by the derived cases above.
+    expect(DIGISTORE_CHECKOUT_HOSTS.length).toBeGreaterThanOrEqual(2);
   });
 
   it("returns an unparseable URL untouched", () => {
@@ -248,6 +311,66 @@ describe("withTestpayParam", () => {
     // broken API key costs one 10s timeout per plan card per render.
     expect(await withTestpayParam(URL_IN, failing)).toBe(URL_IN);
     expect(called).toBe(1);
+  });
+
+  // The bug this warning exists for: the gate was open, the key was there, and
+  // the URL came back undecorated because the host was not recognised. Nothing
+  // said so — and a checkout link that quietly buys for real is the one failure
+  // on this path that a developer cannot see from the outside.
+  it("warns when an open gate still produced an undecorated URL", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const foreign = "https://checkout.example.com/product/1";
+
+    const out = await withTestpayParam(foreign, {
+      fetcher: async () => state(),
+      now: NOW,
+      stateFile,
+    });
+
+    // It never breaks the checkout — the URL comes back untouched.
+    expect(out).toBe(foreign);
+    expect(warn).toHaveBeenCalledTimes(1);
+    const said = String(warn.mock.calls[0]?.[0] ?? "");
+    expect(said).toContain("checkout.example.com");
+    // It names where the list is, or the reader has to go looking for it.
+    expect(said).toContain("DIGISTORE_CHECKOUT_HOSTS");
+    // And it never leaks the key it declined to append.
+    expect(said).not.toContain("abcdef123456");
+  });
+
+  it("warns once per host, not once per plan card", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const opts = { fetcher: async () => state(), now: NOW, stateFile };
+
+    await withTestpayParam("https://checkout.example.com/product/1", opts);
+    await withTestpayParam("https://checkout.example.com/product/2", opts);
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    // A DIFFERENT unknown host is a different finding and does get its line.
+    await withTestpayParam("https://other.example.org/product/3", opts);
+    expect(warn).toHaveBeenCalledTimes(2);
+  });
+
+  it("stays silent when the host IS known — the warning is not unconditional", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const out = await withTestpayParam(
+      "https://www.checkout-ds24.com/product/12345",
+      { fetcher: async () => state(), now: NOW, stateFile },
+    );
+    expect(out).toContain("testpay_4711=");
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("says nothing outside DEV — the gate closes before the warning", async () => {
+    process.env.APP_ENV = "production";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const foreign = "https://checkout.example.com/product/1";
+    expect(await withTestpayParam(foreign, { now: NOW, stateFile })).toBe(foreign);
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it("makes ONE fetch for parallel callers (single-flight)", async () => {

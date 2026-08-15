@@ -337,8 +337,8 @@ without changing the status code.
 
 Prepaid tokens are a **balance**, not access, and they live in
 `lib/tokens/account.ts`. A purchase of a token package never creates a grant, so
-`hasPlan(memberId, "pro")` is `false` for every Member, forever — `pro` ships as
-a `kind: "token"` package in the registry. Only `kind: "subscription"` and
+`hasPlan(memberId, "starter")` is `false` for every Member, forever — `starter`
+ships as a `kind: "token"` package in the registry. Only `kind: "subscription"` and
 `kind: "one_time"` entries become entitlements.
 
 ```ts

@@ -21,14 +21,20 @@ into the `.env` as `DIGISTORE_API_KEY`.
 For apps with several offers (subscription plans + token packages),
 **`config/digistore-products.json`** is the source of truth. `sync-products.mjs`
 creates one product **per offer and language** via `createProduct` (or updates it
-via `updateProduct`) and writes the ids back into `productIdByLanguage`. One per
+via `updateProduct`) and writes the ids back into `productIds.<env>`. One per
 language because a DS24 product carries exactly one `data[language]`, and that
 is the language of the buyer's order form. **The price is NOT set on the
 product** (`data[amount]` is deprecated and discarded) — price and interval stay
 in the registry and travel with the checkout call as `payment_plan[...]`
 (`lib/digistore/checkout.ts`). Do **not** maintain payment plans in the DS24 UI;
-the price would then live in two places. All environments use the same live
-products.
+the price would then live in two places.
+
+**Each environment has its own product set** (`dev` / `staging` / `prod`), and
+`--env` picks which one a run maintains — see `docs/environments.md`. Two older
+shapes are still read as the PROD set: `productIdByLanguage` (template < 0.14.0,
+one set shared by every environment) and a bare `productId`/`language` pair
+(< 0.6.0, one product per offering). A `--env prod` run folds them into
+`productIds.prod` in place, so sales and approvals survive.
 
 ```bash
 # The normal case — creates/updates and registers the IPN:
@@ -38,12 +44,22 @@ node run.mjs ds24-sync
 node run.mjs ds24-sync --dry-run
 
 # A single product only:
-node run.mjs ds24-sync --key pro
+node run.mjs ds24-sync --key starter
+
+# Yes to the list of NEW products it refused to create:
+node run.mjs ds24-sync --create-new
 ```
 
 `node run.mjs ds24-sync` adds `--apply` by itself; the scripts underneath keep the dry
 run as their default, so a direct `node scripts/ds24/sync-products.mjs` still
 changes nothing. `--dry-run` beats `--apply` wherever both turn up.
+
+🚨 **Creating a product cannot be undone from here**, so the run stops the
+first time it would create one, lists what would be new, and refuses. Say yes
+with `--create-new`, or park what you do not sell with `"sell": false` in the
+registry. Once an offering has an id nothing is being created and the gate is
+silent; updates are never gated. Deleting an entry afterwards does not
+unpublish the product — that is a hand in the Digistore24 backend.
 
 ## localhost and Digistore24 (`_public-url.mjs`)
 
@@ -122,7 +138,11 @@ be sold at all. Full reasoning: `docs/digistore-integration.md`.
 **Before approval only test purchases.** New products are not approved at
 first. In DEV that is already handled: every checkout link carries the
 test-payment parameter by itself (`lib/digistore/testpay.ts`, state in
-`.dev/testpay.json`). Outside DEV the vendor sets the test-purchase cookie
+`.dev/testpay.json`). A link that arrives WITHOUT it leaves a `[testpay]` line
+in `node run.mjs logs` naming which of the two allowlists declined — the
+environment gate, or `DIGISTORE_CHECKOUT_HOSTS` in `lib/digistore/config.mjs`
+(the checkout runs on `www.checkout-ds24.com`, not on the API domain).
+Outside DEV the vendor sets the test-purchase cookie
 once: <https://help.digistore24.com/hc/de/articles/23901169396241>.
 You only request approval once the product description and the app are mature.
 

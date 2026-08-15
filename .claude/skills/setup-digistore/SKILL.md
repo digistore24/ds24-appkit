@@ -1,7 +1,7 @@
 ---
 name: setup-digistore
 description: Sets up Digistore24 billing — the API key, the products, the IPN connection (webhook + SHA512 passphrase) and the checkout links; the agent runs the commands itself (`ds24-connect`, `ds24-sync`). Use this as soon as the app is meant to receive sales or process completed purchases, and when the user says "somebody paid and the app knows nothing about it", "a test purchase never arrives", "connect Digistore24", or asks for a checkout link.
-requires: 0.14.0
+requires: 0.30.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -107,7 +107,27 @@ page — is
 *How an API key comes into being* and *Localhost URLs travel through the redirect*.
 The flags are [`references/one-off-setup.md`](references/one-off-setup.md).
 
-## 2. Create products and the IPN — `node run.mjs ds24-sync`
+## 2. Decide what is actually on sale — BEFORE the sync
+
+🚨 **Do this first, not afterwards.** `config/digistore-products.json` ships with
+example plans, and every entry in it becomes a real product in the user's
+Digistore24 account. **That cannot be undone from here**: deleting an entry
+later does not remove the product over there — it has to be deactivated in the
+Digistore24 backend, by hand.
+
+Go through the list WITH the user and say what it is: *"the template comes with
+three example plans. Which of these do you actually sell?"* Then, per entry:
+
+- **Sell it** → adjust name, price, interval or credits.
+- **Not sell it, but keep the shape** → `"sell": false`. The entry stays in the
+  file as something to copy from, no product is created, and it does not appear
+  on `/plans`.
+- **Never need it** → delete the entry.
+
+One entry per plan, never a second price list in the code, and no prices on the
+Digistore24 product at all.
+
+## 3. Create products and the IPN — `node run.mjs ds24-sync`
 
 One command, idempotent, and it **applies** — the preview is
 `node run.mjs ds24-sync --dry-run`. It creates or updates the plans from
@@ -115,7 +135,18 @@ One command, idempotent, and it **applies** — the preview is
 `…/api/ipn` **via API** with its SHA512 passphrase: the user enters **nothing** in
 the Digistore24 interface.
 
-Four things to do while it runs, and only the first is a command:
+**The first run will stop and show you a list.** Anything that would be created
+NEW is printed and the run refuses, because creating is the irreversible half.
+That is not an error — it is the last look before products exist:
+
+1. Read the list out to the user, by name.
+2. Wait for their yes. If something on it is wrong, go back to step 2 above.
+3. Then run `node run.mjs ds24-sync --create-new`.
+
+Later runs pass straight through: an offering that has been synced carries an
+id, so nothing is being created and nothing is asked. Updates are never gated.
+
+Four more things to do while it runs, and only the first is a command:
 
 - **Run it plain.** Without `--env` it follows `APP_ENV`, so on the user's machine
   it maintains the **DEV** set and the live set stays untouched. The prod set is a
@@ -124,7 +155,9 @@ Four things to do while it runs, and only the first is a command:
 - 🚨 **Read the sync's warnings out loud to the user.** A plan missing a language
   still sells, and those buyers get an order form in the wrong language, which
   nothing else in the app will ever mention. Why, and what the registry has to look
-  like: *The order form's language* in that reference.
+  like: *The order form's language* in that reference. The same goes for a
+  `"sell": false` entry the sync says is still buyable at Digistore24 — that one
+  needs a hand in the vendor backend, and nothing else will ever raise it.
 - **Say that their machine is reachable from the internet** if the sync opened a
   Cloudflare Quick Tunnel for the IPN — it does that by itself while `APP_URL` is
   local, and they must not learn it from a log line later
@@ -133,11 +166,7 @@ Four things to do while it runs, and only the first is a command:
   it truly cannot (app not running, `cloudflared` missing) and names which; fix that
   and run it again.
 
-If the bundled plan list does not fit the user's product yet, edit
-`config/digistore-products.json` first — one entry per plan, never a second price
-list in the code, and no prices on the Digistore24 product at all.
-
-## 3. Check the connection
+## 4. Check the connection
 
 The user can trigger "Test connection" in Digistore24 as soon as the IPN is
 registered: a validly signed IPN is answered `200`, an invalid signature `403`.
@@ -152,7 +181,7 @@ Both verdicts and what each of them means are *"The purchase worked but nothing
 happened"* in that reference. Where no IPN ever arrived,
 `node run.mjs ds24-ipn --auto --apply` re-registers the connection.
 
-## 4. Test a purchase from the app
+## 5. Test a purchase from the app
 
 **In DEV that works by itself, approved or not:** every checkout link the app
 builds carries the Digistore24 test-payment parameter, so clicking a plan card
@@ -164,13 +193,20 @@ cookie once instead
 ([`docs/digistore-createbuyurl.md`](../../../docs/digistore-createbuyurl.md) →
 *Test payments in DEV*).
 
+⚠️ **If the checkout nevertheless says the product is not approved, do not
+conclude that approval is the answer — look first.** Open the link and check the
+address bar for the parameter, then read `node run.mjs logs` for a line
+beginning `[testpay]`: it names which of the two allowlists declined, the
+environment gate or the checkout host. Requesting approval to work around a
+missing parameter is a go-live step spent on a bug.
+
 **Approval is not this skill's job.** A product sold through one of the four
 Digistore24 resellers is unapproved at first and only test purchases work; a
 Direct Seller has no approval step at all. Requesting it
 (`node run.mjs ds24-approval --apply`) waits until the description and the app are
 mature — a go-live step, in the skill `go-live`.
 
-## 5. Checkout links
+## 6. Checkout links
 
 `/plans` already builds them, on **two paths** — one for a signed-in member, whose
 identity travels in `tracking[custom]` so that a later payment finds its owner, and
@@ -184,7 +220,7 @@ locally and nothing reports a fault. Its last step would have to be
 that rule, the cache and the language:
 [`docs/digistore-createbuyurl.md`](../../../docs/digistore-createbuyurl.md).
 
-## 6. The one-off cases
+## 7. The one-off cases
 
 A single product outside the registry, the IPN with a fixed URL, a flag of
 `ds24-connect`: [`references/one-off-setup.md`](references/one-off-setup.md).

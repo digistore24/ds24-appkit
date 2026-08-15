@@ -8,7 +8,7 @@
 //
 // The `key` is stable and appears as "tokens:<key>" in the DS24 `custom` field,
 // so the IPN handler can match a payment to a credit.
-import { getProduct, productsByKind, type ProductDef } from "@/lib/digistore/products";
+import { getProduct, isSold, productsByKind, type ProductDef } from "@/lib/digistore/products";
 
 export interface TokenPackage {
   key: string;
@@ -31,9 +31,16 @@ function toTokenPackage(p: ProductDef): TokenPackage {
   };
 }
 
-/** All token packages. */
+/**
+ * The token packages ON OFFER — parked ones (`"sell": false`) are left out.
+ *
+ * ⚠️ `getTokenPackage()` below deliberately does NOT filter: it answers about
+ * a package somebody already bought, and the automatic top-up runs on a
+ * mandate that was armed while it was still on sale. Taking a package off
+ * offer must not silently stop charging a member who asked to be charged.
+ */
 export function listTokenPackages(): TokenPackage[] {
-  return productsByKind("token").map(toTokenPackage);
+  return productsByKind("token").filter(isSold).map(toTokenPackage);
 }
 
 /** Returns a token package, or throws (unknown, or not a token product). */

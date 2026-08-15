@@ -11,6 +11,9 @@ import {
   productId,
   productByDs24Id,
   unknownKindProblems,
+  sellFieldProblems,
+  isSold,
+  sellableProducts,
   PRODUCT_KINDS,
   productIdsOf,
   productLanguages,
@@ -418,5 +421,117 @@ describe("unknownKindProblems — the loader's refusal", () => {
     // An empty registry is the normal state mid-setup; the empty state on
     // /plans is what reports it, not a load failure.
     expect(unknownKindProblems([])).toEqual([]);
+  });
+});
+
+// A parked offering that HAS a Digistore24 id — the state the whole seam is
+// about. Built by hand rather than read from the registry: the shipped one
+// never holds a parked entry, which is exactly why a test reading it directly
+// would prove nothing (same argument as `plan-sections.ts` and
+// `productByDs24Id` make for taking their list as an argument).
+const PARKED: ProductDef = {
+  key: "retired_plan",
+  name: "Retired plan",
+  kind: "subscription",
+  billingInterval: "1_month",
+  priceCents: 1900,
+  sell: false,
+  productIds: { prod: { de: "9001", en: "9002" } },
+};
+
+describe("isSold", () => {
+  it("treats a missing sell field as sold", () => {
+    // The load-bearing default: every registry in the wild has no such field.
+    expect(isSold({})).toBe(true);
+  });
+
+  it("treats an explicit undefined as sold", () => {
+    expect(isSold({ sell: undefined })).toBe(true);
+  });
+
+  it("treats true as sold", () => {
+    expect(isSold({ sell: true })).toBe(true);
+  });
+
+  it("parks only on a literal false", () => {
+    expect(isSold({ sell: false })).toBe(false);
+  });
+});
+
+describe("sellableProducts", () => {
+  it("holds every product of the shipped registry", () => {
+    // Nothing ships parked, so the two lists agree — and saying so here is
+    // what makes the divergence below a statement about `sell` rather than
+    // about this registry.
+    expect(sellableProducts().map((p) => p.key)).toEqual(
+      allProducts().map((p) => p.key),
+    );
+  });
+
+  it("drops a parked offering", () => {
+    expect(sellableProducts().some((p) => p.key === PARKED.key)).toBe(false);
+  });
+});
+
+// 🚨 THE needle of the `sell` field: the money path must not be filtered.
+//
+// Each of these four answers a question about a purchase that ALREADY
+// happened. Move the filter into `allProducts()` — or into
+// `syncedProductIds()` one file over — and every one of them starts answering
+// "I do not know this product" for somebody who is paying: no entitlement on
+// the next rebill, no refund, no chargeback, no `payment_missed`. And
+// `orders.productKey` is never reconstructed afterwards.
+describe("a parked offering is still ANSWERED for", () => {
+  it("productByDs24Id finds it by its Digistore24 id", () => {
+    expect(productByDs24Id("9001", [PARKED])?.key).toBe(PARKED.key);
+    expect(productByDs24Id("9002", [PARKED])?.key).toBe(PARKED.key);
+  });
+
+  it("findProduct answers for a parked key in the real registry", () => {
+    // Against the shipped registry rather than the fixture, because
+    // findProduct/getProduct read the raw file and take no list: the claim is
+    // that they are unaffected BY CONSTRUCTION, and only the real one shows
+    // that.
+    const sold = allProducts()[0];
+    if (!sold) return;
+    expect(findProduct(sold.key)?.key).toBe(sold.key);
+    expect(getProduct(sold.key).key).toBe(sold.key);
+  });
+
+  it("is what sellableProducts refuses — the counter-proof", () => {
+    // The same object, the same run: one list has it, the other does not.
+    // Without this line the four assertions above would also pass if `sell`
+    // did nothing at all.
+    expect([PARKED].filter(isSold)).toEqual([]);
+  });
+});
+
+describe("sellFieldProblems", () => {
+  it("names a string 'false' — the typo that would put a product on sale", () => {
+    const problems = sellFieldProblems([{ key: "pro", sell: "false" }]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('"pro"');
+    expect(problems[0]).toContain('"false"');
+  });
+
+  it.each([0, 1, "true", null, {}])("refuses %o", (sell) => {
+    expect(sellFieldProblems([{ key: "x", sell }])).toHaveLength(1);
+  });
+
+  it("stays silent for true, false and absent", () => {
+    expect(
+      sellFieldProblems([
+        { key: "a", sell: true },
+        { key: "b", sell: false },
+        { key: "c" },
+        { key: "d", sell: undefined },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("stays silent for the shipped registry", () => {
+    // The module-load guard throws on a problem here, so this is really an
+    // assertion that importing this file at all was legitimate.
+    expect(sellFieldProblems(allProducts())).toEqual([]);
   });
 });

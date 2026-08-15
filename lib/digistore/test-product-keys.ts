@@ -6,9 +6,12 @@
 //
 // ── Why this file exists ────────────────────────────────────────────────────
 //
-// `config/digistore-products.json` ships with five EXAMPLE products, and
-// CLAUDE.md tells the operator to throw away the ones they do not sell:
-// *"Deleting the sample products you do not sell is part of setting the mode."*
+// `config/digistore-products.json` ships with EXAMPLE products, and the
+// operator is told to take out the ones they do not sell — by deleting the
+// entry, or by parking it with `"sell": false`. Either way the key is gone
+// from what the tests below can reach. (The count is deliberately not named
+// here: it has already changed once, and this file's job does not depend on
+// it. `allProducts().length` is the answer if anybody needs one.)
 // Several shipped tests then read a literal out of that file — `hasPlan()`
 // throws on a key the registry does not hold, `planProblem()` refuses one, and
 // `courseConfigProblems()` reports one — so an operator who did exactly what

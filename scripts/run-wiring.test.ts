@@ -166,6 +166,47 @@ function cyclesIn(entries: Map<string, string>): string[] {
   return cycles;
 }
 
+// 🚨 `ds24-sync` runs TWO scripts, and the order plus the failure handling
+// between them is what stops a refused product sync from being followed by an
+// IPN registration — which, while `APP_URL` is local, also opens a Cloudflare
+// tunnel and puts the machine on the internet.
+//
+// It holds today for a reason that is easy to lose: `script()` exits the
+// process on a non-zero code, so `sync-products.mjs` refusing (exit 2) ends
+// the run before `ipn-setup.mjs` is reached. Make `script()` tolerant, or swap
+// the two lines, and the gate in `sync-products.mjs` still refuses — but the
+// second half runs anyway, against a registry the first half declined to
+// write. Nothing else in this repo asks either question.
+describe("ds24-sync stops at the first script that refuses", () => {
+  const body = ENTRIES.get("ds24-sync") ?? "";
+
+  it("has an entry this test can read", () => {
+    // Count guard, same reason as the table's: a renamed command would make
+    // every assertion below vacuously true.
+    expect(body, "no ds24-sync entry in the TASKS table").not.toBe("");
+  });
+
+  it("syncs the products before it registers the IPN", () => {
+    const products = body.indexOf("scripts/ds24/sync-products.mjs");
+    const ipn = body.indexOf("scripts/ds24/ipn-setup.mjs");
+    expect(products).toBeGreaterThan(-1);
+    expect(ipn).toBeGreaterThan(products);
+  });
+
+  it("awaits both, so the second cannot start before the first has answered", () => {
+    expect(body).toContain('await script("scripts/ds24/sync-products.mjs"');
+    expect(body).toContain('await script("scripts/ds24/ipn-setup.mjs"');
+  });
+
+  it("script() ends the run on a non-zero exit code", () => {
+    // The mechanism the two assertions above rely on. Asserted where it
+    // lives rather than assumed: this one line is what makes a refusal in
+    // the first script bind on the second.
+    const helper = SOURCE.slice(SOURCE.indexOf("async function script("));
+    expect(helper.slice(0, 200)).toContain("if (code !== 0) process.exit(code)");
+  });
+});
+
 /** The `needs: [...]` of one entry body. `[]` when it declares none. */
 function needsOf(body: string): string[] {
   const match = /needs:\s*\[([^\]]*)\]/.exec(body);

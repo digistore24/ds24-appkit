@@ -120,7 +120,7 @@ product exists:
 ```
 
 Which archetype sells which, why the shipped `"both"` should not simply stay
-(the mode is display-only and safe to set), and deleting the sample products:
+(the mode is display-only and safe to set), and what to do with the sample products they do not sell (delete, or park with `"sell": false`):
 the billing-mode section of [`references/archetypes.md`](references/archetypes.md).
 Everything else about billing is the `billing-modes` skill.
 

@@ -48,10 +48,15 @@ Two things to know before you set it:
   flag is a layout decision, and a layout decision must not revoke what was paid
   for. The one exception is the manual balance correction, which mints tokens:
   that follows the mode alone and refuses in a subscriptions-only app.
-- **Then delete the products you do not sell** from the same file. The two must
-  agree — `lib/billing-mode.test.ts` fails the build on a token package in a
-  `"subscriptions"` app, because `ds24-sync` would create it at Digistore24 and
-  it would be buyable while the app renders nothing that credits it.
+- **Then take the products you do not sell out of the offer** — either delete
+  the entry, or park it with `"sell": false`, which keeps it in the file as a
+  shape to copy from while no Digistore24 product is created for it and `/plans`
+  leaves it out. The two must agree — `lib/billing-mode.test.ts` fails the build
+  on a token package that is still ON SALE in a `"subscriptions"` app, because
+  `ds24-sync` would create it at Digistore24 and it would be buyable while the
+  app renders nothing that credits it. A parked one is skipped by that check, so
+  you no longer have to delete a package to set `"subscriptions"`.
+  *(`"sell"` needs template 0.30.0.)*
 
 Reference: `lib/billing-mode.ts`.
 
@@ -66,6 +71,14 @@ type it:
 ```bash
 node run.mjs ds24-sync
 ```
+
+🚨 **The first run refuses, on purpose.** It prints every product that would be
+NEW at Digistore24, says that creating them cannot be undone from here, and
+stops — nothing is created and the IPN is not registered yet. Read the list out
+to the user; then either park what they do not sell with `"sell": false` and run
+it again, or confirm with `node run.mjs ds24-sync --create-new`. Once an
+offering carries an id nothing is being created and later runs pass straight
+through; updates are never gated. *(Needs template 0.30.0.)*
 
 That writes the id(s) back into `productIds.<env>` (one Digistore24 product
 per offer, language **and environment** — a DS24 product carries exactly one

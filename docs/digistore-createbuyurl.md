@@ -132,7 +132,8 @@ Forgetting it does not break anything visibly — which is why it gets forgotten
 The app works, the checkout opens, and the developer simply has no way to buy
 anything locally and goes looking for the cookie instead.
 
-Three rules, and the first one is the one that matters:
+Four rules, and the first two — WHEN the parameter may exist, and WHERE it may
+go — are the ones that matter:
 
 - **DEV and localhost only.** ⚠️ The parameter takes **test payments**: anyone
   who opens a link carrying it gets the product **without paying**, and the IPN
@@ -146,6 +147,17 @@ Three rules, and the first one is the one that matters:
   account it unlocks free purchases there too. Treat it like a secret; that is
   why it lives in gitignored `.dev/` and never in `.env`. Hard off:
   `DS24_TESTPAY=off`.
+- **Only onto a Digistore24 checkout host**, and the list of them is
+  `DIGISTORE_CHECKOUT_HOSTS` in `lib/digistore/config.mjs`. ⚠️ **The checkout
+  does not run on the API domain.** `createBuyUrl` answers with
+  `https://www.checkout-ds24.com/...` — a *different registrable domain* from
+  `digistore24.com`, and an allowlist that knew only the latter dropped the
+  parameter from every single link in DEV. Nothing was red: the app ran, the
+  page rendered, the suite was green, and the developer met *"Das Produkt wurde
+  noch nicht genehmigt."* on a product that is simply not approved yet. Matching
+  is the exact host or a dot-boundary subdomain — `notdigistore24.com` and
+  `checkout-ds24.com.evil.example` are refused, and there is a test for each. If
+  Digistore24 ever adds a third domain, that list is the one line to change.
 - **After the cache, never before.** Decorate the **return value**, as above.
   `getOrCreateBuyUrl` writes its result into `buy_url_cache`, a table keyed per
   offering with no member dimension — a decorated URL written there is handed to
@@ -153,8 +165,10 @@ Three rules, and the first one is the one that matters:
   not decorate, and `lib/digistore/checkout.test.ts` fails the build if the call
   moves into it.
 - **It never breaks the checkout.** No API key, a DS24 error, a timeout, an
-  unwritable `.dev/` — every failure returns the undecorated URL with one
-  `console.warn`, and a failed fetch is not retried for ~5 minutes.
+  unwritable `.dev/`, an unknown host — every failure returns the undecorated URL
+  with one `console.warn`, and a failed fetch is not retried for ~5 minutes. The
+  host case is the one that used to be silent; it now names the host and says
+  where the list lives, once per host per process rather than once per plan card.
 
 Outside DEV — a STAGING domain, or the live one before approval — the way to a
 test purchase is the vendor's

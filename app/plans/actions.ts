@@ -22,7 +22,7 @@ import { redirect } from "next/navigation";
 import { getLocale } from "next-intl/server";
 
 import { auth } from "@/auth";
-import { getProduct } from "@/lib/digistore/products";
+import { getProduct, isSold } from "@/lib/digistore/products";
 import { checkoutLinkFor } from "@/lib/digistore/checkout";
 import { buildIdentity, purchaseOriginFor } from "@/lib/digistore/custom";
 import { ensureCheckoutToken } from "@/lib/users/checkout-token";
@@ -44,6 +44,20 @@ export async function startCheckoutAction(formData: FormData): Promise<void> {
   try {
     // Throws on an unknown key — a tampered form must not silently do nothing.
     const def = getProduct(productKey);
+    // 🚨 And throws on a PARKED one, for the same reason. This is an HTTP
+    // endpoint: taking an offering off `/plans` removes the button, not the
+    // route, so a product that was synced while it was on sale would stay
+    // buyable by anyone who kept the form field — the buyer pays for
+    // something the vendor withdrew. Exactly the failure the registry loader
+    // describes for a `kind` typo: "silently vanish from the sales page while
+    // STAYING BUYABLE via a direct POST".
+    //
+    // A refusal here and nowhere near `hasPlan()`, `getTokenPackage()` or the
+    // IPN: this is a NEW purchase decision, and those are existing payment
+    // relationships.
+    if (!isSold(def)) {
+      throw new Error(`Produkt "${productKey}" wird nicht mehr verkauft.`);
+    }
     const checkoutToken = await ensureCheckoutToken(memberId);
     // Decides WHICH of the offering's Digistore24 products they are sent to,
     // and with it the language of the order form — a DS24 product carries

@@ -10,6 +10,9 @@ import {
   setProductId,
   adoptLegacyAsProd,
   syncedProductIds,
+  isSold,
+  sellFieldProblems,
+  parkedTargets,
 } from "./_products.mjs";
 import {
   contradictingProducts as appContradictingProducts,
@@ -18,6 +21,8 @@ import {
 } from "@/lib/billing-mode";
 import {
   productIdsOf as appProductIdsOf,
+  sellFieldProblems as appSellFieldProblems,
+  allProducts,
   type ProductDef,
 } from "@/lib/digistore/products";
 import registry from "@/config/digistore-products.json";
@@ -320,5 +325,154 @@ describe("syncedProductIds — what the env's IPN connection is scoped to", () =
     // A `null` cannot travel in `product_ids` — the fallback to "all" is the
     // caller's decision (ipn-setup.mjs), not this function's.
     expect(syncedProductIds({ products: { pro: { productIds: { dev: { de: null } } } } }, "dev")).toEqual([]);
+  });
+
+  // 🚨 The counterpart of the seam in lib/digistore/sell-seam.test.ts, on the
+  // script side. A parked plan's id has to stay in the IPN scope: its buyers
+  // are still paying, and their rebills, refunds and chargebacks arrive as
+  // IPNs naming that id. An id missing here is an event the app never hears —
+  // access that should have ended does not end.
+  it("keeps a PARKED product's id — taking it off sale is not ending it", () => {
+    const parked = {
+      products: {
+        retired: { sell: false, productIds: { prod: { de: "911", en: "912" } } },
+        live: { productIds: { prod: { de: "100" } } },
+      },
+    };
+    expect(syncedProductIds(parked, "prod").sort()).toEqual(["100", "911", "912"]);
+  });
+});
+
+describe("isSold — the twin of lib/digistore/products.ts", () => {
+  it("treats an absent sell field as sold", () => {
+    // Load-bearing: every registry written before this field existed.
+    expect(isSold({})).toBe(true);
+    expect(isSold({ sell: undefined })).toBe(true);
+  });
+
+  it("parks only on a literal false", () => {
+    expect(isSold({ sell: true })).toBe(true);
+    expect(isSold({ sell: false })).toBe(false);
+  });
+
+  it("survives an entry that is not an object", () => {
+    expect(isSold(undefined)).toBe(true);
+  });
+});
+
+describe("sellFieldProblems (script side)", () => {
+  it("names the string 'false' — the typo that would create the product", () => {
+    const problems = sellFieldProblems({ products: { pro: { sell: "false" } } });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('"pro"');
+    expect(problems[0]).toContain('"false"');
+  });
+
+  it.each([0, 1, "true", null])("refuses %o", (sell) => {
+    expect(sellFieldProblems({ products: { x: { sell } } })).toHaveLength(1);
+  });
+
+  it("stays silent for true, false and absent", () => {
+    expect(
+      sellFieldProblems({
+        products: { a: { sell: true }, b: { sell: false }, c: {} },
+      }),
+    ).toEqual([]);
+  });
+
+  it("agrees with the app side on the shipped registry", () => {
+    expect(sellFieldProblems(registry)).toEqual(appSellFieldProblems(allProducts()));
+    expect(sellFieldProblems(registry)).toEqual([]);
+  });
+});
+
+describe("productTargets skips a parked offering", () => {
+  const products = {
+    live: { productIds: { dev: { de: "1", en: "2" } } },
+    retired: { sell: false, productIds: { dev: { de: "9", en: "8" } } },
+  };
+
+  it("builds no row for it — so nothing is created and nothing is approved", () => {
+    // One filter, two commands: sync-products and request-approval both build
+    // their work list here.
+    expect(productTargets(products, "dev").map((t) => t.key)).toEqual([
+      "live",
+      "live",
+    ]);
+  });
+
+  it("still keeps every row of a sold offering — the counter-proof", () => {
+    const { retired: _dropped, ...soldOnly } = products;
+    expect(productTargets(soldOnly, "dev")).toHaveLength(2);
+  });
+});
+
+describe("parkedTargets — what the sync warns about", () => {
+  it("names a parked offering that already exists at Digistore24", () => {
+    const rows = parkedTargets(
+      { retired: { sell: false, productIds: { prod: { de: "911", en: "912" } } } },
+      "prod",
+    );
+    expect(rows.map((r) => [r.key, r.language, r.productId])).toEqual([
+      ["retired", "de", "911"],
+      ["retired", "en", "912"],
+    ]);
+  });
+
+  it("says nothing about a parked offering that was never created", () => {
+    // There is nothing over there to deactivate, so there is nothing to warn
+    // about — a warning here would be noise on every fresh app.
+    expect(
+      parkedTargets({ retired: { sell: false, productIds: { prod: { de: null } } } }, "prod"),
+    ).toEqual([]);
+  });
+
+  it("says nothing about a sold offering", () => {
+    expect(parkedTargets({ live: { productIds: { prod: { de: "1" } } } }, "prod")).toEqual([]);
+  });
+
+  it("is scoped to the asked environment", () => {
+    const products = { retired: { sell: false, productIds: { dev: { de: "7" }, prod: { de: "911" } } } };
+    expect(parkedTargets(products, "dev").map((r) => r.productId)).toEqual(["7"]);
+    expect(parkedTargets(products, "prod").map((r) => r.productId)).toEqual(["911"]);
+  });
+});
+
+describe("contradictingProducts ignores a parked product", () => {
+  it("lets a parked token package past a subscriptions-only app", () => {
+    // The freedom this field buys: switching to "subscriptions" used to mean
+    // DELETING the token packages to get past the refusal.
+    expect(
+      contradictingProducts({
+        billingMode: "subscriptions",
+        products: { paket: { kind: "token", sell: false } },
+      }),
+    ).toEqual([]);
+  });
+
+  it("still refuses the same package when it is SOLD — the counter-proof", () => {
+    // Without this line the test above would also pass if `billingMode` had
+    // stopped checking anything at all.
+    expect(
+      contradictingProducts({
+        billingMode: "subscriptions",
+        products: { paket: { kind: "token" } },
+      }),
+    ).toEqual(["paket"]);
+  });
+
+  it("keeps app and script in step on a parked entry", () => {
+    // The twin rule, asked about the one shape the shipped registry cannot
+    // show: both sides must skip it, or `make check` and `ds24-sync` disagree.
+    const shifted = {
+      ...registry,
+      billingMode: "subscriptions",
+      products: {
+        ...Object.fromEntries(
+          Object.entries(registry.products).map(([k, p]) => [k, { ...p, sell: false }]),
+        ),
+      },
+    };
+    expect(contradictingProducts(shifted)).toEqual([]);
   });
 });

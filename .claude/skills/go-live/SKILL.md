@@ -84,11 +84,19 @@ one, and only **after the app is deployed and answers**: registering the IPN nee
 2. `node run.mjs ds24-sync --env prod` — the live products, their ids into
    `productIds.prod`, and the prod IPN connection scoped to exactly those products.
    Never `node scripts/ds24/sync-products.mjs`: it skips the IPN, and purchases then
-   unlock nothing. Two stops here:
+   unlock nothing. Three stops here:
+   - **The run WILL stop the first time and list what it would create**
+     *(needs template 0.30.0; before that it creates them straight away — so on an
+     older app, read the `--dry-run` output first instead)*. This is the
+     one place that list matters most: it is the live account, and creating cannot
+     be undone from here. Read every line out to the user by name, wait for their
+     yes, then repeat the command with `--create-new`. Anything on that list they do
+     not sell gets `"sell": false` in `config/digistore-products.json` first.
    - 🚨 **It adopts; it must never recreate.** An older app's products have no set,
      and the first `--env prod` run updates them in place so sales and approvals
-     survive. **`would create` in the dry run for a product that already sells: stop
-     and look before applying.**
+     survive. **A product that already sells appearing in that create list: stop and
+     look before you pass `--create-new`.** That is now a refusal you have to
+     override rather than a line scrolling past in a dry run.
    - 🚨 **Read the warnings and fix the registry first.** Last moment to get one
      product per plan AND language right; a gap puts half your customers on an order
      form in the wrong language, and fixing it later means new products, new

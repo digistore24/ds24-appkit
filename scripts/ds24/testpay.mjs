@@ -82,8 +82,12 @@ show("Stored in", path.relative(projectRoot, stateFile));
 console.log(
   "\nIn DEV every checkout link of this app appends the parameter by itself —\n" +
     "click a plan card and the Digistore24 form opens in test-payment mode\n" +
-    "(works for not-yet-approved products too). It never activates outside DEV\n" +
-    "(allowlist in lib/digistore/testpay.ts; hard off: DS24_TESTPAY=off).\n" +
+    "(works for not-yet-approved products too). Two allowlists guard it, and\n" +
+    "they answer different questions: WHEN it may exist is the environment gate\n" +
+    "in lib/digistore/testpay.ts (never outside DEV; hard off: DS24_TESTPAY=off),\n" +
+    "WHERE it may go is DIGISTORE_CHECKOUT_HOSTS in lib/digistore/config.mjs.\n" +
+    "If a link arrives without the parameter, `node run.mjs logs` carries a\n" +
+    "[testpay] line saying which of the two declined.\n" +
     "\nTreat the key like a secret, and rotate it before going live:\n" +
     "  node run.mjs ds24-testpay --recreate",
 );

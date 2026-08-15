@@ -60,11 +60,16 @@ becomes something people skip.
 - **Payment: one row, three different failures.** The row asks for all three of
   `DIGISTORE_API_KEY`, `DIGISTORE_IPN_PASSPHRASE` and
   `DIGISTORE_IPN_DOMAIN_ID`, so it cannot say which is missing. A key but no ids
-  on the products in `config/digistore-products.json` → the sync never ran; no
-  passphrase → no IPN, so purchases arrive nowhere; both → **`setup-digistore`**.
+  on the products in `config/digistore-products.json` → the sync never ran, **or
+  it ran and stopped at its own gate**: it refuses to CREATE anything until the
+  run is repeated with `--create-new`, so "no ids" is as often an unanswered
+  question as a forgotten command. ⚠️ An entry parked with `"sell": false`
+  carries no ids by design and is not a finding at all. No passphrase → no IPN,
+  so purchases arrive nowhere; both → **`setup-digistore`**.
   A product id for only *some* of the app's languages → the missing ones get an
-  order form in the wrong language: re-run `node run.mjs ds24-sync` and read its
-  warnings. Ids only under `dev` on an app about to launch → the PROD set does
+  order form in the wrong language: re-run `node run.mjs ds24-sync`, read the
+  list of what it would create and its warnings, then confirm with
+  `--create-new`. Ids only under `dev` on an app about to launch → the PROD set does
   not exist yet → **`go-live`**.
 - **Are the legal TEXTS written?** `node run.mjs legal-check` answers this, and
   it is the answer to quote. The routes `app/impressum` and `app/datenschutz`

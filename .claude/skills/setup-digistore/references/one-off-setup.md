@@ -29,7 +29,9 @@ node scripts/ds24/create-product.mjs --saas "…" --plan "…" --apply
 Only for a product you deliberately want beside the registry. It writes no id
 back, so nothing in the app will ever find it — normally take
 `node run.mjs ds24-sync`, which maintains the whole plan list for one environment
-and registers that environment's IPN connection in the same run.
+and registers that environment's IPN connection in the same run (whose first
+pass refuses until the new products are confirmed with `--create-new` —
+SKILL.md § 3).
 
 ## The IPN on its own, with a fixed URL
 

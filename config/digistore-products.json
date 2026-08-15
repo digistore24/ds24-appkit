@@ -1,8 +1,9 @@
 {
-  "_comment": "Central product registry (source of truth) — your plans live here. Every offering = ONE Digistore24 product PER LANGUAGE. This list is deliberately hard-coded: reshape it or delete what you do not need. It feeds BOTH the plans page (/plans) and the sync script (scripts/ds24/sync-products.mjs), which creates the products at Digistore24 and writes the ids back into 'productIds.<env>'. The PRICE stays HERE: it is not set on the DS24 product (the API discards data[amount]) but travels with every checkout call as a payment_plan built from 'priceCents'/'currency'/'billingInterval' — see lib/digistore/checkout.ts and docs/digistore-billing-modes.md. Do not create payment plans in the Digistore24 interface; the price would then live in two places and drift. The keys below ('basic_monthly', 'pro', …) are identifiers, not display text: a token key travels to Digistore24 as 'tokens:<key>' in the custom field and is matched there by the IPN handler. Rename them only before your first live sale.",
+  "_comment": "Central product registry (source of truth) — your plans live here. Every offering = ONE Digistore24 product PER LANGUAGE. This list is deliberately hard-coded: reshape it or delete what you do not need. It feeds BOTH the plans page (/plans) and the sync script (scripts/ds24/sync-products.mjs), which creates the products at Digistore24 and writes the ids back into 'productIds.<env>'. The PRICE stays HERE: it is not set on the DS24 product (the API discards data[amount]) but travels with every checkout call as a payment_plan built from 'priceCents'/'currency'/'billingInterval' — see lib/digistore/checkout.ts and docs/digistore-billing-modes.md. Do not create payment plans in the Digistore24 interface; the price would then live in two places and drift. The keys below ('basic_monthly', 'starter', …) are identifiers, not display text: a token key travels to Digistore24 as 'tokens:<key>' in the custom field and is matched there by the IPN handler. Rename them only before your first live sale.",
   "_languageComment": "Each environment set in productIds is one Digistore24 product per language, and it is not a convenience — a DS24 product carries exactly ONE language, and that language is the language of the ORDER FORM the buyer fills in (field labels, buttons, payment methods, cancellation terms). createBuyUrl has no parameter to override it. So an app whose UI speaks German and English needs TWO products per offering: 'de' and 'en'. Cover every locale from i18n/config.ts here; a locale with no entry still sells, but its buyers land on another language's form ('node run.mjs ds24-sync' warns about the gap). The language also decides the marketplace the approval is requested from: German -> Digistore24 Germany (siteowner 1), everything else -> USA (2). Your product COPY ('name', 'description', 'tagline', 'features') is deliberately NOT translated — it is your text, and the same one is sent to every language product.",
   "_envComment": "'productIds' holds ONE PRODUCT SET PER ENVIRONMENT (dev/staging/prod): 'node run.mjs ds24-sync --env <env>' maintains exactly one of them and never touches the others. The dev/staging products carry a visible ' [DEV]'/' [STAGING]' suffix in their name; prod names stay clean. Staging is optional — most apps go dev -> prod, which is fine as long as they test. 'productGroupId' is the ONE Digistore24 product group (folder) of this app, shared by every environment; the sync creates it once and keeps every product in it. Both are written back by the sync — treat them like the product ids: committed, never hand-edited.",
   "_billingModeComment": "What this app sells: 'subscriptions' (plans only), 'tokens' (prepaid credit only) or 'both'. ONE switch — it turns off the surfaces of the model you do not use (a balance card stuck at 0, an empty 'next payment' card), so you do not have to hunt them down page by page. It is COSMETIC: hasPlan(), consumeTokens() and the IPN behave the same in every mode, and a mode only ever hides an EMPTY card — a customer who still holds tokens keeps seeing them after a switch. Set it, then delete the products below that you do not sell; lib/billing-mode.test.ts fails the build if the two contradict each other. Details: lib/billing-mode.ts.",
+  "_sellComment": "\"sell\" is the switch between \"I offer this\" and \"this is a template I keep\". A missing field means SOLD, so every registry written before this field existed keeps selling; only a literal false parks an entry. A parked entry stays in this file as a shape to copy from, but \"node run.mjs ds24-sync\" creates no Digistore24 product for it and /plans does not show it — that is the difference from deleting it. PARKING IS ABOUT SELLING, NEVER ABOUT ACCESS: whoever already bought it keeps it, hasPlan() still answers for it, and its refunds and cancellations keep arriving. It also does not unpublish anything: a product that was synced while it was on sale stays buyable at Digistore24 through an old checkout link until you deactivate it THERE, by hand — the sync says so when it meets one. Creating products is the step that cannot be undone from here, so ds24-sync refuses to create NEW ones until you have seen the list and re-run it with --create-new.",
   "billingMode": "both",
   "productGroupId": null,
   "products": {
@@ -21,6 +22,7 @@
         "Cancel monthly"
       ],
       "imageUrl": null,
+      "sell": true,
       "productIds": {
         "dev": {
           "de": null,
@@ -48,6 +50,7 @@
         "Cheaper than 12 monthly plans"
       ],
       "imageUrl": null,
+      "sell": true,
       "productIds": {
         "dev": {
           "de": null,
@@ -73,57 +76,7 @@
         "Balance does not expire"
       ],
       "imageUrl": null,
-      "productIds": {
-        "dev": {
-          "de": null,
-          "en": null
-        },
-        "prod": {
-          "de": null,
-          "en": null
-        }
-      }
-    },
-    "pro": {
-      "name": "Pro Tokens",
-      "tagline": "For regular use",
-      "description": "5,000 tokens as a one-off balance. No subscription.",
-      "kind": "token",
-      "credits": 5000,
-      "priceCents": 3900,
-      "currency": "EUR",
-      "highlight": true,
-      "features": [
-        "5,000 tokens",
-        "No subscription",
-        "Balance does not expire"
-      ],
-      "imageUrl": null,
-      "productIds": {
-        "dev": {
-          "de": null,
-          "en": null
-        },
-        "prod": {
-          "de": null,
-          "en": null
-        }
-      }
-    },
-    "business": {
-      "name": "Business Tokens",
-      "tagline": "Best price per token",
-      "description": "15,000 tokens as a one-off balance. No subscription.",
-      "kind": "token",
-      "credits": 15000,
-      "priceCents": 9900,
-      "currency": "EUR",
-      "features": [
-        "15,000 tokens",
-        "No subscription",
-        "Balance does not expire"
-      ],
-      "imageUrl": null,
+      "sell": true,
       "productIds": {
         "dev": {
           "de": null,

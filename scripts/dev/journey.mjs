@@ -423,7 +423,7 @@ export const JOURNEY = [
     what: "Fetches the API key, creates the products and registers the IPN connection.",
     optional: false,
     recurring: false,
-    requires: "0.14.0",
+    requires: "0.30.0",
     module: null,
     // All three, not just the key: a key with no passphrase means purchases
     // arrive nowhere, which is the failure coach routes to this skill.
