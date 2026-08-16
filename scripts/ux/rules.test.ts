@@ -709,10 +709,10 @@ import { ArrowRight, Check } from "lucide-react";
     // ships inside the customer's app, and `salespage` — which this template
     // recommends, step 2.4 of the path — REPLACES `app/page.tsx`. Reported from
     // the field 2026-08-16 and reproduced here: one red test out of 7 700-odd,
-    // in an app whose only fault was following the instructions. Five of these
-    // have been healed between 0.27.0 and 0.33.0 (brand-mark, payment-event,
-    // content-tools, content/check) and this is the first whose premise was
-    // *the customer has not done the recommended step*.
+    // in an app whose only fault was following the instructions. FOUR of these
+    // have been healed between 0.27.0 and 0.33.0 — brand-mark, payment-event,
+    // content-tools, content/check — and this is the fifth, the first whose
+    // premise was *the customer has not done the recommended step*.
     //
     // So the precondition is asked FIRST, and it is asked INDEPENDENTLY of the
     // rule under test: the three `features.*Title` keys the shipped page
