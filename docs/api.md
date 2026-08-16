@@ -21,8 +21,8 @@ and the skill `mobile-companion` walks through both.
 | Getting it | `node run.mjs module add api`, then `node run.mjs db-migrate` |
 | Endpoints | `/api/v1/…` — plain JSON over HTTPS, see the table below |
 | Authentication | `Authorization: Bearer ds24api_…` — one key per member |
-| Getting a key | `POST /api/v1/auth/token` (email + password), or the **App keys** card on `/dashboard/account` |
-| Switch | `"enabled": true` in `config/api.json` — installed is not switched on |
+| Getting a key | `POST /api/v1/auth/token` (email + password) — and the **App keys** card on `/dashboard/account`, which ships hidden |
+| Switch | `"enabled": true` in `config/api.json` — installed is not switched on. `"selfService": true` is a **second** decision: it puts the card in front of every member |
 | Errors | `{ "error": "<code>", "detail": "…" }` — the code is the contract, the sentence may change |
 | Check it | `node run.mjs api-check` (`--live` mints a temporary key and really calls `/api/v1/me`) — the module brings the command, so it exists only once installed |
 
@@ -47,23 +47,74 @@ than being wired in: the module fills the core's `account` slot
 (`lib/modules/slots.ts`), so the account page imports nothing of the API's and
 the card fetches its own rows. Uninstalled, that slot renders nothing at all.
 
+⚠️ **Arriving is not appearing.** With the shipped config nobody sees that card:
+it needs `enabled` *and* `selfService`, and both ship `false`. So a `courses` or
+`community` app — which must install this module, see *What a MODULE adds to
+this surface* — gains an empty `api_keys` table and a section in the data
+export, and **nothing its customers can see**. Do not promise them a card as the
+price of the dependency; the price is a table.
+
 ## Switching it on
 
 ```json
 // config/api.json
 {
   "enabled": true,
-  "requiresPlan": null
+  "requiresPlan": null,
+  "selfService": false
 }
 ```
 
 Read it only through `isApiEnabled()` / `apiConfig()`
 (`modules/api/api/config.ts`), never by re-reading the JSON. A malformed file
 counts as **off** — the failure mode of this switch is an open endpoint, so
-every doubt falls towards closed. `requiresPlan` names a Product Key from
+every doubt falls towards closed, and that holds for `selfService` too: a value
+that is present and not a boolean takes the whole API down rather than being
+ignored. `requiresPlan` names a Product Key from
 `config/digistore-products.json` when the API itself is a paid feature; `null`
 means every member. A token package is refused here for the usual reason: a
 balance is not an entitlement.
+
+### Three questions, not one switch
+
+They are separate because an app can want any combination, and the common one —
+a companion app and no card in front of anybody — is not expressible with a
+single flag:
+
+| | asks |
+|---|---|
+| `enabled` | does this app offer `/api/v1` at all |
+| `requiresPlan` | may THIS member use it — checked when a key is used **and when one is minted** |
+| `selfService` | may a member mint a key for themselves, on `/dashboard/account` |
+
+What a member sees under **App keys**, given the three:
+
+| state | holds no key | holds keys |
+|---|---|---|
+| API off, or its config broken | nothing | the list, **revoke only** |
+| `selfService: false` | nothing | the list, **revoke only** |
+| `requiresPlan` set and not held | nothing | the list, **revoke only** |
+| everything permits | the full card | the full card |
+
+🚨 **Revoking is refused by nothing.** Every condition that stops a member
+creating a key is a reason to let them destroy one — withdrawing the way out at
+the moment the feature is withdrawn strands a live credential on somebody's
+laptop with nobody able to kill it. The decision is one pure function,
+`keysCardMode()` (`modules/api/keys/visibility.ts`), called by the card **and**
+by `createApiKeyAction`, because a rendering decision is never a boundary.
+
+⚠️ **`selfService` does not close `POST /api/v1/auth/token`**, and that is the
+point rather than a gap: it is how a companion gets its key in an app that shows
+no card. It is a decision about the dashboard, **not a security boundary** — a
+member who knows their own password can still mint one with `curl`. What limits
+who may *have* a key is `requiresPlan`; what limits what a key may *do* is its
+scope. If you want both doors shut, what you actually want is an operator who
+hands keys out — that does not exist and would be a new admin surface, not a
+third flag.
+
+⚠️ **One combination has no way in at all**: `selfService: false` in an app whose
+members sign in by magic link only. They have no password for the token endpoint
+and no card to use — say so before switching it off, rather than after.
 
 While the API is off, every `/api/v1` path — the token endpoint included —
 answers **404**, as if it did not exist. That is the shipped state, and the
@@ -101,12 +152,19 @@ out. On top of the sign-in's own limits, minting is metered per origin
 (`TOKEN_MINT_LIMIT`): a credential factory deserves a narrower door than a
 read.
 
+A member who does not hold `requiresPlan` is refused here too, with the same
+`403 planRequired` the guard gives — **after** the password verified, so it
+tells a caller nothing about an account that is not theirs. Minting a key that
+is refused on its first call is a debugging session, not a credential.
+
 **Members without a password** (magic-link sign-in only) cannot use this
 endpoint — deliberately, not accidentally. They create a key on
 `/dashboard/account` under **App keys** and paste it into their program, or
-set a password there first. A device-code flow was considered and rejected
-for v1: it needs a pending-authorization table, polling endpoints and a
-user-code screen, and the dashboard card already covers the case.
+set a password there first. ⚠️ The first of those needs `selfService: true`,
+which is not the shipped state — see *Three questions, not one switch*. A
+device-code flow was considered and rejected for v1: it needs a
+pending-authorization table, polling endpoints and a user-code screen, and the
+dashboard card already covers the case.
 
 **No refresh tokens.** Keys are long-lived and revocable; rotation is
 "create a new one, revoke the old one". Scopes are `read` and `write`, and a
@@ -150,9 +208,12 @@ ride on decides these too.
 Both modules therefore declare `"requires": ["api"]`: a course or a community
 is installable only in an app that also has the API. `node run.mjs module add
 courses` in an app without it is refused by name, and `node run.mjs module
-check` says the dependency out loud on every run. That is a real cost — the
-`api_keys` table and the App-keys card arrive with it — and it is the price of
-the module owning its own handlers instead of the core learning about courses.
+check` says the dependency out loud on every run. That is a real cost — an empty
+`api_keys` table and one more section in every member's data export — and it is
+the price of the module owning its own handlers instead of the core learning
+about courses. It is **not** a visible one: with `enabled` and `selfService`
+both shipping `false`, such an app's members see nothing that was not there
+before.
 
 | Endpoint | Method | What it answers | Module |
 |---|---|---|---|

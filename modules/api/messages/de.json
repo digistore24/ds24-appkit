@@ -5,6 +5,10 @@
     "offTitle": "Die HTTP-API ist ausgeschaltet",
     "offDisabledBody": "Diese App bietet zurzeit keine API für eigene Programme an. Vorhandene Schlüssel funktionieren nicht — du kannst sie hier aber weiterhin zurückziehen.",
     "offBrokenBody": "Die Einstellungen der API sind fehlerhaft, deshalb ist sie abgeschaltet. Bitte wende dich an den Betreiber dieser App.",
+    "noSelfServiceTitle": "Schlüssel werden hier nicht selbst angelegt",
+    "noSelfServiceBody": "Diese App gibt App-Schlüssel nicht zur Selbstbedienung aus. Vorhandene Schlüssel kannst du hier weiterhin zurückziehen.",
+    "planRequiredTitle": "Nicht Teil deines Zugangs",
+    "planRequiredBody": "Die HTTP-API gehört nicht zu deinem Zugang. Vorhandene Schlüssel kannst du hier weiterhin zurückziehen.",
     "endpointTitle": "Adresse",
     "endpointBody": "Unter dieser Adresse erreicht dein Programm die API — zusammen mit dem Schlüssel von unten im Authorization-Header.",
     "countHint": "{live} von {max} aktiven Schlüsseln",
@@ -59,6 +63,8 @@
     "apiNameTooLong": "Der Name ist zu lang (höchstens 60 Zeichen).",
     "apiTooManyKeys": "Du hast bereits die höchstmögliche Zahl aktiver Schlüssel. Zieh einen zurück, den du nicht mehr brauchst.",
     "apiUnknownKey": "Diesen Schlüssel gibt es nicht (mehr).",
-    "apiDisabled": "Diese App bietet gerade keine HTTP-API an."
+    "apiDisabled": "Diese App bietet gerade keine HTTP-API an.",
+    "apiSelfServiceOff": "Diese App gibt App-Schlüssel nicht zur Selbstbedienung aus.",
+    "apiPlanRequired": "Die HTTP-API gehört nicht zu deinem Zugang."
   }
 }

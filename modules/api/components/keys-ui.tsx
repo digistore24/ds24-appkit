@@ -25,6 +25,7 @@ import { Copy, KeyRound, Plus, ShieldCheck, ShieldOff } from "lucide-react";
 import { toast } from "sonner";
 
 import { useActionToast } from "@/hooks/use-action-toast";
+import type { KeysCardMode, KeysCardReason } from "../keys/visibility";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
@@ -100,25 +101,52 @@ export interface KeyRowView {
   expiresAt: Date | null;
 }
 
+/**
+ * Which pair of texts explains a refusal.
+ *
+ * A `Record` and not an `if` chain, so a new reason in `keys/visibility.ts`
+ * fails `npm run typecheck` here rather than rendering an empty Callout.
+ */
+const NOTICE: Record<
+  Exclude<KeysCardReason, null>,
+  { title: string; body: string }
+> = {
+  disabledInConfig: { title: "offTitle", body: "offDisabledBody" },
+  brokenConfig: { title: "offTitle", body: "offBrokenBody" },
+  selfServiceOff: { title: "noSelfServiceTitle", body: "noSelfServiceBody" },
+  planRequired: { title: "planRequiredTitle", body: "planRequiredBody" },
+};
+
 export function KeysCard({
   namespace,
   keys,
   endpoint,
   maxLiveKeys,
   liveKeys,
-  offReason,
+  mode,
+  reason,
   createAction,
   revokeAction,
 }: {
   /** The message namespace the card's texts come from. */
   namespace: "apiKeys";
   keys: KeyRowView[];
-  /** The absolute URL a client connects to. Built on the server. */
-  endpoint: string;
+  /**
+   * The absolute URL a client connects to, built on the server — `null` when
+   * there is nothing to connect with, which is every mode but `manage`.
+   */
+  endpoint: string | null;
   maxLiveKeys: number;
   liveKeys: number;
-  /** Why the feature is off, or null when it is on. */
-  offReason: "disabledInConfig" | "brokenConfig" | null;
+  /**
+   * 🚨 `readOnly` renders the LIST and its revoke buttons and nothing else.
+   * That third state is the whole point: this component used to return the
+   * notice alone whenever the API was off, so a member who held keys at that
+   * moment could see the card and had no way to revoke from it — while the
+   * server component above it was letting them through for exactly that.
+   */
+  mode: KeysCardMode;
+  reason: KeysCardReason;
   createAction: KeyAction;
   revokeAction: KeyAction;
 }) {
@@ -144,21 +172,9 @@ export function KeysCard({
     }
   }, [createState.secret]);
 
-  if (offReason) {
-    return (
-      <section>
-        <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
-          <KeyRound aria-hidden className="text-muted-foreground size-5" />
-          {t("title")}
-        </h2>
-        <Callout variant="info" title={t("offTitle")}>
-          {t(offReason === "brokenConfig" ? "offBrokenBody" : "offDisabledBody")}
-        </Callout>
-      </section>
-    );
-  }
-
+  const manage = mode === "manage";
   const atLimit = liveKeys >= maxLiveKeys;
+  const notice = reason === null ? null : NOTICE[reason];
 
   return (
     <section>
@@ -166,9 +182,20 @@ export function KeysCard({
         <KeyRound aria-hidden className="text-muted-foreground size-5" />
         {t("title")}
       </h2>
-      <p className="text-muted-foreground mb-4 text-sm">
-        {t("description")}
-      </p>
+      {/* What the card is FOR. Left out where nothing can be connected — the
+          notice below says what is going on instead, and two explanations of
+          two different things read as one confused one. */}
+      {manage && (
+        <p className="text-muted-foreground mb-4 text-sm">
+          {t("description")}
+        </p>
+      )}
+
+      {notice && (
+        <Callout variant="info" title={t(notice.title)} className="mb-4">
+          {t(notice.body)}
+        </Callout>
+      )}
 
       {/* The one moment that cannot be repeated. A Callout and not a toast:
           this has to survive a scroll, a misclick and a moment of confusion. */}
@@ -184,19 +211,22 @@ export function KeysCard({
         </Callout>
       )}
 
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle className="text-base">{t("endpointTitle")}</CardTitle>
-          <CardDescription>{t("endpointBody")}</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-center gap-2">
-          <code className="bg-muted min-w-0 flex-1 overflow-x-auto rounded px-2 py-1 font-mono text-xs">
-            {endpoint}
-          </code>
-          <CopyButton value={endpoint} label={t("copy")} copied={t("copied")} />
-        </CardContent>
-      </Card>
+      {endpoint && (
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle className="text-base">{t("endpointTitle")}</CardTitle>
+            <CardDescription>{t("endpointBody")}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-2">
+            <code className="bg-muted min-w-0 flex-1 overflow-x-auto rounded px-2 py-1 font-mono text-xs">
+              {endpoint}
+            </code>
+            <CopyButton value={endpoint} label={t("copy")} copied={t("copied")} />
+          </CardContent>
+        </Card>
+      )}
 
+      {manage && (
       <div className="mt-4 flex items-center justify-between gap-3">
         <p className="text-muted-foreground text-sm">
           {t("countHint", { live: liveKeys, max: maxLiveKeys })}
@@ -275,8 +305,9 @@ export function KeysCard({
           </DialogContent>
         </Dialog>
       </div>
+      )}
 
-      {atLimit && (
+      {manage && atLimit && (
         <Callout variant="info" title={t("limitTitle")} className="mt-3">
           {t("limitBody", { max: maxLiveKeys })}
         </Callout>

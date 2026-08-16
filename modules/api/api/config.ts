@@ -29,6 +29,8 @@ export interface ApiConfig {
   enabled: boolean;
   /** Product key the API belongs to, or null for every member. */
   requiresPlan: string | null;
+  /** May a Member mint a key for themselves on `/dashboard/account`? */
+  selfService: boolean;
 }
 
 export const DEFAULT_API_CONFIG: ApiConfig = {
@@ -36,6 +38,12 @@ export const DEFAULT_API_CONFIG: ApiConfig = {
   // resolve to an open endpoint.
   enabled: false,
   requiresPlan: null,
+  // Off too, and for a milder version of the same reason: switching the API on
+  // is a decision that this product has an external client, which is not the
+  // same decision as putting a credential-minting card in front of every
+  // customer. Most apps that offer an API offer it to ONE companion, whose
+  // sign-in is `POST /api/v1/auth/token` and which never needs the card.
+  selfService: false,
 };
 
 /** The configured API, with every unreadable field replaced by its default. */
@@ -49,6 +57,7 @@ export function apiConfig(): ApiConfig {
       typeof requiresPlan === "string" && requiresPlan.trim() !== ""
         ? requiresPlan.trim()
         : null,
+    selfService: file.selfService === true,
   };
 }
 
@@ -66,6 +75,15 @@ export function apiConfigProblems(): string[] {
   const file = raw as Record<string, unknown>;
 
   pushEnabledProblem(problems, file);
+
+  // The same shape as `enabledProblem()`, kept here rather than generalised
+  // into `lib/config-problems.ts`: that helper exists because FIVE readers had
+  // the `enabled` check copied out, and a sibling with one caller would be the
+  // second copy this tree refuses. When a second `selfService`-shaped switch
+  // appears, the two move together.
+  if (file.selfService !== undefined && typeof file.selfService !== "boolean") {
+    problems.push('"selfService" must be true or false');
+  }
 
   if (config.requiresPlan !== null) {
     const plan = allProducts().find((p) => p.key === config.requiresPlan);

@@ -22,17 +22,67 @@
 //
 // This form path is also the documented fallback for members who sign in by
 // magic link only: `POST /api/v1/auth/token` needs a password, this dialog
-// needs a session (docs/api.md).
+// needs a session (docs/api.md). ⚠️ That fallback is exactly what
+// `"selfService": false` withdraws — an app that switches it off and has
+// magic-link-only members has no path to a key for them at all, which is a
+// decision rather than an oversight and is written down in `docs/api.md`.
 import { revalidatePath } from "next/cache";
 import { unstable_rethrow } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import { requireActiveUser } from "@/lib/authz";
+import { hasPlan } from "@/lib/entitlements/manage";
 import { createKey, revokeKey } from "@/modules/api/keys/keys";
-import { ApiKeyError, checkKeyName, isLifetime, isScope } from "@/modules/api/keys/rules";
-import { isApiEnabled } from "@/modules/api/api/config";
+import {
+  type ApiKeyErrorCode,
+  ApiKeyError,
+  checkKeyName,
+  isLifetime,
+  isScope,
+} from "@/modules/api/keys/rules";
+import { type KeysCardReason, keysCardMode } from "@/modules/api/keys/visibility";
+import { apiConfig, apiOffReason } from "@/modules/api/api/config";
 
 const PAGE = "/dashboard/account";
+
+/**
+ * May this Member mint a key right now — the card's own question, asked again.
+ *
+ * 🚨 **One function, both call sites.** `components/account-card.tsx` decides
+ * what to render from `keysCardMode()`; this decides whether to write from the
+ * same call. Two conditions that agree today are the shape CLAUDE.md names as
+ * the thing nothing can catch — and here the one that matters is the server's,
+ * because the card is a rendering decision and never a boundary.
+ *
+ * `keyCount: 0` because the answer does not depend on it: `manage` requires all
+ * three permissions regardless of what the Member already holds. How many keys
+ * they may hold is `MAX_LIVE_KEYS`, checked inside `createKey()`.
+ */
+async function refusalToMint(memberId: string): Promise<ApiKeyErrorCode | null> {
+  const config = apiConfig();
+  const off = apiOffReason();
+
+  const entitled =
+    off !== null || !config.requiresPlan ? true : await hasPlan(memberId, config.requiresPlan);
+
+  const { mode, reason } = keysCardMode({
+    apiOff: off,
+    selfService: config.selfService,
+    entitled,
+    keyCount: 0,
+  });
+
+  if (mode === "manage") return null;
+
+  const CODES: Record<Exclude<KeysCardReason, null>, ApiKeyErrorCode> = {
+    disabledInConfig: "apiDisabled",
+    brokenConfig: "apiDisabled",
+    selfServiceOff: "apiSelfServiceOff",
+    planRequired: "apiPlanRequired",
+  };
+
+  return CODES[reason ?? "disabledInConfig"];
+}
 
 /**
  * Like `ActionState`, plus the one thing that exists exactly once.
@@ -64,10 +114,11 @@ async function toState(error: unknown): Promise<ApiKeyActionState> {
 /**
  * Issues a key and returns it once.
  *
- * The `isApiEnabled()` check is here as well as in the guard, and not by
- * accident: a key minted while the API is off is a live credential for an
- * endpoint that answers 404 — the Member would be looking at a key that cannot
- * work and has no way to tell why.
+ * The refusal is repeated here rather than left to the card, and not by
+ * accident: a key minted while the API is off — or while this app does not hand
+ * keys out at all, or to somebody whose access does not include the API — is a
+ * live credential for an endpoint that will never answer it, and the Member
+ * would be looking at a key that cannot work with no way to tell why.
  */
 export async function createApiKeyAction(
   _prev: ApiKeyActionState,
@@ -75,7 +126,9 @@ export async function createApiKeyAction(
 ): Promise<ApiKeyActionState> {
   try {
     const session = await requireActiveUser();
-    if (!isApiEnabled()) throw new ApiKeyError("apiDisabled");
+
+    const refusal = await refusalToMint(session.user.id);
+    if (refusal) throw new ApiKeyError(refusal);
 
     const checked = checkKeyName(formData.get("name"));
     if (!checked.ok) throw new ApiKeyError(checked.code);
@@ -118,6 +171,12 @@ export async function createApiKeyAction(
  * Idempotent on purpose: revoking an already-revoked key reports success. A red
  * message about a key that is, in fact, revoked would send somebody looking for
  * a problem that does not exist.
+ *
+ * 🚨 **No `refusalToMint()` here, deliberately.** Every condition that stops a
+ * Member creating a key is a reason to let them destroy one: taking the way out
+ * away at the moment the feature is withdrawn would strand a live credential on
+ * somebody's laptop with nobody able to kill it. This is the half of the card
+ * that `mode: "readOnly"` exists to keep reachable.
  */
 export async function revokeApiKeyAction(
   _prev: ApiKeyActionState,

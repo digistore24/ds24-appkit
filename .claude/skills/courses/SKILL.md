@@ -50,10 +50,12 @@ node run.mjs db-migrate
 
 **The first line is not optional and not a formality.** `courses` declares
 `requires: ["api"]`, so adding it alone is refused by name and changes nothing.
-Say the cost out loud: the `api_keys` table and the App-keys card on
-`/dashboard/account` come with it. The API itself stays **off** in
-`config/api.json` — a course does not need it switched on; a mobile companion
-does ([`docs/api.md`](../../../docs/api.md)).
+Say the cost out loud, and say it accurately: what arrives is an empty
+`api_keys` table and one more section in every member's data export. **Nothing
+the customer's own customers can see** — the API stays **off** in
+`config/api.json`, and the App-keys card needs that switch *and*
+`"selfService"`, both of which ship `false`. A course does not need either; a
+mobile companion needs the first ([`docs/api.md`](../../../docs/api.md)).
 
 🚨 **`config/course.json` holds only the SWITCH.** `shape` and `planKeys` belong
 to the course itself, in `content/course/<course-slug>/course.json` — an app

@@ -11,7 +11,7 @@
 // check itself, wrapped in three meters:
 //
 //   right origin?  →  feature on?  →  under the mint limit?
-//                  →  password verifies?  →  mint a key
+//                  →  password verifies?  →  plan held?  →  mint a key
 //
 // `verifyPasswordLogin()` brings the real sign-in defences with it — the
 // per-address sprint limit, the per-origin limit, the timing-equalised
@@ -30,7 +30,10 @@
 // A member without a password (magic-link only) fails here like a wrong
 // password. That is documented, not accidental: they mint a key on
 // `/dashboard/account` and paste it, or set a password first — both flows the
-// app already has. A device-code flow was considered and rejected for v1
+// app already has. ⚠️ The first of those two is `"selfService": true` and is
+// not the shipped state, so in an app that offers only magic links and no card
+// there is no path to a key; `docs/api.md` says so where the switch is
+// described. A device-code flow was considered and rejected for v1
 // (docs/api.md names the trade).
 import { bearerFrom, callerKey, originAllowed } from "@/modules/api/keys/http";
 import { createKey } from "@/modules/api/keys/keys";
@@ -42,9 +45,10 @@ import {
   type LifetimeDays,
   type Scope,
 } from "@/modules/api/keys/rules";
-import { isApiEnabled } from "@/modules/api/api/config";
+import { apiConfig, isApiEnabled } from "@/modules/api/api/config";
 import { TOKEN_MINT_BUCKET, TOKEN_MINT_LIMIT, apiError, apiJson } from "@/modules/api/api/rules";
 import { verifyPasswordLogin } from "@/lib/credentials/manage";
+import { hasPlan } from "@/lib/entitlements/manage";
 import { isLimited, record } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -136,7 +140,27 @@ export async function POST(request: Request): Promise<Response> {
     return apiError("unauthorized", "Sign-in failed.");
   }
 
-  // 6. Mint. The member id comes from the verified sign-in and from nowhere
+  // 6. May THIS member use the API at all? The same question `guardApi()` asks
+  //    on every call (step 5 there), asked here because minting a key that is
+  //    refused on its first use is a debugging session, not a credential.
+  //
+  //    🚨 Distinguishable from the 401 above ON PURPOSE, and it does not weaken
+  //    the one-answer rule: this is reached only AFTER the password verified,
+  //    so the caller has already proved the account is theirs and learns nothing
+  //    about anybody else's. Same code and same status as the guard gives.
+  //
+  //    ⚠️ `selfService` is deliberately NOT consulted here. It governs the card
+  //    on `/dashboard/account`, so that an app can serve one companion without
+  //    putting a credential-minting form in front of every customer — it is a UI
+  //    decision and never a boundary. Closing this door too would leave no way
+  //    for a key to come into existence at all; `docs/api.md` says what to build
+  //    instead if that is ever wanted.
+  const requiresPlan = apiConfig().requiresPlan;
+  if (requiresPlan && !(await hasPlan(result.user.id, requiresPlan))) {
+    return apiError("planRequired", "This account's plan does not include API access.");
+  }
+
+  // 7. Mint. The member id comes from the verified sign-in and from nowhere
   //    else — this endpoint takes no member id and never will.
   try {
     const created = await createKey({

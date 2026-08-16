@@ -5,6 +5,10 @@
     "offTitle": "The HTTP API is switched off",
     "offDisabledBody": "This app does not currently offer an API for your own programs. Existing keys do not work — but you can still revoke them here.",
     "offBrokenBody": "The API's settings are broken, so it is switched off. Please contact the operator of this app.",
+    "noSelfServiceTitle": "Keys are not created here",
+    "noSelfServiceBody": "This app does not hand out app keys on request. You can still revoke keys you already hold.",
+    "planRequiredTitle": "Not part of your access",
+    "planRequiredBody": "The HTTP API is not part of your access. You can still revoke keys you already hold.",
     "endpointTitle": "Address",
     "endpointBody": "Your program reaches the API at this address — together with the key from below in the Authorization header.",
     "countHint": "{live} of {max} active keys",
@@ -59,6 +63,8 @@
     "apiNameTooLong": "That name is too long (60 characters at most).",
     "apiTooManyKeys": "You already hold the maximum number of active keys. Revoke one you no longer need.",
     "apiUnknownKey": "That key does not exist (any more).",
-    "apiDisabled": "This app does not currently offer an HTTP API."
+    "apiDisabled": "This app does not currently offer an HTTP API.",
+    "apiSelfServiceOff": "This app does not hand out app keys on request.",
+    "apiPlanRequired": "The HTTP API is not part of your access."
   }
 }

@@ -183,6 +183,12 @@ export const API_KEY_ERROR_CODES = [
   "apiTooManyKeys",
   "apiUnknownKey",
   "apiDisabled",
+  // The two refusals the card is supposed to have made already. They exist
+  // because the card is never the boundary: `createApiKeyAction` asks the same
+  // three questions again, and a Member who reaches it anyway gets a sentence
+  // rather than a stack trace.
+  "apiSelfServiceOff",
+  "apiPlanRequired",
 ] as const;
 
 export type ApiKeyErrorCode = (typeof API_KEY_ERROR_CODES)[number];

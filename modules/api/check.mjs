@@ -55,6 +55,10 @@ if (typeof config.enabled !== "boolean") {
   problems.push('"enabled" must be true or false.');
 }
 
+if (config.selfService !== undefined && typeof config.selfService !== "boolean") {
+  problems.push('"selfService" must be true or false.');
+}
+
 if (config.requiresPlan != null) {
   const product = registry.products?.[config.requiresPlan];
   if (!product) {
@@ -72,6 +76,9 @@ if (config.requiresPlan != null) {
 console.log("HTTP API\n");
 console.log(`  enabled       ${config.enabled ? "yes" : "no  (config/api.json → \"enabled\": true)"}`);
 console.log(`  requiresPlan  ${config.requiresPlan ?? "— (every member)"}`);
+console.log(
+  `  selfService   ${config.selfService === true ? "yes (the App keys card is on /dashboard/account)" : "no  (no card — keys come from POST /api/v1/auth/token)"}`,
+);
 
 if (problems.length > 0) {
   console.error("\nProblems in config/api.json:");
@@ -93,6 +100,24 @@ if (!config.enabled) {
 }
 
 console.log("\n✓ The settings are coherent.");
+
+// Who can actually GET a key, spelled out. "enabled: true" with no card and a
+// plan gate is a perfectly good arrangement and it looks like a broken one from
+// the account page, so the check says which of the two doors is open.
+if (config.selfService !== true || config.requiresPlan != null) {
+  const doors = [];
+  if (config.selfService === true) doors.push("the card on /dashboard/account");
+  doors.push("POST /api/v1/auth/token (email + password)");
+  console.log(
+    `\n  A key comes from: ${doors.join(", or ")}.` +
+      (config.requiresPlan != null
+        ? `\n  Only members holding "${config.requiresPlan}" may mint or use one.`
+        : "") +
+      (config.selfService !== true
+        ? "\n  Members see no App keys card; those who already hold keys can still revoke them."
+        : ""),
+  );
+}
 
 const args = parseArgs(process.argv.slice(2));
 if (!args.live) {

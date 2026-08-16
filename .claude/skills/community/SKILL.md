@@ -120,10 +120,12 @@ Five steps, in this order.
 **a. Install the module.** `node run.mjs module add api` **first** — the
 community serves endpoints on the HTTP API's surface and declares
 `requires: ["api"]`, so adding it on its own is refused by name and changes
-nothing. Say that to the user as a cost rather than a footnote: the `api_keys`
-table and the App-keys card on `/dashboard/account` arrive with it, and the API
-itself stays switched off in `config/api.json` until somebody decides otherwise
-([`docs/api.md`](../../../docs/api.md)).
+nothing. Say that to the user as a cost rather than a footnote, and state it
+accurately: what arrives is an empty `api_keys` table and one more section in
+every member's data export — **nothing their members can see**. The API stays
+switched off in `config/api.json` until somebody decides otherwise, and the
+App-keys card on `/dashboard/account` needs that switch *and* `"selfService"`,
+both of which ship `false` ([`docs/api.md`](../../../docs/api.md)).
 
 Then `node run.mjs module add community` and
 `node run.mjs db-migrate` — it brings its own tables on its own migration

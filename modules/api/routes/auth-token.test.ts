@@ -12,10 +12,15 @@ import { ApiKeyError } from "@/modules/api/keys/rules";
 
 vi.mock("@/modules/api/api/config", () => ({
   isApiEnabled: vi.fn(() => true),
+  apiConfig: vi.fn(() => ({ enabled: true, requiresPlan: null, selfService: false })),
 }));
 
 vi.mock("@/lib/credentials/manage", () => ({
   verifyPasswordLogin: vi.fn(),
+}));
+
+vi.mock("@/lib/entitlements/manage", () => ({
+  hasPlan: vi.fn(),
 }));
 
 vi.mock("@/modules/api/keys/keys", () => ({
@@ -23,8 +28,9 @@ vi.mock("@/modules/api/keys/keys", () => ({
 }));
 
 import { POST } from "./auth-token";
-import { isApiEnabled } from "@/modules/api/api/config";
+import { apiConfig, isApiEnabled } from "@/modules/api/api/config";
 import { verifyPasswordLogin } from "@/lib/credentials/manage";
+import { hasPlan } from "@/lib/entitlements/manage";
 import { createKey } from "@/modules/api/keys/keys";
 
 const USER = { id: "member-1", email: "m@example.com", name: "M", role: "member" };
@@ -49,6 +55,12 @@ beforeEach(() => {
   resetRateLimits();
   vi.clearAllMocks();
   vi.mocked(isApiEnabled).mockReturnValue(true);
+  vi.mocked(apiConfig).mockReturnValue({
+    enabled: true,
+    requiresPlan: null,
+    selfService: false,
+  });
+  vi.mocked(hasPlan).mockResolvedValue(true);
   vi.mocked(verifyPasswordLogin).mockResolvedValue({ ok: true, user: { ...USER } });
   vi.mocked(createKey).mockResolvedValue({ ...CREATED });
 });
@@ -188,5 +200,59 @@ describe("bad requests", () => {
     const response = await POST(post({ email: "m@example.com", password: "pw" }));
     expect(response.status).toBe(400);
     expect((await body(response)).detail).toContain("Revoke");
+  });
+});
+
+describe("the plan gate — who may have a key at all", () => {
+  it("refuses a member whose access does not include the API, AFTER the password", async () => {
+    vi.mocked(apiConfig).mockReturnValue({
+      enabled: true,
+      requiresPlan: "basic_monthly",
+      selfService: false,
+    });
+    vi.mocked(hasPlan).mockResolvedValue(false);
+
+    const response = await POST(post({ email: "m@example.com", password: "pw" }));
+
+    expect(response.status).toBe(403);
+    expect((await body(response)).error).toBe("planRequired");
+    // Nothing was minted — the refusal has to come before the credential, not
+    // after it. A key handed out here would be refused on its first call.
+    expect(createKey).not.toHaveBeenCalled();
+    // And it really got past the password: this answer is distinguishable from
+    // the 401 exactly because the caller already proved the account is theirs.
+    expect(verifyPasswordLogin).toHaveBeenCalled();
+  });
+
+  it("mints for a member who holds the plan", async () => {
+    vi.mocked(apiConfig).mockReturnValue({
+      enabled: true,
+      requiresPlan: "basic_monthly",
+      selfService: false,
+    });
+    vi.mocked(hasPlan).mockResolvedValue(true);
+
+    const response = await POST(post({ email: "m@example.com", password: "pw" }));
+
+    expect(response.status).toBe(201);
+    expect(hasPlan).toHaveBeenCalledWith("member-1", "basic_monthly");
+  });
+
+  it("does not ask at all when every member may use the API", async () => {
+    const response = await POST(post({ email: "m@example.com", password: "pw" }));
+    expect(response.status).toBe(201);
+    expect(hasPlan).not.toHaveBeenCalled();
+  });
+
+  // 🚨 The whole point of the second switch: an app can withdraw the card from
+  // every customer and still have a companion that signs in. If this ever turns
+  // red, `selfService` has stopped being a UI decision and become a boundary —
+  // which is a different feature, and `docs/api.md` says what to build instead.
+  it("is NOT closed by selfService — that switch governs the card only", async () => {
+    for (const selfService of [false, true]) {
+      vi.mocked(apiConfig).mockReturnValue({ enabled: true, requiresPlan: null, selfService });
+      const response = await POST(post({ email: "m@example.com", password: "pw" }));
+      expect(response.status).toBe(201);
+    }
   });
 });

@@ -1,4 +1,5 @@
 {
   "enabled": false,
-  "requiresPlan": null
+  "requiresPlan": null,
+  "selfService": false
 }

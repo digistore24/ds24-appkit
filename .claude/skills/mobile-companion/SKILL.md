@@ -91,10 +91,26 @@ companion needs something to accompany.
 
 1. Read [`docs/api.md`](../../../docs/api.md) in full — especially *Every
    route guards itself* and *What this is not*.
-2. Set `"enabled": true` in `config/api.json`. Ask ONE question first: is the
-   API for every member, or a paid feature? A paid feature sets
-   `"requiresPlan"` to a Product Key from `config/digistore-products.json`
-   (never a token package).
+2. Set `"enabled": true` in `config/api.json`. Ask TWO questions first, and ask
+   them together — they are different questions and one flag cannot answer both
+   ([`docs/api.md`](../../../docs/api.md) → *Three questions, not one switch*;
+   the second one is `"selfService"` *(needs template 0.35.0)* — in an older app
+   only the first question exists):
+
+   - **Is the API for every member, or a paid feature?** A paid feature sets
+     `"requiresPlan"` to a Product Key from `config/digistore-products.json`
+     (never a token package). It now gates MINTING as well as using, so a
+     member who does not hold it sees no card and is refused at the token
+     endpoint too.
+   - **Should members be able to make their own keys?** 🚨 **Default no, and
+     say why in one sentence** — the companion signs its user in with
+     `POST /api/v1/auth/token` and mints its own key, so most apps need no card
+     at all, and a credential form in front of every customer is a support
+     question waiting to happen. `"selfService": true` puts the **App keys**
+     card on `/dashboard/account`; leaving it `false` means nobody sees it and
+     holders can still revoke. ⚠️ One case forces a yes: an app whose members
+     sign in by **magic link only** has no password for the token endpoint, so
+     without the card they have no way to a key at all.
 3. Walk the endpoint table in the doc against what the companion will show.
    The core's surface mirrors the dashboard (me, entitlements, tokens,
    billing, chat, media). **Run `node run.mjs module list` before you say what
@@ -115,8 +131,9 @@ companion needs something to accompany.
      is a viewer and a participant.
    - **"Why did `module add courses` want the API too?"** Because `courses` and
      `community` declare `requires: ["api"]` — they serve endpoints on its
-     surface. Say it as a cost, not as a footnote: the `api_keys` table and the
-     App-keys card come with it.
+     surface. Say it as a cost, not as a footnote: an empty `api_keys` table and
+     one more section in every member's data export. Their customers see
+     nothing — both switches ship off.
 
    If a screen the user describes needs something that is still not there,
    follow *Adding an endpoint* in the doc — logic into `lib/<domain>/` (or the

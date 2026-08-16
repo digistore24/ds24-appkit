@@ -14,9 +14,11 @@
 import { headers } from "next/headers";
 
 import type { ModuleSlotProps } from "@/lib/modules/slots";
+import { hasPlan } from "@/lib/entitlements/manage";
 import { countLiveKeys, listKeys } from "../keys/keys";
 import { MAX_LIVE_KEYS } from "../keys/rules";
-import { apiOffReason } from "../api/config";
+import { keysCardMode } from "../keys/visibility";
+import { apiConfig, apiOffReason } from "../api/config";
 import { KeysCard } from "./keys-ui";
 import { createApiKeyAction, revokeApiKeyAction } from "../actions";
 
@@ -44,22 +46,39 @@ async function apiEndpoint(): Promise<string> {
 }
 
 export default async function ApiKeysAccountCard({ viewer }: ModuleSlotProps) {
+  const config = apiConfig();
   const off = apiOffReason();
-  const [rows, liveKeys] = await Promise.all([
+
+  const [rows, liveKeys, entitled] = await Promise.all([
     listKeys(viewer.memberId, "api"),
     countLiveKeys(viewer.memberId, "api"),
+    // 🚨 Only asked while the config is COHERENT. `hasPlan()` throws on a
+    // product key that is not in the registry, and an unknown `requiresPlan` is
+    // exactly what `apiConfigProblems()` reports — so asking anyway would turn a
+    // typo in a config file into a 500 on the whole account page. When the API
+    // is off for any reason, the answer cannot change what the card does.
+    off === null && config.requiresPlan
+      ? hasPlan(viewer.memberId, config.requiresPlan)
+      : Promise.resolve(true),
   ]);
 
-  // Hidden entirely when the interface is off AND this member holds no keys —
-  // there is no point showing somebody a feature their app does not offer. A
-  // member who DOES hold keys sees it either way, so they can still revoke
-  // them: a switch may hide an empty thing, never a non-empty one.
+  // Three separate questions decide what this card is — see `keys/visibility.ts`.
+  // Hidden when the member could not make a key AND holds none; read-only when
+  // they hold some, so a switch can hide an empty thing and never a non-empty
+  // one; the full card otherwise.
   //
-  // ⚠️ Note what this is NOT: it is not the module being uninstalled. An
-  // uninstalled module is not rendered at all, because it is not in the slot
-  // registry. This condition is the module's own switch (`config/api.json`),
-  // and the two questions stay separate here exactly as they do everywhere else.
-  if (off && rows.length === 0) return null;
+  // ⚠️ Note what none of this is: the module being uninstalled. An uninstalled
+  // module is not rendered at all, because it is not in the slot registry.
+  // Everything here is the module's own configuration, and the two questions
+  // stay separate exactly as they do everywhere else.
+  const { mode, reason } = keysCardMode({
+    apiOff: off,
+    selfService: config.selfService,
+    entitled,
+    keyCount: rows.length,
+  });
+
+  if (mode === "hidden") return null;
 
   return (
     <KeysCard
@@ -74,10 +93,13 @@ export default async function ApiKeysAccountCard({ viewer }: ModuleSlotProps) {
         lastUsedAt: key.lastUsedAt,
         expiresAt: key.expiresAt,
       }))}
-      endpoint={await apiEndpoint()}
+      // Only spelled out where it can be acted on. A read-only card is a list to
+      // revoke from, and an address nobody may mint a key for is noise.
+      endpoint={mode === "manage" ? await apiEndpoint() : null}
       maxLiveKeys={MAX_LIVE_KEYS}
       liveKeys={liveKeys}
-      offReason={off}
+      mode={mode}
+      reason={reason}
       createAction={createApiKeyAction}
       revokeAction={revokeApiKeyAction}
     />

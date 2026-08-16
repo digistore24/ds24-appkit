@@ -49,7 +49,14 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(authenticate).mockResolvedValue({ ...GOOD });
   vi.mocked(isApiEnabled).mockReturnValue(true);
-  vi.mocked(apiConfig).mockReturnValue({ enabled: true, requiresPlan: null });
+  // `selfService` is about the account page's card and never about a request —
+  // it is set here only because `ApiConfig` is one object. If a change ever
+  // makes the guard read it, these tests are where that shows up.
+  vi.mocked(apiConfig).mockReturnValue({
+    enabled: true,
+    requiresPlan: null,
+    selfService: false,
+  });
   vi.mocked(hasPlan).mockResolvedValue(true);
   vi.spyOn(console, "warn").mockImplementation(() => {});
 });
@@ -154,7 +161,11 @@ describe("the runaway brake", () => {
 
 describe("plan and scope", () => {
   it("refuses a member without the required plan, after authentication", async () => {
-    vi.mocked(apiConfig).mockReturnValue({ enabled: true, requiresPlan: "basic_monthly" });
+    vi.mocked(apiConfig).mockReturnValue({
+      enabled: true,
+      requiresPlan: "basic_monthly",
+      selfService: false,
+    });
     vi.mocked(hasPlan).mockResolvedValue(false);
     const result = await guardApi(withBearer());
     if (result.ok) throw new Error("unreachable");
