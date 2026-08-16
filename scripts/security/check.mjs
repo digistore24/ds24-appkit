@@ -47,6 +47,7 @@ import { advisories } from "./rungs/advisories.mjs";
 import { container } from "./rungs/container.mjs";
 import { drift } from "./rungs/drift.mjs";
 import { history } from "./rungs/history.mjs";
+import { invisible } from "./rungs/invisible.mjs";
 import { live } from "./rungs/live.mjs";
 import { osv } from "./rungs/osv.mjs";
 import { posture } from "./rungs/posture.mjs";
@@ -79,6 +80,7 @@ export const RUNGS = [
   drift,
   live,
   secrets,
+  invisible,
   history,
   container,
 ];

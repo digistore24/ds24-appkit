@@ -1,6 +1,6 @@
 ---
 name: security-gateway
-description: The security check for this app. Scans it for holes — unprotected routes, access to other people's data (IDOR), secrets in the code, a bypassed IPN signature, a chat tool that hands out too much, XSS, vulnerable packages, a misconfigured host — then fixes and reports. Use it before the app processes real payments and customer data, after larger changes, and whenever somebody asks "is this safe?", "is this route protected?", "is there a secret in the code?".
+description: The security check for this app. Scans it for holes — unprotected routes, access to other people's data (IDOR), secrets in the code, a bypassed IPN signature, a chat tool that hands out too much, XSS, vulnerable packages, a misconfigured host, text hidden in the files an agent reads as instruction — then fixes and reports. Use it before the app processes real payments and customer data, after larger changes, and whenever somebody asks "is this safe?", "is this route protected?", "is there a secret in the code?", "could something be hidden in a module I installed?".
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -195,6 +195,30 @@ value is in git and has not been rotated.** Not the file — the value. A local
 designed, and reporting it as CRITICAL teaches the user to ignore you — the
 command rates that one ℹ️ LOW and carries a count rather than a value, for
 exactly this reason.
+
+**The same command carries a second working-tree rung, and its subject is not a
+secret but a character.** `Invisible characters in the tree` reads every file
+git tracks and reports bidirectional overrides (the Trojan Source trick — a
+host or a condition rendered as its own opposite), Unicode tag characters
+(U+E0000–U+E007F, which mirror ASCII invisibly and which several models decode
+and follow) and runs of zero-width. It matters here rather than in general
+because three doors write somebody else's text into files an agent then reads
+as INSTRUCTION — `module add --from`, `node run.mjs update`, and the corpus
+`knowledge-intake` distils into `content/knowledge/` for the model's system
+block. A review is the control on all three, and this class of character is
+what defeats a review. A finding in `CLAUDE.md`, `docs/`, `.claude/skills/` or
+`content/` is rated one step worse than the same character in code, for that
+reason. Needs template 0.32.0.
+
+⚠️ **Its two blind spots are named on every run, in the rung's own evidence
+line: code COMMENTS and `*.test.*` files** — this template ships three tests
+that plant such characters because rejecting them is what they assert, and two
+comments that carry one to illustrate the attack they describe. The tag block
+is the exception and is scanned everywhere with no exclusion at all, because
+nothing in a source tree has an innocent reason to hold one. What no scan of
+the working tree can answer is what somebody SENDS the app at runtime; the
+fence for that is `buildFencedRequest()` in `lib/ai/customer-text.ts`, and it
+is a `code` question (§2), not this one.
 
 How to run the rest of it is in **`references/checks-secrets-and-deps.md`** — the tools,
 the skip list (sandbox keys, publishable keys, the shipped developer key a

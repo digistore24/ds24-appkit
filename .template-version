@@ -1,5 +1,5 @@
 {
-  "version": "0.31.0",
+  "version": "0.32.0",
   "source": "https://raw.githubusercontent.com/digistore24/ds24-appkit/main/.template-version",
   "raw": "https://raw.githubusercontent.com/digistore24/ds24-appkit/main/",
   "files": {
@@ -24,7 +24,7 @@
     ".agents/skills/operate/SKILL.md": "51ae8943611bfa1d951b2843180d4a37581d9f6f26657193e2a55407d48292b9",
     ".agents/skills/performance-gateway/SKILL.md": "c8bd1a9ef0e62ba118832d133cf0ac9032eed271e0116fd88303719514f387a9",
     ".agents/skills/salespage/SKILL.md": "629a16908b85a836ad891fffc03cfa26deaf4f0d4b3328c1f5f021106585bf5b",
-    ".agents/skills/security-gateway/SKILL.md": "2eaac52ed36d7f67c43b6bf52b4fc8784648f7297e99a59c23df5ab50026ba10",
+    ".agents/skills/security-gateway/SKILL.md": "9ec80d111b29113c9a05ec34042c56be13964f4676977b3f5c7e671a766b79c3",
     ".agents/skills/setup-digistore/SKILL.md": "1fb3355d511278fa23e55fa03340864e70b7e18f62981aad358180f2b7d49b41",
     ".agents/skills/setup-environments/SKILL.md": "20f80001b4bd0f0b70b3a378d995c90a9b5be7d5acf0f8931115aabb8ff2f18f",
     ".agents/skills/setup-hosting/SKILL.md": "66ae64b0549c2024373639fd020e7bbb282330ff9079ec11c6afbdbbc18513c8",
@@ -80,7 +80,7 @@
     ".claude/skills/salespage/SKILL.md": "305eb8c0faf89811566d519bc5bb6b2a539398b34108222ef946b3efa3075939",
     ".claude/skills/salespage/references/copy-guide.md": "01a8b5f2ff79dc2ddacea419c3ee0607a5425d398e6dcc66bab9058019b8ef66",
     ".claude/skills/salespage/references/sections.md": "b28cbaf153b0a707440eed945e75ef94ec435203a8f5dca019250710e5461779",
-    ".claude/skills/security-gateway/SKILL.md": "53253dfa4274b35a4649d39b24247b6ad18dcab6907ca058d48c4f303dec78e5",
+    ".claude/skills/security-gateway/SKILL.md": "e2d1ddc574835ac99c75b875b650db3c72eaa27241a0074a83508b16cab614cd",
     ".claude/skills/security-gateway/references/check-code.md": "da5155dd4135f28aa95103b7ec967bcd3160c0830faf241964e57aec72470714",
     ".claude/skills/security-gateway/references/checks-api-host-verdicts.md": "700594d91ffbb8d38d87079a0fb22532dd7de12191d25f7d96f98f038f9fd43e",
     ".claude/skills/security-gateway/references/checks-secrets-and-deps.md": "ca13843ffb4aaa8263c3632fd0a784e0552c70fbeea7c3e323ae5d463890affe",
