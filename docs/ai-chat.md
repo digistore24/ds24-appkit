@@ -286,6 +286,12 @@ on: the chat was the first feature in this template that sends customer input to
 a third party outside the payment and mail path — first, and no longer the only
 one (§8a).
 
+**And nothing outside this app, either.** She has no web access: her sources are
+the handbook and the registered content sources, both of which are yours. There
+is no fetch, no search engine and no browsing tool anywhere in the tool set — so
+an answer she cannot find in your material is one she says she does not know,
+not one she goes looking for.
+
 **That rule is about HER, and it stays.** It is not a limitation waiting to be
 lifted — it is what makes an assistant safe to switch on for every signed-in
 member without a second thought about their data. A companion built into the
@@ -392,6 +398,13 @@ the member holds that plan (`mayUseChat()` in `lib/ai/rules.ts`). That decides
 what is drawn, never what is allowed: `app/api/chat/route.ts` asks every
 question again on every request, because a button nobody rendered is not a
 check.
+
+**And the route guards itself because nothing else does.**
+`app/api/chat/route.ts` opens with `currentActiveUser()`. That is not
+belt-and-braces beside the middleware: `proxy.ts` matches `/dashboard` only, so
+**every** route under `app/api/` is public until it protects itself — the chat's,
+and the next one somebody adds beside it. A route that forgets this answers
+anonymous requests and spends your provider budget on them.
 
 **One exception, and it is there for you rather than for your customers.** When
 she is switched on but this machine cannot run her — no key for the provider her

@@ -18,6 +18,14 @@ the person who wonders for thirty minutes whether anything is going right.
 
 Adjust the numbers to the truth, never downward for comfort.
 
+**Why all five at once, and announced.** The people who open this template are
+often not developers, and a short concrete idea — *"an app for nutrition
+coaches"* — leaves more open than it settles: who pays, what the buyer walks
+away with, what it is called, what it looks like. **What it leaves open does not
+stay open.** It gets decided silently, by whoever builds next, and reappears as
+finished work nobody chose. Asking the five together, and saying beforehand that
+you are going to, is what turns those decisions back into the customer's.
+
 ## The five
 
 Ask them **in one bundle**, numbered, and wait for the reply. Not five

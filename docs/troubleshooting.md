@@ -432,6 +432,13 @@ bash: it starts no process, finds no process, and is the one check that cannot
 be written in the language it is checking for. The config files it lives in are
 JSON and cannot hold a comment, which is why the reason is written down here.
 
+**And why the precondition is hard rather than a courtesy.** A machine without
+Node does not stop an app from coming into being — every file of it can be
+written — and it gives way at the first command that runs any of it. The failure
+arrives after the work, not before it, which is the whole reason `CLAUDE.md`
+asks for one answered `node` command before the first file is written rather
+than for a check somewhere later.
+
 Three of the four hook mechanisms are young, and two of them have open bugs
 where the hook silently stops firing. That is what `node run.mjs greet` is for:
 it prints the same greeting on demand. If no greeting appeared, run it —

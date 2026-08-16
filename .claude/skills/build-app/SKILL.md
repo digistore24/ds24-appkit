@@ -235,8 +235,8 @@ Read `docs/design.md`; failing that, the recorded decline (*No custom
 identity*) in `docs/app.md`. **Either is an answer**: say in ONE sentence which
 look Step 3's pages follow, move on, and do not re-ask. Only if NEITHER is
 there — they came through the "Build my app" door and skipped phase 1 — offer
-`design` once, here, handing over the NUMBER so it never asks twice. Both
-paths, and what a `0` records: [`references/menus.md`](references/menus.md).
+`design` once, here, handing over the NUMBER so it never asks twice. Both paths,
+and what a `0` records: [`references/menus.md`](references/menus.md) → `menus-look.md`.
 
 ## Step 1f — Show the end picture, wait, then write it down
 

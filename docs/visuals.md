@@ -15,6 +15,13 @@ Delivery, the size ceiling and the byte-signature check are all decided **per
 kind**, which is what keeps this one subsystem: a new file type is a row in a
 table, never a second store beside the first.
 
+⚠️ **The refusals below all fail SILENTLY when they are skipped.** Not one of
+them throws at the door: an unchecked upload writes, a missing `mayAccess()`
+renders, a local driver starts. What they protect against shows up later and
+somewhere else — as a file that is public, a bucket that emptied itself on the
+last redeploy, or a customer whose picture loads about half the time. Read them
+as a list of things nothing will tell you about.
+
 Check it any time with:
 
 ```bash

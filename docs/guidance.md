@@ -144,6 +144,16 @@ their way around one skill has then found their way around all of them:
 - **End by naming the next skill and offering to start it.** A skill that stops
   with "you could now…" leaves the user exactly where they were.
 
+- **The order of the four phases is an argument, not a habit.** Two of them are
+  asked about often enough to be written down. **Experience comes before
+  security**: `ux-gateway`'s findings change the interface, and a security pass
+  run before those changes is a pass on an app that no longer exists. And both
+  come **after** the payment step, because the moment they exist to protect — a
+  customer who has just paid, looking for proof that it worked — is not there
+  until there is a checkout. The phases themselves are DATA
+  (`scripts/dev/journey.mjs`), projected into `CLAUDE.md` and `README.md`; this
+  paragraph is why they sit in that sequence.
+
 ## One report shape
 
 Five skills produce a verdict and write it down: the four gateways

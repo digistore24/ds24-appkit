@@ -201,6 +201,13 @@ reads a deployed app without writing to it. (The one thing this template does
 put into a deployed app, the smoke account, is its own `--apply` command for
 exactly that reason.) Run `node run.mjs smoke` against a local app to exercise
 it; every route in that list carries the reason it was not.
+
+**What `smoke` does not reach at all.** It skips dynamic **pages** (`[id]`)
+entirely — only dynamic API routes are exercised, and only against a local app —
+and it is signed in as exactly ONE account. Money, roles and other people's data
+are therefore outside what it can answer, whatever colour it prints: those need
+your own eyes on the page, as the account that is supposed to see it and as one
+that is not.
 `errors --url` exits **1** for *found something* and **2** for *could not look*,
 and the refusal never prints a `✓`. Its window lives in one instance's memory
 and empties on every restart, which is why the success line always names the

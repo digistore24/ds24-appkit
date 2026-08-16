@@ -204,7 +204,7 @@ same four:
 
 - **Tables.** A `<Table>` does not wrap. Put it in a container that scrolls
   (`overflow-x-auto`), or render cards below `sm:`.
-- **Dialogs.** A form in a `<Dialog>` on a 360 px screen needs its own scroll,
+- **Dialogs.** A form in a `<Dialog>` on a 380 px screen needs its own scroll,
   or the submit button ends up under the keyboard.
 - **Fixed widths.** `w-[720px]` is a horizontal scrollbar on the whole page.
   `max-w-` and a grid instead.

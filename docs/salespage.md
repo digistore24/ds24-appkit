@@ -152,7 +152,11 @@ What the block holds:
   refuses the wording**: the ten as stems, so "dauerhaft nutzen" is caught
   although the criteria spell it "dauerhafter", and only where the sentence also
   names access, so a generous FEATURE ("unbegrenzt viele Notizen") stays
-  allowed. Write what is true — "pay once, no subscription", "as long as your
+  allowed. The sweep is exhaustive rather than a sample: **every language file
+  (`messages/*.json`), the product registry (`config/digistore-products.json`)
+  and every page**. The registry is in that list because its `features[]` and
+  `tagline` never travel through the i18n files, so a "dauerhafter Zugang"
+  written there would walk past any check that only reads translations. Write what is true — "pay once, no subscription", "as long as your
   plan runs".
 - **An honest risk-reversal.** EU consumer law gives most digital purchases a
   14-day withdrawal right — *naming* it costs nothing and reads as a

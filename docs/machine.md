@@ -224,6 +224,12 @@ a proxy for it. `scripts/dev/ports.mjs` is written that way.
 table above and fails the run when one shows up — it is the reason this does not
 quietly rot back into a Linux-only project. Don't switch it off.
 
+**Why these rules need a test at all.** Each of them breaks on exactly ONE of
+the three systems while every gate stays green on the other two — which is the
+worst shape a defect can have in a product whose developers are spread across
+all three. Nobody who can reproduce it is the person who wrote it, and the one
+who wrote it has a clean run to point at.
+
 ## Two spawn rules
 
 Both are written out at the top of `run.mjs`:

@@ -16,7 +16,7 @@ complete feature with its own pages, tables, texts and guidance, living under
 > |---|---|---|---|
 > | **`activity`** | what a course's customer DOES, judged on the server | `module add activity`, then `db-migrate` | [`docs/learning.md`](learning.md) · skill `learning-activities` |
 > | **`companion`** | the app working alongside its customer while they work | `module add companion` — no table, so no migration | [`docs/ai-in-product.md`](ai-in-product.md) · skill `ai-companion` |
-> | **`api`** | the HTTP API a customer's own programs talk to | `module add api`, then `db-migrate` | [`docs/api.md`](api.md) · skill `mobile-companion` |
+> | **`api`** | the HTTP API a customer's own programs talk to | `module add api`, then `db-migrate` | [`docs/api.md`](api.md) · the companion app itself: [`docs/mobile.md`](mobile.md) · skill `mobile-companion` |
 > | **`community`** | a place for members: rooms, discussions, private messages | `module add community`, then `db-migrate` — its own tables | [`docs/community.md`](community.md) · skill `community` |
 > | **`courses`** | the course itself: blocks, lessons, progress, and the purchase gate in front of them — and, for the accompanied workshop, the hand-in, the operator's queue to answer it in, and a daily digest job that mails them the COUNT and names nobody. 🚨 **Do not build a reply surface or a hand-in notification by hand** | `module add courses`, then `db-migrate` — and it ships switched OFF until the content is written | [`docs/courses.md`](courses.md) · skill `courses` |
 >
@@ -373,7 +373,10 @@ node run.mjs db-migrate && npm run test
 ```
 
 `--from` is required for anything that is not already in your tree, so this can
-never happen by mistyping an id. A local path or a folder works too, which is
+never happen by mistyping an id — **and it is the only way in.** A module copied
+into `modules/<id>/` by hand skips every check below: nothing verified its
+manifest, nothing looked for a table or a route somebody else already owns, and
+nothing refused an archive entry that climbs out of its folder. A local path or a folder works too, which is
 what the author of a module uses while writing it. `--sha256 <hash>` checks the
 download against a hash the vendor published.
 
@@ -601,7 +604,10 @@ reading a file that contains only re-exports, which is green by emptiness.
   ⚠️ Their 404s look identical and are not the same thing. Uninstalled, the
   route does not EXIST (Next never built one). Switched off, the route exists
   and refuses. `node run.mjs module list` is what tells them apart; nothing
-  else does.
+  else does. So a 404 here is never a diagnosis — **and a missing feature is
+  never evidence of an old clone.** An app that answers 404 on `/community` may
+  have the module and have it switched off, or may never have had it, and both
+  are ordinary states of a perfectly up-to-date app.
   ⚠️ **And a module's absence does not always LOOK like absence.** The
   `companion` task id stays in `TASKS` whatever is installed — it is core
   vocabulary, argued in `modules/boundary.test.ts` under the five refusals — so

@@ -75,7 +75,14 @@ export async function GET(
           completed: completed.has(unit.slug),
           // Whether the lesson ASKS for something, not what it asks — the
           // prompt is content and travels with the lesson.
-          hasTask: unit.taskPrompt !== null,
+          //
+          // 🚨 **Both conditions, the same pair `./unit.ts` and
+          // `../pages/unit/page.tsx` apply.** A prompt on a lesson outside a
+          // `workshop` is a row nothing can act on: `submissionProblem()`
+          // refuses the hand-in on the shape before it ever looks at the
+          // prompt. Reporting the column alone made this outline promise a
+          // hand-in the module then refused with a 403.
+          hasTask: shape === "workshop" && unit.taskPrompt !== null,
         })),
       };
     }),

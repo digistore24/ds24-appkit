@@ -169,6 +169,13 @@ go — are the ones that matter:
   `console.warn`, and a failed fetch is not retried for ~5 minutes. The host case
   is the one that used to be silent; it now names the host and says where the
   list lives, once per host per process rather than once per plan card.
+  🚨 **Every one of those failures leaves a `[testpay]` line in the log** saying
+  which gate declined: the unknown host, the key that could not be fetched, or
+  the environment allowlist. So an undecorated link is a LOG question and not an
+  approval question — in the browser the two look identical, the developer is
+  shown *"Das Produkt wurde noch nicht genehmigt."* and concludes the
+  marketplace has not approved it, while in fact a gate said no. Grep the log
+  for `[testpay]` **before** you conclude anything about approval.
 - **An unwritable `.dev/` is not one of those failures**, and listing it as one
   was wrong until 2026-08-15: `writeStateFile()` fails silently and the key stays
   in memory, so the link comes back **decorated** and nothing is warned. That is

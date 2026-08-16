@@ -283,6 +283,22 @@ describe("the outline carries structure and no content", () => {
     // It does say the lesson ASKS for something — that is structure.
     expect(payload.blocks[0].units[0]).toMatchObject({ slug: UNIT.slug, hasTask: true });
   });
+
+  // 🚨 The other half, and the one that was wrong. `hasTask` used to report the
+  // COLUMN, so a prompt on a lesson outside a `workshop` — which the admin
+  // surface writes without complaint, and `courses-check` refuses only in the
+  // content files — told a client there was a hand-in here. There is not:
+  // `submissionProblem()` refuses the shape before it looks at the prompt.
+  for (const shape of ["self-study", "drip"] as const) {
+    it(`says no lesson asks for a hand-in in a ${shape} course`, async () => {
+      COURSE_ROW.shape = shape;
+
+      const payload = await (await outline.GET(nosyRequest(), courseParams())).json();
+
+      expect(UNIT.taskPrompt, "the fixture must carry a prompt, or this proves nothing").toBeTruthy();
+      expect(payload.blocks[0].units[0]).toMatchObject({ slug: UNIT.slug, hasTask: false });
+    });
+  }
 });
 
 describe("the lesson endpoint", () => {
@@ -309,6 +325,37 @@ describe("the lesson endpoint", () => {
     // Who read it is the operator's record, not the member's to receive.
     expect(JSON.stringify(payload)).not.toContain("coach-9");
   });
+
+  // 🚨 Measured against a running app before it was fixed: on a `self-study`
+  // course with an operator-authored prompt this route handed the prompt out,
+  // a client rendered the hand-in box, and the POST one path over answered
+  // `403 This course does not take hand-ins.` The web page had never shown it.
+  // One module owes one answer.
+  for (const shape of ["self-study", "drip"] as const) {
+    it(`withholds the prompt in a ${shape} course — and does not READ the row`, async () => {
+      COURSE_ROW.shape = shape;
+      haveSubmission({
+        id: "s1",
+        memberId: MEMBER,
+        unitSlug: UNIT.slug,
+        body: "my work",
+        submittedAt: WHEN,
+        reply: null,
+        repliedAt: null,
+        repliedBy: null,
+      });
+
+      const payload = await (await unit.GET(nosyRequest(), params())).json();
+
+      expect(UNIT.taskPrompt, "the fixture must carry a prompt, or this proves nothing").toBeTruthy();
+      expect(payload.taskPrompt).toBeNull();
+      // Not merely unreported. A route that read the row and then withheld it
+      // would still query somebody's private writing on every lesson of every
+      // shape — the page states that rule and this is the same rule.
+      expect(submissionFor).not.toHaveBeenCalled();
+      expect(payload.submission).toBeNull();
+    });
+  }
 
   it("hands media out as ids and never as addresses", async () => {
     const payload = await (await unit.GET(nosyRequest(), params())).json();

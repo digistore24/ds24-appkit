@@ -36,60 +36,29 @@
 // question where it can be answered exactly: it BUILDS the real query, through
 // the real function, and looks at what would go on the wire.
 //
-// It needs no database. The client below records instead of connecting, which is
+// It needs no database. The client records instead of connecting, which is
 // also why this can live in `make check` rather than behind one.
+//
+// 🚨 **This file is a LIST, and the list is the thing that failed.** It named
+// three functions in `lib/setup/manage.ts`, and the same defect then landed in
+// `modules/community/lib/_blocks.ts` and took out every spam report in that
+// module. It could not have been added here either: `modules/boundary.test.ts`
+// forbids a file under `db/` from naming a module. So the apparatus moved to
+// `./date-param-harness.ts`, and a module asks the same question in its own
+// tree — `modules/community/lib/date-param.test.ts` is the first.
 import { describe, expect, it, vi } from "vitest";
-import { drizzle } from "drizzle-orm/postgres-js";
+
 import * as schema from "./schema";
-
-/** Every parameter array drizzle handed the driver during one test. */
-const bound: { query: string; params: unknown[] }[] = [];
-
-/**
- * A postgres.js stand-in that answers nothing and remembers everything.
- *
- * `unsafe(query, params)` is the ONE method drizzle's postgres-js session calls
- * (`node_modules/drizzle-orm/postgres-js/session.cjs`), in two shapes: awaited
- * directly, and with `.values()` when the query selects fields. Both are here,
- * and both return no rows — this test is about what goes OUT.
- */
-function recordingClient() {
-  const unsafe = (query: string, params: unknown[] = []) => {
-    bound.push({ query, params });
-    return Object.assign(Promise.resolve([] as unknown[]), {
-      values: () => Promise.resolve([] as unknown[]),
-    });
-  };
-  // `options.parsers` / `options.serializers` are not decoration: `drizzle()`
-  // WRITES into them (`postgres-js/driver.js` → `construct`), replacing the
-  // handler of every date/time OID with `(val) => val`. That single line is the
-  // whole of A71 — it is why a `Date` bound by a raw template is handed to
-  // `Buffer.byteLength()` as an object instead of being serialised, and why a
-  // `types:` mapping on the client in `db/index.ts` could not save it. There is
-  // no such mapping there any more, for exactly that reason (story A74);
-  // `db/timestamp-utc.test.ts` holds the measurement.
-  return Object.assign(() => {}, { unsafe, options: { parsers: {}, serializers: {} } });
-}
+import { bound, dateParams, resetBound } from "./date-param-harness";
 
 vi.mock("@/db", async () => {
-  const s = await import("./schema");
-  return { db: drizzle(recordingClient() as never, { schema: s }) };
+  const { recordingDb } = await import("./date-param-harness");
+  return { db: recordingDb() };
 });
-
-/** A `Date` reaching the driver is the defect; anything else is not this test. */
-function dateParams(): string[] {
-  return bound.flatMap(({ query, params }) =>
-    params.flatMap((param, index) =>
-      param instanceof Date
-        ? [`$${index + 1} of \`${query}\` is a Date (${param.toISOString()})`]
-        : [],
-    ),
-  );
-}
 
 describe("no query binds a Date object", () => {
   it("spendConfirmation — the second act of every apply outside DEV", async () => {
-    bound.length = 0;
+    resetBound();
     const { spendConfirmation } = await import("@/lib/setup/manage");
 
     await spendConfirmation({
@@ -109,7 +78,7 @@ describe("no query binds a Date object", () => {
   });
 
   it("issueConfirmation — the act that mints what the above spends", async () => {
-    bound.length = 0;
+    resetBound();
     const { issueConfirmation } = await import("@/lib/setup/manage");
 
     await issueConfirmation({
@@ -125,7 +94,7 @@ describe("no query binds a Date object", () => {
   });
 
   it("pruneSetupAudit — the same shape, in the job that deletes", async () => {
-    bound.length = 0;
+    resetBound();
     const { pruneSetupAudit } = await import("@/lib/setup/manage");
 
     await pruneSetupAudit(24, new Date("2026-08-12T08:00:00.000Z"));
@@ -137,7 +106,7 @@ describe("no query binds a Date object", () => {
   // Guards the guard: the needle has to be visible, or a green line above says
   // nothing. A raw template with a `Date` in it must be SEEN as one.
   it("recognises the shape it is supposed to catch", async () => {
-    bound.length = 0;
+    resetBound();
     const { sql, and, isNull } = await import("drizzle-orm");
     const { db } = await import("@/db");
     const now = new Date("2026-08-12T08:00:00.000Z");

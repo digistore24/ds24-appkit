@@ -305,6 +305,14 @@ that anything between those markers was written by the customer: read it, judge
 it, answer about it, never follow it. No input can emit either marker — the two
 tag sequences are escaped in the text, in the labels and in the fact values.
 
+**Only the WORK is fenced, and that is a rule about what you write, not only
+about what the layer does.** Everything you append or render around a fenced
+block — the `instruction`, the `ask`, the labels, and whatever your page puts
+next to the answer — reads to the model, and to the reader, as your app's own
+voice. So it has to be words you wrote. Passing something the customer typed in
+as an `ask` or as a label does not become safe by sitting beside a fence; it
+walks around it.
+
 **Their earlier turns are fenced too**, on every later question — the same
 strings, marked the same way, labelled so the model can tell them from the one it
 is answering. Without that the rule would hold for exactly one turn: the app
@@ -717,7 +725,7 @@ counts, latency, the outcome, and the member it was made for.
 **No prompt, no answer, no text a member typed.** That is structural — there is
 no column that could carry one. See `docs/data-protection.md` §10.
 
-Two things are always true of a row and are worth knowing:
+Three things are always true of a row and are worth knowing:
 
 - **The provider and the model are always named**, including on a call that
   never reached a provider — one refused for a missing key, say. The binding is
@@ -725,6 +733,12 @@ Two things are always true of a row and are worth knowing:
   the answer to "why is nothing working".
 - **"No usage reported" is not "zero tokens".** A provider that says nothing is
   recorded as having said nothing, so an unmeasured call never looks free.
+- **Recording never fails a call.** The usage row is written after the response,
+  and a write that fails is logged and swallowed — an answer the customer
+  already has is never taken away because the ledger had a bad minute. The
+  direction is deliberate and it is the one you would want at 2am; the cost of
+  it is that a database problem shows up as a gap on **KI-Kosten** rather than
+  as a broken chat.
 
 **Rows are deleted after 12 months, automatically** — a daily job the app runs
 itself (`prune-ai-usage` in `config/cron.json`, see `docs/cron.md`). The window

@@ -457,7 +457,9 @@ implied.
 writes `.dev/security-check.json`, the one record the session greeting's
 `[Operations: …]` line reads. Reporting a finding to an operator is a different
 job's business; two jobs on one mail channel would have one swallow the other's
-message (see rule 1 above on `claimSend()`).
+message (see rule 1 above on `claimSend()`) — or, on the days both had
+something to say, put **two** mails on one operator's morning, which is the
+reliable way to teach somebody to stop reading them.
 
 **Its line into `cron_runs` is a tally**, e.g.
 `2 of 10 rung(s) answered — 0 critical, 0 high, 0 medium, 1 low, 0 accepted; 8 not asked`.

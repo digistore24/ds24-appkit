@@ -507,7 +507,7 @@ switched off wearing a policy's clothes. To keep everything, disable the job.
 Read only through `isSetupEnabled()` (`lib/setup/config.ts`), never by
 re-reading the JSON. ⚠️ **Any unknown key, wrong type or out-of-range value
 switches the whole surface off** — the failure mode here is an open write
-endpoint, so every doubt falls towards closed. Keys beginning with `_` are
+endpoint **on a production database**, so every doubt falls towards closed. Keys beginning with `_` are
 comments.
 
 While it is off, every `/api/setup` path answers **404 with an empty body**,

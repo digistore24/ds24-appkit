@@ -50,11 +50,26 @@ export async function GET(
     return apiError("forbidden", "This lesson has not opened yet.");
   }
 
+  // 🚨 **The same line as `../pages/unit/page.tsx`, and it has to be.** A
+  // hand-in surface exists exactly when the course is a `workshop` AND this
+  // lesson carries a prompt; `submissionProblem()` refuses every other shape
+  // with `coursesShapeForbidsSubmission`. Handing the raw column out here let
+  // this route advertise a surface its own POST would refuse: measured on a
+  // `self-study` course with an operator-authored prompt, `taskPrompt` came back
+  // with the text, a client rendered the box, and the hand-in answered
+  // `403 This course does not take hand-ins.` The web page had never shown it —
+  // one module, two answers, and the mobile one was the wrong one.
+  const taskPrompt = v.course.shape! === "workshop" ? unit.taskPrompt : null;
+
   const [completed, submission] = await Promise.all([
     completedSlugsFor(g.memberId),
+    // Not merely unreported — not FETCHED, exactly as the page has it: a route
+    // that read the row and then withheld it would still be querying somebody's
+    // private writing on every lesson of every course shape.
+    //
     // Scoped by the key's member in the QUERY — "no such row" and "somebody
     // else's row" are one answer (`../lib/manage.ts`).
-    submissionFor(g.memberId, unit.slug),
+    taskPrompt === null ? null : submissionFor(g.memberId, unit.slug),
   ]);
 
   return apiJson({
@@ -62,7 +77,7 @@ export async function GET(
     title: unit.title,
     position: unit.position,
     body: unit.body,
-    taskPrompt: unit.taskPrompt,
+    taskPrompt,
     completed: completed.has(unit.slug),
     block: { slug: block.slug, title: block.title },
     media: {

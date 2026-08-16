@@ -62,6 +62,23 @@ content, which is too big for a prompt. Up to `MAX_TOOL_ROUNDS` provider
 round-trips per question, one `ai_usage` row each; the mechanics are in
 [`ai-providers.md`](ai-providers.md) → *Tools*.
 
+### One enforcement path
+
+Every tool goes through `runTool()` in `lib/ai/run-tool.ts`, and everything that
+decides whether a call may happen lives **there, in the call path**: the scope
+check, the plan gate, and the charging of tokens. Not in the four tool
+definitions, not in the source, not in the chat endpoint — one place, so a fifth
+tool inherits all three by being called at all rather than by remembering them.
+
+That is also why **no tool ever takes a member id.** The account is
+`ctx.memberId`, bound to the session before the handler runs. Every argument a
+tool receives was written by a MODEL that had just read text somebody else may
+have authored — a lesson body, a forum post, a page the customer submitted. An
+argument named `memberId` is therefore an argument an attacker can write, one
+injected sentence away from a tool fetching another member's content on their
+behalf. The session is the only honest source for who is asking, and it never
+travels through the model.
+
 ---
 
 ## Writing a source

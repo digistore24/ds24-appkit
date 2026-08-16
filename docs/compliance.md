@@ -116,6 +116,11 @@ keys, grants and impersonation records, and deliberately leaves `orders` and
 always the session's own, which is what makes deleting somebody else's by
 mistake impossible rather than merely unlikely.
 
+**And the deletion dialog says so.** It is not enough for the privacy policy to
+be honest about the carve-out: the person clicking *delete* is the one who needs
+to read there, in that moment, that the orders stay and why. A dialog that only
+asks "are you sure?" is asking about something the person has not been told.
+
 A running subscription does not stop the deletion either: the dialog **warns
 and does not block**. Refusing erasure because it is inconvenient is the
 violation — and billing that continues at Digistore24 with no account behind
@@ -217,6 +222,13 @@ who dismisses the notice on their laptop must still meet it on their phone, and
 a column on `users` would silence it exactly where it matters. It is asserted:
 `components/install-app.test.ts` fails when a second key appears, or when the
 key stops being named in this document.
+
+🚨 **Anything you add that writes to a device joins the list above.**
+`localStorage`, `sessionStorage`, a cookie, a fingerprint — the rows here are the
+complete list only for as long as somebody keeps them complete, and the test in
+the previous paragraph guards ONE key. It cannot guard a key nobody told it
+about, and the § 25 TDDDG question is asked about the device, not about the
+storage API somebody happened to choose.
 
 There is no analytics, no pixel, no advertising SDK — `data-protection.md` §5
 states it and means it.

@@ -3,16 +3,16 @@
 # Entitlements: what a Member may use
 
 One question, one answer: **`lib/entitlements/manage.ts`**. Everything on this
-page is about that file, and about the two functions it exports for your app.
+page is about that file, and about the three functions it exports for your app.
 
 ```ts
-import { hasPlan, entitlementsFor } from "@/lib/entitlements/manage";
+import { hasPlan, entitlementsFor, planStartedAt } from "@/lib/entitlements/manage";
 ```
 
 Code:
 
-- `lib/entitlements/manage.ts` — the API (`hasPlan`, `entitlementsFor`) and the
-  writes behind it.
+- `lib/entitlements/manage.ts` — the API (`hasPlan`, `entitlementsFor`,
+  `planStartedAt`) and the writes behind it.
 - `lib/entitlements/rules.ts` — `chooseGrantTransition`: what each Digistore24
   event does to access. Pure, and covered by `rules.test.ts`.
 - `db/schema-entitlements.ts` — the `grants` table.
@@ -129,6 +129,34 @@ Note the asymmetry with `hasPlan`: `entitlementsFor` returns what is stored and
 never consults the registry, so a Product Key you removed from
 `config/digistore-products.json` still turns up here — while `hasPlan` on that
 same key throws. Removing a key that customers hold is a migration, not an edit.
+
+## Since when — `planStartedAt`
+
+```ts
+planStartedAt(memberId: string, productKey: string): Promise<Date | null>
+```
+
+The third function, and the one a drip-released course asks: **since when** does
+this Member hold this plan. `null` means no *active* grant for that key — not
+"no such product"; an unknown key throws, exactly as `hasPlan` does.
+
+🚨 **Do not answer this out of `entitlementsFor()`.** That reader is a
+`DISTINCT ON (product_key)`: it returns exactly **one** row per key, chosen by
+purchase-beats-comp and then by the furthest `accessUntil` — **never by age**.
+"The earliest of the grants `entitlementsFor()` returns" is vacuous over a single
+row, and the date that row carries belongs to whichever grant won a contest about
+something else entirely. A Member who bought, refunded and bought again gets their
+clock started on the wrong grant, silently, and the only symptom is a week that
+opens on the wrong day.
+
+`planStartedAt()` aggregates `min(created_at)` over the ACTIVE grants for that key
+instead — the earliest of the currently active ones. A re-buy after a refund
+therefore restarts the clock, deliberately. A paused grant is not active, so it
+reads `null`, and `null` is not week one: say "your access is paused".
+
+Do not reach for `listGrantsFor()` instead — that is the Operator's read, it
+carries the operator's `note`, and it is forbidden on member surfaces. The worked
+use is [`courses.md`](courses.md) → *Drip release*.
 
 ---
 

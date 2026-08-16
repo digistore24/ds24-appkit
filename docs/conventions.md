@@ -71,6 +71,33 @@ regex that matched nothing cannot make it green. A script that needs a per-flag
 example in its message imports `flagValue()` and keeps only the sentence
 (`scripts/ai/check.mjs` is the one case).
 
+## Green is the commit condition — because nothing runs the tests after you
+
+`.githooks/pre-commit` runs the suite and refuses on red. That hook is the only
+thing that runs it: this template ships no CI, so **nothing runs the tests for
+you after a push**, and a red test that gets committed stays red until somebody
+looks at it by hand — days later, usually while chasing something else. That is
+why `CLAUDE.md` makes green a *condition* of committing rather than a courtesy,
+and why a shipped test that fails is a finding about your change and never an
+obstacle to weaken or delete.
+
+### And a SKIPPED test is not a passed one
+
+`⏭ <file>: NOT CHECKED — <reason>` on stderr has exactly three legitimate
+causes. Two are quickly said: `node run.mjs agent-setup --apply` trimmed a
+config tree, or the registry no longer holds the SHAPE a test needs, because the
+example products were deleted or parked with `"sell": false`.
+
+The third one surprises people: **`scripts/foreign-config.test.ts` starts
+foreign tools.** It asks `gitleaks`, ESLint, PostCSS and drizzle-kit whether they
+actually ACCEPT the config files this repo writes for them — not whether those
+files look plausible. A tool that is not installed on this machine cannot be
+asked, so the test skips itself and says so. That is the one skip a green run on
+a fresh machine produces regularly, and it disappears the moment the tool is
+there.
+
+Anything else on that line is a question nobody answered.
+
 ## What checks a component, and why it is not a unit test
 
 `vitest.config.ts` runs with `environment: "node"` and no DOM. That is a
@@ -86,6 +113,13 @@ those two tell you the page a customer opens actually works, with a real
 database, real translations and the real layout around it. For an app whose
 pages are mostly composition over a design system, the second question is the
 one worth paying for.
+
+**And a green BUILD rules out even less.** `npm run build` checks compilability
+— with no database and no real `.env` — so a page that greets its first visitor
+with *Internal Server Error* is perfectly compatible with a clean
+`npm run typecheck`, a green suite and a successful build. The three of them
+together answer *does it compile and is the logic right*; none of them answers
+*does the page come up*.
 
 ⚠️ **A JSX test is COLLECTED, and it fails saying what is missing.** `include`
 is `**/*.test.{ts,tsx}` on purpose: with `.ts` alone such a file is not
@@ -274,6 +308,9 @@ t.rich("hint", { code: (chunks) => <code>{chunks}</code> })
 - **A price is only *written* differently, never converted.** What gets billed is
   what is on file at Digistore24, and a conversion in the app would put a number in
   front of the customer that the checkout then contradicts.
+- **Identifiers in the code are English**, and only what the customer SEES is
+  translated: `createUserAction`, `emailPlaceholder`, `selfDelete`. The message
+  keys are English too — the German text lives behind them, never in them.
 - **Error messages never come into being deep in the code.** Rule and database
   layers return *codes* (`lib/users/rules.ts` → `"selfDelete"`); only the Server
   Action translates them (`app/dashboard/admin/users/actions.ts`). A sentence born
@@ -288,6 +325,12 @@ t.rich("hint", { code: (chunks) => <code>{chunks}</code> })
 same text is on file. Likewise the app name (`lib/app.ts`) and the terminal output of
 the scripts under `scripts/`.
 
+**Where the language comes from**, and why there is no prefix in the URL: a
+cookie, set by the toggle in the sidebar, and on a first visit the browser's own
+preference. It is wired in `i18n/` and nowhere else — so a page never has to
+know which language it is being rendered in, and a link a customer shares works
+for whoever opens it rather than dragging `/de/` along.
+
 **A third language** is a file in `messages/` plus its code registered in
 `i18n/config.ts` (`LOCALES` + `LOCALE_LABELS`) — done.
 
@@ -300,3 +343,9 @@ Two rules keep that file worth reading, and both are in `CLAUDE.md` → *Adding 
 feature*: quote the access gate as code rather than describing it, and write down
 what was decided *against*, because the rejected alternative cannot be read out
 of the code and is what gets proposed again three sessions later.
+
+**What is not in that file gets built a second time — and the app says so.** The
+session greeting names anything of your own that `docs/app.md` does not mention:
+a page, a **table**, a scheduled **job**. It is the cheapest reminder there is,
+and it is the reason the entry is written the moment the feature works rather
+than at the end of the week.

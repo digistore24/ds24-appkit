@@ -123,13 +123,25 @@ export async function reporterFactsFor(
       // would come back as products of one another. Each rides an index whose
       // leading column is the one being matched — `grants_member`,
       // `community_spam_reports_reporter`, `community_spam_reports_open`.
+      //
+      // 🚨 **"Now" is the DATABASE's, never the `now` above.** Inside a raw
+      // `sql` fragment there is no column mapper, so a JS `Date` reaches
+      // postgres.js unencoded and the driver throws `ERR_INVALID_ARG_TYPE` —
+      // which took out every spam report in the module, because this sweep runs
+      // on the reporter of the row `reportContent()` has just inserted. It
+      // typechecked and no test saw it: the whole guard suite reads this file as
+      // TEXT, and nothing ran the query. `(now() at time zone 'utc')` is the
+      // house form for this exact question — `lib/entitlements/manage.ts` asks
+      // it of this very column that way. The `now` below stays: that one is
+      // arithmetic in JS and never travels into SQL.
       paidGrants: sql<number>`(
         select count(*) from ${grants}
         where ${grants.memberId} = ${users.id}
           and ${grants.source} = 'purchase'
           and ${grants.endedAt} is null
           and ${grants.suspendedAt} is null
-          and (${grants.accessUntil} is null or ${grants.accessUntil} > ${now})
+          and (${grants.accessUntil} is null
+               or ${grants.accessUntil} > (now() at time zone 'utc'))
       )`.mapWith(Number),
       reportsMade: sql<number>`(
         select count(*) from ${communitySpamReports}

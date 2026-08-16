@@ -287,6 +287,15 @@ public — and no way to be forgotten. Answering it is one line. (`api/v1` has i
 own, stricter test: `guard-presence.test.ts` reads the handler rather than
 trusting a list.)
 
+🚨 **A Server Action is an HTTP endpoint of its own, and the page it sits in
+does not protect it.** Next serves every action at a generated URL that accepts
+a POST from anywhere, so the guard belongs in the ACTION — `requireOwner()` or
+`requireActiveUser()` as its first line — and not only in the server component
+that renders the form. The Member-facing case is stricter still: an action on
+`/dashboard/account` never takes a user id from the form, and always acts on the
+session's own account. That is what makes an IDOR there impossible rather than
+merely unlikely — an id nobody accepts is an id nobody can tamper with.
+
 ## Creating the operator/admin account
 
 **Locally you do not have to do anything.** The very first account in a fresh
