@@ -151,30 +151,24 @@ const KNOWN = new Set([
 //
 // ── What changed, and what did NOT ──────────────────────────────────────────
 //
-// 🚨 **The key stays gone.** What `docs` now also accepts is a path inside the
-// module, and it is worth being exact about why that is not the same seam
-// coming back through a side door — both bullets above were re-read against a
-// module SOMEBODY ELSE wrote, and they answer differently:
+// 🚨 **The key stays gone, and `docs` takes ONE form: `docs/<id>.md`.**
 //
-//   - *"An app has to be able to learn about a module it does not have"* proves
-//     the file must SHIP, not that it must sit in `docs/`. Every module folder
-//     ships in every app — `config/modules.json` is empty in a fresh one and all
-//     five folders are still there — so `modules/<id>/docs.md` is exactly as
-//     readable as `docs/<id>.md` for a module nobody installed. And for a module
-//     from outside there is no third option: we cannot ship a page about a
-//     module we have never heard of.
-//   - *"The update channel is addressed by PATH"* is TRUE and is the reason the
-//     core form stays the default for our own five. It does not bind a foreign
-//     module: `scripts/dev/update.mjs` plans over
-//     `keys(remote.files) ∪ keys(stamp.files)`, and a vendor's page is in
-//     neither, so the channel never touches it — no `withdrawn`, no overwrite.
-//     Its guidance freezes with its code, which is what the rest of that module
-//     does anyway.
+// There was a second form for a while — `modules/<id>/docs.md` — added when
+// `module add --from <url>` could bring in a module this template had never
+// heard of, since we cannot ship a page about one. That channel has been
+// removed: no module arrives from outside any more, so the exception has no
+// case left to serve and it is gone with it.
 //
-// The skill is untouched by all of this and still points at `.claude/skills/`:
-// that path is Claude Code's and OpenCode's, not ours. A module from outside
-// simply declares no skill — the key is optional — and a third party who wants
-// to publish one publishes it as a skill, which needs nothing from this file.
+// What that restores is the plain rule: *"the update channel is addressed by
+// PATH"*. `scripts/dev/update.mjs` plans over
+// `keys(remote.files) ∪ keys(stamp.files)`, and a page under `modules/` is in
+// neither — so it would freeze with its code while every other line of guidance
+// in the app moved on. That is the one failure the update channel exists to
+// prevent, and now nothing can opt out of it.
+//
+// The `skill` key is untouched and still points at `.claude/skills/`: that path
+// is Claude Code's and OpenCode's, not ours. It stays optional — a module may
+// simply have no playbook.
 
 const isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const isStringArray = (v) => Array.isArray(v) && v.every((x) => typeof x === "string");
@@ -273,22 +267,17 @@ export function manifestProblems(raw, where) {
   //
   // A dangling pointer is worse than none, so `scripts/modules/manifest.test.ts`
   // opens both against the real tree.
-  // Two legal forms, and the second one is for a module this template did not
-  // write. See `moduleOwnedDocs` below for why that is not a hole in the rule
-  // the note beside KNOWN states.
+  // 🚨 ONE legal form, and the narrowing is deliberate. There used to be a
+  // second — `modules/<id>/docs.md` — for a module this template did not write,
+  // back when `module add --from <url>` could bring one in. That channel is
+  // gone, so every module is ours, and the rule beside KNOWN applies without an
+  // exception: `node run.mjs update` addresses guidance by PATH, so a page under
+  // `modules/` is the one guidance a released app could never bring forward.
   const docs = m.docs;
-  const inCore = typeof docs === "string" && /^docs\/[a-z0-9-]+\.md$/.test(docs);
-  const inModule =
-    typeof docs === "string" &&
-    typeof id === "string" &&
-    new RegExp(`^modules/${id}/[a-z0-9/-]+\\.md$`).test(docs) &&
-    !docs.includes("..");
-  if (!inCore && !inModule) {
-    say('"docs" must name this module\'s page — either in the CORE tree, e.g. ' +
-      `"docs/community.md", which is where a module of this template puts it and where ` +
-      "`node run.mjs update` keeps it current; or inside the module itself, e.g. " +
-      `"modules/${typeof id === "string" ? id : "<id>"}/docs.md", which is where a module ` +
-      "from somewhere else puts it");
+  if (typeof docs !== "string" || !/^docs\/[a-z0-9-]+\.md$/.test(docs)) {
+    say('"docs" must name this module\'s page in the CORE tree, e.g. ' +
+      '"docs/community.md" — that is where `node run.mjs update` keeps it current. ' +
+      "A page under modules/ freezes with the code and can never be brought forward");
   }
   if (m.skill !== undefined && (typeof m.skill !== "string" || !ID.test(m.skill))) {
     say('"skill" must be the name of a skill in .claude/skills/, e.g. "community" — it is the ' +

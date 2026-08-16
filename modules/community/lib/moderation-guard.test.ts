@@ -1476,9 +1476,15 @@ describe("the block is derived and recorded, never stored", () => {
 
   it("guards every WRITE path and no read path", () => {
     const guards = MANAGE.match(/guardSendBlock\(/g) ?? [];
-    // The definition plus the four send paths: start a thread, reply, reply in
-    // an embed, send a private message.
-    expect(guards.length).toBeGreaterThanOrEqual(5);
+    // The definition plus the FIVE write paths: start a thread, reply, reply in
+    // an embed, open a private conversation, send a private message.
+    //
+    // ⚠️ Opening a conversation was outside this count for a long time, and the
+    // count could not see that — it asks how many callers there are, never
+    // whether the set is complete. What closes that gap is the required `act`
+    // parameter on `guardSendBlock()`: a write path that forgets the guard is
+    // still invisible here, but one that calls it wrongly is a type error.
+    expect(guards.length).toBeGreaterThanOrEqual(6);
 
     // Blocked means silenced, never blinded — no reader asks.
     for (const reader of [

@@ -202,11 +202,13 @@ git tracks and reports bidirectional overrides (the Trojan Source trick — a
 host or a condition rendered as its own opposite), Unicode tag characters
 (U+E0000–U+E007F, which mirror ASCII invisibly and which several models decode
 and follow) and runs of zero-width. It matters here rather than in general
-because three doors write somebody else's text into files an agent then reads
-as INSTRUCTION — `module add --from`, `node run.mjs update`, and the corpus
-`knowledge-intake` distils into `content/knowledge/` for the model's system
-block. A review is the control on all three, and this class of character is
-what defeats a review. A finding in `CLAUDE.md`, `docs/`, `.claude/skills/` or
+because two doors write somebody else's text into files an agent then reads
+as INSTRUCTION — `node run.mjs update`, and the corpus `knowledge-intake`
+distils into `content/knowledge/` for the model's system block. A review is the
+control on both, and this class of character is what defeats a review. (There
+was a third, `module add --from`; that channel is gone, and the rung is not
+narrowed for it — a character pasted into any tracked file is the same finding.)
+A finding in `CLAUDE.md`, `docs/`, `.claude/skills/` or
 `content/` is rated one step worse than the same character in code, for that
 reason. Needs template 0.32.0.
 

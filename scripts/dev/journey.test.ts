@@ -128,13 +128,13 @@ const daysAgo = (days: number) => new Date(NOW - days * 24 * 60 * 60 * 1000).toI
 // ── The list is readable at all ─────────────────────────────────────────────
 
 describe("the journey is readable at all", () => {
-  it("has thirty-one rows in six phases", () => {
+  it("has thirty-two rows in six phases", () => {
     // Non-vacuity. Everything below filters `rows`, and a filter over an empty
     // list satisfies almost any assertion anybody writes about it.
     //
-    // Thirty skills plus ONE row that names no skill — phase 1's own deliverable,
+    // Thirty-one skills plus ONE row that names no skill — phase 1's own deliverable,
     // `docs/plan.md`, written by `build-app` step 1f or `market-research` phase 5.
-    expect(JOURNEY.length).toBe(31);
+    expect(JOURNEY.length).toBe(32);
     expect(PHASES.map((phase) => phase.id)).toEqual([
       "voraussetzung",
       "planen",
@@ -793,7 +793,14 @@ describe("a row that needs a module", () => {
   it("blocks nothing that needs no module", () => {
     const state = journeyState(facts({ modules: [] }));
     const blocked = state.rows.filter((row) => row.state === "blocked").map((row) => row.skill);
-    expect(blocked).toEqual(["courses", "learning-activities", "community", "ai-companion", "mobile-companion"]);
+    expect(blocked).toEqual([
+      "courses",
+      "learning-activities",
+      "community",
+      "ai-companion",
+      "mobile-companion",
+      "metrics",
+    ]);
   });
 });
 

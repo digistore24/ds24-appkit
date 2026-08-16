@@ -144,15 +144,24 @@ deploy IS the incident response. While you are in the file, leave the brakes
 alone unless asked; an unknown key or an out-of-range value there switches the
 **whole module** off until the next deploy.
 
-⚠️ **Two blocks in that file are about spam and both ship OFF — mention them
-once and move on unless the user asks.** `weighting` makes a report from a
-long-standing paying member weigh more than one from an account made this
+⚠️ **Three blocks in that file are about spam. Two ship OFF, one ships ON —
+mention them once and move on unless the user asks.** `weighting` makes a report
+from a long-standing paying member weigh more than one from an account made this
 morning; `postHide` takes a reported post off the page automatically while it
 waits to be judged. Neither is needed to open a community, and switching either
 on is a decision about how the rooms are policed rather than about whether they
 exist. What they do, and the two floors no setting can configure away, is
 [`docs/community.md`](../../../docs/community.md) → *The spam loop*.
 Needs template 0.31.0.
+
+🚨 **The third is `newMember`, and it is the one that is already on.** Those two
+are reactive — somebody has to be bothered and report — and that is enough only
+where a purchase is the price of entry. `newMember` limits an account that is
+new **and** holds no purchased access, which in an app selling access to its
+community is nobody, and in one with an `open` room is everybody at the door.
+Leave it alone unless the user asks; if they do, or if this app will have an open
+room, the section is [`docs/community.md`](../../../docs/community.md) → *The
+floor under a free room*. Needs template 0.34.0.
 
 **c. The rooms — created in the RUNNING app, not in code.** Start the app
 (`node run.mjs start`) and create them at `/dashboard/admin/community` as the
@@ -219,6 +228,14 @@ never a billing table.
 - **`open`** — every active member. **This is first-class, not a missing
   gate.** A membership product's main room is usually open, and dressing it up
   in a plan key nobody checks is worse than saying "everybody who is in".
+  ⚠️ **It is also the one level with no floor under it**, because an account on
+  this template costs a typed address and everything else in the spam machinery
+  waits for somebody to complain. The shipped answer is `newMember` in
+  `config/community.json` — on out of the box, invisible to anybody who has
+  bought something. Before you create the first open room, read
+  `docs/community.md` → *The floor under a free room*, and say to the operator in
+  one sentence what it does and what it does not (it delays an abusive signup, it
+  does not make one expensive). Needs template 0.34.0.
 - **`plan`** — product keys from `config/digistore-products.json`. 🚨 **Never
   invent a key.** They are validated when the group is saved
   (`groupPlanProblems()`) because `hasPlan()` **throws** on a key it does not
@@ -278,6 +295,21 @@ Four hunts, in this order. Each says what it reads.
    as its operator and LOOK — or have the operator look and report back. Do the
    same for the member's `/dashboard/community`. 🚨 CRITICAL on an empty
    deployed community for an app that sells one.
+5. **The free room with no floor.** Read `config/community.json`: does any group
+   have `accessLevel: "open"` (check `/dashboard/admin/community`), and does
+   `newMember.enabled` say `true`? Everything else in this module's spam
+   machinery is reactive — somebody must be bothered and report first — and in a
+   room where an account costs one typed address that loop needs a victim before
+   it starts. ❌ HIGH on an open room with `newMember` switched off and an
+   operator who did not decide that. ℹ️ if every room is gated on a plan: the
+   grace exempts anybody with a live purchase, so it never fires there and the
+   setting is moot. While you are in the file, say what the other two are for —
+   an app with open rooms usually wants `weighting` and `postHide` on as well,
+   and `docs/community.md` → *The floor under a free room* carries the block to
+   copy and the two warnings that go with it.
+   ⚠️ Say the limit out loud rather than selling it: this raises the LATENCY of
+   an abusive signup, not its cost. Accounts made today and used on Wednesday
+   walk through. Needs template 0.34.0.
 
 Findings in the house shape (🚨/❌/⚠️/ℹ️ · Where · Why · Fix · Evidence), and
 the verdict goes dated into `docs/reports/` **every time** — a solo `check`

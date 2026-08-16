@@ -228,3 +228,55 @@ export const LOOKUP_ORIGIN_LIMIT: Limit = {
 
 /** The bucket for origin-keyed lookups. */
 export const LOOKUP_ORIGIN_BUCKET = "sign-in-lookup:origin";
+
+// --- Mailing a sign-in link --------------------------------------------------
+//
+// The limits above meter an ANSWER — a lookup that reads the database and hands
+// something back. These meter an ACT with a cost outside the app: a mail leaves
+// the operator's sending domain, addressed to whoever typed the form.
+//
+// It is the same act lib/email-change/rules.ts already bounds, and the sentence
+// there is the one that applies here too — "a way to mail a stranger repeatedly
+// from the operator's own verified sending domain, which costs the operator
+// their sender reputation, not just the stranger their patience." The
+// difference is that this door is OPEN: nobody is signed in, so there is no
+// account counter to lean on and no `requireActiveUser()` behind it.
+//
+// ⚠️ These do not stop an account being created — a magic link creates nothing
+// until somebody clicks it, which docs/auth-setup.md → "Creating the
+// operator/admin account" says in as many words. What they protect is
+// deliverability, which no restart brings back.
+
+/**
+ * Per address, three an hour — CONFIRMATION_LIMIT in lib/email-change/rules.ts
+ * unchanged, because it is the same act with the same cost. A person whose mail
+ * is slow asks twice; a third within the hour is already generous.
+ */
+export const LINK_SEND_LIMIT: Limit = {
+  max: 3,
+  windowMs: 60 * 60 * 1000,
+};
+
+/** Hits against the address a link would be mailed to. */
+export const LINK_SEND_BUCKET = "sign-in-link";
+
+/**
+ * Per origin — and here, unlike the lookup pair, this is not the half that does
+ * the work but the half that catches the OTHER shape.
+ *
+ * Varying the address on every request never lets the per-address counter fire,
+ * and that is precisely the shape worth having: a script does not want three
+ * mails to one person, it wants one mail to three hundred. The full reasoning,
+ * including the part about a distributed attempt walking past it, is at
+ * SIGN_IN_ORIGIN_LIMIT above and holds here unchanged.
+ *
+ * Twenty an hour rather than sixty: this is mail, not a database read, and an
+ * office behind one NAT does not sign in twenty times in an hour by mail.
+ */
+export const LINK_SEND_ORIGIN_LIMIT: Limit = {
+  max: 20,
+  windowMs: 60 * 60 * 1000,
+};
+
+/** The bucket for origin-keyed link sends. */
+export const LINK_SEND_ORIGIN_BUCKET = "sign-in-link:origin";

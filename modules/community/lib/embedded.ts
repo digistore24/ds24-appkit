@@ -8,7 +8,7 @@ import { findEmbed } from "./embeds";
 import { CommunityError, canParticipate, checkPostContent, mayViewEmbed, planKeysToResolve } from "./rules";
 
 import { grantedKeysFor } from "./_access";
-import { guardSendBlock } from "./_blocks";
+import { guardGraceLinks, guardSendBlock } from "./_blocks";
 import { PostImageUpload, attachPostImages, discardPostImages, judgePostImages, storePostImages } from "./_post-images";
 import { participationProfile } from "./profiles";
 import { PostRow, guardPostRate, postsFor, releaseRateOnFailure } from "./talk";
@@ -207,7 +207,7 @@ export async function addEmbeddedPost(
   if (denial) throw new CommunityError(denial);
 
   // The fourth send path — an embed is a place to write like any other.
-  await guardSendBlock(viewer.memberId);
+  await guardSendBlock(viewer.memberId, "post");
 
   // A lock is a property of the row, so it can only exist once the row does —
   // an embed nobody has posted in yet is not locked, it is empty. This is an
@@ -218,6 +218,7 @@ export async function addEmbeddedPost(
 
   const content = checkPostContent(input.content);
   if (!content.ok) throw new CommunityError(content.code);
+  await guardGraceLinks(viewer.memberId, content.content);
   const pictures = judgePostImages(input);
 
   guardPostRate(viewer.memberId);

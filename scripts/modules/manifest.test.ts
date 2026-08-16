@@ -146,14 +146,20 @@ describe("a coherent manifest passes", () => {
     ).toEqual([]);
   });
 
-  it("accepts a docs page inside the module — the form a foreign module uses", () => {
-    // Our own five point into `docs/`, where `node run.mjs update` keeps them
-    // current. A module this template did not write has no page there and never
-    // could: we cannot ship a doc about a module we have never heard of. It
-    // ships its own, and the update channel never touches it because the file
-    // is in neither manifest.
-    expect(manifestProblems(broken({ docs: "modules/community/docs.md" }), WHERE)).toEqual([]);
-    expect(manifestProblems(broken({ docs: "modules/community/docs/guide.md" }), WHERE)).toEqual([]);
+  it("🚨 refuses a docs page inside the module — the form a foreign module used", () => {
+    // This was LEGAL until `module add --from <url>` was removed. It existed
+    // because a module this template had never heard of could have no page in
+    // `docs/` — and with no way for such a module to arrive, the exception has
+    // no case left. What it costs to allow is the whole point of the rule:
+    // `node run.mjs update` addresses guidance by PATH, so a page under
+    // `modules/` freezes with its code while the rest of the app's guidance
+    // moves on, and no released app could ever bring it forward.
+    expect(manifestProblems(broken({ docs: "modules/community/docs.md" }), WHERE).join(" ")).toMatch(
+      /"docs"/,
+    );
+    expect(
+      manifestProblems(broken({ docs: "modules/community/docs/guide.md" }), WHERE).join(" "),
+    ).toMatch(/"docs"/);
   });
 
   it("refuses a docs path that points into ANOTHER module, or out of the tree", () => {

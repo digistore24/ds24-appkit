@@ -24,8 +24,22 @@ export interface SignInFormState {
    * Referer header and every access log in front of the app.
    */
   email: string;
-  /** A key under `login.*`, or null. Translated in ui.tsx, never in an action. */
-  error: "passwordFailed" | "noWayIn" | "tooManyAttempts" | "signInFailed" | null;
+  /**
+   * A key under `login.*`, or null. Translated in ui.tsx, never in an action.
+   *
+   * ⚠️ `tooManyAttempts` and `tooManyLinks` are two codes on purpose, not one
+   * tidied into the other. The first is about ADDRESSES being checked and its
+   * sentence says "wait a few minutes"; the second is about MAIL and its window
+   * is an hour. Collapsing them would tell somebody to wait five minutes for a
+   * counter that will not move for sixty.
+   */
+  error:
+    | "passwordFailed"
+    | "noWayIn"
+    | "tooManyAttempts"
+    | "tooManyLinks"
+    | "signInFailed"
+    | null;
 }
 
 export const INITIAL_SIGN_IN_STATE: SignInFormState = {

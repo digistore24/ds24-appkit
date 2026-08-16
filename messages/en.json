@@ -103,6 +103,8 @@
     "noWayInBody": "This address has no password, and no email delivery is set up — so there is nothing this sign-in could be confirmed with. Get in touch with the operator.",
     "tooManyAttemptsTitle": "Too many attempts",
     "tooManyAttemptsBody": "Too many addresses were checked in quick succession. Wait a few minutes and then try again.",
+    "tooManyLinksTitle": "Too many links requested",
+    "tooManyLinksBody": "Several sign-in links have just been sent to this address. Check your inbox first — the spam folder too. You can request a new one in about an hour.",
     "signInFailedTitle": "Sign-in failed",
     "signInFailedBody": "The sign-in could not be completed. Try again — if it keeps happening, get in touch with the operator."
   },

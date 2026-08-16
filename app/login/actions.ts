@@ -27,7 +27,7 @@ import { routeForSignIn } from "@/lib/auth/sign-in-route";
 import { originOf } from "@/lib/auth/password-login";
 import { isDevLoginActive } from "@/lib/auth/dev-login";
 import { isEmailLoginEnabled } from "@/lib/email";
-import { addressHasPassword } from "@/lib/credentials/manage";
+import { addressHasPassword, mayMailSignInLink } from "@/lib/credentials/manage";
 import { normaliseEmail } from "@/lib/credentials/rules";
 import type { SignInFormState } from "./state";
 
@@ -80,7 +80,21 @@ async function lookUp(email: string): Promise<SignInFormState> {
   }
 }
 
+/**
+ * Step 2's "mail me a link instead" — and step 1's fall-through to it.
+ *
+ * 🚨 **Metered, and this is the door that used to be open.** `lookUp()` pays
+ * LOOKUP_LIMIT for the ANSWER it gives; this path gives no answer, so for a
+ * while it paid nothing — and `intent === "link"` reaches it from the form
+ * directly, without step 1. Posting that submit in a loop mailed anybody, as
+ * often as anybody liked, from the operator's own sending domain. The counter
+ * belongs HERE rather than one level down in `signIn`, because both ways in
+ * pass through this function and neither reaches the other.
+ */
 async function sendLink(email: string): Promise<SignInFormState> {
+  if (!(await mayMailSignInLink(email, await currentOrigin()))) {
+    return { step: "email", email, error: "tooManyLinks" };
+  }
   // Auth.js sends the mail and then redirects to its own verify-request page —
   // the same call, and the same outcome, as before this dialog had two steps.
   return handOver(email, () => signIn("email", { email, redirectTo: "/dashboard" }));

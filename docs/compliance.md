@@ -101,7 +101,7 @@ later matter.
 | Restriction | 18 | blocking the account; otherwise by hand |
 | Portability (machine-readable) | 20 | the same JSON export |
 | Objection | 21 | relevant once you add anything on legitimate interest |
-| No automated decision alone | 22 | ⚠️ the core makes none. **The `community` module does**: reports silence a member's writing automatically, weighted when switched on. Writing only, never reading; nothing stored; a human lifts it. `data-protection.md` §15 |
+| No automated decision alone | 22 | ⚠️ the core makes none. **The `community` module makes TWO**: reports silence a member's writing automatically (weighted when switched on), and the `newMember` grace limits a new unpaid account for a window — that one ships **on** and needs no report at all. Both: writing only, never reading; nothing stored; a human lifts either. `data-protection.md` §15 |
 
 **You have one month** (Art. 12(3)), extendable by two with reasons.
 

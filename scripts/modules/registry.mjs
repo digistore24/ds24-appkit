@@ -317,12 +317,13 @@ export function loadModules(root = ROOT, ids = installedModules(root)) {
  * 🚨 **These are invisible inside a single manifest and fatal across two**, which
  * is why they live above `manifestProblems()` rather than in it.
  *
- * Lifted out of `loadModules()` so that `module verify` can ask the SAME
- * question of a candidate before a byte of it reaches the app tree. Two callers,
- * one rule set: a second implementation here would be two opinions about
- * whether an arrangement is legal, and the one nobody runs is the one that
- * rots. `loadModules()` still throws on the first entry, with the message
- * unchanged.
+ * Separate from `loadModules()` because the two want different shapes of the
+ * same answer: this returns EVERY clash, `loadModules()` throws on the first.
+ * It had a second caller — `module verify`, which asked it of a candidate
+ * before a byte reached the tree — and that command went with the
+ * `module add --from` channel. One rule set either way: a second
+ * implementation would be two opinions about whether an arrangement is legal,
+ * and the one nobody runs is the one that rots.
  *
  * @param {ModuleRecord[]} records
  * @returns {string[]}
@@ -389,8 +390,10 @@ export function crossModuleProblems(records) {
   ]);
   // The switch file lives in the core's `config/`, so two modules naming the
   // same one would share an on/off switch — and `boundary.test.ts` §1c would
-  // then hold ONE file against two reasons. Unreachable between our own five
-  // and cheap to state; a module from outside is the caller this is for.
+  // then hold ONE file against two reasons. Unreachable between the modules
+  // that ship today and cheap to state: the next one added here is the caller
+  // this is for, and a clash it caught would otherwise surface as one module
+  // silently switching another off.
   clash("a switch file", (r) =>
     typeof r.manifest.config === "string" ? [r.manifest.config] : [],
   );

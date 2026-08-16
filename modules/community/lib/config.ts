@@ -89,6 +89,24 @@ export interface CommunityConfig {
    * mechanism would be unreachable.
    */
   postHide: { enabled: boolean; threshold: number };
+  /**
+   * The floor under a FREE room. Ships **on** — the only block here that does.
+   *
+   * Everything else in this file is reactive: somebody must be bothered and
+   * report before anything happens. That is enough where a purchase is the
+   * price of entry, and it is nothing at all in a room whose `accessLevel` is
+   * `open`, where an account costs one typed address. This is the cost on the
+   * first act rather than the answer to the tenth. The arithmetic is
+   * `graceLimitsFor()` in `rules.ts`.
+   */
+  newMember: {
+    enabled: boolean;
+    graceHours: number;
+    maxPostsPerDay: number;
+    /** `0` = no links at all while the grace lasts. A real value, not "off". */
+    maxLinksPerPost: number;
+    maxDmsPer10Min: number;
+  };
   /** How long private messages are kept. `0` means: until the account goes. */
   dmRetentionMonths: number;
   live: { visibleSeconds: number; hiddenSeconds: number };
@@ -183,6 +201,44 @@ export const DEFAULT_COMMUNITY_CONFIG: CommunityConfig = {
   // post invisible until a moderator opens the list. An operator who weighs
   // that differently writes 3.
   postHide: { enabled: false, threshold: 2 },
+  // ── The grace on a new account, and it ships ON ─────────────────────────
+  // 🚨 **The one block in this file that is on out of the box, and the
+  // inversion that comes with it is the thing to be careful about.** Every
+  // other switch here reads `=== true`, because "unreadable" must resolve to
+  // the closed direction and closed means off. Here the brake IS the closed
+  // direction, so this one reads `!== false` — the same shape of trap
+  // `dmRetentionMonths` below warns about, from the other side. A value that
+  // is not a boolean is still REPORTED and still switches the community off;
+  // the coercion only decides what the resolved value is while somebody reads
+  // the sentence.
+  //
+  // Why on: a switch that ships off measures nothing and is never found. The
+  // two above can afford it because they change who gets SILENCED, and an
+  // operator who updates and changes nothing is owed no surprise there. This
+  // one changes nothing for anybody who has paid — `graceLimitsFor()` exempts
+  // a live purchase grant before it looks at the clock — so in an app that
+  // sells access to its community it is invisible by construction, and in one
+  // that gives a room away for nothing it is the only thing standing at the
+  // door.
+  //
+  // 48 hours because it is the shape of the attack rather than a punishment:
+  // a farm's value is in posting NOW, and a spammer willing to wait two days
+  // per account is paying a cost this template never charged before. Five
+  // posts a day is above what a person finding their feet writes and far
+  // below a flood. No links at all is the sharpest of the three and the
+  // cheapest to be wrong about: somebody with something to link to on their
+  // first evening can say so in words, and the grace is over by Thursday.
+  //
+  // ⚠️ It raises the LATENCY of an attack, not its cost. Twenty accounts made
+  // today and used on Wednesday walk straight through, and `docs/community.md`
+  // says so where it says the same about the send-block.
+  newMember: {
+    enabled: true,
+    graceHours: 48,
+    maxPostsPerDay: 5,
+    maxLinksPerPost: 0,
+    maxDmsPer10Min: 3,
+  },
   // ── OQ-3, decided here (2026-08-06): retention ships OFF ─────────────────
   // `0` means private messages are kept until the account that wrote them is
   // deleted, and nothing prunes them by age out of the box.
@@ -306,6 +362,44 @@ function postImagesMax(value: unknown): number {
   if (value < 1 || value > MAX_POST_IMAGES) return fallback;
   return value;
 }
+
+/**
+ * How many links a member still in their grace may put in one post — or 0.
+ *
+ * ⚠️ **Zero is the shipped value and a real one, so `count()` is the wrong
+ * helper** for exactly the reason spelled out at `postImagesMax()` above: it
+ * refuses anything below one. The direction is the same as there and not as
+ * `dmRetentionMonths` — zero and the fallback both point towards LESS — so an
+ * unreadable value resolves to the shipped 0 and there is no inversion here to
+ * be careful about. The inversion in this block is `enabled`, and it is
+ * commented where it lives.
+ */
+function graceLinksMax(value: unknown): number {
+  const fallback = DEFAULT_COMMUNITY_CONFIG.newMember.maxLinksPerPost;
+  if (value === undefined) return fallback;
+  if (typeof value !== "number" || !Number.isInteger(value)) return fallback;
+  if (value === 0) return 0;
+  if (value < 1 || value > MAX_GRACE_LINKS) return fallback;
+  return value;
+}
+
+/**
+ * The ceiling on the grace itself: 720 hours, a month.
+ *
+ * Past that it is not a grace period but a second class of membership, and a
+ * member who has been reading for five weeks without being allowed to answer
+ * has been told something the operator did not mean to say.
+ */
+const MAX_GRACE_HOURS = 720;
+
+/**
+ * And on the links: ten.
+ *
+ * Same kind of number as `MAX_POST_IMAGES` — a bound on what the setting can
+ * mean, not on what a post can hold. Ten links in one post by a two-day-old
+ * account is not a contribution anybody is protecting.
+ */
+const MAX_GRACE_LINKS = 10;
 
 /** The upper bound on the posting limit — see `count()`. */
 const MAX_POSTS_PER_10_MIN = 1000;
@@ -539,6 +633,34 @@ export function communityConfig(): CommunityConfig {
           : DEFAULT_COMMUNITY_CONFIG.postHide.threshold;
       })(),
     },
+    newMember: (() => {
+      const block = blockObject(file, "newMember");
+      const shipped = DEFAULT_COMMUNITY_CONFIG.newMember;
+      return {
+        // 🚨 **`!== false`, and it is the only one in this file.** Everywhere
+        // else an unreadable `enabled` resolves to off, because off is the
+        // closed direction. Here the brake is the closed direction, so an
+        // unreadable value must resolve to ON. Writing `=== true` here would
+        // typecheck, pass every test that sets the field explicitly, and quietly
+        // take the floor out from under every app whose operator fat-fingered
+        // one character — which is the failure this whole block exists to
+        // prevent. It is still REPORTED: `communityConfigProblems()` names a
+        // non-boolean and the community goes off until the next deploy.
+        enabled: block.enabled !== false,
+        graceHours: count(block.graceHours, shipped.graceHours, MAX_GRACE_HOURS),
+        maxPostsPerDay: count(
+          block.maxPostsPerDay,
+          shipped.maxPostsPerDay,
+          MAX_POSTS_PER_10_MIN,
+        ),
+        maxLinksPerPost: graceLinksMax(block.maxLinksPerPost),
+        maxDmsPer10Min: count(
+          block.maxDmsPer10Min,
+          shipped.maxDmsPer10Min,
+          MAX_MESSAGES_PER_10_MIN,
+        ),
+      };
+    })(),
     // ⚠️ Its own coercion, because `count()` refuses zero and zero is this
     // field's whole OFF state. Everything else falls to the default — which
     // is off — so a typo keeps data rather than deleting it.
@@ -961,7 +1083,58 @@ export function communityConfigProblems(): string[] {
     );
   }
 
-  // ── The one CROSS-block rule in this file, beside `live` ─────────────────
+  // ── The grace on a new account ───────────────────────────────────────────
+  // Reported exactly like its neighbours even though the resolution is the
+  // other way round: a non-boolean `enabled` still resolves to ON (see the
+  // block in `communityConfig()`), and it still lands here, so an operator who
+  // wrote `"enabled": "false"` meaning to switch the floor off is TOLD rather
+  // than left believing they did.
+  if (
+    typeof file.newMember === "object" &&
+    file.newMember !== null &&
+    !Array.isArray(file.newMember)
+  ) {
+    const block = blockObject(file, "newMember");
+    if (block.enabled !== undefined && typeof block.enabled !== "boolean") {
+      problems.push('"newMember.enabled" must be true or false');
+    }
+    const bounded: [string, unknown, number, number][] = [
+      ["graceHours", block.graceHours, 1, MAX_GRACE_HOURS],
+      ["maxPostsPerDay", block.maxPostsPerDay, 1, MAX_POSTS_PER_10_MIN],
+      // The only one whose floor is zero — "no links at all" is the shipped
+      // value and a decision, not an off state.
+      ["maxLinksPerPost", block.maxLinksPerPost, 0, MAX_GRACE_LINKS],
+      ["maxDmsPer10Min", block.maxDmsPer10Min, 1, MAX_MESSAGES_PER_10_MIN],
+    ];
+    for (const [name, value, min, max] of bounded) {
+      if (
+        value !== undefined &&
+        (typeof value !== "number" ||
+          !Number.isInteger(value) ||
+          value < min ||
+          value > max)
+      ) {
+        problems.push(
+          `"newMember.${name}" must be a whole number between ${min} and ${max}`,
+        );
+      }
+    }
+    for (const key of Object.keys(block)) {
+      if (key.startsWith("_")) continue;
+      if (!Object.hasOwn(DEFAULT_COMMUNITY_CONFIG.newMember, key)) {
+        problems.push(
+          `unknown field "newMember.${key}" — this block only reads: ` +
+            Object.keys(DEFAULT_COMMUNITY_CONFIG.newMember).join(", "),
+        );
+      }
+    }
+  } else if (file.newMember !== undefined) {
+    problems.push(
+      '"newMember" must be an object, e.g. { "enabled": true, "graceHours": 48 }',
+    );
+  }
+
+  // ── The CROSS-block rules in this file, beside `live` ────────────────────
   // 🚨 A post lock that fell later than the member's send-block would be dead
   // code: by the time enough weight had gathered to hide the post, the author
   // could no longer write anyway. Neither number is wrong on its own, which is
@@ -982,6 +1155,35 @@ export function communityConfigProblems(): string[] {
         `"sendBlock.threshold" (${resolved.sendBlock.threshold}) — the post lock would ` +
         "never be reached, because its author would already be silenced",
     );
+  }
+
+  // 🚨 Two of the same shape, one block over: the grace claims to be TIGHTER
+  // than what an established member gets. A grace looser than the ordinary
+  // brake is not a mild misconfiguration — it is a sentence in
+  // `docs/community.md` that has stopped being true, and the operator would
+  // read the block, believe there is a floor, and have none. Neither number is
+  // wrong alone, which is why nothing but a pair rule can see it.
+  //
+  // `maxPostsPerDay` against `maxPer10Min` compares a day with ten minutes and
+  // is therefore generous by construction — deliberately. It is not trying to
+  // be an exact conversion; it catches the case where the two numbers say the
+  // opposite of what the block promises, and a rule that guessed at the
+  // conversion would refuse configurations that are perfectly coherent.
+  if (resolved.newMember.enabled) {
+    if (resolved.newMember.maxPostsPerDay > resolved.posting.maxPer10Min) {
+      problems.push(
+        `"newMember.maxPostsPerDay" (${resolved.newMember.maxPostsPerDay}) must not be ` +
+          `higher than "posting.maxPer10Min" (${resolved.posting.maxPer10Min}) — ` +
+          "a new account would be allowed more in a day than anybody else in ten minutes",
+      );
+    }
+    if (resolved.newMember.maxDmsPer10Min > resolved.messaging.maxPer10Min) {
+      problems.push(
+        `"newMember.maxDmsPer10Min" (${resolved.newMember.maxDmsPer10Min}) must not be ` +
+          `higher than "messaging.maxPer10Min" (${resolved.messaging.maxPer10Min}) — ` +
+          "the grace would be looser than the ordinary brake it is meant to tighten",
+      );
+    }
   }
 
   // ── The DM retention window ──────────────────────────────────────────────

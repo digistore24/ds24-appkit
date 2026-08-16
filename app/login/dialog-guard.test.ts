@@ -47,6 +47,19 @@ function formCount(code: string): number {
   return [...stripComments(code).matchAll(/<form[\s>]/g)].length;
 }
 
+/**
+ * The message keys `SignInFormState.error` can hold, read off its declaration.
+ *
+ * Comments are blanked first for the usual reason — state.ts explains its own
+ * codes in prose, and a quoted name in an explanation is not a member of the
+ * union. `null` is dropped: it is the absence of a message, not one.
+ */
+function refusalCodes(code: string): string[] {
+  const union = /\berror\s*:([^;]*);/.exec(stripComments(code));
+  if (!union) return [];
+  return [...union[1].matchAll(/"([A-Za-z]+)"/g)].map((match) => match[1]);
+}
+
 describe("the sign-in dialog", () => {
   it("counts forms rather than prose — the counter itself", () => {
     // Non-vacuity check. Without it, a `formCount` that silently returned 0 for
@@ -101,6 +114,14 @@ describe("the sign-in dialog", () => {
 describe("the sign-in messages", () => {
   const locales = { de, en } as Record<string, { login: Record<string, string> }>;
 
+  it("reads the union rather than prose — the parser itself", () => {
+    expect(refusalCodes(`error: "a" | "b" | null;`)).toEqual(["a", "b"]);
+    expect(refusalCodes(`error:\n | "a"\n | null;`)).toEqual(["a"]);
+    // A code named only in an explanation is not a member of the union.
+    expect(refusalCodes(`/* "ghost" */\nerror: "a" | null;`)).toEqual(["a"]);
+    expect(refusalCodes("nothing here")).toEqual([]);
+  });
+
   it("has no key left over from the one-step form", () => {
     // The parity test next door fails on a key missing from ONE locale. A key
     // present in both and used by nobody is invisible to it, so retired copy
@@ -117,7 +138,16 @@ describe("the sign-in messages", () => {
     // These are looked up as `t(`${state.error}Title`)`, which no static check
     // can follow — a missing one surfaces as a rendered key path in front of
     // whoever just failed to sign in.
-    const errors = ["passwordFailed", "noWayIn", "tooManyAttempts", "signInFailed"];
+    //
+    // 🚨 **Read off state.ts rather than typed out here.** A hand-kept list is
+    // the shape that goes quiet exactly when it matters: whoever adds a code to
+    // the union ships it, both locales stay green because nobody asked about
+    // the new one, and the first person to meet it sees `login.xTitle` on
+    // screen. The union is the register; this reads it.
+    const errors = refusalCodes(source("app/login/state.ts"));
+    // Non-vacuity: a parse that silently returned [] would pass everything.
+    expect(errors.length).toBeGreaterThanOrEqual(5);
+    expect(errors).toContain("tooManyLinks");
     for (const [locale, messages] of Object.entries(locales)) {
       for (const error of errors) {
         expect(messages.login[`${error}Title`], `${locale}: ${error}Title`).toBeTruthy();

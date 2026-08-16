@@ -12,12 +12,9 @@
 //
 // ── Why this is a question for THIS app ────────────────────────────────────
 //
-// Three doors in this template carry text from a stranger into the tree an
+// Two doors in this template carry text from a stranger into the tree an
 // agent reads as instruction:
 //
-//   `node run.mjs module add --from https://…`  copies somebody else's module
-//        in AS YOUR CODE — CLAUDE.md says so in as many words: it "runs with
-//        your code's access although nobody read it".
 //   `node run.mjs update`                       fetches guidance text and
 //        writes it over `CLAUDE.md`, `docs/*.md` and `.claude/skills/**`.
 //   the skill `knowledge-intake`                distils third-party ebooks,
@@ -173,8 +170,8 @@ export const INVISIBLE_RULES = [
       "Delete them. Nothing in a source tree has a legitimate reason to carry one, " +
       "with the single exception of a subdivision flag emoji (U+1F3F4 followed by " +
       "tag letters), which this rule already leaves alone. If the file came from " +
-      "somewhere else — a module added with `module add --from`, a fetched " +
-      "guidance file — treat the whole file as unread and read it.",
+      "somewhere else — a fetched guidance file, a pasted-in document — treat " +
+      "the whole file as unread and read it.",
   },
   {
     id: "bidi",

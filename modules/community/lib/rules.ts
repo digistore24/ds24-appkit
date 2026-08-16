@@ -241,6 +241,27 @@ export const COMMUNITY_ERROR_CODES = [
    * the two states mean opposite things. The operator says which one they meant.
    */
   "communityStandingConflict",
+  /**
+   * A new account has written as much as its grace allows for today.
+   *
+   * ⚠️ **Its own code rather than `communityPostRateLimited`.** The two are
+   * different sentences about different situations: the rate limit is a brake
+   * everybody meets and forgets in ten minutes, this one is a state that lasts
+   * a day and ends by itself. Somebody told "wait a moment" when the answer is
+   * "tomorrow" will sit there pressing the button.
+   */
+  "communityNewMemberPostLimit",
+  /**
+   * A new account tried to put more links in a post than its grace allows —
+   * shipped as none at all.
+   *
+   * The state is the reader's OWN, so the sentence may say plainly what it is
+   * and when it ends. That is the same distinction `communityWriteBlocked`
+   * makes against `communityNotDeliverable`: a refusal blurs its cause only
+   * when naming it would expose a THIRD party's decision, and there is no third
+   * party here.
+   */
+  "communityNewMemberNoLinks",
 ] as const;
 
 export type CommunityErrorCode = (typeof COMMUNITY_ERROR_CODES)[number];
@@ -253,12 +274,12 @@ export class CommunityError extends Error {
    * mistyped. The delivery layer passes it straight into `t(code, detail)`;
    * it never contains anything a member typed, and never anything private.
    */
-  readonly detail: Record<string, string> | undefined;
+  readonly detail: Record<string, string | number> | undefined;
 
   constructor(
     code: CommunityErrorCode,
     message?: string,
-    detail?: Record<string, string>,
+    detail?: Record<string, string | number>,
   ) {
     // The message IS the code — it belongs in logs, not in front of people.
     super(message ?? code);
@@ -1920,6 +1941,159 @@ export function postHideState(input: {
     return none;
   }
   return { hidden: true, weight, reporterIds: seen };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// The grace — the floor under a room that costs nothing to enter
+// ───────────────────────────────────────────────────────────────────────────
+//
+// 🚨 **The third derivation in this file, and the only one that acts before
+// anybody has complained.** The send-block and the post lock both need a
+// report: somebody has to be bothered first, and in a room where entry costs a
+// typed address that is a loop an attacker enters at their own pace. This one
+// asks a question nobody has to be harmed to answer — how long has this account
+// existed, and has it paid for anything?
+//
+// **Derived, never stored** — the same choice as the weight next door and for
+// the same reasons. There is no marker on the account, no counter, no expiry
+// row; the state stops being true the moment `graceHours` elapses or a purchase
+// lands, without anybody running anything. `docs/data-protection.md` §14g says
+// so explicitly, because the tempting shape here is a reputation column.
+//
+// ⚠️ **What it buys is LATENCY, not cost.** Twenty accounts created today and
+// used on Wednesday walk through untouched. That is the same residual the
+// send-block has, written down in the same place, and it is the reason a higher
+// wall means identity verification — a product, not a knob.
+
+/** The `newMember` block of `config/community.json`, as the rules see it. */
+export interface NewMemberLimits {
+  enabled: boolean;
+  graceHours: number;
+  maxPostsPerDay: number;
+  maxLinksPerPost: number;
+  maxDmsPer10Min: number;
+}
+
+/** What still binds a writer who is inside their grace. */
+export interface GraceLimits {
+  maxPostsPerDay: number;
+  maxLinksPerPost: number;
+  maxDmsPer10Min: number;
+  /** Whole hours left, for the sentence. Never a countdown to the minute. */
+  hoursLeft: number;
+}
+
+/**
+ * Is this member still inside their grace, and what binds them if so?
+ *
+ * `null` means nothing does — and the five ways to get there are the whole
+ * design, in this order:
+ *
+ *  1. **The block is off.** An operator's decision, honoured first.
+ *  2. **A role-holder.** Same exemption as `sendBlockState()` and
+ *     `postHideState()`: a community whose own moderators are throttled on
+ *     their first day has handed itself to whoever organises fastest.
+ *  3. **Protected.** The operator's whitelist — the row that already overrides
+ *     the automatic block. 🚨 It is not decoration here: it is the human
+ *     override that makes this an automated restriction somebody can lift, and
+ *     `docs/data-protection.md` leans on exactly that.
+ *  4. **They have paid.** One live purchased grant is enough, and this is the
+ *     sentence the whole decision to ship this ON rests on — in an app that
+ *     sells access to its community, nobody ever meets the grace. Checked
+ *     BEFORE the clock, so a buyer is exempt in their first second rather than
+ *     after 48 hours.
+ *  5. **The grace has elapsed.**
+ *
+ * ⚠️ **No clock in here.** `memberHours` is handed in, exactly as `memberDays`
+ * is to `reporterWeight()`, and for the reason written out there: a second
+ * function reading a second clock is a second place for a window to be counted
+ * wrongly. The shell holds the clock; this holds the rule.
+ */
+export function graceLimitsFor(input: {
+  /** Elapsed whole hours since the account was created. */
+  memberHours: number;
+  /** Live purchased entitlements — the same count `reporterWeight()` reads. */
+  paidGrants: number;
+  role: string;
+  protected?: boolean;
+  config: NewMemberLimits;
+}): GraceLimits | null {
+  if (!input.config.enabled) return null;
+  if (isOwner(input.role) || input.role === "moderator") return null;
+  if (input.protected) return null;
+  if (input.paidGrants > 0) return null;
+  if (input.memberHours >= input.config.graceHours) return null;
+
+  return {
+    maxPostsPerDay: input.config.maxPostsPerDay,
+    maxLinksPerPost: input.config.maxLinksPerPost,
+    maxDmsPer10Min: input.config.maxDmsPer10Min,
+    // Rounded UP, so "0 hours left" is never shown to somebody who still has
+    // fifty minutes of it. A grace that says it is over and is not is worse
+    // than one that overstates itself by an hour.
+    hoursLeft: Math.max(
+      0,
+      Math.ceil(input.config.graceHours - input.memberHours),
+    ),
+  };
+}
+
+/**
+ * How many links this post will RENDER as links.
+ *
+ * 🚨 **Built on `postSegments()`, and that is not tidiness — it is the whole
+ * correctness of the check.** `postSegments()` is the definition
+ * `components/post-body.tsx` draws from: it carries `trimTrailing()`'s ruling
+ * about sentence punctuation, `keepsBracket()`'s about a URL that opened its
+ * own bracket, the bidi refusal, and the `LINKABLE` whitelist whose own comment
+ * says adding a scheme there is a security decision. A second definition beside
+ * it would refuse posts whose "links" never become links and pass ones that do
+ * — and it would be that security decision taken twice, once unnoticed.
+ *
+ * Measured, and both cases are in the tests: a Wikipedia address ending in
+ * `(programming_language)` is ONE link, not two and not none; `javascript:` is
+ * not a link at all.
+ */
+export function countLinks(content: string): number {
+  return postSegments(content).filter((segment) => segment.kind === "link").length;
+}
+
+/**
+ * What the grace asks about ONE thing the caller can answer.
+ *
+ * ⚠️ **A discriminated question rather than one object with two optional
+ * halves**, because the two are asked at different moments: the daily count
+ * before the content exists (the guard runs on `unknown` input), the links
+ * after `checkPostContent()` has normalised it. An input carrying both would
+ * make every caller pass a value it does not have, and `0` reads as "no
+ * problem" — so a caller that forgot a half would be silently green, which is
+ * the one failure mode a rule like this must not have.
+ */
+export type GraceQuestion =
+  | { kind: "postCount"; postsInLast24h: number }
+  | { kind: "links"; links: number };
+
+/**
+ * The grace's verdict on one question. `null` when nothing refuses.
+ *
+ * Takes the already-derived `GraceLimits` rather than deriving them again, so
+ * the two halves stay separable: "is this member in their grace" is about the
+ * account and is asked once per request; "does this fit" is about the act.
+ */
+export function graceProblem(
+  grace: GraceLimits | null,
+  question: GraceQuestion,
+): CommunityErrorCode | null {
+  if (!grace) return null;
+
+  if (question.kind === "links") {
+    return question.links > grace.maxLinksPerPost
+      ? "communityNewMemberNoLinks"
+      : null;
+  }
+  return question.postsInLast24h >= grace.maxPostsPerDay
+    ? "communityNewMemberPostLimit"
+    : null;
 }
 
 // ───────────────────────────────────────────────────────────────────────────

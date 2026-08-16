@@ -235,14 +235,14 @@ describe("exactly one Next: line", () => {
 describe("the 2.3 shelf", () => {
   const out = describeJourney(MID);
 
-  it("prints a count and a question, never its ten rows", () => {
-    // 🚨 Ten optional things most apps do not want, listed in order, is a
+  it("prints a count and a question, never its eleven rows", () => {
+    // 🚨 Eleven optional things most apps do not want, listed in order, is a
     // checklist — and a checklist is what makes somebody build a mobile app for a
     // product nobody has bought yet.
     expect(out).toContain("2.3  what else it can do");
-    expect(out).toMatch(/0 of 10 taken/);
+    expect(out).toMatch(/0 of 11 taken/);
     expect(out).toContain('Ask "what else can it do?"');
-    for (const letter of "abcdefghij") {
+    for (const letter of "abcdefghijk") {
       expect(out, `2.3${letter} must not appear as a row`).not.toContain(`2.3${letter}`);
     }
   });
@@ -259,14 +259,14 @@ describe("the 2.3 shelf", () => {
   });
 
   it("counts what has been taken", () => {
-    // The needle for the count: a shelf that always said `0 of 10` would be
+    // The needle for the count: a shelf that always said `0 of 11` would be
     // telling an app with a community and a course that it has neither.
     const withModules = state({
       exists: { "docs/product-brief.md": true, "docs/plan.md": true },
       dirs: { "app/dashboard": { entries: ["coaching"], moduleOwned: [] } },
       modules: ["community", "courses"],
     });
-    expect(describeJourney(withModules)).toMatch(/2 of 10 taken/);
+    expect(describeJourney(withModules)).toMatch(/2 of 11 taken/);
   });
 
   it("leaves a lettered step with no siblings as a step of its own", () => {

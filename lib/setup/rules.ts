@@ -359,8 +359,8 @@ export function moduleToolNameProblem(moduleId: string, name: string): string | 
  * hyphens in an id expressly, and both `sqlName()` (for table names) and
  * `generate.mjs` (for the import alias) already make exactly this substitution —
  * this is the third place that needs it, and the first that did not have it.
- * The first foreign module with a hyphen would have been told to use a name the
- * other half of the rule forbids.
+ * The first module with a hyphen in its id would have been told to use a name
+ * the other half of the rule forbids.
  */
 export function toolPrefixOf(moduleId: string): string {
   return String(moduleId).replace(/-/g, "_");

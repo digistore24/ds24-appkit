@@ -26,11 +26,10 @@ modules/community/
 ```
 
 ⚠️ **There is no `guidance/` here, and there used to be a line saying there
-was.** A module of THIS template points at a page in the core tree
-(`docs/community.md`) — `docs/modules.md` → *Where a module's guidance lives*
-carries the reasoning. A module from somewhere else keeps its page inside
-itself, `modules/<id>/docs.md`, because we cannot ship a page about a module we
-have never heard of.
+was.** A module points at a page in the core tree (`docs/community.md`) —
+`docs/modules.md` → *Where a module's guidance lives* carries the reasoning:
+`node run.mjs update` addresses guidance by PATH, so a page under `modules/`
+is the one guidance a released app could never bring forward.
 
 **Three files, three worlds, and mixing them is the one mistake this layout
 exists to prevent:**

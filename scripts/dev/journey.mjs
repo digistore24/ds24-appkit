@@ -742,6 +742,29 @@ export const JOURNEY = [
     handsTo: null,
   },
 
+  {
+    skill: "metrics",
+    phase: "bauen",
+    step: "2.3k",
+    title: { de: "Kennzahlen", en: "Metrics" },
+    what: "The onboarding funnel, return by cohort and split tests, counted in this app's own database.",
+    optional: true,
+    recurring: false,
+    requires: "0.33.0",
+    module: "metrics",
+    // Deliberately right after 2.3j: this measures what `user-onboarding`
+    // built, and its own playbook hands back to that skill. ⚠️ It sits in
+    // **bauen** although the READING only makes sense once there are customers
+    // — because the half that has to happen here is the half nobody can add
+    // later: the `track()` calls at the moments they describe. The funnel fills
+    // from the day it is switched on and has no history before it, so a step
+    // placed in phase 4 would be a step that can only ever measure the future.
+    trace: { kind: "module", id: "metrics" },
+    declined: null,
+    alsoFrom: [],
+    handsTo: null,
+  },
+
   // ── 2.4 onwards — the gates, in the order their findings allow ─────────────
   {
     skill: "salespage",

@@ -1285,6 +1285,34 @@ is the moment it fell, and the moment it was lifted, as events.
 conversation and every page they could see before. The measure is against
 writing, and it is applied before anybody has judged the reports.
 
+**The grace on a new account is not stored either — and this paragraph exists
+to say that nothing is owed here, because the tempting answer is wrong.** With
+`newMember` switched on (it ships on), an account younger than the configured
+window that holds no purchased access writes under tighter limits: a few posts a
+day, no links, a slower rate for private messages. That state is **derived at
+the moment of each write** from two things this document already lists — the
+account's creation time (§1) and its grants (§3) — and it is written nowhere. No
+column, no counter, no expiry row, nothing that could go stale about a person.
+
+So there is **no new export section and no new erasure step**, and adding one
+would be the mistake rather than the diligence: a member can already reconstruct
+the state from data both exports hand them, and a stored copy would be exactly
+the reputation record the rest of this module refuses to keep. The same argument
+§14g makes about the report weight, one derivation over.
+
+**It is an automated restriction, and it is a mild one — but it is named here
+rather than left out.** It has no legal effect, it takes no reading away, it
+ends by itself when the window elapses or the first purchase lands, and **a
+person can lift it**: the operator's protect list
+(`community_member_standing.protected_at`) exempts a member from it exactly as
+it exempts them from the automatic silence. That row is the human override, and
+it is why this measure is not the kind § 15 is about.
+
+Two limits stated plainly, because a policy is only as true as what it admits:
+the grace raises the **latency** of an abusive signup, not its cost — accounts
+created today and used in three days meet none of it — and it is a property of
+the ACCOUNT, so it applies in every room rather than only in the free ones.
+
 ⚠️ **Retention: `node run.mjs community-prune`**, and the same warning §6 gives
 for `ipn_events` applies — the promise is only as true as somebody running it.
 Trail rows and **handled** reports age out after a year by default (`--days`).
@@ -1321,6 +1349,17 @@ Worth stating, because a privacy policy that claims less is easier to keep true:
   `expiryDays` ships `null` precisely so that a person MUST act. Whether that
   clears Art. 22's "legal or similarly significant effects" is a lawyer's call
   on YOUR product, not this file's.
+  ⚠️ **And since 0.34.0 there are TWO automated measures rather than one, which
+  is why this bullet no longer says "measure" in the singular.** The second is
+  the `newMember` grace (§14g, and [`community.md`](community.md) → *The floor
+  under a free room*): a new account without purchased access writes under
+  tighter limits for a configured window. It ships **on**. It differs from the
+  first in the way that matters to a policy — **it needs no report and no
+  complaint**, so it applies to people about whom nothing at all has been
+  alleged. What holds for it: nothing is stored, no score is computed, it ends
+  by itself with nobody acting, it takes no reading and no purchased access
+  away, and the operator's protect list lifts it for a named member. It is the
+  milder of the two on every axis except that one.
 - No special categories of data (health, beliefs, and so on) — unless *your*
   product adds them, in which case this file needs a section you write.
 - No data sold or passed on beyond §5.

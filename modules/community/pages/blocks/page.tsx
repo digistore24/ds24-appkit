@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/table";
 import { requireActiveUser } from "@/lib/authz";
 import { isOwner } from "@/lib/roles";
-import { isCommunityEnabled } from "@/modules/community/lib/config";
+import { communityConfig, isCommunityEnabled } from "@/modules/community/lib/config";
 import {
   contradictoryStandings,
   listedMembers,
@@ -73,6 +73,7 @@ export default async function BlocksPage() {
   if (!derived) notFound();
 
   const mayList = isOwner(authority.role);
+  const grace = communityConfig().newMember;
 
   // ⚠️ The derived half already carries the account name — `standingSendBlocks()`
   // resolves it while it walks the candidates. The hand-set half does not, and
@@ -119,6 +120,27 @@ export default async function BlocksPage() {
           <p>
             {t("blocksContradictionBody", {
               names: contradictions.map(nameOf).join(", "),
+            })}
+          </p>
+        </Callout>
+      )}
+
+      {/* 🚨 **The RULE, never the people it currently binds** — and that
+          distinction is the whole of why the grace has no audit act and no
+          export section. It is a derivation over `users.createdAt` and
+          `grants`: there is no moment anybody decided, nothing to record, and
+          a per-member list here would be the reputation table this module
+          refuses to have. What an operator needs is the answer to "somebody
+          wrote to me saying they cannot post" — one sentence, no query, no
+          personal data. `docs/data-protection.md` §14g leans on this staying
+          a sentence. */}
+      {grace.enabled && (
+        <Callout variant="info" title={t("blocksGraceTitle")} className="mb-4">
+          <p>
+            {t("blocksGraceBody", {
+              hours: grace.graceHours,
+              posts: grace.maxPostsPerDay,
+              links: grace.maxLinksPerPost,
             })}
           </p>
         </Callout>

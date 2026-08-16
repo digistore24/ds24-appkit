@@ -5,14 +5,22 @@ import { cache } from "react";
 import { and, count, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { grants, users } from "@/db/schema";
-import { communityMemberStanding, communitySpamReports } from "../schema";
+import {
+  communityMemberStanding,
+  communityPosts,
+  communitySpamReports,
+} from "../schema";
 import { communityConfig } from "./config";
 import {
   CommunityError,
   NO_STANDING,
   blockThresholdWeight,
+  countLinks,
+  graceLimitsFor,
+  graceProblem,
   reporterWeight,
   sendBlockState,
+  type GraceLimits,
   type MemberStanding,
   type SendBlockState,
 } from "./rules";
@@ -36,11 +44,124 @@ import {
  * operator's own and is about the person reading the sentence, so being clear
  * costs nobody anything.
  */
-export async function guardSendBlock(memberId: string): Promise<void> {
+export async function guardSendBlock(
+  memberId: string,
+  act: WriteAct,
+): Promise<void> {
   const standing = await standingFor(memberId);
   if (standing.writeBlocked) throw new CommunityError("communityWriteBlocked");
   const state = await sendBlockFor(memberId);
   if (state.blocked) throw new CommunityError("communitySendBlocked");
+
+  // The grace comes LAST, after both blocks. A member who is silenced and also
+  // two hours old must be told they are silenced — the grace is a sentence
+  // about being new, and it would read as the reason when it is not.
+  //
+  // Only posts are counted here. A direct message is braked by the tighter
+  // ten-minute bucket in `messages.ts` instead, which needs no query of its own
+  // and answers a question a daily count cannot: the shape unwanted contact
+  // takes is five conversations in five minutes, not thirty over a day.
+  if (act !== "post") return;
+  const grace = await graceFor(memberId);
+  if (!grace) return;
+  const problem = graceProblem(grace, {
+    kind: "postCount",
+    postsInLast24h: await postsInLast24h(memberId),
+  });
+  if (problem) throw new CommunityError(problem, undefined, graceDetail(grace));
+}
+
+/**
+ * Which kind of write is being guarded. **Required, and that is the design.**
+ *
+ * 🚨 `moderation-guard.test.ts` asserts this guard's reach by COUNTING calls to
+ * it, which can say how many callers there are and never whether the set is
+ * complete — `openConversation()` sat outside that count for months. A required
+ * parameter does not close that hole either, but it closes the next one: a
+ * write path added a year from now cannot call this guard *wrongly* without
+ * `npm run typecheck` saying so, and the compiler needs nobody to remember it.
+ *
+ * A plain union rather than an object carrying ids: nothing here needs one, and
+ * a field with no reader is a field the next person fills in wrongly.
+ */
+export type WriteAct = "post" | "dm";
+
+/**
+ * The grace this member is under, or `null` — derived, stored nowhere.
+ *
+ * `cache()`d per REQUEST like the block: a post's guard and its link check
+ * happen in one request and must agree, and the next request asks again. Both
+ * halves it reads are themselves cached, so this costs one derivation and no
+ * query beyond the row `sendBlockFor()` was already fetching.
+ */
+export const graceFor = cache(async function graceFor(
+  memberId: string,
+): Promise<GraceLimits | null> {
+  const [writer, standing] = await Promise.all([
+    writerFactsFor(memberId),
+    standingFor(memberId),
+  ]);
+  return graceLimitsFor({
+    memberHours: writer.memberHours,
+    paidGrants: writer.paidGrants,
+    role: writer.role,
+    protected: standing.protected,
+    config: communityConfig().newMember,
+  });
+});
+
+/** What the two grace sentences need to name themselves. Never a member id. */
+function graceDetail(grace: GraceLimits): Record<string, number> {
+  // ⚠️ **Numbers, not strings, and that is not tidiness.** Both sentences are
+  // ICU plurals (`{max, plural, one {one post} other {# posts}}`), and a plural
+  // handed a string does not pluralise — it renders the "other" branch or
+  // throws, depending on the formatter's mood. `CommunityError.detail` carries
+  // `string | number` for exactly this.
+  return { max: grace.maxPostsPerDay, hours: grace.hoursLeft };
+}
+
+/**
+ * Posts this member has written in the last 24 hours.
+ *
+ * ⚠️ **Only ever asked of a member who IS in their grace**, which in an app
+ * that sells access to its community is nobody. It rides
+ * `community_posts_author (author_id, created_at, id)` — no migration, and no
+ * new index to keep.
+ *
+ * Deleted posts count. A member who writes five, deletes them and writes five
+ * more has written ten, and a limit that could be reset by deleting is not one.
+ */
+async function postsInLast24h(memberId: string): Promise<number> {
+  const from = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const [row] = await db
+    .select({ n: count() })
+    .from(communityPosts)
+    .where(
+      and(
+        eq(communityPosts.authorId, memberId),
+        gt(communityPosts.createdAt, from),
+      ),
+    );
+  return row?.n ?? 0;
+}
+
+/**
+ * The links half of the grace, asked once the content is known.
+ *
+ * Separate from `guardSendBlock()` because of WHEN it can be asked: the guard
+ * runs before `checkPostContent()`, on input that is still `unknown`. Pulling
+ * the content check above the block would invert the module's documented order
+ * — access → participation → block → content → brake — and a silenced member
+ * would be told their post is too long.
+ */
+export async function guardGraceLinks(
+  memberId: string,
+  content: string,
+): Promise<void> {
+  const grace = await graceFor(memberId);
+  if (!grace) return;
+  const problem = graceProblem(grace, { kind: "links", links: countLinks(content) });
+  if (problem) throw new CommunityError(problem, undefined, graceDetail(grace));
 }
 
 /**
@@ -67,6 +188,111 @@ export const standingFor = cache(async function standingFor(
     protected: row.protectedAt !== null,
     writeBlocked: row.writeBlockedAt !== null,
     reportsIgnored: row.reportsIgnoredAt !== null,
+  };
+});
+
+/**
+ * "How many live purchased grants does this member hold", as a fragment.
+ *
+ * 🚨 **One definition, two callers, and that is the point.** `reporterFactsFor()`
+ * weighs a reporter with it and `writerFactsFor()` exempts a buyer with it. Two
+ * copies would be two answers to "has this person paid" that agree today, and
+ * the day they stopped agreeing a customer would be throttled by the grace
+ * while their report still counted as a paying member's — a discrepancy nothing
+ * could report because each half would be self-consistent.
+ *
+ * 🚨 **`(now() at time zone 'utc')`, never a JS `Date`.** Inside a raw `sql`
+ * fragment there is no column mapper, so a `Date` reaches postgres.js unencoded
+ * and the driver throws `ERR_INVALID_ARG_TYPE` — which once took out every spam
+ * report in the module, typechecked, with the whole guard suite green because it
+ * reads this file as TEXT and nothing ran the query.
+ */
+export function paidGrantsFragment() {
+  return sql<number>`(
+    select count(*) from ${grants}
+    where ${grants.memberId} = ${OUTER_MEMBER_ID}
+      and ${grants.source} = 'purchase'
+      and ${grants.endedAt} is null
+      and ${grants.suspendedAt} is null
+      and (${grants.accessUntil} is null
+           or ${grants.accessUntil} > (now() at time zone 'utc'))
+  )`.mapWith(Number);
+}
+
+/**
+ * The outer query's member id, QUALIFIED — `"users"."id"`.
+ *
+ * 🚨 **Interpolating `users.id` here renders `"id"`, unqualified, and that is
+ * silently wrong rather than an error.** Inside `select … from "grants"` the
+ * bare name `"id"` resolves to the GRANT's own id, so
+ * `where "member_id" = "id"` is a correlation to the wrong table: it is
+ * false for every row and the count is always 0. Postgres raises nothing —
+ * both tables have an `id`.
+ *
+ * ⚠️ **It was wrong for a long time and nothing could see it.** The three
+ * subqueries in `reporterFactsFor()` were written this way, and their only
+ * consumer is `reporterWeight()`, which returns early while `weighting` ships
+ * OFF — so `paidGrants`, `reportsMade` and `reportsAgainst` were 0 in every
+ * app, every unit test passed (they hand the pure function its numbers
+ * directly), and the defect had no symptom. It surfaced the day the grace
+ * became a second, always-on consumer: a member with a live purchase was
+ * throttled anyway, found by posting in a real app rather than by any test.
+ *
+ * `sql.identifier()` rather than a raw string so the quoting stays drizzle's.
+ * `_blocks.sql.test.ts` reads the generated SQL and fails on the bare form.
+ */
+const OUTER_MEMBER_ID = sql`${sql.identifier("users")}.${sql.identifier("id")}`;
+
+/** Everything the WRITE path needs about the member doing the writing. */
+export interface WriterFacts {
+  role: string;
+  /** Elapsed whole hours since the account was created. */
+  memberHours: number;
+  paidGrants: number;
+}
+
+/**
+ * The writer's own facts — role, age and whether they have paid — in ONE query.
+ *
+ * 🚨 **This costs nothing, and that is what lets the grace ship switched on.**
+ * `sendBlockFor()` already read a row from `users` on every write path to get
+ * the role; `createdAt` sits in that same row and `paidGrants` is the subquery
+ * `reporterFactsFor()` was already running beside it. So the floor under a free
+ * room is not a query per post — it is three columns where there were one.
+ *
+ * `cache()`d per REQUEST like everything else here: a write, its send-block
+ * guard and its grace check happen in one request and must see one answer.
+ *
+ * ⚠️ **The hours are computed in JS, deliberately.** This is elapsed time, not a
+ * calendar date, so `APP_TIME_ZONE` has no business in it — the same ruling
+ * `reporterFactsFor()`'s `memberDays` carries one function down.
+ */
+export const writerFactsFor = cache(async function writerFactsFor(
+  memberId: string,
+): Promise<WriterFacts> {
+  const now = Date.now();
+  const [row] = await db
+    .select({
+      role: users.role,
+      createdAt: users.createdAt,
+      paidGrants: paidGrantsFragment(),
+    })
+    .from(users)
+    .where(eq(users.id, memberId))
+    .limit(1);
+
+  // No row means the account is gone. "member" and no grants is the closed
+  // reading of both questions it feeds, which is where an absent account
+  // belongs.
+  if (!row) return { role: "member", memberHours: 0, paidGrants: 0 };
+
+  return {
+    role: row.role,
+    memberHours: Math.max(
+      0,
+      Math.floor((now - row.createdAt.getTime()) / (60 * 60 * 1000)),
+    ),
+    paidGrants: row.paidGrants,
   };
 });
 
@@ -124,32 +350,20 @@ export async function reporterFactsFor(
       // leading column is the one being matched — `grants_member`,
       // `community_spam_reports_reporter`, `community_spam_reports_open`.
       //
-      // 🚨 **"Now" is the DATABASE's, never the `now` above.** Inside a raw
-      // `sql` fragment there is no column mapper, so a JS `Date` reaches
-      // postgres.js unencoded and the driver throws `ERR_INVALID_ARG_TYPE` —
-      // which took out every spam report in the module, because this sweep runs
-      // on the reporter of the row `reportContent()` has just inserted. It
-      // typechecked and no test saw it: the whole guard suite reads this file as
-      // TEXT, and nothing ran the query. `(now() at time zone 'utc')` is the
-      // house form for this exact question — `lib/entitlements/manage.ts` asks
-      // it of this very column that way. The `now` below stays: that one is
-      // arithmetic in JS and never travels into SQL.
-      paidGrants: sql<number>`(
-        select count(*) from ${grants}
-        where ${grants.memberId} = ${users.id}
-          and ${grants.source} = 'purchase'
-          and ${grants.endedAt} is null
-          and ${grants.suspendedAt} is null
-          and (${grants.accessUntil} is null
-               or ${grants.accessUntil} > (now() at time zone 'utc'))
-      )`.mapWith(Number),
+      // 🚨 **"Now" is the DATABASE's, never the `now` above** — the reasoning,
+      // and the outage it is about, are at `paidGrantsFragment()`, which is
+      // where this question is defined for both of its callers. The `now` below
+      // stays: that one is arithmetic in JS and never travels into SQL.
+      paidGrants: paidGrantsFragment(),
+      // ⚠️ `OUTER_MEMBER_ID`, never `${users.id}` — see its comment. These two
+      // counted 0 for every member in every app until 2026-08-16.
       reportsMade: sql<number>`(
         select count(*) from ${communitySpamReports}
-        where ${communitySpamReports.reporterId} = ${users.id}
+        where ${communitySpamReports.reporterId} = ${OUTER_MEMBER_ID}
       )`.mapWith(Number),
       reportsAgainst: sql<number>`(
         select count(*) from ${communitySpamReports}
-        where ${communitySpamReports.reportedMemberId} = ${users.id}
+        where ${communitySpamReports.reportedMemberId} = ${OUTER_MEMBER_ID}
       )`.mapWith(Number),
     })
     .from(users)
@@ -218,12 +432,10 @@ export const sendBlockFor = cache(async function sendBlockFor(
     Date.now() - config.windowHours * 60 * 60 * 1000,
   );
 
-  const [[account], reports, standing] = await Promise.all([
-    db
-      .select({ role: users.role })
-      .from(users)
-      .where(eq(users.id, memberId))
-      .limit(1),
+  const [writer, reports, standing] = await Promise.all([
+    // The same row this used to read for the role alone — see `writerFactsFor()`
+    // for why it now brings two more columns back and why that is free.
+    writerFactsFor(memberId),
     db
       .select({
         reporterId: communitySpamReports.reporterId,
@@ -254,7 +466,7 @@ export const sendBlockFor = cache(async function sendBlockFor(
       ...row,
       weight: row.reporterId ? (weights.get(row.reporterId) ?? 0) : 0,
     })),
-    role: account?.role ?? "member",
+    role: writer.role,
     protected: standing.protected,
     thresholdWeight: blockThresholdWeight(config.threshold),
     windowHours: config.windowHours,

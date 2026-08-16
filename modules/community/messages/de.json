@@ -197,6 +197,8 @@
     "blocksWeightValue": "{reporters} Meldende, zusammen {weight}",
     "blocksContradictionTitle": "Widersprüchlicher Zustand",
     "blocksContradictionBody": "Diese Personen sind von Hand gesperrt und haben inzwischen die Moderator-Rolle: {names}. Das kann nur entstehen, wenn die Rolle nach der Sperre vergeben wurde. Entscheide, was gelten soll — die Rolle nimmst du in der Nutzerverwaltung weg, die Sperre hier.",
+    "blocksGraceTitle": "Neue Konten sind die ersten Stunden begrenzt",
+    "blocksGraceBody": "Wer sich gerade erst angemeldet und nichts gekauft hat, kann in {hours, plural, one {der ersten Stunde} other {den ersten # Stunden}} {posts, plural, one {einen Beitrag} other {# Beiträge}} am Tag schreiben, {links, plural, =0 {keinerlei Links setzen} one {einen Link pro Beitrag setzen} other {# Links pro Beitrag setzen}} und nur eingeschränkt Nachrichten verschicken. Das gilt für niemanden mit gekauftem Zugang, für keinen Moderator und für niemanden auf der Whitelist. Es steht in keiner Tabelle und endet von selbst — hier ist deshalb keine Liste, sondern die Regel. Ändern kannst du sie in config/community.json unter „newMember“.",
     "listReasonLabel": "Begründung",
     "listReasonPlaceholder": "Warum diese Entscheidung?",
     "listReasonNote": "Die Begründung steht im Protokoll und in der Auskunft der betroffenen Person — schreib sie so, wie du sie vorgelesen bekommen würdest.",
@@ -319,6 +321,8 @@
     "communityImagesOff": "Beiträge in dieser Community nehmen keine Bilder.",
     "communityWriteBlocked": "Du kannst hier gerade nicht schreiben — das hat die Moderation entschieden. Lesen kannst du weiterhin alles.",
     "communityCannotListRole": "Betreiber und Moderatoren können nicht auf diese Liste. Nimm zuerst die Rolle weg.",
-    "communityStandingConflict": "Geschützt und gesperrt zugleich geht nicht — entscheide dich für eines von beiden."
+    "communityStandingConflict": "Geschützt und gesperrt zugleich geht nicht — entscheide dich für eines von beiden.",
+    "communityNewMemberPostLimit": "Für heute reicht es — neue Konten können {max, plural, one {einen Beitrag} other {# Beiträge}} am Tag schreiben. {hours, plural, one {In einer Stunde} other {In # Stunden}} fällt diese Grenze weg.",
+    "communityNewMemberNoLinks": "Neue Konten können noch keine Links posten. {hours, plural, one {In einer Stunde} other {In # Stunden}} geht es; bis dahin schreib die Adresse in Worten."
   }
 }

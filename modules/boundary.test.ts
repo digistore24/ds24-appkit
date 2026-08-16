@@ -830,9 +830,9 @@ describe("🚨 a module uses the core's media layer, and only its doors", () => 
     // none of the three rules below by construction. Demanding a file from it
     // anyway made this test refuse a manifest the validator accepts, which is a
     // test disagreeing with the rule it is supposed to enforce. Measured with a
-    // module from outside that shipped a manifest, a docs page and two message
-    // files: legal, installable, and this line was the only thing in the whole
-    // suite that objected.
+    // module that shipped a manifest, a docs page and two message files and no
+    // code at all: legal, installable, and this line was the only thing in the
+    // whole suite that objected.
     const CODE_KEYS = [
       "entry", "nav", "gate", "schema", "cron", "setup", "presence", "contentSource",
       "disclosure", "smoke", "appliers", "components", "serverExports", "slots", "commands",

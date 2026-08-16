@@ -427,12 +427,105 @@ built retroactively. An operator seeing organised reporting has the trail to
 prove it and the user administration to act on it. Whoever wants a higher wall
 is asking for identity verification, and that is a product, not a knob.
 
+### The floor under a free room
+
+Everything above this line is **reactive**: somebody has to be bothered, and
+somebody has to report. In a room gated on a purchase that is enough — the card
+is the floor, and the loop only has to deal with people who are already inside
+and already paid. In a room whose `accessLevel` is `open` there is no floor at
+all: an account costs one typed address, and the loop's first move requires a
+victim.
+
+So `newMember` in `config/community.json` charges the **first** act instead of
+answering the tenth. An account that is younger than `graceHours` **and holds no
+purchased access** writes under tighter limits — `maxPostsPerDay`,
+`maxLinksPerPost` (shipped at zero), `maxDmsPer10Min`. Derived at every write
+from `users.createdAt` and `grants`, stored nowhere, gone the moment either
+condition stops holding.
+
+**It ships ON, and it is the only block in that file that does.** The two above
+it — `weighting`, `postHide` — ship off because switching them on changes who
+gets *silenced* in an app that is already running, and an operator who updates
+and changes nothing is owed no surprise there. This one changes nothing for
+anybody who has paid: the exemption is checked before the clock, so a buyer is
+free in their first second. In an app that sells access to its community nobody
+ever meets it; in one that gives a room away it is the only thing at the door.
+A switch that ships off measures nothing and is never found, and that is the
+whole argument.
+
+Exempt, in the order the rule checks them: the block being off · an operator or
+a moderator · **a member on the protect list** · anybody with a live purchase ·
+anybody past the window. The protect list is not decoration — it is the human
+override, and `docs/data-protection.md` §14g leans on its existing to call this
+a restriction a person can lift.
+
+**Four things this deliberately is not:**
+
+- **Not a captcha, and there is no third party anywhere near the sign-in path.**
+  The seam is one line in `app/login/actions.ts` before `sendLink()`, if an
+  operator ever needs one. It stays a seam: a captcha is a new runtime
+  dependency, a key, and a consent question in `data-protection.md` §13 that no
+  app on this template has today.
+- **Not `emailVerified`.** The obvious-looking signal, and the wrong one: the
+  magic link is this template's default way in, so an account created that way is
+  verified in the same second — the field would be set for every attacker and
+  *unset* for a share of honest members (Google sign-in, password accounts, an
+  address change that clears it). It would brake precisely the wrong people.
+  `users.createdAt` is monotonic, cannot be manufactured retroactively, and is
+  the same signal `reporterWeight()` already reads as `memberDays`.
+- **Not an audit act.** *Audit records events; derivation records state* — the
+  rule this file already applies to an expired-but-unlifted block. The grace has
+  no moment of crossing: it is true from the first millisecond and false from
+  `graceHours` or the first purchase, with nobody deciding anything. A row per
+  refused attempt would be a request log in the one table whose worth is that
+  every line is a human act, and its length would be attacker-controlled.
+  `/dashboard/community/blocks` prints the **rule** instead — one sentence out of
+  the config, no query, nobody named.
+- **Not a pre-moderation queue.** An approval step makes the operator the
+  bottleneck, which is the thing Epic 23 exists to avoid.
+
+⚠️ **The residual, again and sharper than the one above.** The grace raises the
+**latency** of an attack, not its cost: twenty accounts made today and used on
+Wednesday walk through it untouched. It is also a property of the ACCOUNT, not
+of the room, so it applies in a paid room too — where it is invisible, because
+everybody there has bought something.
+
+**A community with open rooms wants the other two switched on as well**, and
+this is the copyable answer:
+
+```jsonc
+"weighting": { "enabled": true, "tenureMax": 100, "paidMax": 100,
+               "reportsMadeMax": 50, "reportsAgainstMax": 75 },
+"postHide":  { "enabled": true, "threshold": 2 }
+```
+
+The reasoning is one sentence: with weighting on, a fresh sockpuppet's report is
+worth almost nothing (`memberDays` 0, `paidGrants` 0, and `reportsAgainst` pulls
+down), which is the defence against a **reporting** brigade — the same signal as
+the grace, pointed at the reporter instead of the writer. `postHide` then makes
+a removal fast and fully reversible.
+
+⚠️ Two warnings that go with that block. `postHide.threshold` must stay at or
+below `sendBlock.threshold` or the config is refused and the community goes off
+— so an operator who *also* lowers `sendBlock.threshold` to 2 has to keep the
+pair coherent. And **neither of those two can be made automatic**: they are
+app-wide switches while `open` is a property of one group, so an app can have
+both kinds of room and the config cannot tell them apart. Making it able to
+would mean parameterising both derivations per room, which is more work than
+this whole section describes.
+
 ### What the brakes are, and what they are not
 
 `posting.maxPer10Min` (20), `messaging.maxPer10Min` (10) and
 `report.maxPer10Min` (20) are **noise and cost brakes, not security controls**.
 What stops one member reaching another is the block, which the member sets
 themselves.
+
+🚨 **`newMember` is the exception in that sentence, and the reason it ships on.**
+It is not a noise brake — it is the one thing in this file standing between a
+free room and somebody who can type an address, and it is judged by what it costs
+an attacker rather than by what it saves a host. Everything else here may be
+relaxed on taste; that block is relaxed on a decision.
 
 ⚠️ **`posting.imagesMax` is in the same block and is NOT a brake** — it is how
 many pictures one post may carry (three ships, ten is the hard ceiling), and `0`

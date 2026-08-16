@@ -1,0 +1,7 @@
+{
+  "_comment": "Onboarding funnel, retention and split tests — the `metrics` module's switch and its whole setup. It ships OFF, and the usual reason is not an incident: it is the window between `node run.mjs module add metrics` and somebody working out what \"activated\" means in THIS app. Switch it on once `funnel` names real milestones and the `track()` calls behind them are in place, or the dashboard shows a row of zeroes and reads as broken. ⚠ `funnel` is a list of EVENT IDS, in the order they are read out — the same strings passed to `track()`. An unknown field here is reported rather than ignored: a misspelt key is a setting somebody believes they made. Nothing in this module writes to a browser, so the app keeps needing no consent banner.",
+  "enabled": false,
+  "retentionDays": 400,
+  "funnel": [],
+  "experiments": []
+}

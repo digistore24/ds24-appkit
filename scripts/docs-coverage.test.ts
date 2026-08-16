@@ -511,18 +511,14 @@ describe("the journey's other joins resolve", () => {
     // instead: every module of OURS is a step of the path, and the path is the
     // only place an agent learns the step exists.
     //
-    // 🚨 "Ours" is read off `docs`, never off a list kept here: a module of
-    // this template points at a page in the core tree, one from outside points
-    // inside itself (`docs/modules.md` → *A module from somewhere else*). A
-    // customer who installs a stranger's module is not thereby missing a row in
-    // OUR journey, and this must not turn their suite red for it.
-    const ours = availableModules(ROOT).filter((id) => {
-      try {
-        return !String(JSON.parse(read(`modules/${id}/module.json`)).docs).startsWith("modules/");
-      } catch {
-        return false;
-      }
-    });
+    // 🚨 EVERY module in the tree, with no filter — and the missing filter is
+    // the claim. There used to be one: "ours" was read off `docs`, because a
+    // module from outside (`module add --from <url>`) pointed its page inside
+    // itself and had no business needing a row in OUR journey. That channel is
+    // gone, so every module here is one this template ships, and a predicate
+    // that now answers true for all of them would be a filter that reads as a
+    // rule while measuring nothing.
+    const ours = availableModules(ROOT);
     const named = new Set(JOURNEY.filter((row) => row.module !== null).map((row) => row.module));
     const unwalked = ours.filter((id) => !named.has(id));
 

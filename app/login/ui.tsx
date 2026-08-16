@@ -129,7 +129,9 @@ export function SignInForm({
           {state.error && (
             <Callout
               variant={
-                state.error === "noWayIn" || state.error === "tooManyAttempts"
+                state.error === "noWayIn" ||
+                state.error === "tooManyAttempts" ||
+                state.error === "tooManyLinks"
                   ? "warning"
                   : "danger"
               }

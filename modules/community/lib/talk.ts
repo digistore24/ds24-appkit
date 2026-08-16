@@ -15,7 +15,7 @@ import { findEmbed } from "./embeds";
 import { COMMUNITY_POST_RATE_BUCKET, CommunityError, canDeleteOwnPost, canEditOwnPost, canPost, canStartDiscussion, checkDiscussionTitle, checkPostContent, type PostImage, type PostImagePolicy, contentState, mayEnterGroup, mayViewEmbed, planKeysToResolve, postLimit, postVisibleTo } from "./rules";
 
 import { grantedKeysFor } from "./_access";
-import { guardSendBlock } from "./_blocks";
+import { guardGraceLinks, guardSendBlock } from "./_blocks";
 import { pageOffset } from "./_paging";
 import { PostImageUpload, attachPostImages, discardPostImages, judgePostImages, storePostImages } from "./_post-images";
 import { CommunityGroup, groupFor } from "./groups";
@@ -318,12 +318,15 @@ export async function startDiscussion(
 
   // The spam loop's brake. Reading is untouched — a blocked member still sees
   // every room they could see before.
-  await guardSendBlock(viewer.memberId);
+  await guardSendBlock(viewer.memberId, "post");
 
   const title = checkDiscussionTitle(input.title);
   if (!title.ok) throw new CommunityError(title.code);
   const content = checkPostContent(input.content);
   if (!content.ok) throw new CommunityError(content.code);
+  // The grace's other half, and it has to sit AFTER the content check because
+  // it reads the normalised text — see `guardGraceLinks()`.
+  await guardGraceLinks(viewer.memberId, content.content);
   // The pictures, judged before a byte is read: too many, undescribed, or not
   // allowed here at all are all refusals that cost nothing.
   const pictures = judgePostImages(input);
@@ -403,10 +406,11 @@ export async function addPost(
   );
   if (denial) throw new CommunityError(denial);
 
-  await guardSendBlock(viewer.memberId);
+  await guardSendBlock(viewer.memberId, "post");
 
   const content = checkPostContent(input.content);
   if (!content.ok) throw new CommunityError(content.code);
+  await guardGraceLinks(viewer.memberId, content.content);
   const pictures = judgePostImages(input);
 
   guardPostRate(viewer.memberId);

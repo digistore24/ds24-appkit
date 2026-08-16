@@ -10,7 +10,7 @@ all — a community, an in-app assistant. Those are **modules**. A module is a
 complete feature with its own pages, tables, texts and guidance, living under
 `modules/<id>/`, and an app either has it or does not.
 
-> **Five modules exist, and a fresh app has none of them.**
+> **Six modules exist, and a fresh app has none of them.**
 >
 > | | | | |
 > |---|---|---|---|
@@ -19,6 +19,7 @@ complete feature with its own pages, tables, texts and guidance, living under
 > | **`api`** | the HTTP API a customer's own programs talk to | `module add api`, then `db-migrate` | [`docs/api.md`](api.md) · the companion app itself: [`docs/mobile.md`](mobile.md) · skill `mobile-companion` |
 > | **`community`** | a place for members: rooms, discussions, private messages | `module add community`, then `db-migrate` — its own tables | [`docs/community.md`](community.md) · skill `community` |
 > | **`courses`** | the course itself: blocks, lessons, progress, and the purchase gate in front of them — and, for the accompanied workshop, the hand-in, the operator's queue to answer it in, and a daily digest job that mails them the COUNT and names nobody. 🚨 **Do not build a reply surface or a hand-in notification by hand** | `module add courses`, then `db-migrate` — and it ships switched OFF until the content is written | [`docs/courses.md`](courses.md) · skill `courses` |
+> | **`metrics`** | the onboarding funnel, return by cohort, and split tests — counted in this app's own database, server-side, with no pixel and no cookie. 🚨 **Its own playbook opens by arguing you should not install it**: for most apps the return rate is one SQL query over tables the app already has | `module add metrics`, then `db-migrate` — its switch is `modules/metrics/config.json`, not `config/`, and it ships OFF until the funnel names real milestones | [`docs/metrics.md`](metrics.md) · skill `metrics` |
 >
 > **Every module has a page and a playbook, and its manifest names both**
 > (`docs`, `skill`) — so `node run.mjs module list` prints them beside the id
@@ -59,7 +60,7 @@ remember to join. A module joins them from its manifest instead:
 | `disclosure` | the AI-transparency registry `node run.mjs legal-check` walks |
 | `slots` | a card on a page the CORE owns — see below |
 | `components` | `lib/modules/component-registry.ts` — what the APP's OWN pages import from this module, and the only legal way to reach it — see below |
-| `serverExports` | `lib/modules/server-exports.ts` — the same for the app's own SERVER code (`askCompanion()` is the shipped one). **Two barrels, not one**: importing any name from a barrel pulls its whole graph, so a client component reaching for a hook would drag a module's server code — and its keys — into the browser |
+| `serverExports` | `lib/modules/server-exports.ts` — the same for the app's own SERVER code (`askCompanion()` and `track()` are the shipped ones). **Two barrels, not one**: importing any name from a barrel pulls its whole graph, so a client component reaching for a hook would drag a module's server code — and its keys — into the browser |
 | `setup` | the setup/MCP surface `app/api/setup` serves — this module's own tools, so an agent can configure and fill it without a shell ([`docs/setup-mcp.md`](setup-mcp.md)). Every tool name starts with the module's id, and none may shadow a core tool's; the rule lives in `lib/setup/registry.test.ts` rather than the manifest, because the collision is between tool NAMES in TypeScript, not between module ids |
 | `presence` | `node run.mjs content-check` — this module's answer to *"does this environment hold what it should"*. **Required for a module with `tables`**, on the same bar `privacy` clears: a module that holds rows must be able to say whether an environment HAS them, or the check answers a smaller question than its name while showing a green tick. ⚠️ A module that cannot answer counts as a **failure**, never a pass. 🚨 **It COUNTS, and the file it imports decides whether it may.** The core composes this file into `lib/modules/presence-registry.ts`, which the content plan reaches — and `lib/content/applier-plan.test.ts` asserts over that whole closure that a plan can call nothing which WRITES an object. So a contributor that imports its module's `lib/manage.ts` for one counting helper drags the media store's `put`/`copy`/`remove` onto the plan's path: exactly what `community` shipped, and every app that installed it had a permanently red `npm run test` (reported 2026-08-12). Two rules meet here and both hold — the contributor stays a THIN CALLER (`lib/setup/module-boundary.test.ts` refuses a `@/db` import in it, spine AD-81), so the query goes in a NARROW file of the module's own `lib/` that imports `@/db` and the module's schema and nothing else. `modules/community/lib/room-counts.ts` is the worked example, and `scripts/modules/presence-purity.test.ts` asks it of every module in the tree, installed or not |
 | `content` | the two rows below — it is what says WHICH of them this module owes. **Required for a module with `tables`**, on the same bar `privacy` and `presence` clear, and there are exactly two answers. `"authored"`: the rows come from the REPO, so `appliers` is **required** — content that cannot be applied exists only where it was typed. `"collected"`: the rows come from the people using the app, so it owes no transport. ⚠️ And on a `collected` module a declared `appliers` is **refused**, which is the half only a discriminator can say: those rows are posts, keys and a learner's own answers, and an applier there would upsert over them on every `content-apply`. That is why the duty could not simply be hung on `tables` — three of the four table-owning modules are `collected`, and requiring a transport of them would refuse three correct modules. A module with **no** `tables` declares nothing here, and doing so anyway is refused as a promise about rows it does not have |
@@ -158,6 +159,18 @@ module path, so following the template's own instructions turned *your*
 import from instead. Nobody hit it because the four modules moved under
 `modules/` after the last run that had one installed.
 
+🚨 **And it happened a second time, on the server-side twin, for the same
+reason.** `metrics` shipped with no `serverExports` at all while its skill and
+`docs/metrics.md` prescribed `import { track } from "@/modules/metrics/lib/track"`
+— installable and not usable, reported from the field on 2026-08-16 and
+reproduced here. The declaration is what closes it, but nothing in this repo
+could have SEEN it: `modules/boundary.test.ts` §1 returns early when no module is
+installed, and the template installs none. What sees it now is
+`scripts/modules/reachability.test.ts` — a file inside a module that no
+declaration and no core route file reaches is either dead code or an interface
+the app is meant to import and cannot. `lib/track.ts` was the second, and it was
+the only one in 196 files.
+
 Two rules:
 
 1. **The names are global.** `<ActivityPanel>` is what a page writes, so it
@@ -181,7 +194,7 @@ That looks inconsistent with everything above and is the only arrangement that
 works, for two reasons:
 
 - **An app has to be able to learn about a module it does not have.** The
-  table naming the five modules is how an agent finds out the community
+  table naming the six modules is how an agent finds out the community
   exists and is one command away. Guidance that arrived *with* the module would
   only be readable by somebody who already knew to install it.
 - **`node run.mjs update` addresses guidance by PATH.** The manifest it reads
@@ -193,23 +206,6 @@ works, for two reasons:
 A skill that describes a feature whose code this app is too old for already has
 its answer, and it is a version rather than a location: `requires:` in the
 skill's frontmatter.
-
-**A module from OUTSIDE this template is the one exception, and `docs` takes a
-second form for it** — `modules/<id>/docs.md` instead of `docs/<id>.md`. Both
-reasons above were re-read against that case and they answer differently. The
-first proves the page must SHIP, not that it must sit in `docs/`: every module
-folder ships in every app (`config/modules.json` is empty in a fresh one and all
-five folders are still there), so a page inside the module is exactly as
-readable for a module nobody installed — and for a module we have never heard
-of there is no third option, because we cannot ship a page about it. The second
-holds and is why our own five keep the core form: `node run.mjs update` plans
-over the paths in its manifest and the stamp, and a vendor's page is in neither,
-so the channel never touches it. Its guidance freezes with its code, like the
-rest of it.
-
-A module from outside declares no `skill` at all — the key is optional. A third
-party who wants to publish a playbook publishes a **skill**, which is its own
-product and needs nothing from the module system.
 
 > There used to be a `guidance` field in the manifest for this. It was validated,
 > declared by no module and read by nothing, and it is **gone** — a manifest key
@@ -344,7 +340,6 @@ say what is in the tree must not die on one bad file.
 ## Adding one, and taking one out
 
 ```bash
-node run.mjs module verify <id>     # could this app install it? (also a URL or a path)
 node run.mjs module add <id>        # make this app one that has it
 node run.mjs db-migrate             # its tables are not there yet
 node run.mjs module remove <id>     # see the gate below
@@ -359,51 +354,17 @@ including the one that explains what is wrong — and rewrites the generated
 registries in the same breath. The list and the generated files belong in one
 commit.
 
-### A module from somewhere else
-
-Somebody who is not us can write a module for this app and ship it themselves.
-They publish a `.tar.gz` wherever it is reachable over HTTPS — their own site, a
-release asset, a bucket — and there is no account, no registry and no list they
-have to be on.
-
-```bash
-node run.mjs module verify https://acme.example/ds24-crm-1.2.0.tar.gz   # would it fit?
-node run.mjs module add --from https://acme.example/ds24-crm-1.2.0.tar.gz
-node run.mjs db-migrate && npm run test
-```
-
-`--from` is required for anything that is not already in your tree, so this can
-never happen by mistyping an id — **and it is the only way in.** A module copied
-into `modules/<id>/` by hand skips every check below: nothing verified its
-manifest, nothing looked for a table or a route somebody else already owns, and
-nothing refused an archive entry that climbs out of its folder. A local path or a folder works too, which is
-what the author of a module uses while writing it. `--sha256 <hash>` checks the
-download against a hash the vendor published.
-
-**What arrives becomes YOUR code.** It is unpacked into `modules/<id>/` and
-committed with the rest of your app — not a dependency, not something `npm ci`
-re-fetches. That is deliberate: it means you can read it, diff it and delete it,
-and it means the module freezes with your app the way everything else here does.
-Updating one is re-fetching over it, then `module sync`, `db-migrate` and
-`npm run test`.
-
-**What is checked before anything is written:** the manifest, that every file it
-names is really there, that it needs no newer template than you have, that it
-claims no table, route, text namespace, command, component or switch file
-somebody else already owns, and that it imports no npm package your
-`package.json` lacks — `npm ci` on your host installs that file and nothing
-else. Then the archive itself: an entry that climbs out of its folder, an
-absolute path, a symlink or a device node is refused rather than unpacked.
-
-🚨 **None of that says the code is safe.** It says it FITS. Nobody read it,
-there is no signature, and there is no sandbox to be had — a module runs in the
-same process as the rest of your app, with your database, your `.env` and your
-members' rows. `module add` prints that before it writes, and where the module
-came from is recorded in `docs/reports/module-installs.md`. The real place to
-look is the commit: the code is a tracked change in your own repository.
-
-⚠️ **A module from outside brings no skill.** A vendor who wants to ship a
-playbook ships a skill, which is its own thing and installs on its own.
+> **The modules are the ones in your tree, and there is no way to add another.**
+> `module add` takes an id that is already under `modules/`, which is the set
+> this template shipped you. There is no download, no registry and no archive
+> format: an app is composed from what it was cloned with.
+>
+> This template did once install a module from a URL (`module add --from
+> https://…`), with its own downloader, tar reader and pre-flight check. It is
+> **gone** — the whole channel, not merely the flag — because we do not offer
+> modules for installation and a channel nobody publishes into is an unused way
+> into a customer's app, running with their database and their `.env`. Whoever
+> wants that back is adding a distribution channel, not restoring a flag.
 
 ### 🚨 `remove` looks in the database first
 
@@ -544,8 +505,8 @@ installed **and** switched on.
 
 ## The community's layers — what a big module looks like inside
 
-The community is the largest module and the one a vendor reads first when they
-write their own. Its shell was **one file of 5,902 lines** — eleven domains,
+The community is the largest module and the one to read first before writing
+anything that size. Its shell was **one file of 5,902 lines** — eleven domains,
 96 exported functions — and it is now one file per domain over five small
 helpers. Worth knowing before you build something that size:
 

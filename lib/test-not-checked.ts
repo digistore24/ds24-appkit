@@ -10,7 +10,19 @@
 // an app whose operator deleted the example products — CLAUDE.md tells them
 // to — and a suite that reads the four AI programs' config files has nothing to
 // open once `node run.mjs agent-setup --apply` has taken three of them away,
-// which is that command's whole documented purpose.
+// which is that command's whole documented purpose. The third of that family
+// arrived from the field on 2026-08-16: `scripts/ux/rules.test.ts` proves that
+// `ux-check` still recognises the SHIPPED placeholder home, and the skill
+// `salespage` — step 2.4 of the path in `CLAUDE.md` — replaces that page. One
+// red test out of 7 700-odd, in an app whose only fault was doing the
+// recommended thing.
+//
+// 🚨 **The precondition is always read INDEPENDENTLY of the mechanism under
+// test.** A test that asks its own subject whether it may skip can be talked
+// into skipping by the very defect it exists to catch — which is a silent pass
+// wearing a `⏭`. Measured on the third case: with the marker rule broken and the
+// page replaced, the four fixture assertions still go red and only the
+// shipped-page probe skips.
 //
 // Both used to turn red, which was wrong: nothing is broken. Turning them
 // silently green would be worse — "I could not look" and "there is nothing

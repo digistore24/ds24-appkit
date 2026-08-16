@@ -62,6 +62,7 @@ hands over to the next:
 | 2.3h | `ai-providers` *(optional)* | Picks the AI company, gets the key in, binds tasks to models and sets the prices. |
 | 2.3i | `ai-chat-knowledge` *(optional)* | Switches the in-app assistant on, gives her a name and writes her handbook. |
 | 2.3j | `user-onboarding` *(optional)* | Designs the END USER's first session on purpose instead of inheriting the blueprint's. |
+| 2.3k | `metrics` *(optional)* | The onboarding funnel, return by cohort and split tests, counted in this app's own database. |
 | 2.4 | `salespage` | Turns the placeholder home page into a page that sells THIS product. |
 | 2.5 | `ux-gateway` | Looks at the app the way a paying customer does, fixes what has to be fixed, writes a dated report. |
 | 2.6 | `security-gateway` | Scans the app for holes, fixes what has to be fixed and writes a dated report. |

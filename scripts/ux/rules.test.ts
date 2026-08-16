@@ -39,6 +39,29 @@ import {
   RAW_ELEMENT_EXCEPTIONS,
   partitionAcceptedControls,
 } from "./rules.mjs";
+import { blankComments } from "@/scripts/lib/source-text.mjs";
+import { notChecked } from "@/lib/test-not-checked";
+
+/**
+ * The three message keys the SHIPPED `app/page.tsx` renders its feature list
+ * from — the whole marker, read as raw strings.
+ *
+ * 🚨 Deliberately not imported from `rules.mjs`: this list is what decides
+ * whether the question below may be asked at all, and a precondition taken from
+ * the mechanism under test can be talked out of asking by the very defect it is
+ * there to catch. `findPlaceholderHome()` knows one of these three and looks for
+ * it with a regex; this looks for all three with `includes`. The overlap is the
+ * point — the two agree about the page and disagree about how they read it.
+ *
+ * `salespage` step 0 uses the same marker to decide whether a page was already
+ * built ("the three `home.features.*` keys are gone from the page"), so the two
+ * cannot drift into different opinions about what "still the template" means.
+ */
+const SHIPPED_HOME_KEYS = [
+  "features.authTitle",
+  "features.billingTitle",
+  "features.readyTitle",
+];
 
 describe("parseHsl", () => {
   it("reads the form app/globals.css uses", () => {
@@ -673,7 +696,7 @@ import { ArrowRight, Check } from "lucide-react";
     expect(findPlaceholderHome(source)).toEqual([]);
   });
 
-  it("🚨 the SHIPPED page is still caught — and by how many markers", () => {
+  it("🚨 the SHIPPED page is still caught — and by how many markers", (ctx) => {
     // Every case above is a synthetic fixture, so all four would stay green on
     // a tree where this rule catches nothing at all. Measured 2026-08-15: Story
     // 43.9 rewrote `app/page.tsx` and the icon trio is gone, so the redundancy
@@ -681,9 +704,42 @@ import { ArrowRight, Check } from "lucide-react";
     // and renaming one string key silences `ux-check`, `salespage` step 0,
     // `coach` and `go-live` together. The number is asserted rather than
     // described so that the day it changes, this line says so.
-    const page = readFileSync(join(ROOT, "app", "page.tsx"), "utf8");
+    //
+    // 🚨 **And it only holds while the page IS the placeholder.** This test
+    // ships inside the customer's app, and `salespage` — which this template
+    // recommends, step 2.4 of the path — REPLACES `app/page.tsx`. Reported from
+    // the field 2026-08-16 and reproduced here: one red test out of 7 700-odd,
+    // in an app whose only fault was following the instructions. Five of these
+    // have been healed between 0.27.0 and 0.33.0 (brand-mark, payment-event,
+    // content-tools, content/check) and this is the first whose premise was
+    // *the customer has not done the recommended step*.
+    //
+    // So the precondition is asked FIRST, and it is asked INDEPENDENTLY of the
+    // rule under test: the three `features.*Title` keys the shipped page
+    // carries, matched as raw strings, where `findPlaceholderHome()` knows
+    // exactly one of them and finds it with a regex of its own. A broken rule
+    // therefore cannot talk this test into skipping — the strings are still
+    // there and the assertion still runs. Comments are blanked on both sides so
+    // that a page EXPLAINING the marker is not mistaken for one carrying it.
+    const page = blankComments(readFileSync(join(ROOT, "app", "page.tsx"), "utf8"));
+    const shipped = SHIPPED_HOME_KEYS.filter((key) => page.includes(key));
+    if (shipped.length === 0) {
+      return notChecked(
+        ctx,
+        "app/page.tsx is no longer the shipped placeholder — none of " +
+          `${SHIPPED_HOME_KEYS.join(", ")} is in it. That is what the skill ` +
+          "`salespage` does, so there is no placeholder left for this rule to " +
+          "catch. The rule itself is measured by the four fixtures above",
+      );
+    }
     const hits = findPlaceholderHome(page);
-    expect(hits.length, "the shipped placeholder home is no longer caught at all").toBe(1);
+    expect(
+      hits.length,
+      `app/page.tsx still carries ${shipped.join(", ")} — so it is still the ` +
+        "shipped placeholder — and this rule no longer catches it. Either the " +
+        "rule broke, or somebody renamed `features.authTitle` alone, which " +
+        "silences `ux-check`, `salespage` step 0, `coach` and `go-live` together",
+    ).toBe(1);
   });
 });
 

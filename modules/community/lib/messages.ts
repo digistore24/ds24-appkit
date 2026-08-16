@@ -9,7 +9,7 @@ import { forgetOne, isLimited, record } from "@/lib/rate-limit";
 import { communityConfig } from "./config";
 import { COMMUNITY_DM_RATE_BUCKET, CommunityError, canBlockMember, canDeliverTo, canSendMessage, canonicalPair, counterpartOf, checkMessageContent, contentState, hasUnread, messageLimit } from "./rules";
 
-import { guardSendBlock } from "./_blocks";
+import { graceFor, guardSendBlock } from "./_blocks";
 import { pageOffset } from "./_paging";
 import { participationProfile } from "./profiles";
 import { lastPageOf } from "./talk";
@@ -322,8 +322,21 @@ export async function conversationForParticipant(
  * three), recorded only when the write is about to happen — a refusal further
  * up must not spend an allowance.
  */
-function guardMessageRate(memberId: string): void {
-  const limit = messageLimit(communityConfig().messaging.maxPer10Min);
+async function guardMessageRate(memberId: string): Promise<void> {
+  // The grace's DM half, and it is the whole of it: no daily count, no query,
+  // no second error code — the same bucket with a smaller number.
+  //
+  // ⚠️ Deliberately NOT a rule of its own. The alternative considered was "a
+  // new account may not START a conversation with somebody who has never
+  // written to them", which is a sharper rule and costs a query, a definition
+  // of "stranger" that no pure function makes clean, and a sentence that has to
+  // be written around a THIRD person's behaviour without describing it. What it
+  // would have added over this line is small: unwanted contact is already met
+  // by `isDeliverableTo()`, by the block a member sets themselves, and by this
+  // brake. The seam is here if a measurement ever says otherwise.
+  const grace = await graceFor(memberId);
+  const config = communityConfig().messaging.maxPer10Min;
+  const limit = messageLimit(grace ? Math.min(grace.maxDmsPer10Min, config) : config);
   if (isLimited(COMMUNITY_DM_RATE_BUCKET, memberId, limit)) {
     throw new CommunityError("communityMessageRateLimited");
   }
@@ -347,6 +360,16 @@ export async function openConversation(
 ): Promise<{ conversationId: string }> {
   const denial = canSendMessage(await participationProfile(participantId));
   if (denial) throw new CommunityError(denial);
+
+  // 🚨 **A silenced member does not get to open one either.** This used to be
+  // the one write path in the module that skipped `guardSendBlock()`, and the
+  // guard's own comment — "the refusal every WRITE path asks" — was untrue
+  // because of it. The row it wrote reached nobody's inbox (the join in
+  // `listConversations()` is INNER, so a conversation with no message is
+  // invisible), which is exactly why it survived: a hole whose symptom is
+  // nothing. It is still a row a blocked account could write, and the next
+  // person to loosen that join would have shipped the symptom with it.
+  await guardSendBlock(participantId, "dm");
 
   if (!(await isDeliverableTo(participantId, otherMemberId))) {
     throw new CommunityError("communityNotDeliverable");
@@ -404,7 +427,7 @@ export async function sendMessage(
   const denial = canSendMessage(await participationProfile(participantId));
   if (denial) throw new CommunityError(denial);
 
-  await guardSendBlock(participantId);
+  await guardSendBlock(participantId, "dm");
 
   const counterpartId = counterpartOf(conversation, participantId);
   // A departed counterpart is not deliverable — the conversation survives as
@@ -419,7 +442,7 @@ export async function sendMessage(
   const content = checkMessageContent(input.content);
   if (!content.ok) throw new CommunityError(content.code);
 
-  guardMessageRate(participantId);
+  await guardMessageRate(participantId);
 
   return releaseMessageRateOnFailure(participantId, async () => {
     const [message] = await db

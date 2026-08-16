@@ -55,7 +55,7 @@ policy is only as true as the list it was drafted from.
 | Restriction | 18 | blocking the account | — |
 | Portability | 20 | the same JSON | run the command |
 | Objection | 21 | only bites once something runs on legitimate interest | — |
-| No automated decision | 22 | ⚠️ the core makes none. **With `community` installed the app DOES**: enough reports silence a member's writing with nobody deciding, weighted by tenure and purchases when `weighting` is on. Writing only, never reading; the score is stored nowhere; a moderator lifts it in one audited tap | `docs/data-protection.md` §15 — and `node run.mjs module list` says whether it applies to THIS app |
+| No automated decision | 22 | ⚠️ the core makes none. **With `community` installed the app makes TWO.** (1) Enough reports silence a member's writing with nobody deciding, weighted by tenure and purchases when `weighting` is on. (2) The `newMember` grace limits a new account holding no purchased access for a configured window — 🚨 it ships **ON**, and unlike (1) it needs **no report**, so it reaches people nobody has complained about. Both: writing only, never reading; nothing stored; a human lifts either (a moderator's audited tap, or the operator's protect list) | `docs/data-protection.md` §15 and §14g — and `node run.mjs module list` says whether it applies to THIS app |
 
 **A companion's turns need nothing extra here, and that is worth saying rather
 than assuming.** They are rows in `chat_messages` under a `conversation_id`, not

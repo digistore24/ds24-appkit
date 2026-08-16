@@ -122,12 +122,11 @@ describe("the matrix has real modules to combine", () => {
     //
     // What this line guards is that the tree really holds the modules this
     // template ships — an empty or half-read list would make the whole file
-    // pass while measuring nothing. What it must NOT do is refuse a SIXTH
-    // module, and there are two ways one arrives: we write it, or a customer
-    // installs one from outside. Written as an equality it did both, so a
-    // module from a third party turned the customer's own `npm run test` red on
-    // an app with no line of their own code in it — measured, with a module
-    // fetched over `module add --from`.
+    // pass while measuring nothing. What it must NOT do is refuse the NEXT
+    // module. Written as an equality it did, and that was measured twice: once
+    // with a module a customer had fetched from outside (a channel since
+    // removed), and once with `metrics`, which is ours and simply landed — the
+    // second is the case that remains, and it is the ordinary one.
     //
     // The five names stay spelled out on purpose: dropping one of ours is still
     // a finding, and a bare length check would not see it.

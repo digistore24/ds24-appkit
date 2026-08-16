@@ -103,6 +103,8 @@
     "noWayInBody": "Für diese Adresse ist kein Kennwort hinterlegt, und es ist kein Mail-Versand eingerichtet — es gibt also nichts, womit sich diese Anmeldung bestätigen ließe. Wende dich an den Betreiber.",
     "tooManyAttemptsTitle": "Zu viele Versuche",
     "tooManyAttemptsBody": "Es wurden zu viele Adressen kurz hintereinander geprüft. Warte ein paar Minuten und versuche es dann noch einmal.",
+    "tooManyLinksTitle": "Zu viele Links angefordert",
+    "tooManyLinksBody": "An diese Adresse wurden gerade mehrere Anmelde-Links geschickt. Schau zuerst im Postfach nach — auch im Spam-Ordner. In etwa einer Stunde kannst du einen neuen anfordern.",
     "signInFailedTitle": "Anmeldung fehlgeschlagen",
     "signInFailedBody": "Die Anmeldung konnte nicht abgeschlossen werden. Versuche es noch einmal — bleibt es dabei, wende dich an den Betreiber."
   },

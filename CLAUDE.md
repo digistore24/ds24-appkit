@@ -111,7 +111,7 @@ know, read directly — in a RANGE rather than whole, and never through `cat`.
 
 **1 Plan** — *(optional)* 1.1 `market-research`, 1.2 `design`, 1.3 `knowledge-intake` → 1.4 `build-app`
 
-**2 Build** — 2.1 `build-app` → 2.2 `setup-digistore` → *(optional)* 2.2b `billing-modes`, 2.3a `visuals`, 2.3b `content-production`, 2.3c `courses`, 2.3d `learning-activities`, 2.3e `community`, 2.3f `ai-companion`, 2.3g `mobile-companion`, 2.3h `ai-providers`, 2.3i `ai-chat-knowledge`, 2.3j `user-onboarding` → 2.4 `salespage` → 2.5 `ux-gateway` → 2.6 `security-gateway` → 2.7 `performance-gateway` → 2.8 `compliance-check`
+**2 Build** — 2.1 `build-app` → 2.2 `setup-digistore` → *(optional)* 2.2b `billing-modes`, 2.3a `visuals`, 2.3b `content-production`, 2.3c `courses`, 2.3d `learning-activities`, 2.3e `community`, 2.3f `ai-companion`, 2.3g `mobile-companion`, 2.3h `ai-providers`, 2.3i `ai-chat-knowledge`, 2.3j `user-onboarding`, 2.3k `metrics` → 2.4 `salespage` → 2.5 `ux-gateway` → 2.6 `security-gateway` → 2.7 `performance-gateway` → 2.8 `compliance-check`
 
 **3 Go live** — 3.1 `setup-hosting` → 3.2 `go-live` → *(optional)* 3.3 `setup-environments`, 3.4 `setup-monitoring`
 
@@ -157,7 +157,7 @@ line flags, raw SQL, dates — are **[`docs/conventions.md`](docs/conventions.md
 - **Messages always as a `Callout`** with one of its four intents, never with hand-picked colour classes. What must stay on screen is a `Callout`, what may drift past is a toast — three mechanisms, never a fourth. See **UI**.
 - **Light and dark both count.** Every new piece of UI MUST be readable in both, which follows by itself as long as colours come from the tokens.
 - **Tests are mandatory, and green is the commit condition rather than a courtesy** — nothing runs them for you after a push, so a red test that gets committed stays red until somebody looks. `.githooks/pre-commit` refuses on red, and a shipped test that fails is a finding about your change, never an obstacle to weaken or delete.
-- **⚠️ A SKIPPED test is not a passed one.** `⏭ <file>: NOT CHECKED — <reason>` on stderr has exactly three legitimate causes — `node run.mjs agent-setup --apply`; a registry that no longer holds the SHAPE a test needs, because the example products were deleted or parked with `"sell": false`; and **a foreign tool this machine does not have**, because `scripts/foreign-config.test.ts` asks whether gitleaks, ESLint, PostCSS and drizzle-kit ACCEPT the config files written for them, and a tool that is absent cannot be asked. Anything else is a question nobody answered. Needs template 0.25.0
+- **⚠️ A SKIPPED test is not a passed one.** `⏭ <file>: NOT CHECKED — <reason>` on stderr has exactly four legitimate causes — `node run.mjs agent-setup --apply`; a registry that no longer holds the SHAPE a test needs, because the example products were deleted or parked with `"sell": false`; **a foreign tool this machine does not have**, because `scripts/foreign-config.test.ts` asks whether gitleaks, ESLint, PostCSS and drizzle-kit ACCEPT the config files written for them, and a tool that is absent cannot be asked; and **a page this app has REPLACED**, where `scripts/ux/rules.test.ts` proves the shipped placeholder home is still recognised and the skill **salespage** (2.4 of *The path*) has left no placeholder to recognise. Anything else is a question nobody answered. Needs template 0.25.0
 - **Call up the app yourself before you say "done", then ask the log.** Green tests are no proof that the page loads, and a page that loads is no proof that it rendered. See **Never ship a broken page** below.
 - **Linux, macOS and Windows all count.** Every command in `run.mjs` and every script under `scripts/` MUST work on all three — a developer on Windows who cannot start the app has no way around it. See **Three systems**.
 - **Commit your work — a finished change is a commit, every time.** Unfinished work too: `git commit --no-verify`, saying so in the message, and that is the flag's only legitimate use. Session artifacts (screenshots, throwaway scripts) live in `.dev/` or get deleted, never committed; at the end of a unit of work `git status` is empty and every commit was made on green. (`AGENTS.md` is generated from this file — never edit it.)
@@ -480,11 +480,11 @@ app has. It **ships empty**.
 | activity | `node run.mjs module add activity` | [`docs/learning.md`](docs/learning.md) | `learning-activities` |
 | companion | `node run.mjs module add companion` | [`docs/ai-in-product.md`](docs/ai-in-product.md) | `ai-companion` |
 | api | `node run.mjs module add api` | [`docs/api.md`](docs/api.md) | `mobile-companion` |
+| metrics | `node run.mjs module add metrics` | [`docs/metrics.md`](docs/metrics.md) | `metrics` |
 
-Then `db-migrate`. ⚠️ **`courses` and `community` REQUIRE `api`.** 🚨 **A module
-may also come from a stranger** — `module add --from https://…`, never
-hand-copied: it is checked, then copied in as YOUR code, and runs with your
-code's access although nobody read it. All of it:
+Then `db-migrate`. ⚠️ **`courses` and `community` REQUIRE `api`.** 🚨 **That
+table is the whole set** — `module add` takes an id already under `modules/`,
+and there is no way to fetch another. All of it:
 **[`docs/modules.md`](docs/modules.md)**.
 
 🚨 **A `##` section in this file may condense only a subsystem present in a

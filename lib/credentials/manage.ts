@@ -15,6 +15,10 @@ import { users } from "@/db/schema";
 import { hashPassword, verifyPassword } from "@/lib/credentials/hash";
 import {
   CredentialError,
+  LINK_SEND_BUCKET,
+  LINK_SEND_LIMIT,
+  LINK_SEND_ORIGIN_BUCKET,
+  LINK_SEND_ORIGIN_LIMIT,
   LOOKUP_BUCKET,
   LOOKUP_LIMIT,
   LOOKUP_ORIGIN_BUCKET,
@@ -207,6 +211,43 @@ export async function addressHasPassword(
     .where(eq(users.email, key));
 
   return { ok: true, hasPassword: Boolean(row?.passwordHash) };
+}
+
+/**
+ * May a sign-in link be MAILED to this address right now?
+ *
+ * ⛔ THE SECOND EXCEPTION to the rule at the top of this file, and for the same
+ * reason as the first: nobody has a session on the sign-in page, so there is no
+ * id to read. It touches no database and returns no fact about the address —
+ * only whether the counter has room.
+ *
+ * 🚨 **It lives here rather than in `sendVerificationRequest()`** (lib/email.ts),
+ * which is the tempting place and the wrong one. That function is what
+ * `signIn("email")` calls from EVERY caller — including the operator's
+ * invitation on /dashboard/admin/users, which is `requireOwner()`-gated and has
+ * no business being metered. Deciding here keeps the whole sign-in metric in one
+ * file and makes that exemption a visible choice instead of an accident.
+ *
+ * Counted like the lookup above: on every hit rather than on failures, and
+ * BEFORE the mail is handed to Auth.js. A brake that fires after the send has
+ * already paid for what it refuses.
+ */
+export async function mayMailSignInLink(
+  email: string,
+  /** Where the request came from — see `originOf` in lib/auth/password-login.ts. */
+  origin?: string | null,
+): Promise<boolean> {
+  const key = normaliseEmail(email);
+
+  if (isLimited(LINK_SEND_BUCKET, key, LINK_SEND_LIMIT)) return false;
+  if (origin && isLimited(LINK_SEND_ORIGIN_BUCKET, origin, LINK_SEND_ORIGIN_LIMIT)) {
+    return false;
+  }
+
+  record(LINK_SEND_BUCKET, key, LINK_SEND_LIMIT);
+  if (origin) record(LINK_SEND_ORIGIN_BUCKET, origin, LINK_SEND_ORIGIN_LIMIT);
+
+  return true;
 }
 
 export async function verifyPasswordLogin(

@@ -17,11 +17,11 @@
 //
 // ── Why it is worth a rung of its own ──────────────────────────────────────
 //
-// Three doors in this template write somebody else's text into files an agent
-// then reads as instruction — `module add --from`, `node run.mjs update`, and
-// the corpus the skill `knowledge-intake` distils into `content/knowledge/`,
-// which `lib/ai/retriever.ts` puts into the model's cacheable system block.
-// A review is the control on all three, and a review is exactly what this class
+// Two doors in this template write somebody else's text into files an agent
+// then reads as instruction — `node run.mjs update`, and the corpus the skill
+// `knowledge-intake` distils into `content/knowledge/`, which
+// `lib/ai/retriever.ts` puts into the model's cacheable system block.
+// A review is the control on both, and a review is exactly what this class
 // of character defeats. The reasoning in full, and what was measured and left
 // off, is in `../invisible.mjs`.
 //
@@ -58,8 +58,8 @@
 //
 // That is the argument for the rung rather than for a test alone: the test half
 // guards THIS tree and fails a commit, and the rung is what answers the same
-// question about a tree the test was never written against — a module that
-// arrived from a stranger, a guidance file that arrived over the network.
+// question about a tree the test was never written against — a customer's own
+// app, a guidance file that arrived over the network.
 // Measured on a clean checkout at template 0.32.0; the whole walk is 1353 files
 // in ~140 ms, so it costs nothing worth naming in a ladder that asks a network.
 //

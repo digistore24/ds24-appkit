@@ -1,0 +1,64 @@
+{
+  "id": "metrics",
+  "version": "0.1.0",
+  "requiresTemplate": "0.33.0",
+  "title": {
+    "de": "Kennzahlen",
+    "en": "Metrics"
+  },
+  "summary": "onboarding funnel, retention cohorts and split tests, counted in this app's own database",
+  "docs": "docs/metrics.md",
+  "skill": "metrics",
+  "app": [
+    "dashboard/admin/metrics"
+  ],
+  "nav": "nav.ts",
+  "gate": "gate.ts",
+  "features": [
+    "metricsAdmin"
+  ],
+  "messages": {
+    "namespaces": [
+      "metrics",
+      "metricsAdmin"
+    ],
+    "dir": "messages"
+  },
+  "schema": "schema.ts",
+  "tables": [
+    "metrics_events",
+    "metrics_daily"
+  ],
+  "tablePrefix": "metrics_",
+  "content": "collected",
+  "migrations": "drizzle",
+  "migrationsTable": "__drizzle_migrations_metrics",
+  "entry": "module.ts",
+  "serverExports": {
+    "track": "lib/track.ts"
+  },
+  "erase": true,
+  "privacy": {
+    "sections": [
+      "metricsEvents"
+    ],
+    "accountNotes": {
+      "export": "metrics.accountExportNote",
+      "deletion": "metrics.accountDeletionNote"
+    },
+    "ts": "privacy/sections.ts",
+    "mjs": "privacy/sections.mjs"
+  },
+  "presence": "presence/check.ts",
+  "commands": {
+    "metrics-report": {
+      "script": "report.mjs",
+      "help": "The onboarding funnel, retention cohorts and split-test readings — as text, or as data with --json"
+    }
+  },
+  "cron": "cron.ts",
+  "cronJobs": [
+    "metrics-rollup",
+    "metrics-prune"
+  ]
+}

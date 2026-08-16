@@ -197,6 +197,8 @@
     "blocksWeightValue": "{reporters} reporters, {weight} together",
     "blocksContradictionTitle": "Contradictory state",
     "blocksContradictionBody": "These people are blocked by hand and now hold the moderator role: {names}. That can only happen if the role was granted after the block. Decide which should stand — the role comes off in the user administration, the block here.",
+    "blocksGraceTitle": "New accounts are limited for their first hours",
+    "blocksGraceBody": "Somebody who has just signed up and bought nothing may write {posts, plural, one {one post} other {# posts}} a day for their first {hours, plural, one {one hour} other {# hours}}, {links, plural, =0 {no links at all} one {one link per post} other {# links per post}}, and send messages at a tighter rate. It applies to nobody with purchased access, no moderator and nobody on the whitelist. It is in no table and ends by itself — so this is the rule rather than a list. Change it in config/community.json under \"newMember\".",
     "listReasonLabel": "Reason",
     "listReasonPlaceholder": "Why this decision?",
     "listReasonNote": "The reason goes in the trail and in the subject access report of the person concerned — write it the way you would want it read back to you.",
@@ -319,6 +321,8 @@
     "communityImagesOff": "Posts in this community do not take pictures.",
     "communityWriteBlocked": "You cannot write here at the moment — moderation decided that. You can still read everything.",
     "communityCannotListRole": "Operators and moderators cannot go on this list. Take the role away first.",
-    "communityStandingConflict": "Protected and blocked at the same time is not a state. Choose one."
+    "communityStandingConflict": "Protected and blocked at the same time is not a state. Choose one.",
+    "communityNewMemberPostLimit": "That is it for today — a new account can write {max, plural, one {one post} other {# posts}} a day. {hours, plural, one {In an hour} other {In # hours}} this limit is gone.",
+    "communityNewMemberNoLinks": "New accounts cannot post links yet. {hours, plural, one {In an hour} other {In # hours}} you can; until then, write the address out in words."
   }
 }
