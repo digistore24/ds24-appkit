@@ -213,6 +213,34 @@ export const COMMUNITY_ERROR_CODES = [
    * told about, unlike the module's own enablement (FR-180).
    */
   "communityImagesOff",
+  /**
+   * An operator has taken this member's writing away by hand.
+   *
+   * 🚨 **Its own code, and never `communitySendBlocked`.** That one says "there
+   * are reports against you" — true of the automatic block, a lie about this
+   * one, and a member who reads it would go looking for reports that do not
+   * exist. Two mechanisms, two sentences: the automatic block is a derivation
+   * anybody can dissolve by consuming reports, this is a decision a person took
+   * and only a person takes back.
+   */
+  "communityWriteBlocked",
+  /**
+   * Somebody tried to put an operator or a moderator on a blacklist.
+   *
+   * The mirror of "role-holders are never auto-blocked" (`sendBlockState()`): a
+   * community that can silence its own moderation has handed itself to whoever
+   * organises fastest — and by hand is the same hole with a slower fuse. Take
+   * the ROLE away first; the user administration is where that lives.
+   */
+  "communityCannotListRole",
+  /**
+   * Protected and write-blocked at once.
+   *
+   * Refused rather than resolved by a precedence rule: "which wins" is a
+   * sentence somebody has to remember correctly at the moment it matters, and
+   * the two states mean opposite things. The operator says which one they meant.
+   */
+  "communityStandingConflict",
 ] as const;
 
 export type CommunityErrorCode = (typeof COMMUNITY_ERROR_CODES)[number];
@@ -837,15 +865,72 @@ export function postLimit(maxPosts: number): Limit {
  * timestamp and no actor is not a state this app writes, and it resolves to
  * `authorDeleted` — the mildest reading, which is the right way to be wrong
  * about a row that should not exist.
+ *
+ * ── The fifth state, and why `hiddenAt` is REQUIRED here ──────────────────
+ * 🚨 **Not an optional field.** Optional would mean a `select` that forgets the
+ * column hands in `undefined`, which reads as "not hidden", and a post the
+ * community took off the page renders — the exact failure this function exists
+ * to make impossible, reached by omission instead of by a renderer reading
+ * columns itself. Required makes the COMPILER name every read site. A caller
+ * that genuinely has no such axis (a direct message) passes `null` and says so.
+ *
+ * **Deletion beats hiding.** A row carrying both reads as the final thing: to
+ * the author, "you deleted this" and "this is being looked at" are different
+ * sentences, and the first is the one that is settled.
  */
 export function contentState(post: {
   deletedAt: Date | null;
   deletedBy: "author" | "moderator" | "system" | null;
-}): "visible" | "authorDeleted" | "moderatorRemoved" | "accountDeleted" {
-  if (!post.deletedAt) return "visible";
+  /** The automatic lock. `null` for anything that cannot carry one. */
+  hiddenAt: Date | null;
+}):
+  | "visible"
+  | "authorDeleted"
+  | "moderatorRemoved"
+  | "accountDeleted"
+  | "autoHidden" {
+  if (!post.deletedAt) return post.hiddenAt ? "autoHidden" : "visible";
   if (post.deletedBy === "moderator") return "moderatorRemoved";
   if (post.deletedBy === "system") return "accountDeleted";
   return "authorDeleted";
+}
+
+/**
+ * What THIS reader gets of a post: its words, a tombstone, or nothing at all.
+ *
+ * 🚨 **The one question in this file that depends on who is asking**, and it
+ * exists because the automatic lock is the one state that is not the same fact
+ * for everybody. A deletion is: the post is gone, and every reader — the author
+ * included — sees the same stub. A lock is a SUSPICION, and the person it is
+ * about is the one who most needs to know it happened.
+ *
+ *  - **`words`** — render it. A live post for anyone; a locked post for its own
+ *    author, who is shown it with a sentence saying it is being looked at.
+ *  - **`tombstone`** — the three deletions. A stub stays, because the replies
+ *    under it would otherwise answer nothing.
+ *  - **`omit`** — a locked post, to anybody else. It is not there.
+ *
+ * ⚠️ **The cost of `omit` is real and was chosen with it named:** replies below
+ * a post that has vanished read as answers to nothing, which is the very thing
+ * the deletion stub exists to prevent. The trade is deliberate — spam that is
+ * merely greyed out is still spam on the page — and it is why the lock is
+ * reversible and why the queue is where it lands.
+ *
+ * ⚠️ **This decides the WORDS, not only the markup.** A server that sent a
+ * locked post's content and left the hiding to a browser would be publishing
+ * it: the payload is readable in the network tab. So `omit` blanks on the
+ * server AND drops in the renderer, and neither half is the guard on its own.
+ */
+export function postVisibleTo(
+  state: ReturnType<typeof contentState>,
+  authorId: string | null,
+  viewerId: string | null,
+): "words" | "tombstone" | "omit" {
+  if (state === "visible") return "words";
+  if (state !== "autoHidden") return "tombstone";
+  // An anonymous reader is never the author — `null === null` must not make
+  // an account-less viewer the author of an authorless post.
+  return authorId !== null && authorId === viewerId ? "words" : "omit";
 }
 
 /**
@@ -1340,6 +1425,34 @@ export const MODERATION_ACTS = [
   "sendBlockFallen",
   /** …and a moderator lifted it. */
   "blockLifted",
+  /**
+   * 🚨 **The automatic post lock fell — and nobody decided it.**
+   *
+   * Written with `actorId: null`, exactly as `sendBlockFallen` is: a threshold
+   * is not a person, and putting the reporting member's name here would read as
+   * if they had removed the post themselves.
+   */
+  "postAutoHidden",
+  /** …and somebody put the post back. This one HAS an actor. */
+  "postRestored",
+  /** An operator put a member beyond the reach of the automatic blocks. */
+  "memberProtected",
+  /** …and took that protection away again. Its OWN row, never an edit. */
+  "memberUnprotected",
+  /** An operator took a member's writing away by hand. Carries a reason. */
+  "writeBlocked",
+  /** …and gave it back. */
+  "writeUnblocked",
+  /**
+   * An operator stopped this member's reports from counting.
+   *
+   * ⚠️ Their reports are still WRITTEN — see `reporterWeight()`. The act is
+   * recorded here because it is a decision about a person, and because "why did
+   * my reports stop working" has to have an answer somewhere.
+   */
+  "reportsIgnored",
+  /** …and let them count again. */
+  "reportsCounted",
 ] as const;
 
 export type ModerationAct = (typeof MODERATION_ACTS)[number];
@@ -1447,10 +1560,183 @@ export function lockProblem(
 /** What the reports say about one member, right now. */
 export interface SendBlockState {
   blocked: boolean;
-  /** When it crossed — the moment the threshold-th distinct report landed. */
+  /** When it crossed — the moment the report that took the sum over landed. */
   since: Date | null;
   /** The distinct reporters that count. Never rendered to the blocked member. */
   reporterIds: string[];
+  /**
+   * What those reporters summed to, in hundredths.
+   *
+   * Reported so the review list can say WHY a block stands — "five ordinary
+   * reporters" and "two long-standing customers" are the same `blocked: true`
+   * and are not the same thing to whoever has to judge it.
+   */
+  weight: number;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// What one member's word weighs
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * One ordinary reporter. Every weight in this file is hundredths of this.
+ *
+ * 🚨 **Hundredths of an integer, never a fraction.** The comparison this feeds
+ * is `sum >= threshold`, and a floating-point sum is order-dependent — the same
+ * rows added in a different order could cross or not cross. Somebody's writing
+ * hangs on that comparison. Same temperature as `compareCursor()`, which
+ * compares a tuple rather than a timestamp for the same class of reason.
+ */
+export const WEIGHT_UNIT = 100;
+
+/**
+ * The most one member's word may ever weigh — four ordinary reporters.
+ *
+ * ⚠️ **The cap is the point, not a formality.** Without it a long-standing
+ * customer who has paid for years could cross a threshold of five on their own,
+ * and this whole mechanism would have replaced "five members agree" with "one
+ * important member decided". The second floor in `sendBlockState()` (at least
+ * two distinct reporters, always) is the other half of that answer, and both
+ * are needed: 400 is more than a threshold of 2 × 100.
+ */
+export const MAX_REPORTER_WEIGHT = 400;
+
+/**
+ * However heavy they are, this many different people have to agree.
+ *
+ * 🚨 **The floor the weights cannot argue with.** `sendBlock.threshold` already
+ * refuses a configured 1 because it would be a one-tap gag; weights would smuggle
+ * that back in through the other door, since one capped reporter (400) outweighs
+ * a threshold of 2 (200). So the count survives alongside the sum, and neither
+ * alone can block anybody.
+ */
+export const MIN_DISTINCT_REPORTERS = 2;
+
+/** A year of membership is where the tenure term reaches its configured most. */
+export const TENURE_FULL_DAYS = 365;
+/**
+ * Three live purchased entitlements is where the paying term reaches its most.
+ *
+ * 🚨 **Entitlements, not money, and that is a correction rather than a
+ * shortcut.** "The more they pay, the more they weigh" wants a sum, and
+ * `orders.amount` is `numeric(12,2)` beside its OWN currency column —
+ * `CLAUDE.md` forbids summing across two of them, and the alternative is an
+ * exchange rate this app has no business inventing. What it can answer without
+ * guessing is how much live PURCHASED access somebody holds
+ * (`grants.source = 'purchase'`), which is the app's own definition of a paying
+ * customer everywhere else. A customer with three products outranks one with a
+ * single subscription; a cheap product and an expensive one weigh alike, and
+ * that is the honest limit of what can be counted here.
+ */
+export const PAID_FULL_GRANTS = 3;
+/** Ten reports filed is where the participation term reaches its most. */
+export const REPORTS_MADE_FULL = 10;
+/** Five reports against somebody is where the deduction reaches its most. */
+export const REPORTS_AGAINST_FULL = 5;
+
+/**
+ * The four dials an operator actually turns, in hundredths.
+ *
+ * Each says **how much that signal may be worth at most**; the ramp to it is
+ * linear and its end point is a constant above. Four numbers with a plain
+ * meaning beat nine with an arithmetic one — and this config file switches the
+ * WHOLE community off on a value it cannot read, so every knob that does not
+ * earn its place is a way to take a community down by typo.
+ */
+export interface ReporterWeighting {
+  /** Ships **false**: every reporter weighs exactly `WEIGHT_UNIT`. */
+  enabled: boolean;
+  /** Most the tenure term may add. */
+  tenureMax: number;
+  /** Most the paying term may add. */
+  paidMax: number;
+  /** Most filing reports may add. */
+  reportsMadeMax: number;
+  /** Most reports AGAINST this member may take away. */
+  reportsAgainstMax: number;
+}
+
+/** Linear ramp to `max`, then flat. Integer in, integer out, never negative. */
+function ramp(value: number, full: number, max: number): number {
+  if (max <= 0 || full <= 0 || value <= 0) return 0;
+  if (value >= full) return Math.round(max);
+  return Math.round((value / full) * max);
+}
+
+/**
+ * What this member's word weighs, in hundredths of an ordinary reporter.
+ *
+ * 🚨 **Nothing here is stored.** The weight is recomputed every time a block is
+ * derived, from facts that exist anyway — how long they have been a member,
+ * what they have paid, how much they have reported, how much they have been
+ * reported. A stored score would be a second truth that goes stale, and it
+ * would also be a reputation number about a person sitting in a table waiting
+ * to be exported; there is nothing to export because there is nothing to store.
+ *
+ * ⚠️ **The cost of that choice is real and is answered elsewhere:** a standing
+ * block can dissolve on its own when two reporters' subscriptions lapse, with
+ * nobody deciding anything. The review list is where an operator sees that, and
+ * the write-blacklist is how they make one stand.
+ *
+ * ── No clock ──────────────────────────────────────────────────────────────
+ * The time-shaped input arrives as `memberDays`, already counted. The shell
+ * holds the one clock this module reasons with (`sendBlockState()`); a second
+ * function reading a second clock is a second place for a window to be counted
+ * wrongly, and this one would be counted in the operator's timezone or not.
+ *
+ * ── The farmable term, named rather than hidden ───────────────────────────
+ * ⚠️ `reportsMade` is the one signal the reporter controls themselves, and
+ * `report.maxPer10Min` is 20. It gets the smallest shipped ceiling of the four,
+ * and `reportsAgainst` pulls against it — a ring whose members report each other
+ * drives its own weight down, which is exactly the shape organised abuse takes.
+ *
+ * @param reportsIgnored the write-blacklist B. Short-circuits to 0.
+ */
+export function reporterWeight(input: {
+  reportsIgnored: boolean;
+  memberDays: number;
+  /** Live purchased entitlements — see `PAID_FULL_GRANTS` for why not money. */
+  paidGrants: number;
+  reportsMade: number;
+  reportsAgainst: number;
+  config: ReporterWeighting;
+}): number {
+  // An operator said this member's reports do not count. Nothing outweighs
+  // that — not tenure, not money. It is the whole point of the list.
+  if (input.reportsIgnored) return 0;
+
+  // Off is the shipped state, and off means "exactly as before this existed":
+  // every reporter weighs one, so a sum against `threshold × WEIGHT_UNIT` is
+  // the distinct count it has always been.
+  if (!input.config.enabled) return WEIGHT_UNIT;
+
+  const earned =
+    ramp(input.memberDays, TENURE_FULL_DAYS, input.config.tenureMax) +
+    ramp(input.paidGrants, PAID_FULL_GRANTS, input.config.paidMax) +
+    ramp(input.reportsMade, REPORTS_MADE_FULL, input.config.reportsMadeMax);
+
+  const lost = ramp(
+    input.reportsAgainst,
+    REPORTS_AGAINST_FULL,
+    input.config.reportsAgainstMax,
+  );
+
+  const weight = WEIGHT_UNIT + earned - lost;
+  return Math.max(0, Math.min(MAX_REPORTER_WEIGHT, weight));
+}
+
+/**
+ * The configured threshold, as a weight.
+ *
+ * 🚨 **The one place `threshold` becomes hundredths, and the reason
+ * `sendBlock.threshold` keeps its name and its scale.** Renaming it would make
+ * it an UNKNOWN KEY in `config/community.json`, and an unknown key in that
+ * block switches the whole community off until the next deploy — for every app
+ * already shipping a file with `"threshold": 5` in it. So the config keeps
+ * saying "this many ordinary reporters" and the arithmetic happens here.
+ */
+export function blockThresholdWeight(threshold: number): number {
+  return threshold * WEIGHT_UNIT;
 }
 
 /**
@@ -1470,18 +1756,33 @@ export interface SendBlockState {
  *
  * ── What counts ───────────────────────────────────────────────────────────
  *  - **Distinct reporters**, so one member cannot block anybody alone. The
- *    unique indexes already absorb their duplicates; counting distinct ids is
- *    the same rule stated where it can be read.
+ *    unique indexes already absorb duplicates of the same CONTENT; five
+ *    different posts by the same person are five rows, and only the first of
+ *    them counts. 🚨 With weights this stops being a restatement of the index
+ *    and becomes load-bearing: "add up every row" would hand one member the
+ *    one-tap gag that `threshold`'s floor of 2 exists to forbid.
  *  - **Unconsumed** rows only — a moderator who judged a report took it out of
  *    the derivation, which is exactly how the lift works.
  *  - **Inside the window**, so a slow trickle of complaints over a year is not
  *    a block.
+ *  - **Weight**, in hundredths of an ordinary reporter, computed fresh by the
+ *    shell (`reporterWeight()`). A reporter's FIRST row inside the window
+ *    carries their weight; the rest of their rows carry nothing, so a member
+ *    cannot add to their own weight by reporting more.
+ *
+ * ── Two floors, and both are needed ───────────────────────────────────────
+ * 🚨 Blocked requires the summed weight to reach the threshold **AND** at least
+ * `MIN_DISTINCT_REPORTERS` distinct reporters. The cap on a single weight is
+ * not enough on its own: `MAX_REPORTER_WEIGHT` is 400 and a threshold of 2 is
+ * 200, so without the second floor one heavyweight could silence somebody
+ * alone — the exact thing the config's floor of 2 refuses to configure.
  *
  * ── Who is exempt ─────────────────────────────────────────────────────────
- * The operator and anybody holding the moderator role, at derivation time. A
- * community that can silence its own moderators by five taps has handed the
- * moderation of itself to whoever organises fastest. Role-holders stay
- * blockable by hand, through the user administration that already exists.
+ * The operator and anybody holding the moderator role, at derivation time, and
+ * anybody an operator has PROTECTED by hand. A community that can silence its
+ * own moderators by five taps has handed the moderation of itself to whoever
+ * organises fastest. Role-holders stay blockable by hand, through the user
+ * administration that already exists.
  *
  * The clock is injected so the window and the expiry are testable at their
  * edges rather than around them.
@@ -1489,28 +1790,39 @@ export interface SendBlockState {
 export function sendBlockState(input: {
   reports: ReadonlyArray<{
     reporterId: string | null;
+    /** Hundredths of an ordinary reporter — `reporterWeight()`. */
+    weight: number;
     createdAt: Date;
     consumedAt: Date | null;
   }>;
   /** The target's role, read fresh by the shell (AD-63). */
   role: string;
-  threshold: number;
+  /** The target sits on the operator's protect list. Read fresh, like the role. */
+  protected?: boolean;
+  /** In hundredths — `blockThresholdWeight(config.threshold)`. */
+  thresholdWeight: number;
   windowHours: number;
   /** `null` = never expires. See OQ-4 in `config/community.json`. */
   expiryDays: number | null;
   now: Date;
 }): SendBlockState {
-  const none: SendBlockState = { blocked: false, since: null, reporterIds: [] };
+  const none: SendBlockState = {
+    blocked: false,
+    since: null,
+    reporterIds: [],
+    weight: 0,
+  };
 
-  // Role-holders are never auto-blocked. See the header.
+  // Role-holders and protected members are never auto-blocked. See the header.
   if (isOwner(input.role) || input.role === "moderator") return none;
+  if (input.protected) return none;
 
   const from = new Date(
     input.now.getTime() - input.windowHours * 60 * 60 * 1000,
   );
 
   // Oldest first, so the crossing moment is the createdAt of the report that
-  // brought the distinct count up to the threshold.
+  // brought the running sum up to the threshold.
   const counting = input.reports
     .filter((row) => row.consumedAt === null)
     .filter((row) => row.reporterId !== null)
@@ -1518,15 +1830,29 @@ export function sendBlockState(input: {
     .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
   const seen: string[] = [];
+  let weight = 0;
   let since: Date | null = null;
   for (const row of counting) {
-    if (!seen.includes(row.reporterId as string)) {
-      seen.push(row.reporterId as string);
-      if (seen.length === input.threshold) since = row.createdAt;
-    }
+    const reporterId = row.reporterId as string;
+    if (seen.includes(reporterId)) continue;
+    // A weight of 0 is somebody whose reports an operator has stopped counting.
+    // They count for NOTHING — not towards the sum, and not as a distinct
+    // reporter, and not in `reporterIds`, which feeds `conflictOfInterest()`.
+    // A reporter who contributed nothing must not be able to lock a moderator
+    // out of acting.
+    if (row.weight <= 0) continue;
+    seen.push(reporterId);
+    weight += row.weight;
+    if (since === null && weight >= input.thresholdWeight) since = row.createdAt;
   }
 
-  if (seen.length < input.threshold || !since) return none;
+  if (
+    weight < input.thresholdWeight ||
+    seen.length < MIN_DISTINCT_REPORTERS ||
+    !since
+  ) {
+    return none;
+  }
 
   // OQ-4's term. `null` is the shipped answer — a block stands until somebody
   // lifts it, because v1 has no notification channel and a silent expiry
@@ -1536,7 +1862,122 @@ export function sendBlockState(input: {
     if (input.now.getTime() >= expires) return none;
   }
 
-  return { blocked: true, since, reporterIds: seen };
+  return { blocked: true, since, reporterIds: seen, weight };
+}
+
+/**
+ * Has this ONE post been reported enough to be taken off the page?
+ *
+ * The sibling of `sendBlockState()` one level down: that one asks about a
+ * person over a window, this one asks about an object. Same distinct-reporter
+ * rule, same weights, same exemptions — and one deliberate difference.
+ *
+ * 🚨 **No window, and no clock.** A member is a person over time; a post is a
+ * thing. Three reports spread over three weeks say exactly as much about one
+ * post as three in an hour, and a window here would mean a spam post quietly
+ * reappearing a day later with nobody told. That is the same argument
+ * `config/community.json` makes for shipping `expiryDays: null`, only sharper —
+ * here there is no term that could expire, so the function takes no `now` at
+ * all. A test asserts that, because the absence IS the decision.
+ *
+ * ⚠️ **The threshold is its own, and it is meant to be LOWER** than the
+ * member's: the post is the damage, and hiding one is fully reversible where
+ * silencing somebody is felt. `communityConfigProblems()` refuses a
+ * configuration where it is higher, which would make this mechanism dead code.
+ */
+export function postHideState(input: {
+  reports: ReadonlyArray<{
+    reporterId: string | null;
+    weight: number;
+    consumedAt: Date | null;
+  }>;
+  /** The author's role, read fresh by the shell (AD-63). */
+  authorRole: string;
+  /** The author sits on the operator's protect list. */
+  authorProtected?: boolean;
+  /** In hundredths — `blockThresholdWeight(config.postHide.threshold)`. */
+  thresholdWeight: number;
+}): { hidden: boolean; weight: number; reporterIds: string[] } {
+  const none = { hidden: false, weight: 0, reporterIds: [] as string[] };
+
+  // Same exemptions as the send-block, and for the same reason: a community
+  // that can hide its own moderators' posts has handed itself over.
+  if (isOwner(input.authorRole) || input.authorRole === "moderator") return none;
+  if (input.authorProtected) return none;
+
+  const seen: string[] = [];
+  let weight = 0;
+  for (const row of input.reports) {
+    if (row.consumedAt !== null) continue;
+    if (row.reporterId === null) continue;
+    if (row.weight <= 0) continue;
+    if (seen.includes(row.reporterId)) continue;
+    seen.push(row.reporterId);
+    weight += row.weight;
+  }
+
+  if (weight < input.thresholdWeight || seen.length < MIN_DISTINCT_REPORTERS) {
+    return none;
+  }
+  return { hidden: true, weight, reporterIds: seen };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// The three lists — an operator's standing decisions about one member
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * What an operator has decided about this member, standing until they change it.
+ *
+ * 🚨 **Stored, and that is the opposite decision from the weight above — on
+ * purpose.** The weight is a CALCULATION over facts that exist anyway, so
+ * storing it would be a second truth that goes stale. These three are
+ * DECISIONS a person took: they follow from nothing, no derivation can produce
+ * them, they have to survive a redeploy, and they are the surface an operator
+ * corrects the automation with. The line is "who decided", not "how few tables".
+ */
+export interface MemberStanding {
+  /** Whitelist: the automatic blocks never touch this member. */
+  protected: boolean;
+  /** Blacklist A: an operator took their writing away by hand. */
+  writeBlocked: boolean;
+  /** Blacklist B: their reports are still written, and weigh nothing. */
+  reportsIgnored: boolean;
+}
+
+/** Nobody on any list — what a member with no row means. */
+export const NO_STANDING: MemberStanding = {
+  protected: false,
+  writeBlocked: false,
+  reportsIgnored: false,
+};
+
+/**
+ * May this standing be written for this member?
+ *
+ * Two refusals, and neither is a matter of taste:
+ *
+ * **A role-holder goes on no blacklist.** The mirror of "role-holders are never
+ * auto-blocked" in `sendBlockState()`. Silencing a moderator by hand is the
+ * same hole as silencing them by five taps, only slower; the answer is to take
+ * the ROLE away first, in the user administration where that decision lives.
+ * Protecting one is allowed — it changes nothing, since they are exempt anyway,
+ * and refusing a no-op would be a rule nobody could explain.
+ *
+ * **Protected and write-blocked at once is refused, not resolved.** A
+ * precedence rule is a sentence somebody has to remember correctly at the
+ * moment it matters, and these two mean opposite things.
+ */
+export function standingProblem(
+  target: { role: string },
+  next: MemberStanding,
+): "communityCannotListRole" | "communityStandingConflict" | null {
+  if (next.protected && next.writeBlocked) return "communityStandingConflict";
+  const onABlacklist = next.writeBlocked || next.reportsIgnored;
+  if (onABlacklist && (isOwner(target.role) || target.role === "moderator")) {
+    return "communityCannotListRole";
+  }
+  return null;
 }
 
 /**
@@ -1697,6 +2138,14 @@ export function reportProblem(input: {
  * `deletedAt === null` check that would silently mean something different if a
  * fourth state ever arrived.
  *
+ * 🚨 **And one did — `autoHidden` — which is the whole argument made good.** A
+ * `deletedAt === null` check here would have kept a post the community had just
+ * taken off the page in every follower's feed, compiling cleanly and passing
+ * every test. Because the question is asked of `contentState()` instead, the
+ * new state was excluded by construction, and the only thing this change needed
+ * was the column in the parameter type. Nothing about the sentence below had to
+ * be re-decided.
+ *
  * ⚠️ **It says nothing about ACCESS.** Whether the viewer may be in the space
  * a post was written in is answered by the space's own rules, at read time,
  * before this is ever asked — `mayEnterGroup()` and `mayViewEmbed()` are the
@@ -1705,6 +2154,7 @@ export function reportProblem(input: {
 export function feedVisible(post: {
   deletedAt: Date | null;
   deletedBy: "author" | "moderator" | "system" | null;
+  hiddenAt: Date | null;
 }): boolean {
   return contentState(post) === "visible";
 }
@@ -2377,14 +2827,24 @@ export function hasUnread(
  *
  * Timezone-innocent on purpose: it compares `Date` values handed in and never
  * reads a clock, which is what lets the live cursor be tested without one.
- * `greatest(deletedAt, editedAt)`, with a missing stamp counting as the epoch
- * so a post that has neither sorts before every post that has one.
+ * `greatest(deletedAt, editedAt, hiddenAt)`, with a missing stamp counting as
+ * the epoch so a post that has none sorts before every post that has one.
+ *
+ * 🚨 **`hiddenAt` belongs in here, and forgetting it is a silent failure.** The
+ * live channel hands out state changes ordered by this stamp; a post that goes
+ * hidden without moving it stays on screen in every open tab until a reload —
+ * which is precisely the moment the spam wave is happening. This is also the
+ * reason the lock is a column at all rather than a derivation: a derived state
+ * has nothing to sort by. `live-parity.test.ts` drives this function and its
+ * SQL twin `CHANGED_AT` over one matrix, which is what keeps them in step.
  */
 export function changedAt(post: {
   deletedAt: Date | null;
   editedAt: Date | null;
+  hiddenAt: Date | null;
 }): Date {
   const deleted = post.deletedAt?.getTime() ?? 0;
   const edited = post.editedAt?.getTime() ?? 0;
-  return new Date(Math.max(deleted, edited));
+  const hidden = post.hiddenAt?.getTime() ?? 0;
+  return new Date(Math.max(deleted, edited, hidden));
 }

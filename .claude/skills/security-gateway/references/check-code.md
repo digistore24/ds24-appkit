@@ -113,8 +113,13 @@ community tables, so there is nothing here to check — skip the section.
 
 Installed, check `config/community.json` next. If `"enabled"` is false, the whole
 surface answers not-found — and **that is itself a check**: walk `/dashboard/community`,
-`/dashboard/admin/community`, one discussion URL, one server action in
-`modules/community/pages/**/actions.ts` and `POST /api/community/live`. Anything
+`/dashboard/admin/community`, `/dashboard/community/blocks`, one discussion URL,
+one server action in `modules/community/pages/**/actions.ts` and
+`POST /api/community/live`. (The blocks page earns its place in a sample of
+five rather than lengthening it for its own sake: it is the one route a
+**moderator** may read and the operator may not merely read but write on, so it
+is the only one of these whose guard is neither `requireOwner()` nor an
+ordinary member's.) Anything
 but a not-found in that state is 🚨 **CRITICAL** — the switch is this module's
 incident response, and a switch that leaves a door open is not one.
 

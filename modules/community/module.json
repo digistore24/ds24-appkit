@@ -28,6 +28,7 @@
     "community_group_moderators",
     "community_groups",
     "community_member_blocks",
+    "community_member_standing",
     "community_messages",
     "community_moderation_audit",
     "community_post_media",
@@ -92,7 +93,8 @@
       "communityModerationActs",
       "communityModerationReceived",
       "communitySpamReportsMade",
-      "communitySpamReportsReceived"
+      "communitySpamReportsReceived",
+      "communityMemberStanding"
     ],
     "accountNotes": {
       "export": "community.accountExportNote",

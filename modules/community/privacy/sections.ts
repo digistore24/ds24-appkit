@@ -41,6 +41,7 @@ import {
   communityGroupModerators,
   communityGroups,
   communityMemberBlocks,
+  communityMemberStanding,
   communityMessages,
   communityModerationAudit,
   communityPostMedia,
@@ -181,6 +182,29 @@ const privacy: ModulePrivacy = {
     // there rather than letting this file imply a protection it does not have.
     "communitySpamReportsMade",
     "communitySpamReportsReceived",
+    // What an operator has DECIDED about this member and left standing: the
+    // whitelist and the two blacklists.
+    //
+    // ⚠️ **A state, not an act, and that is why it needs a slice of its own.**
+    // The acts that put them on a list are already carried by the two
+    // moderation slices above — `community_moderation_audit` holds a row per
+    // decision. What no slice would otherwise answer is "and what is true about
+    // me RIGHT NOW", which is the part that is actually operating on them: a
+    // member whose reports have quietly counted for nothing since March cannot
+    // learn that from a trail of acts they would have to read backwards.
+    //
+    // ⚠️ It does NOT name the operator who set it, the same withholding as
+    // `communityModerationReceived` and for the same reason: in a small
+    // community, naming somebody is naming a person to be angry at. The
+    // decision, its date and its reason are what a member needs to dispute it.
+    //
+    // 🚨 Note what is NOT here and cannot be: the reporter weight. It is
+    // computed at the moment a block is derived and stored nowhere, so there is
+    // no row to export — an accident of the derived design that happens to be
+    // the privacy-friendly one, since a stored reputation number about a person
+    // would have to travel in both exports and would sit in a table waiting to
+    // be asked for.
+    "communityMemberStanding",
   ],
 
   async build(memberId: string) {
@@ -478,6 +502,23 @@ const privacy: ModulePrivacy = {
         .orderBy(asc(communitySpamReports.createdAt)),
     ]);
 
+    // The operator's standing decisions about this member. At most one row —
+    // the table is 1:1 — and no row is the ordinary case, which is why the key
+    // is always present and `null` rather than absent: an absent heading would
+    // say "this application has no such thing", which is a claim about the
+    // data. `setBy` is deliberately not selected; see the section's note.
+    const [standingRow] = await db
+      .select({
+        protectedAt: communityMemberStanding.protectedAt,
+        writeBlockedAt: communityMemberStanding.writeBlockedAt,
+        reportsIgnoredAt: communityMemberStanding.reportsIgnoredAt,
+        createdAt: communityMemberStanding.createdAt,
+        updatedAt: communityMemberStanding.updatedAt,
+      })
+      .from(communityMemberStanding)
+      .where(eq(communityMemberStanding.memberId, memberId))
+      .limit(1);
+
     // Both directions, in one section — the two lists this member can already
     // see on their own page. No count is derived here or anywhere else.
     const [followingRows, followedByRows] = await Promise.all([
@@ -525,6 +566,7 @@ const privacy: ModulePrivacy = {
       communityModerationReceived: moderationReceived,
       communitySpamReportsMade: reportsMade,
       communitySpamReportsReceived: reportsReceived,
+      communityMemberStanding: standingRow ?? null,
     };
   },
 };

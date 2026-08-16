@@ -238,6 +238,8 @@ export function MessageList({
         const state = contentState({
           deletedAt: message.deletedAt ? new Date(message.deletedAt) : null,
           deletedBy: message.deletedBy,
+          // A direct message carries no automatic lock — see `messages.ts`.
+          hiddenAt: null,
         });
         const mine = message.authorId === memberId;
 

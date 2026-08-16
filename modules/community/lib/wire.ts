@@ -55,6 +55,7 @@ export function wirePost(post: PostRow): PostView {
     editedAt: post.editedAt?.toISOString() ?? null,
     deletedAt: post.deletedAt?.toISOString() ?? null,
     deletedBy: post.deletedBy,
+    hiddenAt: post.hiddenAt?.toISOString() ?? null,
     authorProfileName: post.authorProfileName,
     authorAccountName: post.authorAccountName,
     images: post.images,

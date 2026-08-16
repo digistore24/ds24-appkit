@@ -2,16 +2,16 @@
 // SPDX-License-Identifier: MIT
 
 import { cache } from "react";
-import { and, asc, count, eq, inArray, isNull, ne, or } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNotNull, isNull, ne, or } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { communityDiscussions, communityMessages, communityModerationAudit, communityPosts, communitySpamReports, communityProfiles } from "../schema";
 import { isOwner } from "@/lib/roles";
 import { isLimited, record } from "@/lib/rate-limit";
 import { communityConfig } from "./config";
-import { COMMUNITY_REPORT_RATE_BUCKET, MAX_MODERATION_REASON_LENGTH, CommunityError, conflictOfInterest, mayConsumeReport, contentState, mayModerate, reportLimit, reportProblem, sendBlockState, windowMessageIds } from "./rules";
+import { COMMUNITY_REPORT_RATE_BUCKET, MAX_MODERATION_REASON_LENGTH, CommunityError, blockThresholdWeight, conflictOfInterest, mayConsumeReport, contentState, mayModerate, postHideState, reportLimit, reportProblem, sendBlockState, windowMessageIds } from "./rules";
 
-import { sendBlockFor } from "./_blocks";
+import { reporterWeightsFor, sendBlockFor, standingFor } from "./_blocks";
 import { pageOffset } from "./_paging";
 import { MessageRow, conversationForParticipant, toMessageRow } from "./messages";
 import { moderationAuthority, requireModerator } from "./moderation";
@@ -259,6 +259,12 @@ export async function reportContent(input: {
           reporterId: communitySpamReports.reporterId,
           createdAt: communitySpamReports.createdAt,
           consumedAt: communitySpamReports.consumedAt,
+          // For the post lock below — the same read, narrowed in JS rather than
+          // asked a second time. A post has exactly one author, so the row lock
+          // taken above already serialises two members reporting the same post
+          // at once; a second query would need its own lock to be worth
+          // anything, and would take it in a different order.
+          postId: communitySpamReports.postId,
         })
         .from(communitySpamReports)
         .where(eq(communitySpamReports.reportedMemberId, reportedMemberId))
@@ -266,10 +272,23 @@ export async function reportContent(input: {
 
       const blockConfig = communityConfig().sendBlock;
       const now = new Date();
+
+      // The weights, once, for both derivations below — they are over the same
+      // reporters, and asking twice would be two sweeps for one answer.
+      const weights = await reporterWeightsFor(
+        rows.map((row) => row.reporterId).filter((id) => id !== null),
+      );
+      const weighted = rows.map((row) => ({
+        ...row,
+        weight: row.reporterId ? (weights.get(row.reporterId) ?? 0) : 0,
+      }));
+      const targetStanding = await standingFor(reportedMemberId);
+
       const state = sendBlockState({
-        reports: rows,
+        reports: weighted,
         role: targetRole,
-        threshold: blockConfig.threshold,
+        protected: targetStanding.protected,
+        thresholdWeight: blockThresholdWeight(blockConfig.threshold),
         windowHours: blockConfig.windowHours,
         expiryDays: blockConfig.expiryDays,
         now,
@@ -278,11 +297,12 @@ export async function reportContent(input: {
       // Was it already blocked WITHOUT this report? If so the state did not
       // change and there is nothing to record.
       const before = sendBlockState({
-        reports: rows.filter(
+        reports: weighted.filter(
           (row) => row.reporterId !== input.reporterId,
         ),
         role: targetRole,
-        threshold: blockConfig.threshold,
+        protected: targetStanding.protected,
+        thresholdWeight: blockThresholdWeight(blockConfig.threshold),
         windowHours: blockConfig.windowHours,
         expiryDays: blockConfig.expiryDays,
         now,
@@ -298,6 +318,77 @@ export async function reportContent(input: {
           targetMemberId: reportedMemberId,
           exposedMessageIds: state.reporterIds,
         });
+      }
+
+      // ── The automatic post lock ─────────────────────────────────────────
+      //
+      // Same before/after shape as the block above, and the comparison is not
+      // decoration: without it every FURTHER report on an already-locked post
+      // would stamp `hiddenAt` again — including one that arrives after a
+      // moderator has just put the post back, which would undo their decision
+      // silently and leave a second `postAutoHidden` row claiming a threshold
+      // was crossed that had already been judged.
+      //
+      // ⚠️ **Only ever the post being reported now.** A member's OTHER posts
+      // may well be over the line too, and locking them here would mean one
+      // report acting on content nobody reported. Each post crosses on its own
+      // report, which is also what keeps this arithmetic bounded.
+      const hideConfig = communityConfig().postHide;
+      if (hideConfig.enabled && input.postId) {
+        const onThisPost = weighted.filter(
+          (row) => row.postId === input.postId,
+        );
+        const hidden = postHideState({
+          reports: onThisPost,
+          authorRole: targetRole,
+          authorProtected: targetStanding.protected,
+          thresholdWeight: blockThresholdWeight(hideConfig.threshold),
+        });
+        const hiddenBefore = postHideState({
+          reports: onThisPost.filter(
+            (row) => row.reporterId !== input.reporterId,
+          ),
+          authorRole: targetRole,
+          authorProtected: targetStanding.protected,
+          thresholdWeight: blockThresholdWeight(hideConfig.threshold),
+        });
+
+        if (hidden.hidden && !hiddenBefore.hidden) {
+          // 🚨 `isNull(hiddenAt)` in the WHERE and `returning` on the way out:
+          // the row is only stamped if it was not stamped already, and the act
+          // is only recorded if the row really moved. Two reports crossing the
+          // line in the same instant would otherwise write two acts for one
+          // event — the A-shaped defect the send-block's own row lock exists to
+          // prevent, one table over.
+          //
+          // ⚠️ A post that already carries a DELETION is left alone: it is
+          // gone by a stronger route, `contentState()` reads the deletion
+          // first, and stamping it would put a lock on a row a moderator has
+          // already settled.
+          const locked = await tx
+            .update(communityPosts)
+            .set({ hiddenAt: now })
+            .where(
+              and(
+                eq(communityPosts.id, input.postId),
+                isNull(communityPosts.hiddenAt),
+                isNull(communityPosts.deletedAt),
+              ),
+            )
+            .returning({ id: communityPosts.id });
+
+          if (locked.length > 0) {
+            await tx.insert(communityModerationAudit).values({
+              // Nobody decided this either — the same NULL, for the same
+              // reason as `sendBlockFallen` above.
+              actorId: null,
+              act: "postAutoHidden",
+              targetMemberId: reportedMemberId,
+              postId: input.postId,
+              exposedMessageIds: hidden.reporterIds,
+            });
+          }
+        }
       }
     }
   });
@@ -353,6 +444,43 @@ export async function liftSendBlock(input: {
       // an answer a year later.
       exposedMessageIds: consumed.map((row) => row.id),
     });
+
+    // ── And every post this member had locked comes back ─────────────────
+    //
+    // 🚨 **One statement, not a loop, and no re-derivation — because the lift
+    // has just made re-derivation trivially answerable.** The `UPDATE` above
+    // consumed EVERY unconsumed report against this member, so no post of
+    // theirs can still be over the line: `postHideState()` counts only
+    // unconsumed rows, and there are none left. Recomputing per post would be
+    // asking a question whose answer the previous statement guarantees.
+    //
+    // ⚠️ It does not touch a post carrying a DELETION — a moderator's removal
+    // outlives a lift, and clearing the lock on one would be housekeeping on a
+    // row somebody already settled. `contentState()` would read the deletion
+    // either way; this keeps the column honest rather than merely harmless.
+    const restored = await tx
+      .update(communityPosts)
+      .set({ hiddenAt: null })
+      .where(
+        and(
+          eq(communityPosts.authorId, input.memberId),
+          isNotNull(communityPosts.hiddenAt),
+          isNull(communityPosts.deletedAt),
+        ),
+      )
+      .returning({ id: communityPosts.id });
+
+    // ONE act for one lift, with the posts it covered in the id list — the
+    // same shape `blockLifted` uses for the reports it consumed. A row per post
+    // would read as several decisions where a person made one.
+    if (restored.length > 0) {
+      await tx.insert(communityModerationAudit).values({
+        actorId: input.actorId,
+        act: "postRestored",
+        targetMemberId: input.memberId,
+        exposedMessageIds: restored.map((row) => row.id),
+      });
+    }
   });
 }
 
@@ -371,6 +499,17 @@ export async function standingSendBlocks(actorId: string): Promise<
     name: string | null;
     since: Date;
     reporterIds: string[];
+    /**
+     * What the counted reporters summed to, in hundredths.
+     *
+     * ⚠️ **The review list is the ONE surface allowed to show this.** "Five
+     * ordinary reporters" and "two long-standing customers" are the same
+     * `blocked: true` and are not the same thing to judge, so whoever has to
+     * judge it gets the number. A member never does: a score on a page is a
+     * running tally of how close somebody is to being silenced, which is a
+     * brigade's scoreboard.
+     */
+    weight: number;
     /** May THIS moderator lift it? The core decides; the button obeys. */
     conflicted: boolean;
   }> | null
@@ -389,6 +528,7 @@ export async function standingSendBlocks(actorId: string): Promise<
     name: string | null;
     since: Date;
     reporterIds: string[];
+    weight: number;
     conflicted: boolean;
   }> = [];
 
@@ -406,6 +546,7 @@ export async function standingSendBlocks(actorId: string): Promise<
       name: account?.name ?? null,
       since: state.since,
       reporterIds: state.reporterIds,
+      weight: state.weight,
       conflicted:
         conflictOfInterest(
           { id: actorId, role: authority.role },
@@ -694,6 +835,14 @@ export async function consumeReport(input: {
     // that removes the reason for keeping the words is the act that removes
     // them.
     await completeDeferredScrub(tx, report);
+
+    // ── And the automatic lock comes off, if this was what held it ────────
+    //
+    // 🚨 **This is the correction half of "the system decides, a person
+    // corrects", and without it the whole mechanism is a one-way door.** A
+    // moderator who looks at a locked post and judges it fine has exactly one
+    // action — consuming the report — and that has to be what puts it back.
+    await restoreIfJudged(tx, report, input.actorId);
   });
 }
 
@@ -705,6 +854,87 @@ export async function consumeReport(input: {
  * moderators consuming the last two reports at once would each decide the
  * other one still needs it.
  */
+/**
+ * Take the automatic lock off a post once its reports have been judged.
+ *
+ * 🚨 **The lock is an EVENT STAMP, not a standing derivation, and this is the
+ * function that makes that true.** The threshold was crossed; that happened,
+ * and it does not un-happen because a reporter's subscription lapsed and their
+ * live weight sank. So nothing recomputes the lock in the background — it is
+ * cleared by an ACT, here and in `liftSendBlock()`, and by nothing else.
+ *
+ * The failure direction is deliberate: a suspected post stays hidden until
+ * somebody looks. That is the safe way round, and it is why no job is needed
+ * to clear this column — which is also the answer to "does this re-open AD-64".
+ *
+ * Re-derived rather than assumed: consuming ONE report of several does not
+ * necessarily take the post back under the line, and a post that is still over
+ * it must stay down. `returning` decides whether an act is recorded, so a
+ * second consumption that changes nothing writes nothing.
+ */
+async function restoreIfJudged(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  report: { postId: string | null; reportedMemberId: string | null },
+  actorId: string,
+): Promise<void> {
+  if (!report.postId) return;
+
+  const config = communityConfig().postHide;
+  const rows = await tx
+    .select({
+      reporterId: communitySpamReports.reporterId,
+      consumedAt: communitySpamReports.consumedAt,
+    })
+    .from(communitySpamReports)
+    .where(eq(communitySpamReports.postId, report.postId));
+
+  const weights = await reporterWeightsFor(
+    rows.map((row) => row.reporterId).filter((id) => id !== null),
+  );
+  const [author] = report.reportedMemberId
+    ? await tx
+        .select({ role: users.role })
+        .from(users)
+        .where(eq(users.id, report.reportedMemberId))
+        .limit(1)
+    : [];
+
+  const still = postHideState({
+    reports: rows.map((row) => ({
+      ...row,
+      weight: row.reporterId ? (weights.get(row.reporterId) ?? 0) : 0,
+    })),
+    authorRole: author?.role ?? "member",
+    authorProtected: report.reportedMemberId
+      ? (await standingFor(report.reportedMemberId)).protected
+      : false,
+    thresholdWeight: blockThresholdWeight(config.threshold),
+  });
+  if (still.hidden) return;
+
+  const restored = await tx
+    .update(communityPosts)
+    .set({ hiddenAt: null })
+    .where(
+      and(
+        eq(communityPosts.id, report.postId),
+        isNotNull(communityPosts.hiddenAt),
+      ),
+    )
+    .returning({ id: communityPosts.id });
+
+  if (restored.length > 0) {
+    await tx.insert(communityModerationAudit).values({
+      // This one HAS an actor — a person judged it, where the lock itself fell
+      // without anybody deciding. That asymmetry is the trail's whole value.
+      actorId,
+      act: "postRestored",
+      targetMemberId: report.reportedMemberId,
+      postId: report.postId,
+    });
+  }
+}
+
 async function completeDeferredScrub(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   report: { id: string; postId: string | null; messageId: string | null },
@@ -773,6 +1003,12 @@ export async function reportedPostFor(
       content: communityPosts.content,
       deletedAt: communityPosts.deletedAt,
       deletedBy: communityPosts.deletedBy,
+      // ⚠️ Selected so the queue can SAY the post is already off the page, and
+      // for no other purpose: this reader hands back `content` regardless of
+      // the state, because the queue is the one surface that has to show a
+      // moderator what was reported. The state travels beside the words rather
+      // than instead of them.
+      hiddenAt: communityPosts.hiddenAt,
       discussionId: communityPosts.discussionId,
     })
     .from(communitySpamReports)

@@ -844,27 +844,52 @@ describe("titleState", () => {
 });
 
 describe("contentState", () => {
+  /** A live post. Every case below says which one column it changes. */
+  const LIVE = { deletedAt: null, deletedBy: null, hiddenAt: null } as const;
+
   it("reads a live post as visible", () => {
-    expect(contentState({ deletedAt: null, deletedBy: null })).toBe("visible");
+    expect(contentState(LIVE)).toBe("visible");
     // `deletedBy` alone is not a deletion — the timestamp is the fact.
-    expect(contentState({ deletedAt: null, deletedBy: "moderator" })).toBe("visible");
+    expect(contentState({ ...LIVE, deletedBy: "moderator" })).toBe("visible");
   });
 
   it("tells the three deletions apart", () => {
     const at = new Date("2026-08-06T10:00:00Z");
-    expect(contentState({ deletedAt: at, deletedBy: "author" })).toBe("authorDeleted");
-    expect(contentState({ deletedAt: at, deletedBy: "moderator" })).toBe(
-      "moderatorRemoved",
+    expect(contentState({ ...LIVE, deletedAt: at, deletedBy: "author" })).toBe(
+      "authorDeleted",
     );
-    expect(contentState({ deletedAt: at, deletedBy: "system" })).toBe("accountDeleted");
+    expect(
+      contentState({ ...LIVE, deletedAt: at, deletedBy: "moderator" }),
+    ).toBe("moderatorRemoved");
+    expect(contentState({ ...LIVE, deletedAt: at, deletedBy: "system" })).toBe(
+      "accountDeleted",
+    );
   });
 
   it("reads a deletion with no actor as the mildest of the three", () => {
     // Not a state this app writes. Being wrong towards "the author tidied up"
     // is better than announcing a moderation decision that never happened.
-    expect(contentState({ deletedAt: new Date(), deletedBy: null })).toBe(
+    expect(contentState({ ...LIVE, deletedAt: new Date() })).toBe(
       "authorDeleted",
     );
+  });
+
+  it("reads the automatic lock as its own state", () => {
+    expect(contentState({ ...LIVE, hiddenAt: new Date() })).toBe("autoHidden");
+  });
+
+  it("lets a deletion beat the lock", () => {
+    // 🚨 A row can carry both — the post was hidden while it waited, then a
+    // moderator removed it for real. The settled fact is the one to show: to
+    // the author, "a moderator removed this" and "this is being looked at" are
+    // different sentences and the first one is over.
+    const at = new Date("2026-08-06T10:00:00Z");
+    expect(
+      contentState({ deletedAt: at, deletedBy: "moderator", hiddenAt: at }),
+    ).toBe("moderatorRemoved");
+    expect(
+      contentState({ deletedAt: at, deletedBy: "author", hiddenAt: at }),
+    ).toBe("authorDeleted");
   });
 });
 

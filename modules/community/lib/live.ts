@@ -6,7 +6,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { communityDiscussions, communityMessages, communityModerationAudit, communityPosts, communitySpamReports, communityProfiles } from "../schema";
 import { record } from "@/lib/rate-limit";
-import { advanceCursor, liveCursorToken, parseLiveCursorToken, type LiveCursor, contentState, changedAt } from "./rules";
+import { advanceCursor, liveCursorToken, parseLiveCursorToken, type LiveCursor, contentState, changedAt, postVisibleTo } from "./rules";
 
 import { CHANGED_AT, changedAtParam } from "./_change-stamp";
 import { embedAccessFor, embeddedDiscussionFor } from "./embedded";
@@ -225,6 +225,10 @@ export async function liveAnswerFor(
         editedAt: null,
         deletedAt: null,
         deletedBy: null,
+        // A feed answer only ever carries VISIBLE posts — `feedVisible()` drops
+        // the rest before this map runs — so the lock is null by construction
+        // rather than by omission.
+        hiddenAt: null,
         removedReason: null,
         // ⚠️ **The feed carries no pictures, and that is a scope decision rather
         // than a gap in the resolution.** A feed item is a pointer INTO a
@@ -357,10 +361,21 @@ export async function liveAnswerFor(
   // no address for a picture its words are no longer shown with. That is not a
   // detail: half (b) exists precisely to deliver deletions, so it is the half
   // that would otherwise hand a reader a live `srcset` for a removed post.
+  // 🚨 `postVisibleTo()`, not `contentState()`: a locked post is shown to its
+  // own author and to nobody else, so whose request this is decides whether its
+  // pictures are minted at all.
+  const showsWords = (row: {
+    post: {
+      authorId: string | null;
+      deletedAt: Date | null;
+      deletedBy: "author" | "moderator" | "system" | null;
+      hiddenAt: Date | null;
+    };
+  }) =>
+    postVisibleTo(contentState(row.post), row.post.authorId, viewer.memberId) ===
+    "words";
   const images = await postImagesFor(
-    [...byId.values()]
-      .filter((row) => contentState(row.post) === "visible")
-      .map((row) => row.post.id),
+    [...byId.values()].filter(showsWords).map((row) => row.post.id),
     viewer,
   );
 
@@ -369,12 +384,18 @@ export async function liveAnswerFor(
     // The same blanking `postsFor()` does, for the same reason: what a server
     // hands a browser is what a reader may see, and a hidden post's words must
     // not travel just because a different surface asked for them.
-    content: contentState(row.post) === "visible" ? row.post.content : "",
+    // 🚨 **A locked post still TRAVELS to everybody, with its words removed.**
+    // Omitting the row instead would be exactly what AD-70 forbids — "deletions
+    // ride the same answer as row-state, never by omission" — and the failure
+    // is concrete: an open tab already showing the post would never learn to
+    // take it down, which is the one moment this feature is for. So the state
+    // arrives and the RENDERER drops it; the words never leave the server.
+    content: showsWords(row) ? row.post.content : "",
     // Blanked here as well as excluded from the statement — see `postsFor()` for
     // why both. It matters more on this path: half (b) exists to deliver
     // tombstones, so this is the line that keeps a removal from arriving at an
     // open tab with a live `srcset` still on it.
-    images: contentState(row.post) === "visible" ? (images.get(row.post.id) ?? []) : [],
+    images: showsWords(row) ? (images.get(row.post.id) ?? []) : [],
     authorProfileName: row.profileName,
     authorAccountName: row.accountName,
   }));
@@ -526,6 +547,9 @@ async function liveConversationAnswer(
     // exactly what a message that cannot be edited is.
     ...toMessageRow(row.message, row.profileName, row.accountName),
     editedAt: null,
+    // And no automatic lock either, for the reason `messages.ts` gives: a
+    // message has one reader and hiding it after delivery protects nobody.
+    hiddenAt: null,
     // ⚠️ **A private message cannot carry a picture, and this is the line that
     // says so rather than implying it.** Story 26.2 put images on POSTS: a room
     // is a place with a moderator and a report queue in it, and a private

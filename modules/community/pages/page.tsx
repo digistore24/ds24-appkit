@@ -4,7 +4,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { Flag, Mail, MessagesSquare, Rss, ScrollText, Users } from "lucide-react";
+import { Flag, Mail, MessagesSquare, Rss, ScrollText, ShieldOff, Users } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -145,6 +145,12 @@ export default async function CommunityPage() {
               <Link href="/dashboard/community/reports">
                 <Flag aria-hidden />
                 {t("reportsLink")}
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/community/blocks">
+                <ShieldOff aria-hidden />
+                {t("blocksLink")}
               </Link>
             </Button>
             <Button variant="outline" asChild>

@@ -37,6 +37,12 @@ export const sections = [
   "communityModerationReceived",
   "communitySpamReportsMade",
   "communitySpamReportsReceived",
+  // The operator's standing decisions about this member — the whitelist and the
+  // two blacklists. A STATE, where the two moderation slices above carry the
+  // acts: what is actually operating on somebody right now is not readable from
+  // a trail they would have to reconstruct backwards. It does not name the
+  // operator who set it, the same withholding as `communityModerationReceived`.
+  "communityMemberStanding",
 ];
 
 /**
@@ -271,6 +277,17 @@ export async function build(sql, memberId) {
         order by created_at`
     : [];
 
+  // At most one row — the table is 1:1 — and no row is the ordinary case.
+  // `member_id` is not selected: it is this member, which the file already says
+  // at its top, and `updated_at`/`created_at` are what date the decision.
+  const communityStandingRows = memberId
+    ? await sql`
+        select protected_at, write_blocked_at, reports_ignored_at,
+               created_at, updated_at
+        from community_member_standing where member_id = ${memberId}
+        limit 1`
+    : [];
+
   return {
     // Always present, `null` when they never named themselves — see the note at
     // the top of this file. An absent heading says "this application has no
@@ -295,5 +312,6 @@ export async function build(sql, memberId) {
     communityModerationReceived,
     communitySpamReportsMade: communityReportsMade,
     communitySpamReportsReceived: communityReportsReceived,
+    communityMemberStanding: communityStandingRows[0] ?? null,
   };
 }

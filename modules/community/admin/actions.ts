@@ -39,6 +39,7 @@ import {
   removeGroupModerator,
   reorderGroups,
   setGroupArchived,
+  setMemberStanding,
   updateGroup,
 } from "@/modules/community/lib/manage";
 import {
@@ -72,6 +73,20 @@ export type { ActionState } from "@/lib/action-state";
 async function guard(): Promise<void> {
   if (!isCommunityEnabled()) notFound();
   await requireOwner();
+}
+
+/**
+ * The same two guards, handing back WHO passed them.
+ *
+ * A separate function rather than changing `guard()`'s return type: every
+ * caller above wants the refusal and none of them wants the session, and a
+ * guard whose value is usually discarded invites the next reader to think the
+ * value is optional. The one act that records an actor asks for one.
+ */
+async function guardAsOperator(): Promise<string> {
+  if (!isCommunityEnabled()) notFound();
+  const session = await requireOwner();
+  return session.user.id;
 }
 
 /** Turn an error from the rules/database layer into a displayable message. */
@@ -250,6 +265,53 @@ export async function removeModeratorAction(
     revalidatePath(PAGE);
     const t = await getTranslations("communityAdmin");
     return { error: null, ok: t("moderatorRemoved") };
+  } catch (error) {
+    return toState(error);
+  }
+}
+
+/**
+ * Put a member on one of the three lists, or take them off it.
+ *
+ * 🚨 **`requireOwner()`, never `mayModerate()`.** A standing decision has no
+ * WHERE — it applies everywhere at once — so scoping it by room duty would let
+ * a moderator who looks after one room neutralise somebody who reports them in
+ * another. The role is granted in the core's user administration and the lists
+ * are set here; both are the operator's.
+ *
+ * One field per submit, and the desired VALUE comes from the form rather than
+ * being a toggle: two operators pressing the same row would otherwise cancel
+ * each other out. The `setBlockedAction` idiom, one table over.
+ */
+export async function setStandingAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  try {
+    const actorId = await guardAsOperator();
+    const field = String(formData.get("field") ?? "");
+    if (
+      field !== "protected" &&
+      field !== "writeBlocked" &&
+      field !== "reportsIgnored"
+    ) {
+      // Not one of the three. Through the shipped form this cannot happen;
+      // through a crafted post it can, and an action is a public endpoint.
+      const t = await getTranslations("errors");
+      return { error: t("unknown"), ok: null };
+    }
+    const value = formData.get("value") === "true";
+    await setMemberStanding({
+      actorId,
+      memberId: String(formData.get("memberId") ?? ""),
+      field,
+      value,
+      reason: formData.get("reason"),
+    });
+    revalidatePath(PAGE);
+    revalidatePath("/dashboard/community/reports");
+    const t = await getTranslations("communityAdmin");
+    return { error: null, ok: t(value ? "listed" : "unlisted") };
   } catch (error) {
     return toState(error);
   }

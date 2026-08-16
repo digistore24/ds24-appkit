@@ -20,7 +20,7 @@ import { communityPosts } from "../schema";
  * restatements of one rule, which is why `live-parity.test.ts` runs both over
  * the same matrix.
  */
-export const CHANGED_AT = sql`greatest(coalesce(${communityPosts.deletedAt}, 'epoch'), coalesce(${communityPosts.editedAt}, 'epoch'))`;
+export const CHANGED_AT = sql`greatest(coalesce(${communityPosts.deletedAt}, 'epoch'), coalesce(${communityPosts.editedAt}, 'epoch'), coalesce(${communityPosts.hiddenAt}, 'epoch'))`;
 
 /**
  * A `Date` bound against {@link CHANGED_AT}, carrying a column's own converter.

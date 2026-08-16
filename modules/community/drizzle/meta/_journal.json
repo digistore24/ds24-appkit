@@ -29,6 +29,13 @@
       "when": 1786363250949,
       "tag": "0003_lazy_sage",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786877265195,
+      "tag": "0004_many_firestar",
+      "breakpoints": true
     }
   ]
 }

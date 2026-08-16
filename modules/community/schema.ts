@@ -499,6 +499,47 @@ export const communityPosts = pgTable(
     // The moderator's reason, and theirs alone: an author deleting their own
     // post is never asked for one, and the system never writes one.
     removedReason: text("removed_reason"),
+
+    // ── The automatic lock. A SECOND axis, deliberately not the triple ─────
+    //
+    // 🚨 **Why this is not `deletedBy: "system"`.** Four independent reasons,
+    // any one of which is enough:
+    //
+    //   1. It would say something false. `contentState()` maps `"system"` to
+    //      `accountDeleted`, and the renderer then tells every reader the post
+    //      is from a deleted account and replaces the author's name. This post
+    //      is from a living member who is about to be judged.
+    //   2. It would spend the one deletion slot. AD-72 allows a single
+    //      deletion event per row, so `removalProblem()` would answer
+    //      `communityAlreadyDeleted` and a moderator could no longer remove
+    //      the post PROPERLY — with a reason, with a trail row. The suspicion
+    //      would have crowded out the verdict.
+    //   3. It could not be taken back. Undoing would mean writing `deletedAt`
+    //      to NULL, which nothing in this module does and two guards forbid.
+    //   4. It would confuse the deferred scrub, which branches on
+    //      `deletedBy !== "author"`.
+    //
+    // The distinction underneath all four: **the triple records an EVENT** —
+    // stamped once, hence at most one — **and this records a STATE**, and
+    // states are allowed to flip. Its history is not in this row but in the
+    // append-only trail, exactly as `docs/community.md` puts it: "Audit
+    // records EVENTS; derivation records STATE."
+    //
+    // ⚠️ **A stamp, not a standing derivation.** The threshold was crossed;
+    // that happened, and it does not un-happen because a reporter's
+    // subscription lapsed and the live weight sank. It is cleared by an ACT —
+    // consuming the reports, or lifting the block — never by arithmetic. The
+    // failure direction is a suspected post staying hidden until somebody
+    // looks, which is the safe one.
+    //
+    // No `hiddenBy`: there is exactly one writer and it is nobody, the same
+    // reason `sendBlockFallen` writes `actorId: null`. No `hiddenReason`: the
+    // reason is the report. No counter: the queue counts, live.
+    //
+    // `precision: 3` like every other stamp on this table — it is compared
+    // against a millisecond cursor in `CHANGED_AT`, and a post that goes
+    // hidden has to reach an open tab.
+    hiddenAt: timestamp("hidden_at", { mode: "date", precision: 3 }),
   },
   (t) => [
     // The paginated read of a thread: this discussion's posts, oldest first,
@@ -901,8 +942,102 @@ export const communitySpamReports = pgTable(
     index("community_spam_reports_handled")
       .on(t.createdAt)
       .where(sql`${t.consumedAt} is not null`),
+    // The weighting's own read: "how much has this member reported". Its twin —
+    // "how much has this member BEEN reported" — is already served by
+    // `community_spam_reports_open` above, whose leading column is
+    // `reported_member_id`. NFR-41: indexed for its access pattern at design
+    // time, and named here so the next reader knows which query it is for.
+    //
+    // ⚠️ NOT partial. Both weighting counts are over EVERY report, consumed or
+    // not: "this member has reported forty things" is a fact about them whether
+    // or not a moderator has got round to the rows yet, and a partial index
+    // would silently stop serving the query the day the queue is worked
+    // through.
+    index("community_spam_reports_reporter").on(t.reporterId),
   ],
 );
+
+/**
+ * What an operator has decided about ONE member, standing until they change it.
+ *
+ * 🚨 **This is the deliberate opposite of the send-block, and the difference is
+ * WHO DECIDED.** The block is a calculation over rows that exist anyway, so it
+ * is derived and stored nowhere (AD-64) — a stored copy would go stale, and a
+ * stale copy of "this person may not write" needs a job to clear it. These
+ * three are not calculations. Nothing derives them, no rule produces them, they
+ * follow from no other row: a person looked at a case and decided. They have to
+ * survive a redeploy, and they are the surface an operator corrects the
+ * automation with. Deriving them would not be tidier, it would delete them.
+ *
+ * ── Does `writeBlockedAt` re-open AD-64? No ───────────────────────────────
+ * AD-64's argument is worth quoting exactly, because the analogy is tempting
+ * and wrong: *a stored flag would need a job to clear it, and a job nobody runs
+ * is a member silenced for ever* — **by five taps from strangers**. The load is
+ * on "needs a job", and a job is needed there because the block's dissolving
+ * condition is TIME. This column has no dissolving condition at all: a person
+ * wrote it, their name is on the trail row beside it, and a person takes it
+ * back. A row a machine cannot write gags nobody.
+ *
+ * ── One row, three questions ──────────────────────────────────────────────
+ * `NULL` means "not", a timestamp means "since when" — the `users.blockedAt`
+ * idiom this schema uses throughout. A row exists only while at least one of
+ * the three is set; clearing the last one deletes it, so "no row" and "on no
+ * list" are the same state rather than two that can disagree.
+ *
+ * Protected and write-blocked at once is refused by `standingProblem()` rather
+ * than resolved by a precedence rule — the two mean opposite things, and a
+ * precedence rule is a sentence somebody has to remember correctly at the
+ * moment it matters.
+ *
+ * ── Who wrote it lives in the trail, not here ─────────────────────────────
+ * No `setBy`, no `reason`: six acts in `community_moderation_audit` carry both,
+ * and a lock and its later lift are two rows there for the same reason a
+ * discussion's are. A column here would be a second, lossy copy of the last
+ * one of them.
+ *
+ * ── Privacy ───────────────────────────────────────────────────────────────
+ * A standing decision about a person IS personal data, and it travels in both
+ * exports (`privacy/sections.ts`, and its `.mjs` twin) as the STATE — the acts
+ * are already carried by the moderation slices. It does not name the operator
+ * who set it, exactly as `communityModerationReceived` does not: in a small
+ * community, naming a moderator is naming somebody to be angry at. The cascade
+ * takes the row when the member's account goes, so there is no scrub statement
+ * — there is nobody left for it to be about.
+ */
+export const communityMemberStanding = pgTable("community_member_standing", {
+  // Primary key AND foreign key — one row per member, no id of its own and no
+  // unique index that has to be kept honest. The same shape
+  // `community_profiles` uses, and cascade for the same reason.
+  memberId: text("member_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+
+  // Whitelist: the automatic block and the automatic post lock never touch
+  // this member. It does NOT make them a moderator and grants nothing.
+  protectedAt: timestamp("protected_at", { mode: "date", precision: 3 }),
+
+  // Blacklist A: an operator took their writing away by hand. Refused at every
+  // write path with its OWN sentence — never the automatic block's, which
+  // speaks of reports this member may not have.
+  writeBlockedAt: timestamp("write_blocked_at", { mode: "date", precision: 3 }),
+
+  // Blacklist B: their reports weigh nothing.
+  //
+  // ⚠️ Their reports are still WRITTEN, at weight 0. Refusing them instead
+  // would answer this member differently from everybody else, and a
+  // distinguishable refusal announces the list — after which they open a
+  // second account. The module already makes this call twice, in
+  // `canDeliverTo()` and in `reportProblem()`. It also keeps the evidence:
+  // twenty ignored reports against one person is something a moderator wants
+  // to see.
+  reportsIgnoredAt: timestamp("reports_ignored_at", {
+    mode: "date",
+    precision: 3,
+  }),
+
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
+});
 
 /**
  * Every act of moderation power, written down as it happens.

@@ -112,6 +112,7 @@ function post(id: string) {
     editedAt: null,
     deletedAt: null,
     deletedBy: null,
+    hiddenAt: null,
     removedAt: null,
     removedBy: null,
     removedReason: null,

@@ -140,13 +140,22 @@ describe("the feed is filtered by the viewer's own access, in the query", () => 
 
 describe("feedVisible", () => {
   it("admits a live post and nothing else", () => {
-    expect(feedVisible({ deletedAt: null, deletedBy: null })).toBe(true);
+    expect(
+      feedVisible({ deletedAt: null, deletedBy: null, hiddenAt: null }),
+    ).toBe(true);
     for (const deletedBy of ["author", "moderator", "system"] as const) {
       expect(
-        feedVisible({ deletedAt: new Date(), deletedBy }),
+        feedVisible({ deletedAt: new Date(), deletedBy, hiddenAt: null }),
         deletedBy,
       ).toBe(false);
     }
+    // 🚨 The automatic lock too, and this one is the reason `feedVisible()`
+    // asks `contentState()` instead of testing `deletedAt === null`: a post the
+    // community has just taken off the page must not stay in every follower's
+    // feed. A `deletedAt` check would have let it through, compiling cleanly.
+    expect(
+      feedVisible({ deletedAt: null, deletedBy: null, hiddenAt: new Date() }),
+    ).toBe(false);
   });
 
   it("is the reason the feed reads contentState and not a column", () => {

@@ -3,8 +3,8 @@
 # The community — rooms, embedded discussions, private messages
 
 > **A MODULE, and a fresh app does not have it.** `node run.mjs module add
-> community`, then `node run.mjs db-migrate` — it brings twelve tables on its
-> own migration chain. Then the switch below, which ships OFF. Needs template
+> community`, then `node run.mjs db-migrate` — it brings its own tables on its
+> own migration chain (`node run.mjs module list` counts them). Then the switch below, which ships OFF. Needs template
 > 0.19.0 or newer; `node run.mjs update` brings this text, not the code.
 >
 > ⚠️ **A missing community is not evidence of an old clone.** Every generated
@@ -172,7 +172,7 @@ which is why it survives the state.
 
 #### Absent and off are two states, and only one of them has tables
 
-`node run.mjs db-migrate` creates the twelve community tables in an app that has
+`node run.mjs db-migrate` creates this module's tables in an app that has
 **installed** the module, and in no other. An app that never ran `module add
 community` has none of them, and none of this module's code is in its bundle
 either — its routes are only routes while it is installed.
@@ -205,13 +205,13 @@ second time"*. Measured before the module system was built: drizzle-kit
 registers the `pgTable` objects the **entry file exports**, and this module's
 schema imports the core's tables for its foreign keys without re-exporting them.
 So pointing a config at `modules/community/schema.ts` is the whole filter — the
-generated SQL creates the twelve tables and references the core's without
+generated SQL creates the module's tables and references the core's without
 touching them. The rule that keeps it true is in `modules/boundary.test.ts`: a
 module's schema must not re-export a core table.
 
 What that costs an app that DOES install the module and then switches it off is
-what the old paragraph described: twelve empty tables, bytes in the catalogue,
-no query and no index maintenance.
+what the old paragraph described: a dozen or so empty tables, bytes in the
+catalogue, no query and no index maintenance.
 
 Note what none of this changes: the subject-access exports are unconditional by
 design (`lib/privacy/export.ts`), because switching the module off deletes
@@ -324,6 +324,69 @@ prevent.
   ever by five taps. A test reads the schema and fails if `sendBlock` appears
   in it. The lift is one audited tap that **consumes** every counted report,
   which is why the judged set cannot re-trigger.
+- **A report can weigh more than one, and the weight is computed rather than
+  stored.** `weighting` ships **off**, where every reporter weighs exactly one
+  and the threshold is the distinct count it has always been. Switched on, four
+  things already in the database decide: how long somebody has been a member,
+  how much live PURCHASED access they hold, how much they have reported, and how
+  much they have BEEN reported — the last one subtracting, so a ring whose
+  members report each other drives its own weight down. Each is capped, and the
+  smallest cap is on "has reported", because it is the one signal a reporter can
+  drive themselves.
+  🚨 **None of it is stored**, deliberately: a saved score is a second truth that
+  goes stale, and it would be a reputation number about a person sitting in a
+  table waiting to be exported. The cost is real and is answered by the review
+  list rather than hidden — a standing block can dissolve on its own when two
+  reporters' subscriptions lapse, with nobody deciding anything.
+  ⚠️ **"How much they pay" is counted as ENTITLEMENTS, not money.**
+  `orders.amount` sits beside its own currency column and `CLAUDE.md` forbids
+  summing across two of them; the alternative is an exchange rate this app has
+  no business inventing.
+- 🚨 **Two floors, and neither is enough alone.** Blocked needs the summed weight
+  to reach the threshold **and** at least two distinct reporters. A single capped
+  reporter (400) outweighs a threshold of 2 (200), so without the count one
+  heavyweight could silence somebody alone — exactly what the config's floor of 2
+  refuses to configure.
+- **The post itself can be taken off the page, and that is a SECOND axis.**
+  `postHide` ships **off**; switched on, a reported post disappears once enough
+  weight agrees — for everybody but its author, who keeps seeing it with a
+  sentence saying it is being looked at. It stays readable in the queue, and one
+  tap puts it back.
+  🚨 **It is not `deletedBy: "system"`** — that value already means "the account
+  was deleted", AD-72 allows one deletion event per row (so a moderator could no
+  longer remove the post *properly*, with a reason and a trail row), and a
+  deletion cannot be taken back. A deletion is an event; a lock is a suspicion,
+  and suspicions have to be reversible. So `hidden_at` is its own column, read
+  only through `contentState()`.
+  ⚠️ **It is an event stamp, not a standing derivation.** The threshold was
+  crossed; that does not un-happen because a weight sank afterwards. It is
+  cleared by an ACT — consuming the report, or lifting the block — and by nothing
+  else, which is why it needs no job and therefore does not re-open the paragraph
+  above. The failure direction is a suspected post staying hidden until somebody
+  looks.
+  ⚠️ **The cost, named:** replies under a vanished post read as answers to
+  nothing, which is the very thing the deletion stub exists to prevent. The trade
+  is deliberate — spam that is merely greyed out is still spam on the page.
+- **Three lists an operator keeps, and they ARE a table.** A whitelist (never
+  automatically silenced), a hand-set write block, and "this member's reports do
+  not count". 🚨 **This is the deliberate opposite of the two paragraphs above,
+  and the line is who decided**: a weight and a block are calculations over rows
+  that exist anyway, so storing either would be a second truth; these follow from
+  nothing, no derivation can recover them, and they have to survive a redeploy.
+  They do not re-open AD-64 either, and the argument is its own wording — *a
+  stored flag would need a job to clear it* — because a row a person writes and a
+  person lifts needs none.
+  ⚠️ **A report from somebody on the ignore list is still WRITTEN, at weight
+  zero.** Refusing it would answer that member differently from everybody else,
+  and a distinguishable refusal announces the list — after which they open a
+  second account. The same call `canDeliverTo()` and `reportProblem()` already
+  make. It also keeps the evidence: twenty ignored reports against one person is
+  something a moderator wants to see.
+- **Who is silenced right now is `/dashboard/community/blocks`.** Moderators read
+  it; the operator also sets the lists there and on the rooms screen — through
+  one component rendered twice, never two. It shows the automatic and the
+  hand-set blocks side by side and says which is which, because one can dissolve
+  on its own and the other cannot.
 - **Nobody acts on a report they filed**, nor on a block whose counted reports
   include their own — those pass to another moderator or to the operator
   (`conflictOfInterest()`). The operator is never conflicted out: somebody must
@@ -353,7 +416,9 @@ the template is apologising for.
 
 ⚠️ **The residual, stated rather than hidden: a patient sockpuppet farm can
 cross any threshold.** Five accounts and a day is not a high wall, and no
-number would be. The module does not pretend otherwise, and the answer is
+number would be — the weighting raises it (a fresh free account weighs less
+than a long-standing customer, and reports AGAINST somebody pull their own
+weight down) without ever removing it. The module does not pretend otherwise, and the answer is
 deliberately not an arms race — it is that the block silences *writing* rather
 than access, that lifting it is one audited tap by a real person, that the
 queue puts it in front of a moderator immediately, that reporting is itself

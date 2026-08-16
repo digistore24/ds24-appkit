@@ -17,7 +17,7 @@ complete feature with its own pages, tables, texts and guidance, living under
 > | **`activity`** | what a course's customer DOES, judged on the server | `module add activity`, then `db-migrate` | [`docs/learning.md`](learning.md) · skill `learning-activities` |
 > | **`companion`** | the app working alongside its customer while they work | `module add companion` — no table, so no migration | [`docs/ai-in-product.md`](ai-in-product.md) · skill `ai-companion` |
 > | **`api`** | the HTTP API a customer's own programs talk to | `module add api`, then `db-migrate` | [`docs/api.md`](api.md) · skill `mobile-companion` |
-> | **`community`** | a place for members: rooms, discussions, private messages | `module add community`, then `db-migrate` — twelve tables | [`docs/community.md`](community.md) · skill `community` |
+> | **`community`** | a place for members: rooms, discussions, private messages | `module add community`, then `db-migrate` — its own tables | [`docs/community.md`](community.md) · skill `community` |
 > | **`courses`** | the course itself: blocks, lessons, progress, and the purchase gate in front of them — and, for the accompanied workshop, the hand-in, the operator's queue to answer it in, and a daily digest job that mails them the COUNT and names nobody. 🚨 **Do not build a reply surface or a hand-in notification by hand** | `module add courses`, then `db-migrate` — and it ships switched OFF until the content is written | [`docs/courses.md`](courses.md) · skill `courses` |
 >
 > **Every module has a page and a playbook, and its manifest names both**
@@ -28,8 +28,8 @@ complete feature with its own pages, tables, texts and guidance, living under
 > somebody after a file that is not there. See *What a module joins by declaring
 > itself*.
 >
-> The community is the biggest of them by an order of magnitude — twelve
-> tables, thirteen data-protection sections, its own pages, its own admin tree,
+> The community is the biggest of them by an order of magnitude — a dozen-plus
+> tables, as many data-protection sections, its own pages, its own admin tree,
 > its own polling transport — and it is the one that proves every seam at once.
 > [`docs/community.md`](community.md) is its reference.
 
@@ -319,7 +319,7 @@ until the module is switched **on**:
 
 ```bash
 node run.mjs module add community
-node run.mjs db-migrate                 # twelve tables
+node run.mjs db-migrate                 # its own tables
 #   config/community.json → "enabled": true
 node run.mjs restart                    # no runtime toggle, deliberately
 ```

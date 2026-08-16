@@ -42,6 +42,16 @@ interface Row {
   id: string;
   deletedAt: Date | null;
   editedAt: Date | null;
+  /**
+   * The automatic lock — the third stamp `CHANGED_AT` takes the greatest of.
+   *
+   * 🚨 It has to be here, and the reason is the one this whole file exists for:
+   * a post going hidden is a state change that must reach an OPEN TAB, and the
+   * live channel finds those by ordering on that expression. A lock left out of
+   * the stamp leaves the spam on every screen already showing it until a
+   * reload — at exactly the moment the wave is running.
+   */
+  hiddenAt: Date | null;
 }
 
 /**
@@ -63,7 +73,8 @@ function createdHalf(row: Row, position: Cursor): boolean {
 /**
  * Half (b) of the shipped `WHERE`, transcribed.
  *
- *   greatest(coalesce(deleted_at, 'epoch'), coalesce(edited_at, 'epoch')) > :at
+ *   greatest(coalesce(deleted_at, 'epoch'), coalesce(edited_at, 'epoch'),
+ *            coalesce(hidden_at, 'epoch')) > :at
  *   or (that same expression = :at and id > :id)
  *
  * The key is `CHANGED_AT` in `manage.ts`, and its JS twin is `changedAt()` —
@@ -104,7 +115,7 @@ describe("the creation half and compareCursor() are the same comparison", () => 
       for (const id of IDS) {
         for (const at of MOMENTS) {
           for (const cursorId of IDS) {
-            const row: Row = { createdAt, id, deletedAt: null, editedAt: null };
+            const row: Row = { createdAt, id, deletedAt: null, editedAt: null, hiddenAt: null };
             const cursor: Cursor = { at, id: cursorId };
             const sqlSaid = createdHalf(row, cursor);
             const pureSaid = pureSemantics(row, cursor);
@@ -128,7 +139,7 @@ describe("the creation half and compareCursor() are the same comparison", () => 
 
   it("excludes the cursor's own row — a window is exclusive at its start", () => {
     // The row a client last received must not come back on every poll.
-    const row: Row = { createdAt: T1, id: "m", deletedAt: null, editedAt: null };
+    const row: Row = { createdAt: T1, id: "m", deletedAt: null, editedAt: null, hiddenAt: null };
     expect(createdHalf(row, { at: T1, id: "m" })).toBe(false);
     expect(pureSemantics(row, { at: T1, id: "m" })).toBe(false);
   });
@@ -137,8 +148,8 @@ describe("the creation half and compareCursor() are the same comparison", () => 
     // Real under load, and the reason the cursor is a tuple rather than a
     // timestamp: without the id half, one of these two would be lost for ever.
     const cursor: Cursor = { at: T1, id: "m" };
-    expect(createdHalf({ createdAt: T1, id: "z", deletedAt: null, editedAt: null }, cursor)).toBe(true);
-    expect(createdHalf({ createdAt: T1, id: "a", deletedAt: null, editedAt: null }, cursor)).toBe(false);
+    expect(createdHalf({ createdAt: T1, id: "z", deletedAt: null, editedAt: null, hiddenAt: null }, cursor)).toBe(true);
+    expect(createdHalf({ createdAt: T1, id: "a", deletedAt: null, editedAt: null, hiddenAt: null }, cursor)).toBe(false);
   });
 
   it("ignores a deletion entirely — that is the OTHER half's row to deliver", () => {
@@ -146,7 +157,7 @@ describe("the creation half and compareCursor() are the same comparison", () => 
     // state disjunct creeps back into this predicate, the half ordered by
     // `created_at` starts carrying old rows again and the starvation below
     // returns with it.
-    const row: Row = { createdAt: T0, id: "a", deletedAt: T2, editedAt: T2 };
+    const row: Row = { createdAt: T0, id: "a", deletedAt: T2, editedAt: T2, hiddenAt: null };
     expect(createdHalf(row, { at: T1, id: "m" })).toBe(false);
   });
 });
@@ -157,12 +168,24 @@ describe("the change half and compareCursor() are the same comparison", () => {
   // because `GREATEST` over two nullable columns is where a transcription
   // quietly stops matching: JS would compare `null` where Postgres yields NULL,
   // and `coalesce(…, 'epoch')` is the reason neither side has to.
-  const STATES: { label: string; deletedAt: Date | null; editedAt: Date | null }[] = [
-    { label: "untouched", deletedAt: null, editedAt: null },
-    { label: "deleted @T0", deletedAt: T0, editedAt: null },
-    { label: "edited @T2", deletedAt: null, editedAt: T2 },
-    { label: "deleted @T2, edited @T0", deletedAt: T2, editedAt: T0 },
-    { label: "deleted @T0, edited @T2", deletedAt: T0, editedAt: T2 },
+  const STATES: {
+    label: string;
+    deletedAt: Date | null;
+    editedAt: Date | null;
+    hiddenAt: Date | null;
+  }[] = [
+    { label: "untouched", deletedAt: null, editedAt: null, hiddenAt: null },
+    { label: "deleted @T0", deletedAt: T0, editedAt: null, hiddenAt: null },
+    { label: "edited @T2", deletedAt: null, editedAt: T2, hiddenAt: null },
+    { label: "deleted @T2, edited @T0", deletedAt: T2, editedAt: T0, hiddenAt: null },
+    { label: "deleted @T0, edited @T2", deletedAt: T0, editedAt: T2, hiddenAt: null },
+    // The lock, alone and in every combination that can decide the greatest —
+    // once as the newest stamp, once as an older one another stamp overtakes.
+    { label: "hidden @T2", deletedAt: null, editedAt: null, hiddenAt: T2 },
+    { label: "hidden @T0", deletedAt: null, editedAt: null, hiddenAt: T0 },
+    { label: "hidden @T2, edited @T0", deletedAt: null, editedAt: T0, hiddenAt: T2 },
+    { label: "hidden @T0, edited @T2", deletedAt: null, editedAt: T2, hiddenAt: T0 },
+    { label: "hidden @T2, deleted @T0", deletedAt: T0, editedAt: null, hiddenAt: T2 },
   ];
 
   it("agrees for every (row state, cursor) pair the tuple can express", () => {
@@ -177,6 +200,7 @@ describe("the change half and compareCursor() are the same comparison", () => {
               id,
               deletedAt: state.deletedAt,
               editedAt: state.editedAt,
+              hiddenAt: state.hiddenAt,
             };
             const position: Cursor = { at, id: cursorId };
             const sqlSaid = changedHalf(row, position);
@@ -200,13 +224,53 @@ describe("the change half and compareCursor() are the same comparison", () => {
     ).toEqual([]);
   });
 
-  it("keys a row on the LATER of its two state columns", () => {
+  it("keys a row on the LATEST of its three state columns", () => {
     // `GREATEST`, not "whichever is set": a post edited in the morning and
     // removed in the afternoon has to ride the answer for the removal, and a
     // key taken from the edit would sit behind a cursor that already delivered
     // it.
-    expect(changedAt({ deletedAt: T2, editedAt: T0 }).getTime()).toBe(T2.getTime());
-    expect(changedAt({ deletedAt: T0, editedAt: T2 }).getTime()).toBe(T2.getTime());
+    expect(changedAt({ deletedAt: T2, editedAt: T0, hiddenAt: null }).getTime()).toBe(T2.getTime());
+    expect(changedAt({ deletedAt: T0, editedAt: T2, hiddenAt: null }).getTime()).toBe(T2.getTime());
+    // 🚨 **The third stamp asserted DIRECTLY, and this is not redundancy with
+    // the matrix above — it is the one thing the matrix structurally cannot
+    // see.** That comparison runs `changedHalf()` against
+    // `pureChangeSemantics()`, and BOTH of them call `changedAt()`. A column
+    // dropped from the function moves both sides equally, they go on agreeing,
+    // and the whole file stays green. Measured, not reasoned: with `hiddenAt`
+    // taken back out of `changedAt()`, all 560 tests of this module passed —
+    // while a post the community had just taken off the page stayed on every
+    // open tab until a reload, at exactly the moment a spam wave is running.
+    // These three lines are the probe that has to hold the claim.
+    expect(changedAt({ deletedAt: null, editedAt: null, hiddenAt: T2 }).getTime()).toBe(T2.getTime());
+    expect(changedAt({ deletedAt: T0, editedAt: T0, hiddenAt: T2 }).getTime()).toBe(T2.getTime());
+    expect(changedAt({ deletedAt: T2, editedAt: null, hiddenAt: T0 }).getTime()).toBe(T2.getTime());
+  });
+
+  it("names all three columns in the SQL twin as well", async () => {
+    // The other half of the same hole. `CHANGED_AT` is a template string, so no
+    // type and no matrix reaches it: a column left out of the SQL is a column
+    // the DATABASE never orders by, and the JS twin above would go on being
+    // right about rows the query never returned.
+    //
+    // Comments blanked (`CLAUDE.md`: a checker that reads source as TEXT goes
+    // through `blankComments()`), so a column merely NAMED in the prose around
+    // the expression cannot satisfy this — and so the paragraph above
+    // `CHANGED_AT`, which names all three, does not make the assertion vacuous.
+    const { blankComments } = await import("@/scripts/lib/source-text.mjs");
+    const source = blankComments(shellSource());
+    const start = source.indexOf("export const CHANGED_AT");
+    expect(start, "CHANGED_AT has moved or been renamed").toBeGreaterThan(-1);
+    const stamp = source.slice(start, source.indexOf(";", start));
+    // The Drizzle references, not the SQL names: the expression interpolates
+    // `${communityPosts.hiddenAt}` and drizzle emits the column. Asserting the
+    // reference is the stronger of the two — a raw `hidden_at` in the string
+    // would bypass the column's own converter, which is the trap
+    // `changedAtParam()` right below `CHANGED_AT` exists to document.
+    for (const column of ["deletedAt", "editedAt", "hiddenAt"]) {
+      expect(stamp, `CHANGED_AT must order by ${column}`).toContain(
+        `communityPosts.${column}`,
+      );
+    }
   });
 
   it("keys an untouched row at the epoch, the way coalesce does", () => {
@@ -214,10 +278,10 @@ describe("the change half and compareCursor() are the same comparison", () => {
     // is before every real cursor, so an untouched row is never delivered by
     // this half — and never removed from the answer either, because half (a)
     // is what carries it.
-    expect(changedAt({ deletedAt: null, editedAt: null }).getTime()).toBe(0);
+    expect(changedAt({ deletedAt: null, editedAt: null, hiddenAt: null }).getTime()).toBe(0);
     expect(
       changedHalf(
-        { createdAt: T0, id: "a", deletedAt: null, editedAt: null },
+        { createdAt: T0, id: "a", deletedAt: null, editedAt: null, hiddenAt: null },
         { at: T1, id: "m" },
       ),
     ).toBe(false);
@@ -229,8 +293,8 @@ describe("the change half and compareCursor() are the same comparison", () => {
     // deletion does — would be indistinguishable to a cursor that may only move
     // forward, and one of them would be lost.
     const position: Cursor = { at: T2, id: "m" };
-    const later: Row = { createdAt: T0, id: "z", deletedAt: T2, editedAt: null };
-    const earlier: Row = { createdAt: T0, id: "a", deletedAt: T2, editedAt: null };
+    const later: Row = { createdAt: T0, id: "z", deletedAt: T2, editedAt: null, hiddenAt: null };
+    const earlier: Row = { createdAt: T0, id: "a", deletedAt: T2, editedAt: null, hiddenAt: null };
     expect(changedHalf(later, position)).toBe(true);
     expect(changedHalf(earlier, position)).toBe(false);
   });
@@ -240,7 +304,7 @@ describe("the state half — what would otherwise arrive by omission", () => {
   const cursor: Cursor = { at: T1, id: "m" };
 
   it("delivers an OLD post that was deleted after the cursor", () => {
-    const row: Row = { createdAt: T0, id: "a", deletedAt: T2, editedAt: null };
+    const row: Row = { createdAt: T0, id: "a", deletedAt: T2, editedAt: null, hiddenAt: null };
     expect(pureSemantics(row, cursor), "its own coordinate is behind the cursor").toBe(false);
     expect(
       changedHalf(row, cursor),
@@ -251,12 +315,12 @@ describe("the state half — what would otherwise arrive by omission", () => {
   });
 
   it("delivers an OLD post that was edited after the cursor", () => {
-    const row: Row = { createdAt: T0, id: "a", deletedAt: null, editedAt: T2 };
+    const row: Row = { createdAt: T0, id: "a", deletedAt: null, editedAt: T2, hiddenAt: null };
     expect(changedHalf(row, cursor)).toBe(true);
   });
 
   it("leaves an old, untouched post alone", () => {
-    const row: Row = { createdAt: T0, id: "a", deletedAt: null, editedAt: null };
+    const row: Row = { createdAt: T0, id: "a", deletedAt: null, editedAt: null, hiddenAt: null };
     expect(changedHalf(row, cursor)).toBe(false);
     expect(createdHalf(row, cursor)).toBe(false);
   });
@@ -264,7 +328,7 @@ describe("the state half — what would otherwise arrive by omission", () => {
   it("leaves a post deleted BEFORE the cursor alone", () => {
     // The client already received that state; redelivering it for ever is the
     // cost this bound exists to keep small.
-    const row: Row = { createdAt: T0, id: "a", deletedAt: T0, editedAt: null };
+    const row: Row = { createdAt: T0, id: "a", deletedAt: T0, editedAt: null, hiddenAt: null };
     expect(changedHalf(row, cursor)).toBe(false);
   });
 
@@ -273,7 +337,7 @@ describe("the state half — what would otherwise arrive by omission", () => {
     // `coalesce(…, 'epoch')` turns that into a row that keys before everything.
     // A transcription that compared `null` in JS would answer differently,
     // which is exactly the drift this file exists to catch.
-    const row: Row = { createdAt: T0, id: "a", deletedAt: null, editedAt: null };
+    const row: Row = { createdAt: T0, id: "a", deletedAt: null, editedAt: null, hiddenAt: null };
     expect(changedHalf(row, { at: T0, id: "a" })).toBe(false);
   });
 });
@@ -381,6 +445,7 @@ describe("the cursor advance loop — the channel that used to stop for ever", (
       id: `old-${String(index).padStart(4, "0")}`,
       deletedAt: SCRUB_AT,
       editedAt: null,
+      hiddenAt: null,
     }),
   );
 
@@ -389,6 +454,7 @@ describe("the cursor advance loop — the channel that used to stop for ever", (
     id: "new-0001",
     deletedAt: null,
     editedAt: null,
+    hiddenAt: null,
   };
 
   const ROWS: Row[] = [...TOMBSTONES, FRESH];

@@ -101,7 +101,7 @@ later matter.
 | Restriction | 18 | blocking the account; otherwise by hand |
 | Portability (machine-readable) | 20 | the same JSON export |
 | Objection | 21 | relevant once you add anything on legitimate interest |
-| No automated decision alone | 22 | this app makes none — see `data-protection.md` §13 |
+| No automated decision alone | 22 | ⚠️ the core makes none. **The `community` module does**: reports silence a member's writing automatically, weighted when switched on. Writing only, never reading; nothing stored; a human lifts it. `data-protection.md` §15 |
 
 **You have one month** (Art. 12(3)), extendable by two with reasons.
 
@@ -633,8 +633,12 @@ or 150 % of the sales price.
 
 Not a substitute for the checks — a starting position, and better than most:
 
-- **No tracking, no profiling, no automated decision-making, no advertising
-  SDK.** The cleanest possible starting point under § 25 TDDDG.
+- **No tracking, no advertising profiling, no advertising SDK.** The cleanest
+  possible starting point under § 25 TDDDG. ⚠️ **Automated decision-making is
+  no longer on this list**, and the correction is deliberate: with the
+  `community` module installed, reports silence a member's writing without a
+  person deciding. `data-protection.md` §15 says what that is and what it is
+  not.
 - **The data inventory exists and is current** —
   [`data-protection.md`](data-protection.md), written from the code.
 - **A subject access request is one command**, and the member can produce their

@@ -12,7 +12,7 @@ import { findMedia, mayAccess, type Viewer } from "@/lib/media/manage";
 import { mediaImageFor } from "@/lib/media/url";
 import { communityConfig } from "./config";
 import { findEmbed } from "./embeds";
-import { COMMUNITY_POST_RATE_BUCKET, CommunityError, canDeleteOwnPost, canEditOwnPost, canPost, canStartDiscussion, checkDiscussionTitle, checkPostContent, type PostImage, type PostImagePolicy, contentState, mayEnterGroup, mayViewEmbed, planKeysToResolve, postLimit } from "./rules";
+import { COMMUNITY_POST_RATE_BUCKET, CommunityError, canDeleteOwnPost, canEditOwnPost, canPost, canStartDiscussion, checkDiscussionTitle, checkPostContent, type PostImage, type PostImagePolicy, contentState, mayEnterGroup, mayViewEmbed, planKeysToResolve, postLimit, postVisibleTo } from "./rules";
 
 import { grantedKeysFor } from "./_access";
 import { guardSendBlock } from "./_blocks";
@@ -80,6 +80,8 @@ export interface PostRow {
   editedAt: Date | null;
   deletedAt: Date | null;
   deletedBy: "author" | "moderator" | "system" | null;
+  /** The automatic lock — a second axis, never part of the deletion triple. */
+  hiddenAt: Date | null;
   removedReason: string | null;
   authorProfileName: string | null;
   authorAccountName: string | null;
@@ -795,9 +797,13 @@ export async function postsFor(
   // words a reader may see — a tombstone's attachments are not fetched, so there
   // is no address to blank afterwards and nothing to forget to blank. The door
   // asks `mayAccess()` before it mints anything (`postImagesFor()`).
-  const visibleIds = rows
-    .filter((row) => contentState(row.post) === "visible")
-    .map((row) => row.post.id);
+  // ⚠️ `postVisibleTo()` and not `contentState()`, because a locked post is not
+  // the same fact for everybody: its own author is shown it, so their pictures
+  // are fetched and everybody else's are not.
+  const showsWords = (row: { post: { authorId: string | null; deletedAt: Date | null; deletedBy: "author" | "moderator" | "system" | null; hiddenAt: Date | null } }) =>
+    postVisibleTo(contentState(row.post), row.post.authorId, viewer.memberId) ===
+    "words";
+  const visibleIds = rows.filter(showsWords).map((row) => row.post.id);
   const images = await postImagesFor(visibleIds, viewer);
 
   return {
@@ -808,7 +814,7 @@ export async function postsFor(
       // in the ROW on purpose (the report queue needs them), and this is the
       // line that keeps that decision from becoming a disclosure: what a
       // server component receives is what a reader may see.
-      content: contentState(row.post) === "visible" ? row.post.content : "",
+      content: showsWords(row) ? row.post.content : "",
       // ⚠️ **Blanked HERE as well as excluded from the statement above**, and the
       // redundancy is deliberate — the same shape `content` has. The `where`
       // clause is what makes the query cheap; this line is what makes the claim
@@ -816,7 +822,7 @@ export async function postsFor(
       // guarantee that lives only in a filter is one a later `inArray` edit can
       // take away silently, and `post-images.test.ts` asserts it on a mixed page
       // for exactly that reason.
-      images: contentState(row.post) === "visible" ? (images.get(row.post.id) ?? []) : [],
+      images: showsWords(row) ? (images.get(row.post.id) ?? []) : [],
       authorProfileName: row.profileName,
       authorAccountName: row.accountName,
     })),

@@ -194,6 +194,9 @@ export function LiveDiscussion({
             editedAt: null,
             deletedAt: null,
             deletedBy: null,
+            // The member's own post, a moment old and not yet on the server.
+            // Nothing could have reported it yet.
+            hiddenAt: null,
             authorProfileName: viewerProfileName,
             authorAccountName: viewerAccountName,
             // ⚠️ **Empty, and it stays empty until the poll answers.** The

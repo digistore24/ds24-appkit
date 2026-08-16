@@ -140,6 +140,7 @@ async function feedRows(
       createdAt: communityPosts.createdAt,
       deletedAt: communityPosts.deletedAt,
       deletedBy: communityPosts.deletedBy,
+      hiddenAt: communityPosts.hiddenAt,
     })
     .from(communityPosts)
     .innerJoin(
@@ -167,6 +168,13 @@ async function feedRows(
         // limit that counted tombstones would return short pages), the core
         // is what decides.
         isNull(communityPosts.deletedAt),
+        // Same clause, same reason, for the automatic lock: `feedVisible()`
+        // already drops these, so without this the `limit` would spend its
+        // budget on rows the core is about to discard and hand back a short
+        // page. ⚠️ Not a second opinion about visibility — the core stays the
+        // decision, and dropping this line would change how FULL a page is,
+        // never what is in it.
+        isNull(communityPosts.hiddenAt),
         where,
       ),
     )
@@ -348,6 +356,12 @@ export async function feedSince(
     .select({
       deletedAt: communityPosts.deletedAt,
       editedAt: communityPosts.editedAt,
+      // The automatic lock is a state change like the other two, and it is the
+      // one this feed would otherwise be slowest to notice: an item nobody is
+      // adding to, on a quiet feed, sitting on screen after the community took
+      // it down. `CHANGED_AT` in the `WHERE` above already counts it — reading
+      // it here is what keeps this row's `changedAt()` the same arithmetic.
+      hiddenAt: communityPosts.hiddenAt,
     })
     .from(communityPosts)
     .innerJoin(

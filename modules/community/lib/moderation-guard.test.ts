@@ -24,12 +24,20 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
 import {
+  MAX_REPORTER_WEIGHT,
+  MIN_DISTINCT_REPORTERS,
+  WEIGHT_UNIT,
+  blockThresholdWeight,
   conflictOfInterest,
   mayConsumeReport,
   lockProblem,
   mayModerate,
+  postHideState,
+  postVisibleTo,
   removalProblem,
+  reporterWeight,
   sendBlockState,
+  standingProblem,
   windowMessageIds,
 } from "./rules";
 import { blankComments as withoutComments } from "@/scripts/lib/source-text.mjs";
@@ -574,15 +582,38 @@ describe("the deferred scrub completes on consumption", () => {
 const NOW = new Date("2026-08-06T12:00:00Z");
 const hoursAgo = (n: number) => new Date(NOW.getTime() - n * 60 * 60 * 1000);
 
-function reports(...rows: Array<[string, number] | [string, number, Date]>) {
-  return rows.map(([reporterId, hours, consumedAt]) => ({
+/**
+ * `[reporterId, hoursAgo, consumedAt?, weight?]`.
+ *
+ * ⚠️ **The weight defaults to `WEIGHT_UNIT`, and that default is the
+ * backwards-compatibility proof rather than a convenience.** Every test below
+ * was written before weights existed and none of them was re-thought: with the
+ * weighting switched off — the shipped state — each reporter weighs exactly one
+ * and a threshold of five is a sum of 500, so the assertions have to hold
+ * unchanged. If any of them had needed a new expectation, that would have been
+ * a behaviour change shipping into apps that already run.
+ */
+function reports(
+  ...rows: Array<
+    | [string, number]
+    | [string, number, Date | null]
+    | [string, number, Date | null, number]
+  >
+) {
+  return rows.map(([reporterId, hours, consumedAt, weight]) => ({
     reporterId,
     createdAt: hoursAgo(hours),
-    consumedAt: (consumedAt as Date | undefined) ?? null,
+    consumedAt: (consumedAt as Date | null | undefined) ?? null,
+    weight: (weight as number | undefined) ?? WEIGHT_UNIT,
   }));
 }
 
-const BASE = { threshold: 5, windowHours: 24, expiryDays: null, now: NOW };
+const BASE = {
+  thresholdWeight: blockThresholdWeight(5),
+  windowHours: 24,
+  expiryDays: null,
+  now: NOW,
+};
 
 describe("sendBlockState", () => {
   it("blocks at the threshold and not below it", () => {
@@ -664,6 +695,499 @@ describe("sendBlockState", () => {
         now: new Date(NOW.getTime() + 2 * 24 * 60 * 60 * 1000),
       }).blocked,
     ).toBe(false);
+  });
+
+  // ── The weights ────────────────────────────────────────────────────────
+  //
+  // 🚨 **The decoy first.** Every test above is a WEIGHT-blind assertion that
+  // stays true when the sum is replaced by a count, so on their own they would
+  // pass an implementation that ignores `weight` entirely. These are the ones
+  // that do not.
+
+  it("reaches the threshold with FEWER heavy reporters than light ones", () => {
+    // Two reporters worth two-and-a-half ordinary ones each: 500, exactly the
+    // threshold. The count is two, where five would be needed unweighted.
+    const heavy = reports(["a", 1, null, 250], ["b", 2, null, 250]);
+    const state = sendBlockState({ ...BASE, role: "member", reports: heavy });
+    expect(state.blocked).toBe(true);
+    expect(state.weight).toBe(500);
+    expect(state.reporterIds).toHaveLength(2);
+  });
+
+  it("does NOT reach it with light ones, however many rows they file", () => {
+    // Four reporters at a quarter weight each is 100 — a fifth of the way.
+    const light = reports(
+      ["a", 1, null, 25],
+      ["b", 2, null, 25],
+      ["c", 3, null, 25],
+      ["d", 4, null, 25],
+    );
+    expect(
+      sendBlockState({ ...BASE, role: "member", reports: light }).blocked,
+    ).toBe(false);
+  });
+
+  it("counts a reporter's FIRST weight and never adds their later rows", () => {
+    // ⚠️ The unique indexes only absorb duplicates of the same CONTENT, so five
+    // different posts by one person are five rows. Summing every row would hand
+    // one member the gag the floor of two exists to forbid — and at a weight of
+    // 100 that is exactly `WEIGHT_UNIT × 5 = 500`, the threshold. The oldest
+    // row wins because the list is sorted oldest-first.
+    const oneLoudMember = reports(
+      ["a", 5],
+      ["a", 4],
+      ["a", 3],
+      ["a", 2],
+      ["a", 1],
+    );
+    const state = sendBlockState({
+      ...BASE,
+      role: "member",
+      reports: oneLoudMember,
+    });
+    expect(state.blocked).toBe(false);
+    expect(state.weight).toBe(0);
+  });
+
+  it("refuses to block on one reporter however heavy they are", () => {
+    // 🚨 The second floor. A single capped reporter (400) outweighs a threshold
+    // of two (200), so the cap alone would not stop this — only the count does.
+    const alone = reports(["a", 1, null, MAX_REPORTER_WEIGHT]);
+    expect(
+      sendBlockState({
+        ...BASE,
+        role: "member",
+        reports: alone,
+        thresholdWeight: blockThresholdWeight(MIN_DISTINCT_REPORTERS),
+      }).blocked,
+    ).toBe(false);
+
+    // The same weight split over two people does block, which is the
+    // counter-proof that the refusal above is about the COUNT and not about
+    // the arithmetic being wrong.
+    const shared = reports(
+      ["a", 1, null, MAX_REPORTER_WEIGHT / 2],
+      ["b", 1, null, MAX_REPORTER_WEIGHT / 2],
+    );
+    expect(
+      sendBlockState({
+        ...BASE,
+        role: "member",
+        reports: shared,
+        thresholdWeight: blockThresholdWeight(MIN_DISTINCT_REPORTERS),
+      }).blocked,
+    ).toBe(true);
+  });
+
+  it("drops a zero-weight reporter from the count AND from reporterIds", () => {
+    // Blacklist B. Their report is still written — that is the point of the
+    // list — but it must not silence anybody, and it must not appear among the
+    // counted reporters, which is what `conflictOfInterest()` reads: a reporter
+    // who contributed nothing may not lock a moderator out of acting.
+    const withMuted = reports(
+      ["muted", 1, null, 0],
+      ["a", 2, null, 250],
+      ["b", 3, null, 250],
+    );
+    const state = sendBlockState({
+      ...BASE,
+      role: "member",
+      reports: withMuted,
+    });
+    expect(state.blocked).toBe(true);
+    expect(state.reporterIds).not.toContain("muted");
+    expect(state.weight).toBe(500);
+
+    // And on their own they achieve nothing at all.
+    const onlyMuted = reports(
+      ["m1", 1, null, 0],
+      ["m2", 2, null, 0],
+      ["m3", 3, null, 0],
+      ["m4", 4, null, 0],
+      ["m5", 5, null, 0],
+    );
+    expect(
+      sendBlockState({ ...BASE, role: "member", reports: onlyMuted }).blocked,
+    ).toBe(false);
+  });
+
+  it("never blocks a member the operator protected", () => {
+    const five = reports(["a", 1], ["b", 2], ["c", 3], ["d", 4], ["e", 5]);
+    expect(
+      sendBlockState({
+        ...BASE,
+        role: "member",
+        reports: five,
+        protected: true,
+      }).blocked,
+    ).toBe(false);
+    // Counter-proof: without the whitelist the very same reports do block, so
+    // the assertion above is about the flag rather than about the fixture.
+    expect(
+      sendBlockState({ ...BASE, role: "member", reports: five }).blocked,
+    ).toBe(true);
+  });
+});
+
+describe("reporterWeight", () => {
+  const OFF = {
+    enabled: false,
+    tenureMax: 100,
+    paidMax: 100,
+    reportsMadeMax: 50,
+    reportsAgainstMax: 75,
+  };
+  const ON = { ...OFF, enabled: true };
+  const NOBODY = {
+    reportsIgnored: false,
+    memberDays: 0,
+    paidGrants: 0,
+    reportsMade: 0,
+    reportsAgainst: 0,
+  };
+
+  it("weighs everybody the same while it is switched off", () => {
+    // 🚨 The shipped state, and the reason this may ship into running apps: a
+    // veteran paying customer and an account made this morning weigh the same
+    // until an operator decides otherwise.
+    expect(reporterWeight({ ...NOBODY, config: OFF })).toBe(WEIGHT_UNIT);
+    expect(
+      reporterWeight({
+        ...NOBODY,
+        memberDays: 4000,
+        paidGrants: 9,
+        reportsMade: 40,
+        config: OFF,
+      }),
+    ).toBe(WEIGHT_UNIT);
+  });
+
+  it("gives a brand-new free account exactly one, switched on", () => {
+    // The neutral point is not an accident: somebody with no history is an
+    // ordinary reporter, so switching the feature on cannot silently make the
+    // newcomers of an existing community count for less than they did.
+    expect(reporterWeight({ ...NOBODY, config: ON })).toBe(WEIGHT_UNIT);
+  });
+
+  it("rewards tenure and paying, and flattens past the full point", () => {
+    const year = reporterWeight({ ...NOBODY, memberDays: 365, config: ON });
+    expect(year).toBe(WEIGHT_UNIT + 100);
+    // Ten years is not ten times a year.
+    expect(reporterWeight({ ...NOBODY, memberDays: 3650, config: ON })).toBe(
+      year,
+    );
+    expect(reporterWeight({ ...NOBODY, paidGrants: 3, config: ON })).toBe(
+      WEIGHT_UNIT + 100,
+    );
+  });
+
+  it("subtracts for reports AGAINST them, and that term can outweigh the rest", () => {
+    // The anti-brigade property: a ring whose members report each other drives
+    // its own weight down.
+    const reported = reporterWeight({
+      ...NOBODY,
+      reportsMade: 10,
+      reportsAgainst: 5,
+      config: ON,
+    });
+    expect(reported).toBe(WEIGHT_UNIT + 50 - 75);
+    expect(reported).toBeLessThan(WEIGHT_UNIT);
+  });
+
+  it("never goes below zero or above the cap", () => {
+    expect(
+      reporterWeight({
+        ...NOBODY,
+        reportsAgainst: 10_000,
+        config: { ...ON, reportsAgainstMax: 200 },
+      }),
+    ).toBe(0);
+    expect(
+      reporterWeight({
+        ...NOBODY,
+        memberDays: 9999,
+        paidGrants: 99,
+        reportsMade: 99,
+        config: { ...ON, tenureMax: 200, paidMax: 200, reportsMadeMax: 200 },
+      }),
+    ).toBe(MAX_REPORTER_WEIGHT);
+  });
+
+  it("weighs an ignored reporter at nothing, whatever else they have", () => {
+    // Nothing outweighs the list — not a decade of membership, not nine
+    // products. It is the whole point of the list.
+    expect(
+      reporterWeight({
+        reportsIgnored: true,
+        memberDays: 5000,
+        paidGrants: 9,
+        reportsMade: 50,
+        reportsAgainst: 0,
+        config: ON,
+      }),
+    ).toBe(0);
+    // …and it holds with the weighting switched OFF too, which is the case a
+    // short-circuit placed after the `enabled` check would get wrong.
+    expect(
+      reporterWeight({ ...NOBODY, reportsIgnored: true, config: OFF }),
+    ).toBe(0);
+  });
+});
+
+describe("postHideState", () => {
+  const OPEN = { authorRole: "member", thresholdWeight: blockThresholdWeight(2) };
+  const rows = (
+    ...list: Array<[string] | [string, number] | [string, number, Date | null]>
+  ) =>
+    list.map(([reporterId, weight, consumedAt]) => ({
+      reporterId,
+      weight: weight ?? WEIGHT_UNIT,
+      consumedAt: consumedAt ?? null,
+    }));
+
+  it("takes a post down once enough distinct reporters agree", () => {
+    const state = postHideState({ ...OPEN, reports: rows(["a"], ["b"]) });
+    expect(state.hidden).toBe(true);
+    expect(state.weight).toBe(200);
+  });
+
+  it("is not reached by one member reporting the same post repeatedly", () => {
+    // The unique index makes this impossible in the database, and the rule is
+    // still written here — where somebody reads it — rather than left to an
+    // index nobody looks at while editing this function.
+    expect(
+      postHideState({ ...OPEN, reports: rows(["a"], ["a"], ["a"]) }).hidden,
+    ).toBe(false);
+  });
+
+  it("ignores judged reports, so consuming brings the post back", () => {
+    expect(
+      postHideState({
+        ...OPEN,
+        reports: rows(["a", WEIGHT_UNIT, NOW], ["b", WEIGHT_UNIT, NOW]),
+      }).hidden,
+    ).toBe(false);
+  });
+
+  it("spares role-holders and protected members", () => {
+    for (const authorRole of ["owner", "moderator"]) {
+      expect(
+        postHideState({ ...OPEN, authorRole, reports: rows(["a"], ["b"]) })
+          .hidden,
+        authorRole,
+      ).toBe(false);
+    }
+    expect(
+      postHideState({
+        ...OPEN,
+        authorProtected: true,
+        reports: rows(["a"], ["b"]),
+      }).hidden,
+    ).toBe(false);
+  });
+
+  it("takes NO clock, and that absence is the decision", () => {
+    // 🚨 A member is a person over time and gets a window; a post is an object
+    // and does not. Three reports over three weeks say exactly what three in an
+    // hour say about one post, and a window here would mean spam quietly
+    // reappearing a day later with nobody told. Asserted on the SIGNATURE,
+    // because a `now` that crept in would otherwise sit unused and unnoticed
+    // until somebody wired a window to it.
+    const source = postHideState.toString();
+    expect(source).not.toMatch(/\bnow\b/);
+    expect(source).not.toMatch(/windowHours|expiryDays|createdAt/);
+  });
+});
+
+// ── The automatic lock, as the shell actually writes it ────────────────────
+//
+// 🚨 These read SOURCE, because the properties are about a database path and
+// this repo runs no database in vitest. Each one is a claim the pure tests
+// above cannot reach: they say what the arithmetic decides, these say that the
+// shell asks it at the right moment and writes what it decided.
+
+describe("the post lock is stamped once, and only on a real crossing", () => {
+  it("compares before and after, exactly as the send-block does", () => {
+    // ⚠️ Without the comparison the lock would be re-stamped by every FURTHER
+    // report on an already-locked post — including one arriving after a
+    // moderator put it back, which would undo their decision in silence and
+    // write a second act claiming a threshold was crossed that had been judged.
+    const body = MANAGE.slice(MANAGE.indexOf("export async function reportContent("));
+    const scoped = body.slice(0, body.indexOf("\nexport "));
+    expect(scoped).toContain("postHideState(");
+    expect(scoped).toMatch(/hidden\.hidden\s*&&\s*!hiddenBefore\.hidden/);
+  });
+
+  it("stamps only a row that is neither locked nor deleted, and records only a row that moved", () => {
+    // `isNull(hiddenAt)` is what makes two simultaneous crossings one event;
+    // `returning` is what stops an act being written for an update that hit
+    // nothing. `isNull(deletedAt)` keeps the lock off a post a moderator has
+    // already settled by the stronger route.
+    const body = MANAGE.slice(MANAGE.indexOf("export async function reportContent("));
+    const scoped = body.slice(0, body.indexOf("\nexport "));
+    const update = scoped.slice(scoped.indexOf("update(communityPosts)"));
+    expect(update).toContain("isNull(communityPosts.hiddenAt)");
+    expect(update).toContain("isNull(communityPosts.deletedAt)");
+    expect(update).toContain("returning(");
+    expect(update).toMatch(/locked\.length\s*>\s*0/);
+  });
+
+  it("names NOBODY as the actor of a lock, and a person as the actor of a release", () => {
+    // The asymmetry is the trail's whole value: a threshold is not a person,
+    // and a release is a decision somebody made and can be asked about.
+    const fell = MANAGE.slice(MANAGE.indexOf('act: "postAutoHidden"'));
+    expect(fell.slice(-400)).toBeTruthy();
+    const around = MANAGE.slice(
+      MANAGE.lastIndexOf("actorId", MANAGE.indexOf('act: "postAutoHidden"')),
+      MANAGE.indexOf('act: "postAutoHidden"'),
+    );
+    expect(around).toContain("actorId: null");
+
+    const restored = MANAGE.slice(
+      MANAGE.lastIndexOf("actorId", MANAGE.indexOf('act: "postRestored"')),
+      MANAGE.indexOf('act: "postRestored"'),
+    );
+    expect(restored).not.toContain("actorId: null");
+  });
+
+  it("has a release path on BOTH acts that judge reports", () => {
+    // 🚨 The correction half. Consuming one report and lifting a whole block
+    // are the two ways a report stops counting, and a lock left standing after
+    // either would be a one-way door — the mechanism this feature must not be.
+    //
+    // ⚠️ **Scoped between two named points, not "up to the next `export`", and
+    // that is a correction rather than a style choice.** `restoreIfJudged` is a
+    // module-private `async function` sitting immediately after
+    // `consumeReport`, so a slice ending at the next EXPORT swallowed its
+    // declaration — and the assertion then found the name whether or not
+    // anybody called it. Measured: with the call deleted, all 566 tests stayed
+    // green. The helper's own declaration is the upper bound instead.
+    const consumeAt = MANAGE.indexOf("export async function consumeReport(");
+    const helperAt = MANAGE.indexOf("async function restoreIfJudged(");
+    expect(consumeAt, "consumeReport is where it was").toBeGreaterThan(-1);
+    expect(helperAt, "restoreIfJudged is declared after it").toBeGreaterThan(
+      consumeAt,
+    );
+    expect(
+      MANAGE.slice(consumeAt, helperAt),
+      "consumeReport must CALL restoreIfJudged, not merely be near it",
+    ).toContain("await restoreIfJudged(");
+
+    const lift = MANAGE.slice(MANAGE.indexOf("export async function liftSendBlock("));
+    const lifted = lift.slice(0, lift.indexOf("\nexport "));
+    expect(lifted).toContain("hiddenAt: null");
+    expect(lifted).toContain('act: "postRestored"');
+  });
+
+  it("clears the lock ONLY by an act, never on a schedule or a read", () => {
+    // ⚠️ The lock is an event stamp, not a standing derivation — that is what
+    // makes it need no job, which is what keeps it clear of AD-64. So the only
+    // writers of `hiddenAt` are the report path and the two judging paths, and
+    // this counts them rather than trusting the sentence.
+    // ⚠️ `.set({ hiddenAt: … })` and not a bare `hiddenAt:` — the loose form
+    // counts seven, because every reader that hands `contentState()` a shape
+    // without the column passes `hiddenAt: null` as an ARGUMENT. Those are
+    // reads. Measured while writing this: 7 against 3, and the difference is
+    // the whole distinction the assertion is about.
+    const writes = MANAGE.match(/\.set\(\{\s*hiddenAt:\s*(now|null)\s*\}\)/g) ?? [];
+    expect(
+      writes.length,
+      "hiddenAt is SET in exactly three places: the report, the consumption, the lift",
+    ).toBe(3);
+    // And no read path may write it: a getter that "repaired" the column would
+    // be the background re-derivation this design refuses.
+    for (const reader of ["postsFor", "openReports", "reportedPostFor"]) {
+      const at = MANAGE.indexOf(`export async function ${reader}(`);
+      if (at === -1) continue;
+      const body = MANAGE.slice(at);
+      const scoped = body.slice(0, body.indexOf("\nexport "));
+      expect(scoped, `${reader} must not write hiddenAt`).not.toMatch(
+        /\.set\(\{\s*hiddenAt:/,
+      );
+    }
+  });
+});
+
+describe("postVisibleTo", () => {
+  it("shows a live post to everybody, signed in or not", () => {
+    expect(postVisibleTo("visible", "a", "a")).toBe("words");
+    expect(postVisibleTo("visible", "a", "b")).toBe("words");
+    expect(postVisibleTo("visible", "a", null)).toBe("words");
+  });
+
+  it("leaves a stub for all three deletions, for everybody", () => {
+    // A deletion is the same fact for every reader, the author included — and
+    // the stub has to stay, or the replies under it answer nothing.
+    for (const state of [
+      "authorDeleted",
+      "moderatorRemoved",
+      "accountDeleted",
+    ] as const) {
+      expect(postVisibleTo(state, "a", "a"), state).toBe("tombstone");
+      expect(postVisibleTo(state, "a", "b"), state).toBe("tombstone");
+    }
+  });
+
+  it("shows a LOCKED post to its author and to nobody else", () => {
+    expect(postVisibleTo("autoHidden", "a", "a")).toBe("words");
+    expect(postVisibleTo("autoHidden", "a", "b")).toBe("omit");
+  });
+
+  it("never makes an anonymous reader the author of an authorless post", () => {
+    // 🚨 `null === null` is true, so the obvious comparison would hand a signed
+    // -out visitor the words of every locked post whose author's account has
+    // been deleted. The one line that stops it, asserted rather than trusted.
+    expect(postVisibleTo("autoHidden", null, null)).toBe("omit");
+    expect(postVisibleTo("autoHidden", null, "a")).toBe("omit");
+  });
+});
+
+describe("standingProblem", () => {
+  const CLEAR = {
+    protected: false,
+    writeBlocked: false,
+    reportsIgnored: false,
+  };
+
+  it("allows an ordinary member on any single list", () => {
+    for (const next of [
+      { ...CLEAR, protected: true },
+      { ...CLEAR, writeBlocked: true },
+      { ...CLEAR, reportsIgnored: true },
+    ]) {
+      expect(standingProblem({ role: "member" }, next)).toBeNull();
+    }
+  });
+
+  it("refuses protected AND write-blocked at once", () => {
+    // Refused rather than resolved: "which one wins" is a sentence somebody has
+    // to remember correctly at the moment it matters.
+    expect(
+      standingProblem({ role: "member" }, {
+        ...CLEAR,
+        protected: true,
+        writeBlocked: true,
+      }),
+    ).toBe("communityStandingConflict");
+  });
+
+  it("keeps role-holders off both blacklists, and lets them be protected", () => {
+    for (const role of ["owner", "moderator"]) {
+      expect(
+        standingProblem({ role }, { ...CLEAR, writeBlocked: true }),
+        role,
+      ).toBe("communityCannotListRole");
+      expect(
+        standingProblem({ role }, { ...CLEAR, reportsIgnored: true }),
+        role,
+      ).toBe("communityCannotListRole");
+      // Protecting one changes nothing — they are exempt anyway — and refusing
+      // a no-op would be a rule nobody could explain.
+      expect(
+        standingProblem({ role }, { ...CLEAR, protected: true }),
+        role,
+      ).toBeNull();
+    }
   });
 });
 

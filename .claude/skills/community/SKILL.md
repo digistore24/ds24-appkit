@@ -126,8 +126,12 @@ itself stays switched off in `config/api.json` until somebody decides otherwise
 ([`docs/api.md`](../../../docs/api.md)).
 
 Then `node run.mjs module add community` and
-`node run.mjs db-migrate` — it brings twelve tables on its own migration chain,
-and they are not there until that second command has run. Skip it and every
+`node run.mjs db-migrate` — it brings its own tables on its own migration
+chain, and they are not there until that second command has run. ⚠️ **How many
+is not written here on purpose**: it said "twelve" while the manifest listed
+thirteen, and a number in prose beside a list that grows is a sentence that
+goes quietly wrong. `node run.mjs module list` counts them, and
+`modules/community/module.json` names them. Skip it and every
 step below acts on a feature the app does not have: the routes do not exist,
 the config switch changes nothing, and the first page answers the same 404 an
 absent route answers. `node run.mjs module list` is the check.
@@ -139,6 +143,16 @@ next deploy: there is no runtime toggle and no admin setting, because that
 deploy IS the incident response. While you are in the file, leave the brakes
 alone unless asked; an unknown key or an out-of-range value there switches the
 **whole module** off until the next deploy.
+
+⚠️ **Two blocks in that file are about spam and both ship OFF — mention them
+once and move on unless the user asks.** `weighting` makes a report from a
+long-standing paying member weigh more than one from an account made this
+morning; `postHide` takes a reported post off the page automatically while it
+waits to be judged. Neither is needed to open a community, and switching either
+on is a decision about how the rooms are policed rather than about whether they
+exist. What they do, and the two floors no setting can configure away, is
+[`docs/community.md`](../../../docs/community.md) → *The spam loop*.
+Needs template 0.31.0.
 
 **c. The rooms — created in the RUNNING app, not in code.** Start the app
 (`node run.mjs start`) and create them at `/dashboard/admin/community` as the
@@ -249,6 +263,12 @@ Four hunts, in this order. Each says what it reads.
    and file one test report end to end — then handle it, so the queue is left
    as you found it. ❌ HIGH on a room with traffic, no duty and an operator who
    has never opened the page.
+   ⚠️ **Then open `/dashboard/community/blocks` too, and this is a second
+   question rather than the same one twice.** The queue asks "what is waiting to
+   be judged"; that page asks "who is silenced right now" — and somebody can be
+   silenced with an empty queue, because a block is derived from reports a
+   moderator has already stopped looking at. ❌ HIGH on a member silenced longer
+   than a few days that nobody has looked at. Needs template 0.31.0.
 4. **The dev-only rooms** — the content-in-PROD trap. Rooms are rows and rows
    do not travel with a deploy, so the deployed app can serve a clean 200 over
    an empty community. **Be honest about how this is checked: there is no

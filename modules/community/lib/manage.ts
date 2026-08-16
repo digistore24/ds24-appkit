@@ -68,6 +68,8 @@ export { avatarUrlFor, avatarUrlsFor, memberWithProfile, profileFor, refreshAvat
 export type { CommunityProfile } from "./profiles";
 export { REPORTS_PER_PAGE, consumeReport, liftSendBlock, openReports, reportConflictFor, reportContent, reportedMessagesFor, reportedPostFor, standingSendBlocks } from "./reports";
 export type { SpamReportRow } from "./reports";
+export { contradictoryStandings, listedMembers, setMemberStanding } from "./standing";
+export type { StandingRow } from "./standing";
 export { DISCUSSIONS_PER_PAGE, POSTS_PER_PAGE, addPost, deleteOwnPost, discussionFor, discussionsFor, editOwnPost, lastPageOf, postImagePolicy, postImagesFor, postsFor, startDiscussion } from "./talk";
 export type { DiscussionRow, PostRow } from "./talk";
 export { acknowledgeRead, unreadByDiscussion, unreadByGroup, unreadFor } from "./unread";

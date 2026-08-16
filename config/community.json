@@ -26,6 +26,19 @@
     "windowHours": 24,
     "expiryDays": null
   },
+  "_comment_weighting": "Wie schwer die Meldung EINES Mitglieds wiegt. Ausgeliefert AUS — und aus heisst hier: jede Meldung wiegt genau eine, die Schwelle oben ist also die Zahl verschiedener Meldender, die sie immer war. Wer es einschaltet, macht aus der Zaehlung eine Summe: wer laenger dabei ist, wer bezahlt hat und wer selbst schon gemeldet hat, wiegt mehr; wer selbst haeufig gemeldet wurde, wiegt weniger. Die vier Zahlen sagen, wie viel ein Signal HOECHSTENS wert sein darf, in Hundertsteln eines gewoehnlichen Meldenden (100 = ein Meldender); dazwischen steigt es geradlinig bis zu einem festen Punkt, der im Code steht: ein Jahr Mitgliedschaft, 200 Euro bezahlt, zehn eigene Meldungen, fuenf Meldungen gegen einen. Nichts davon wird gespeichert — es wird bei jeder Ableitung neu gerechnet, damit kein veralteter Wert ueber jemanden in einer Tabelle steht. ⚠ reportsMadeMax ist bewusst der kleinste Regler: es ist das einzige Signal, das ein Meldender selbst hochdrehen kann. 🚨 Zwei Boeden lassen sich mit keiner Einstellung wegkonfigurieren: ein einzelnes Mitglied wiegt nie mehr als 400, und es muessen IMMER mindestens zwei verschiedene Menschen gemeldet haben. Ein Wert ausserhalb 0–200, ein falscher Typ oder ein unbekannter Schluessel schaltet die ganze Community bis zum naechsten Deploy ab, wie ueberall in dieser Datei.",
+  "weighting": {
+    "enabled": false,
+    "tenureMax": 100,
+    "paidMax": 100,
+    "reportsMadeMax": 50,
+    "reportsAgainstMax": 75
+  },
+  "_comment_posthide": "Der automatische Riegel auf den BEITRAG. Ausgeliefert AUS. Eingeschaltet verschwindet ein gemeldeter Beitrag von allen Mitglieder-Flaechen, sobald genug Gewicht zusammenkommt — er bleibt in der Meldungs-Warteschlange lesbar, und ein Tipp holt ihn zurueck. Der Autor sieht seinen Beitrag weiterhin, mit einem Hinweis; ihn spurlos verschwinden zu lassen hiesse, dass er ihn fuer verloren haelt und neu schreibt. threshold ist bewusst NIEDRIGER als sendBlock.threshold: einen Beitrag auszublenden ist vollstaendig umkehrbar, einen Menschen stillzulegen ist es nicht. 🚨 Ein threshold HOEHER als der von sendBlock wird nicht befolgt, sondern gemeldet — der Riegel waere unerreichbar, weil der Autor vorher schon nicht mehr schreiben koennte, und ein Mechanismus, den man einschaltet und der nie greift, ist schlimmer als ein ausgeschalteter. Untergrenze 2, aus demselben Grund wie oben. Ausgeliefert wird nichts geloescht: der Riegel ist ein Zeitstempel, der wieder verschwindet.",
+  "postHide": {
+    "enabled": false,
+    "threshold": 2
+  },
   "_comment_retention": "How long private messages are kept. 0 — the shipped value — means: until the account that wrote them is deleted, and nothing prunes them by age. ⚠ Zero is the OFF sentinel here, which is the opposite of what it means in a cron retention window: every unreadable value in this field falls back to 0, so a typo KEEPS data instead of deleting it. A positive whole number (1–120 months) turns on bulk-by-age pruning. Two things trigger it and they differ in one way that matters: `node run.mjs community-prune` is a dry run unless you pass --apply, and the scheduled job `community-prune` (modules/community/cron.ts) cannot ask — it deletes. That job declares `enabledByDefault: false`, so nothing is deleted on a schedule until an operator ADDS an entry for it to config/cron.json with 'enabled': true — the entry is absent from the shipped file on purpose, because that file belongs to the core and may not name a job an app without this module does not have; setting a window in THIS field alone changes only what the command would do. There is deliberately no way to delete ONE conversation: choosing which means knowing what is in it, and that is read access by another name. Out-of-range or non-integer values switch the WHOLE COMMUNITY OFF until the next deploy, like every other field here.",
   "dmRetentionMonths": 0
 }

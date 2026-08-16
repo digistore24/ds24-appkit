@@ -1227,6 +1227,7 @@ course structure.
 |---|---|---|
 | `community_moderation_audit` | one row per act of moderation power: who did it, what, about whose content, their written reason, when — plus, for a DM visibility event, the exact message ids that became visible | **in both**, as two slices: `communityModerationActs` (what this member DID) and `communityModerationReceived` (what was done to their content) |
 | `community_spam_reports` | one row per report: who reported, whose content, which post or message, their optional reason, any attached message ids, when — and whether it has been dealt with | **in both**, as `communitySpamReportsMade` and `communitySpamReportsReceived` |
+| `community_member_standing` | at most one row per member, and only while they are on a list: protected from the automatic blocks, write-blocked by hand, or having their reports ignored — with the date of each | **in both**, as `communityMemberStanding`. It does **not** name the operator who set it, the same withholding as the audit trail's received slice |
 
 **Two subjects per row in both tables**, and the slicing differs between them
 in a way worth stating rather than leaving to be noticed:
@@ -1242,6 +1243,16 @@ deletes their account, and it should be written as if it will be read out —
 because here it is. **The same holds for a spam report's reason**: prose one
 member wrote about another, in both exports, and emptied when its author deletes
 their account.
+
+🚨 **A STANDING decision is exported as well as the act that made it, and the
+two are not the same thing.** The audit trail holds "on 3 March an operator
+stopped counting your reports"; the standing row holds "and they still do not
+count". A member whose reports have quietly weighed nothing since March cannot
+learn that from a trail they would have to read backwards, so the state travels
+in its own section. The **weight** a report carried does not appear in either
+export, and cannot: it is computed at the moment of a derivation and stored
+nowhere — an accident of the derived design that happens to be the
+privacy-friendly one.
 
 🚨 **What is emptied is the TEXT; the ACT stays.** Who did what, and when, remains
 in the trail with the author link removed — because who took a decision is the
@@ -1289,7 +1300,27 @@ off, and so does the export (§14a).
 
 Worth stating, because a privacy policy that claims less is easier to keep true:
 
-- No tracking, no profiling, no automated decision-making.
+- No tracking, no advertising profiling, no cross-site measurement, and nothing
+  sold or passed on for it.
+- 🚨 **One qualification, and it is written here rather than left for somebody
+  to discover: with the `community` module installed, this app DOES take an
+  automated measure and DOES compute a score about a person.** Enough distinct
+  reports inside a window silence a member's writing without anybody deciding
+  it, and with `weighting` switched on those reports are weighted by how long
+  the reporter has been a member, how much purchased access they hold, and how
+  much they have reported and been reported. Both are described in
+  [`community.md`](community.md) → *The spam loop*.
+  ⚠️ **The first half of that has been true since the module shipped**, before
+  any weighting existed — this bullet used to say otherwise, which was the
+  clearest kind of privacy claim to get wrong: one that is comfortable.
+  What holds instead, and what a policy may say: it suspends WRITING and never
+  reading, so no purchased access is withdrawn; the score is computed at the
+  moment of the derivation and stored nowhere, so there is no reputation record
+  to disclose or correct; and there is a human in the loop by construction — the
+  block appears in a moderators' review list, one audited tap lifts it, and
+  `expiryDays` ships `null` precisely so that a person MUST act. Whether that
+  clears Art. 22's "legal or similarly significant effects" is a lawyer's call
+  on YOUR product, not this file's.
 - No special categories of data (health, beliefs, and so on) — unless *your*
   product adds them, in which case this file needs a section you write.
 - No data sold or passed on beyond §5.

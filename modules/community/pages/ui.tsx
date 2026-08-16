@@ -28,6 +28,7 @@ import {
   MAX_POST_LENGTH,
   contentState,
   displayNameFor,
+  postVisibleTo,
   type PostImage,
   type PostImagePolicy,
   POST_IMAGE_MIME_TYPES,
@@ -482,6 +483,17 @@ export interface PostView {
   editedAt: string | null;
   deletedAt: string | null;
   deletedBy: "author" | "moderator" | "system" | null;
+  /**
+   * The automatic lock, as an ISO string.
+   *
+   * ⚠️ **It travels, where `removedReason` deliberately does not**, and the
+   * difference is what the field IS. A removal reason is prose a moderator
+   * wrote about a member; this is a bare timestamp saying the post is off the
+   * page, which is a fact every reader of the thread can already see from the
+   * tombstone. Without it the browser cannot tell `autoHidden` from `visible`
+   * and would render the words the server just took away.
+   */
+  hiddenAt: string | null;
   authorProfileName: string | null;
   authorAccountName: string | null;
   /**
@@ -650,8 +662,19 @@ export function PostList({
           const state = contentState({
             deletedAt: post.deletedAt ? new Date(post.deletedAt) : null,
             deletedBy: post.deletedBy,
+            hiddenAt: post.hiddenAt ? new Date(post.hiddenAt) : null,
           });
-          const mine = post.authorId === memberId && state === "visible";
+          // 🚨 **A locked post is not there for anybody but its author.** The
+          // server already withheld its words; this drops the row entirely, so
+          // no stub sits in the thread announcing that something was taken
+          // down. The cost is named where the rule is
+          // (`postVisibleTo()`): replies below it read as answers to nothing.
+          const shown = postVisibleTo(state, post.authorId, memberId);
+          if (shown === "omit") return null;
+
+          const mine =
+            post.authorId === memberId &&
+            (state === "visible" || state === "autoHidden");
           // A moderator's control appears on somebody ELSE's visible post.
           // Their own goes through the author menu, which already has delete —
           // a moderator removing their own post with a reason would put a
@@ -737,8 +760,17 @@ export function PostList({
                 )}
               </div>
 
-              {state === "visible" ? (
+              {shown === "words" ? (
                 <>
+                  {/* The author, and only the author, is told their own post is
+                      being looked at. Not "you were reported N times": a count
+                      is the queue's business, and a number here would be a
+                      running score of how close somebody is to being silenced. */}
+                  {state === "autoHidden" && (
+                    <Callout variant="warning" className="mb-3">
+                      {t("state_autoHiddenMine")}
+                    </Callout>
+                  )}
                   <PostBody content={post.content} />
                   <PostImages images={post.images} />
                 </>

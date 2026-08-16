@@ -626,6 +626,12 @@ export async function listConversations(
         contentState({
           deletedAt: last.deletedAt,
           deletedBy: last.deletedBy,
+          // A private message carries no automatic lock, and it is not an
+          // omission. The lock exists to take spam off a page other people are
+          // reading; a message has exactly one reader, and it is the person who
+          // reported it. Hiding it after the fact protects nobody and would cost
+          // a column on `community_messages` that only ever holds NULL.
+          hiddenAt: null,
         }) === "visible";
 
       return {
@@ -713,8 +719,12 @@ export function toMessageRow(
     id: message.id,
     authorId: message.authorId,
     // What a server hands a browser is what a reader may see.
+    // `hiddenAt: null` — see the note in `conversationsFor()`: a direct message
+    // has no automatic lock, by decision rather than by oversight.
     content:
-      contentState(message) === "visible" ? message.content : "",
+      contentState({ ...message, hiddenAt: null }) === "visible"
+        ? message.content
+        : "",
     createdAt: message.createdAt,
     deletedAt: message.deletedAt,
     deletedBy: message.deletedBy,

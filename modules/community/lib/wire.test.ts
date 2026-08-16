@@ -106,10 +106,18 @@ describe("wirePost", () => {
     expect(JSON.stringify(wired)).not.toContain("Verwarnung");
   });
 
-  it("hands back exactly the ten fields `PostView` declares", () => {
+  it("hands back exactly the eleven fields `PostView` declares", () => {
     // The other half of the same guard: a field ADDED to `PostRow` does not
     // travel until somebody decides it should. Without this, the next widening
     // of the row silently widens every payload.
+    //
+    // ✅ **`hiddenAt` was such a decision and this list is where it was
+    // recorded** (the automatic post lock). It travels where `removedReason`
+    // above does not, and the difference is what the field IS: a bare timestamp
+    // saying the post is off the page — which every reader of the thread can
+    // already see from the tombstone — against prose a moderator wrote about a
+    // member. Without it the browser cannot tell `autoHidden` from `visible`
+    // and renders the words the server just took away.
     expect(Object.keys(wirePost(row())).sort()).toEqual([
       "authorAccountName",
       "authorId",
@@ -119,6 +127,7 @@ describe("wirePost", () => {
       "deletedAt",
       "deletedBy",
       "editedAt",
+      "hiddenAt",
       "id",
       "images",
     ]);

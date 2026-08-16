@@ -52,6 +52,7 @@
 // the first to render one.
 import raw from "@/config/community.json";
 import { pushEnabledProblem } from "@/lib/config-problems";
+import type { ReporterWeighting } from "./rules";
 
 export interface CommunityConfig {
   enabled: boolean;
@@ -73,6 +74,21 @@ export interface CommunityConfig {
     /** `null` = never expires — OQ-4's shipped answer. */
     expiryDays: number | null;
   };
+  /**
+   * How much one member's report weighs. Ships **off**, where every reporter
+   * weighs exactly one and the sum is the distinct count it has always been.
+   * The arithmetic is `reporterWeight()` in `rules.ts`.
+   */
+  weighting: ReporterWeighting;
+  /**
+   * The automatic post lock. Ships **off**.
+   *
+   * Its own threshold, and it is meant to be LOWER than `sendBlock.threshold`:
+   * a hidden post is fully reversible, a silenced person is felt. A
+   * configuration where it is higher is refused rather than obeyed — the
+   * mechanism would be unreachable.
+   */
+  postHide: { enabled: boolean; threshold: number };
   /** How long private messages are kept. `0` means: until the account goes. */
   dmRetentionMonths: number;
   live: { visibleSeconds: number; hiddenSeconds: number };
@@ -137,6 +153,36 @@ export const DEFAULT_COMMUNITY_CONFIG: CommunityConfig = {
   // The block is derived from unconsumed report rows, which is what makes it
   // lift itself when they age out and what makes one tap enough to clear it.
   sendBlock: { threshold: 5, windowHours: 24, expiryDays: null },
+  // ── The weighting, and it ships OFF ─────────────────────────────────────
+  // Off means every reporter weighs one, so the sum against `threshold × 100`
+  // is exactly the distinct count this module has always used. That is the
+  // condition for shipping this into apps that already run: an operator who
+  // updates and changes nothing sees no change in who gets silenced.
+  //
+  // Each dial is the MOST that signal may be worth, in hundredths of an
+  // ordinary reporter; the ramp to it is linear and its end point is a
+  // constant in `rules.ts` (a year, €200, ten reports filed, five received).
+  //
+  // ⚠️ `reportsMadeMax` is the smallest on purpose — it is the one signal a
+  // reporter can drive themselves, twenty times per ten minutes. It is meant
+  // to acknowledge somebody who helps, not to be a currency; `reportsAgainstMax`
+  // is larger and pulls the other way, so a ring whose members report each
+  // other drives its own weight down.
+  weighting: {
+    enabled: false,
+    tenureMax: 100,
+    paidMax: 100,
+    reportsMadeMax: 50,
+    reportsAgainstMax: 75,
+  },
+  // ── The automatic post lock, and it ships OFF ───────────────────────────
+  // Two reporters take a post off the page while it waits to be looked at.
+  // Two, because that is the cheapest brigade there is — and the trade is
+  // deliberate: hiding is fully reversible, the post is in the queue anyway
+  // because somebody reported it, and the cost of a false positive is one
+  // post invisible until a moderator opens the list. An operator who weighs
+  // that differently writes 3.
+  postHide: { enabled: false, threshold: 2 },
   // ── OQ-3, decided here (2026-08-06): retention ships OFF ─────────────────
   // `0` means private messages are kept until the account that wrote them is
   // deleted, and nothing prunes them by age out of the box.
@@ -309,6 +355,26 @@ const MAX_SEND_BLOCK_WINDOW_HOURS = 30 * 24;
 const MAX_SEND_BLOCK_EXPIRY_DAYS = 365;
 
 /**
+ * The most any single weighting dial may be worth — two ordinary reporters.
+ *
+ * ⚠️ **A bound on the DIAL, not on the weight.** `MAX_REPORTER_WEIGHT` in
+ * `rules.ts` is the hard cap on the total; this stops one dial from reaching
+ * that cap by itself, which would make the other three decorative. Four dials at
+ * 200 could still sum past the cap, and that is fine — the cap clamps. What is
+ * not fine is a single mistyped `20000` turning one long-standing member into a
+ * silencer.
+ */
+const MAX_WEIGHT_DIAL = 200;
+
+/** The dials, so the reader and the problems list cannot disagree on the set. */
+const WEIGHT_DIALS = [
+  "tenureMax",
+  "paidMax",
+  "reportsMadeMax",
+  "reportsAgainstMax",
+] as const;
+
+/**
  * One named block as an object, whatever the file actually holds.
  *
  * `posting` and `messaging` are the same shape — one bounded number apiece —
@@ -432,6 +498,45 @@ export function communityConfig(): CommunityConfig {
           value <= MAX_SEND_BLOCK_EXPIRY_DAYS
           ? value
           : DEFAULT_COMMUNITY_CONFIG.sendBlock.expiryDays;
+      })(),
+    },
+    weighting: (() => {
+      const block = blockObject(file, "weighting");
+      const dials = Object.fromEntries(
+        WEIGHT_DIALS.map((dial) => {
+          const value = block[dial];
+          // ⚠️ Zero is legitimate here — it means "this signal is worth
+          // nothing" — so `count()` is the wrong helper; it refuses zero.
+          // Everything unreadable falls to the shipped dial, and the shipped
+          // state as a whole is `enabled: false`, so a typo cannot widen who
+          // gets silenced.
+          return [
+            dial,
+            typeof value === "number" &&
+            Number.isInteger(value) &&
+            value >= 0 &&
+            value <= MAX_WEIGHT_DIAL
+              ? value
+              : DEFAULT_COMMUNITY_CONFIG.weighting[dial],
+          ];
+        }),
+      ) as Omit<ReporterWeighting, "enabled">;
+      // Strictly `=== true`, the shape `enabled` uses everywhere in this file:
+      // anything else is off, and off is where an unreadable value belongs.
+      return { enabled: block.enabled === true, ...dials };
+    })(),
+    postHide: {
+      enabled: blockObject(file, "postHide").enabled === true,
+      // Same floor of two as the send-block, and the same reason: one would
+      // let a single member take anybody's post off the page.
+      threshold: (() => {
+        const value = blockObject(file, "postHide").threshold;
+        return typeof value === "number" &&
+          Number.isInteger(value) &&
+          value >= 2 &&
+          value <= MAX_SEND_BLOCK_THRESHOLD
+          ? value
+          : DEFAULT_COMMUNITY_CONFIG.postHide.threshold;
       })(),
     },
     // ⚠️ Its own coercion, because `count()` refuses zero and zero is this
@@ -770,6 +875,112 @@ export function communityConfigProblems(): string[] {
   } else if (file.sendBlock !== undefined) {
     problems.push(
       '"sendBlock" must be an object, e.g. { "threshold": 5, "windowHours": 24, "expiryDays": null }',
+    );
+  }
+
+  // ── How much a report weighs ─────────────────────────────────────────────
+  // Reported when written and not read, like every other block: an operator
+  // who believes they made long-standing customers count double and did not is
+  // running a community with a rule they do not have.
+  if (
+    file.weighting !== undefined &&
+    typeof file.weighting === "object" &&
+    file.weighting !== null &&
+    !Array.isArray(file.weighting)
+  ) {
+    const block = blockObject(file, "weighting");
+    if (block.enabled !== undefined && typeof block.enabled !== "boolean") {
+      problems.push('"weighting.enabled" must be true or false');
+    }
+    for (const dial of WEIGHT_DIALS) {
+      const value = block[dial];
+      if (
+        value !== undefined &&
+        (typeof value !== "number" ||
+          !Number.isInteger(value) ||
+          value < 0 ||
+          value > MAX_WEIGHT_DIAL)
+      ) {
+        problems.push(
+          `"weighting.${dial}" must be a whole number between 0 and ${MAX_WEIGHT_DIAL} — ` +
+            "hundredths of an ordinary reporter, and 0 means this signal counts for nothing",
+        );
+      }
+    }
+    for (const key of Object.keys(block)) {
+      if (key.startsWith("_")) continue;
+      if (!Object.hasOwn(DEFAULT_COMMUNITY_CONFIG.weighting, key)) {
+        problems.push(
+          `unknown field "weighting.${key}" — this block only reads: ` +
+            Object.keys(DEFAULT_COMMUNITY_CONFIG.weighting).join(", "),
+        );
+      }
+    }
+  } else if (file.weighting !== undefined) {
+    problems.push(
+      '"weighting" must be an object, e.g. { "enabled": false, "tenureMax": 100 }',
+    );
+  }
+
+  // ── The automatic post lock ──────────────────────────────────────────────
+  if (
+    file.postHide !== undefined &&
+    typeof file.postHide === "object" &&
+    file.postHide !== null &&
+    !Array.isArray(file.postHide)
+  ) {
+    const block = blockObject(file, "postHide");
+    if (block.enabled !== undefined && typeof block.enabled !== "boolean") {
+      problems.push('"postHide.enabled" must be true or false');
+    }
+    const threshold = block.threshold;
+    if (
+      threshold !== undefined &&
+      (typeof threshold !== "number" ||
+        !Number.isInteger(threshold) ||
+        threshold < 2 ||
+        threshold > MAX_SEND_BLOCK_THRESHOLD)
+    ) {
+      problems.push(
+        `"postHide.threshold" must be a whole number between 2 and ${MAX_SEND_BLOCK_THRESHOLD} — ` +
+          "one would let a single member take anybody's post off the page",
+      );
+    }
+    for (const key of Object.keys(block)) {
+      if (key.startsWith("_")) continue;
+      if (!Object.hasOwn(DEFAULT_COMMUNITY_CONFIG.postHide, key)) {
+        problems.push(
+          `unknown field "postHide.${key}" — this block only reads: ` +
+            Object.keys(DEFAULT_COMMUNITY_CONFIG.postHide).join(", "),
+        );
+      }
+    }
+  } else if (file.postHide !== undefined) {
+    problems.push(
+      '"postHide" must be an object, e.g. { "enabled": false, "threshold": 2 }',
+    );
+  }
+
+  // ── The one CROSS-block rule in this file, beside `live` ─────────────────
+  // 🚨 A post lock that fell later than the member's send-block would be dead
+  // code: by the time enough weight had gathered to hide the post, the author
+  // could no longer write anyway. Neither number is wrong on its own, which is
+  // exactly why nothing else could catch it — it is the PAIR that is
+  // incoherent, and an incoherent config switches the community off rather
+  // than running a mechanism the operator believes they configured.
+  //
+  // Read through `communityConfig()` and not off the raw file, so an operator
+  // who typed something unreadable is told about THAT first and does not also
+  // get a confusing second sentence about a pair they never wrote.
+  const resolved = communityConfig();
+  if (
+    resolved.postHide.enabled &&
+    resolved.postHide.threshold > resolved.sendBlock.threshold
+  ) {
+    problems.push(
+      `"postHide.threshold" (${resolved.postHide.threshold}) must not be higher than ` +
+        `"sendBlock.threshold" (${resolved.sendBlock.threshold}) — the post lock would ` +
+        "never be reached, because its author would already be silenced",
     );
   }
 
