@@ -17,6 +17,7 @@
 import * as React from "react";
 import { useActionState, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useTranslations, useFormatter } from "next-intl";
 import {
   MoreHorizontal,
@@ -31,12 +32,22 @@ import {
   Ban,
   CircleCheck,
   LogIn,
+  SearchX,
   type LucideIcon,
 } from "lucide-react";
 
 // Deliberately from lib/roles (not lib/authz): authz depends on auth.ts and
 // therefore on mail sending — that does not belong in the browser bundle.
 import { ROLES, type Role } from "@/lib/roles";
+import {
+  ANY_ROLE,
+  USERS_PATH,
+  isFiltered,
+  parseUserFilter,
+  userFilterHref,
+  type RawSearchParams,
+  type UserFilter,
+} from "@/lib/users/list-filter";
 import { cn } from "@/lib/utils";
 import { useActionToast } from "@/hooks/use-action-toast";
 import { RoleBadge } from "@/components/role-badge";
@@ -205,12 +216,152 @@ interface Row {
   blockedAt: Date | null;
 }
 
+/** FormData as the same shape `parseUserFilter` reads out of the URL. */
+function formValues(form: HTMLFormElement): RawSearchParams {
+  const raw: RawSearchParams = {};
+  for (const [key, value] of new FormData(form).entries()) {
+    if (typeof value === "string") raw[key] = value;
+  }
+  return raw;
+}
+
+// A plain GET form, deliberately — the same shape and the same reason as the
+// purchases screen's: `useSearchParams()` would opt this route out of static
+// rendering and fail the production build unless it sat inside a Suspense
+// boundary, and the form needs none of it. Without JavaScript the browser
+// submits it and the page still filters; with JavaScript the submit handler
+// builds a cleaner address and — by leaving `page` out — always returns to the
+// first page, because page 7 of the old filter is nobody's answer to a new one.
+function UserFilters({ filter }: { filter: UserFilter }) {
+  const t = useTranslations("users");
+  const tRoles = useTranslations("roles");
+  const router = useRouter();
+
+  return (
+    <form
+      method="get"
+      action={USERS_PATH}
+      // Remount when the filter changes, so the uncontrolled fields follow the
+      // URL — otherwise "reset" would clear the address but leave the form
+      // showing what it no longer filters by.
+      key={userFilterHref(filter, 1)}
+      onSubmit={(event) => {
+        event.preventDefault();
+        router.push(userFilterHref(parseUserFilter(formValues(event.currentTarget)), 1));
+      }}
+      className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_auto] lg:items-end"
+    >
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="filter-q">{t("filterQuery")}</Label>
+        <Input
+          id="filter-q"
+          name="q"
+          type="search"
+          defaultValue={filter.query ?? ""}
+          placeholder={t("filterQueryPlaceholder")}
+        />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="filter-role">{t("filterRole")}</Label>
+        <Select name="role" defaultValue={filter.role ?? ANY_ROLE}>
+          <SelectTrigger id="filter-role" className="w-full">
+            <SelectValue placeholder={t("filterAnyRole")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ANY_ROLE}>{t("filterAnyRole")}</SelectItem>
+            {/* The roles from `lib/roles.ts`, never a list typed again here —
+                a fourth role would otherwise be filterable everywhere except
+                in the one place an operator looks for it. */}
+            {ROLES.map((role) => (
+              <SelectItem key={role} value={role}>
+                {tRoles(role)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="filter-blocked">{t("filterBlocked")}</Label>
+        <Select name="blocked" defaultValue={filter.blocked}>
+          <SelectTrigger id="filter-blocked" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t("blocked_all")}</SelectItem>
+            <SelectItem value="active">{t("blocked_active")}</SelectItem>
+            <SelectItem value="blocked">{t("blocked_blocked")}</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex gap-2">
+        <Button type="submit">{t("filterSubmit")}</Button>
+        {isFiltered(filter) && (
+          <Button type="button" variant="ghost" asChild>
+            <Link href={USERS_PATH}>{t("filterReset")}</Link>
+          </Button>
+        )}
+      </div>
+    </form>
+  );
+}
+
+function Paging({
+  filter,
+  page,
+  hasMore,
+}: {
+  filter: UserFilter;
+  page: number;
+  hasMore: boolean;
+}) {
+  const t = useTranslations("users");
+  if (page === 1 && !hasMore) return null;
+
+  return (
+    <div className="mt-3 flex items-center justify-between gap-2">
+      <span className="text-muted-foreground text-sm">{t("pageIndicator", { page })}</span>
+      <div className="flex gap-2">
+        {page > 1 ? (
+          <Button variant="outline" size="sm" asChild>
+            <Link href={userFilterHref(filter, page - 1)}>{t("pagePrev")}</Link>
+          </Button>
+        ) : (
+          <Button variant="outline" size="sm" disabled>
+            {t("pagePrev")}
+          </Button>
+        )}
+        {hasMore ? (
+          <Button variant="outline" size="sm" asChild>
+            <Link href={userFilterHref(filter, page + 1)}>{t("pageNext")}</Link>
+          </Button>
+        ) : (
+          <Button variant="outline" size="sm" disabled>
+            {t("pageNext")}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function UserTable({
   users,
+  filter,
+  page,
+  hasMore,
+  total,
   currentUserId,
   impersonationEnabled,
 }: {
   users: Row[];
+  filter: UserFilter;
+  page: number;
+  hasMore: boolean;
+  /** Matches for this filter, ignoring the page — decides the empty state. */
+  total: number;
   currentUserId: string;
   /**
    * Whether `config/impersonation.json` has the feature switched on. Passed in
@@ -271,18 +422,30 @@ export function UserTable({
     startAction(() => action(formData));
   }
 
-  if (users.length === 0) {
-    return (
-      <EmptyState
-        icon={Users}
-        title={t("emptyTitle")}
-        description={t("emptyBody")}
-      />
-    );
+  // 🚨 **Two empty states, and telling them apart is the point.** "This app has
+  // no users" and "your search matched nobody" are different situations with
+  // different next steps, and the second one needs the filter form to stay on
+  // screen — an operator who mistyped an address must be able to correct it
+  // rather than wonder where their customers went.
+  if (total === 0 && !isFiltered(filter)) {
+    return <EmptyState icon={Users} title={t("emptyTitle")} description={t("emptyBody")} />;
   }
 
   return (
     <>
+      <UserFilters filter={filter} />
+
+      {users.length === 0 ? (
+        <EmptyState
+          icon={SearchX}
+          title={t("filterEmptyTitle")}
+          description={t("filterEmptyBody")}
+        >
+          <Button variant="outline" size="sm" asChild>
+            <Link href={USERS_PATH}>{t("filterReset")}</Link>
+          </Button>
+        </EmptyState>
+      ) : (
       <div className="overflow-hidden rounded-xl border">
         <Table>
           <TableHeader>
@@ -473,6 +636,9 @@ export function UserTable({
           </TableBody>
         </Table>
       </div>
+      )}
+
+      <Paging filter={filter} page={page} hasMore={hasMore} />
 
       {/* Signing in as somebody asks first, and names the address while doing
           so. Not because it is destructive — it takes nothing away — but

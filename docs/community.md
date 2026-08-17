@@ -600,6 +600,19 @@ and "there is activity somewhere you cannot see" is exactly the purchase
 information *There is no roster* refuses. Whoever adds a counter asks the same
 `mayEnterGroup()` question the reader asks, in the same statement.
 
+⚠️ **A room card DOES say how much is in it — and that is not a hole in the rule
+above, it is the rule read exactly.** Since 2026-08-17 a card carries "2
+conversations · last one 47 minutes ago", and the thread list carries a post
+count per conversation. What the paragraph above refuses is a number about a
+room the viewer may NOT enter, and a count of the PEOPLE in one; neither is what
+these are. A card only exists for a room `groupsFor()` returned, which is a room
+this person may open in full one click further on — so its table of contents
+tells them nothing the page itself would not. The **unread dot stays existence,
+never a number**: "3 new" is pressure aimed at a member, where "12
+conversations" describes a room. The whole argument, and the guard that keeps
+the ids access-checked rather than merely intended, are
+`modules/community/lib/activity.ts` and `activity-leak.test.ts`.
+
 **The feed shows the authors' faces, and thirty of them cost ONE query.**
 There are two doors onto an avatar and picking the wrong one is the mistake
 worth naming: `avatarUrlFor(id, viewer)` is for a surface showing **one** person

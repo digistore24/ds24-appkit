@@ -191,11 +191,22 @@ try {
   const me = JSON.parse(text);
   console.log(`  ✓ GET /me      ${me.email} (role ${me.role})`);
 
+  // 🚨 The closing line follows `selfService`, because it used to contradict
+  // this run's own header eleven lines up: with the switch off, the settings
+  // block says "no card — keys come from POST /api/v1/auth/token" and this
+  // sentence still sent the reader to a card that renders for nobody
+  // (`keysCardMode()` hides it for a member holding no key, and shows a
+  // revoke-only list to one who does). Two sentences, one output, opposite
+  // answers — and the wrong one is the one somebody acts on.
   console.log(
     `\n✓ The API answers.\n\nA program signs in like this (docs/api.md):\n\n` +
       `  POST ${base}/auth/token\n` +
       `  { "email": "…", "password": "…", "name": "My phone" }\n\n` +
-      `Members can also create keys by hand at /dashboard/account.`,
+      (config.selfService === true
+        ? `Members can also create keys by hand at /dashboard/account.`
+        : `That is the only door: with "selfService": false nobody creates a key on ` +
+          `/dashboard/account — a member holding one sees it there to revoke it, and ` +
+          `nothing more.`),
   );
 
   // Revoked rather than deleted, so the row is still there to be seen if

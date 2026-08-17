@@ -215,11 +215,18 @@
     "setupKeysTitle": "Einrichtung per Agent",
     "setupKeysBody": "Schlüssel, mit denen dein Coding-Agent diese Umgebung einrichtet — und das Protokoll dessen, was er getan hat.",
     "setupKeysCta": "Schlüssel verwalten",
-    "setupAuditCta": "Protokoll ansehen"
+    "setupAuditCta": "Protokoll ansehen",
+    "impersonationsTitle": "Zugriffe auf Konten",
+    "impersonationsBody": "Jedes Mal, wenn ein Admin sich als Kunde angemeldet hat — wer, bei wem und wie lange. Festgehalten wird der Zugriff, nicht was dabei getan wurde.",
+    "impersonationsCta": "Zugriffe ansehen",
+    "moduleSurfacesTitle": "Aus deinen Modulen",
+    "moduleSurfacesBody": "Betreiber-Seiten, die diese App durch installierte Module hat. Was hier steht, hängt an config/modules.json — nicht an einer Liste in dieser Seite.",
+    "moduleSurfaceCta": "Öffnen"
   },
   "users": {
     "title": "Benutzer",
     "description": "{count, plural, =0 {Noch keine Benutzer} one {# Benutzer} other {# Benutzer}} · du bist angemeldet als {email}",
+    "descriptionFiltered": "{count, plural, =0 {Kein Benutzer passt} one {# Benutzer passt} other {# Benutzer passen}} zu deiner Suche",
     "createTrigger": "Benutzer anlegen",
     "createTitle": "Benutzer anlegen",
     "createDescription": "Der neue Benutzer meldet sich selbst per Anmelde-Link an. Ein Kennwort kann er sich später selbst geben — vergeben kannst du keines.",
@@ -262,7 +269,22 @@
     "impersonate": "Als Benutzer einloggen",
     "impersonateTitle": "Als {email} einloggen?",
     "impersonateBody": "Du siehst die App genau so wie dieser Kunde und kannst in seinem Namen handeln. Ein Banner zeigt, in wessen Konto du bist, die Sitzung endet nach 30 Minuten von selbst, und sie wird festgehalten.",
-    "impersonateConfirm": "Als Benutzer einloggen"
+    "impersonateConfirm": "Als Benutzer einloggen",
+    "filterQuery": "Suche",
+    "filterQueryPlaceholder": "Name oder Teil der E-Mail-Adresse",
+    "filterRole": "Rolle",
+    "filterAnyRole": "Alle Rollen",
+    "filterBlocked": "Zustand",
+    "blocked_all": "Alle",
+    "blocked_active": "Nur aktive",
+    "blocked_blocked": "Nur gesperrte",
+    "filterSubmit": "Suchen",
+    "filterReset": "Zurücksetzen",
+    "filterEmptyTitle": "Niemand passt",
+    "filterEmptyBody": "Zu dieser Suche gibt es keinen Benutzer. Setz sie zurück, um wieder alle zu sehen.",
+    "pageIndicator": "Seite {page}",
+    "pagePrev": "Zurück",
+    "pageNext": "Weiter"
   },
   "memberBilling": {
     "title": "Abrechnungsstand",
@@ -363,7 +385,7 @@
     "filterSubmit": "Filtern",
     "filterReset": "Zurücksetzen",
     "filterEmptyTitle": "Kein Kauf passt",
-    "filterEmptyBody": "Zu dieser Filterkombination gibt es keinen Kauf. Setzen Sie die Filter zurück, um wieder alle zu sehen.",
+    "filterEmptyBody": "Zu dieser Filterkombination gibt es keinen Kauf. Setz die Filter zurück, um wieder alle zu sehen.",
     "pageIndicator": "Seite {page}",
     "pagePrev": "Zurück",
     "pageNext": "Weiter",
@@ -858,7 +880,7 @@
   },
   "opsWatchdog": {
     "subject": "{count, plural, =1 {1 Sache braucht Aufmerksamkeit} other {# Sachen brauchen Aufmerksamkeit}} ({severity})",
-    "heading": "{count, plural, =1 {Eine Sache braucht Ihre Aufmerksamkeit} other {# Sachen brauchen Ihre Aufmerksamkeit}}",
+    "heading": "{count, plural, =1 {Eine Sache braucht deine Aufmerksamkeit} other {# Sachen brauchen deine Aufmerksamkeit}}",
     "condition": {
       "security-open": "{count, plural, =1 {1 Sicherheitsbefund} other {# Sicherheitsbefunde}} ab HIGH sind offen. Befehl: node run.mjs security-check",
       "jobs-failing": "{count, plural, =1 {1 geplanter Job ist} other {# geplante Jobs sind}} beim letzten Lauf fehlgeschlagen. Befehl: node run.mjs cron --list",

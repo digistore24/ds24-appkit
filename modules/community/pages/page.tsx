@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getTranslations } from "next-intl/server";
+import { getFormatter, getTranslations } from "next-intl/server";
 import { Flag, Mail, MessagesSquare, Rss, ScrollText, ShieldOff, Users } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
@@ -21,6 +21,7 @@ import {
   groupsFor,
   moderationAuthority,
   unreadByGroup,
+  activityByGroup,
 } from "@/modules/community/lib/manage";
 import { hasUnreadMessages } from "@/modules/community/lib/dm-presence";
 import { mayModerate } from "@/modules/community/lib/rules";
@@ -122,12 +123,40 @@ export default async function CommunityPage() {
   // on a page every member opens, and a dot is what the question deserves.
   const hasMessages = await hasUnreadMessages(session);
 
+  // 🚨 How much is going on in each room — for the rooms this viewer may
+  // already enter, and no others. Same ids as the dot above, so a room nobody
+  // may open contributes nothing here either. `../lib/activity.ts` argues at
+  // length why THESE two numbers are not the counts the module refuses.
+  const activity = await activityByGroup(groups.map((group) => group.id));
+
   // The moderation entry, for whoever the DATABASE says may moderate — never
   // the session's role. Cosmetics either way: the page re-reads it and answers
   // not-found to anybody else.
   const authority = await moderationAuthority(session.user.id);
   const canModerate =
     authority !== null && mayModerate(authority, null, authority.duties) === null;
+
+  const format = await getFormatter();
+  // One clock for the whole render: two rooms whose last post fell either side
+  // of a second must not be described against two different "now"s.
+  const now = new Date();
+
+  /**
+   * What one room card says about itself.
+   *
+   * An empty room says so in words rather than "0 conversations, last activity
+   * never" — the state most rooms are in on their first day, and the one a
+   * number renders as broken rather than new.
+   */
+  const activityLine = (groupId: string): string => {
+    const room = activity.get(groupId);
+    return room && room.topics > 0 && room.lastActivityAt
+      ? t("groupActivity", {
+          topics: room.topics,
+          when: format.relativeTime(room.lastActivityAt, now),
+        })
+      : t("groupQuiet");
+  };
 
   return (
     <>
@@ -226,11 +255,18 @@ export default async function CommunityPage() {
                   )}
                 </CardTitle>
               </CardHeader>
-              {group.description && (
-                <CardContent className="text-muted-foreground text-sm">
-                  {group.description}
-                </CardContent>
-              )}
+              <CardContent className="text-muted-foreground flex flex-col gap-1 text-sm">
+                {group.description && <p>{group.description}</p>}
+                {/* ⚠️ **A description of the ROOM, not a nudge at the member.**
+                    The unread dot above stays what it always was — existence,
+                    never a count — because "3 new" is pressure. How many
+                    conversations a room holds and when the last one moved is
+                    the table of contents of a page this person may open in
+                    full, and without it four rooms look identical. The whole
+                    argument, including which counts stay refused, is in
+                    `../lib/activity.ts`. */}
+                <p>{activityLine(group.id)}</p>
+              </CardContent>
             </Card>
           ))}
         </div>

@@ -5,6 +5,8 @@ import Link from "next/link";
 import { getTranslations, getFormatter } from "next-intl/server";
 import { Mail } from "lucide-react";
 
+import { appTimeZone } from "@/i18n/catalogue";
+import { isSameDay } from "@/lib/same-day";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -57,6 +59,10 @@ export default async function MessagesPage({
 
   const pages = Math.max(1, Math.ceil(total / CONVERSATIONS_PER_PAGE));
   const placeholderLabel = t("memberPlaceholder");
+  // One clock and one zone for the whole list, so two rows either side of a
+  // second are not judged against two different "today"s.
+  const now = new Date();
+  const timeZone = appTimeZone();
 
   return (
     <>
@@ -106,18 +112,40 @@ export default async function MessagesPage({
                     </div>
                     {/* Cut on the SERVER — `lastMessagePreview` arrives already
                         shortened, so the page's payload does not carry a whole
-                        private message that CSS then hides. */}
+                        private message that CSS then hides.
+
+                        ⚠️ **"Du:" when the last word was the viewer's own.**
+                        Without it the row reads as if the other person had
+                        written it, which is the opposite of what happened and
+                        exactly the state an inbox is scanned for: who is
+                        waiting for whom. The flag comes off the loader, which
+                        is the only place that holds the viewer's id. */}
                     <p className="text-muted-foreground truncate text-sm">
-                      {conversation.lastMessagePreview}
+                      {conversation.lastMessageMine
+                        ? t("messagePreviewMine", {
+                            preview: conversation.lastMessagePreview,
+                          })
+                        : conversation.lastMessagePreview}
                     </p>
                   </div>
                   <time
                     dateTime={conversation.lastMessageAt.toISOString()}
                     className="text-muted-foreground shrink-0 text-xs"
                   >
-                    {format.dateTime(conversation.lastMessageAt, {
-                      dateStyle: "medium",
-                    })}
+                    {/* 🚨 Today gets a TIME, everything older gets a date. An
+                        inbox is read to find out what happened since this
+                        morning, and "16.08.2026" on three rows that arrived
+                        minutes apart answers nothing — while a bare time on a
+                        message from March would be a lie about the day.
+
+                        The comparison is made in the app's own zone
+                        (`appTimeZone()`, the one `i18n/request.ts` hands the
+                        formatter), never the server's: a member in Berlin and a
+                        machine in UTC disagree about "today" for two hours
+                        every night. */}
+                    {isSameDay(conversation.lastMessageAt, now, timeZone)
+                      ? format.dateTime(conversation.lastMessageAt, { timeStyle: "short" })
+                      : format.dateTime(conversation.lastMessageAt, { dateStyle: "medium" })}
                   </time>
                 </CardContent>
               </Card>

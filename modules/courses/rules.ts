@@ -608,6 +608,87 @@ export interface UnitRef {
 }
 
 /**
+ * A block, as the three reading surfaces hand one in — deliberately not the DB
+ * row, so this file stays testable without `@/db` in the import graph.
+ */
+export interface BlockRef {
+  readonly position: number;
+  readonly releaseAfterDays: number;
+  readonly units: readonly {
+    readonly slug: string;
+    readonly title: string;
+    readonly position: number;
+  }[];
+}
+
+/**
+ * The course's lessons, flattened, each carrying whether it is open for this
+ * learner right now.
+ *
+ * 🚨 **One computation, three pages.** The overview built this inline, and the
+ * course LIST and the lesson page now need the same answer — the list to say
+ * "4 of 13" beside a course, the lesson page to know what comes next. Three
+ * copies of a flatMap that calls `isUnlocked()` per block is three places for
+ * the shape argument to be forgotten, and forgetting it opens week ten on day
+ * one (`unlockedAt()` says why config wins over data in both directions).
+ *
+ * Locked units are IN the list. Every caller needs them: progress counts the
+ * whole course rather than the part that happens to be open today — otherwise a
+ * drip learner reads "2 of 2, done" in week one — and `nextUnit()` does its own
+ * filtering on `unlocked`.
+ *
+ * Unsorted, as the outline hands it over: `nextUnit()` and `neighbours()` sort
+ * for themselves, because a caller that merely counts must not pay for it.
+ */
+export function unitRefs(
+  blocks: readonly BlockRef[],
+  startedAt: Date | null,
+  shape: CourseShape,
+  now: Date,
+): UnitRef[] {
+  return blocks.flatMap((block) => {
+    // Once per BLOCK, not once per unit: the clock is a property of the block,
+    // and a course of ten blocks with twelve lessons each would otherwise ask
+    // the same question 120 times.
+    const unlocked = isUnlocked(block.releaseAfterDays, startedAt, shape, now);
+    return block.units.map((unit) => ({
+      slug: unit.slug,
+      title: unit.title,
+      blockPosition: block.position,
+      position: unit.position,
+      unlocked,
+    }));
+  });
+}
+
+/**
+ * What lies either side of this lesson, in reading order.
+ *
+ * ⚠️ **It answers with LOCKED units too, and that is the point.** The lesson
+ * page has to tell "this is the last lesson" (nothing there) from "the next one
+ * opens on the 20th" (there, but shut) — and only the caller knows how to say
+ * the second, because it is the one holding the translator and the date. A
+ * function that filtered locked units away would make the two states
+ * indistinguishable and put a dead end at the end of every drip week.
+ *
+ * `null` on either side means there is genuinely nothing — the first and the
+ * last lesson of the course. A slug that is not in the list gets `null` twice
+ * rather than an error: the page has already 404'd anything that is not part of
+ * this course, so this is the belt to that braces.
+ */
+export function neighbours(
+  units: readonly UnitRef[],
+  slug: string,
+): { previous: UnitRef | null; next: UnitRef | null } {
+  const ordered = [...units].sort(
+    (a, b) => a.blockPosition - b.blockPosition || a.position - b.position,
+  );
+  const at = ordered.findIndex((unit) => unit.slug === slug);
+  if (at < 0) return { previous: null, next: null };
+  return { previous: ordered[at - 1] ?? null, next: ordered[at + 1] ?? null };
+}
+
+/**
  * Where should this learner go now?
  *
  * The first uncompleted unit in block-then-unit order that is actually open.

@@ -11,6 +11,7 @@ import { hasDigistoreApiKey } from "@/lib/digistore/settings";
 import { nextPaymentForMember } from "@/lib/digistore/subscriptions";
 import { purchaseNoticeFor } from "@/lib/digistore/member-billing";
 import { entitlementsFor } from "@/lib/entitlements/manage";
+import { isOwner } from "@/lib/roles";
 import { getTokenAccount } from "@/lib/tokens/account";
 import { findProduct } from "@/lib/digistore/products";
 import { sellsPlans, sellsTokens } from "@/lib/billing-mode";
@@ -71,7 +72,16 @@ export default async function DashboardPage({
 
   // The Digistore24 connection is a matter of the installation, not of the
   // user: it comes from .env (node run.mjs ds24-connect), not from a form.
+  //
+  // 🚨 Which is exactly why only the OPERATOR is told about it. Both surfaces
+  // below used to render for everybody, so on an app whose key is not in place
+  // yet — a fresh DEV app, and every minute of STAGING before somebody
+  // connects it — a paying member met a status card reading "Abrechnung ·
+  // Nicht verbunden" (which they read as *their* payment being broken) and a
+  // warning callout instructing them to run `node run.mjs ds24-connect` in a
+  // terminal they do not have. Neither says anything a customer can act on.
   const connected = hasDigistoreApiKey();
+  const isOperator = isOwner(session.user.role);
 
   // When the Member is next charged — DISPLAY ONLY. It says nothing about what
   // they may use; that answer comes from lib/entitlements (AD-1, AD-2).
@@ -344,18 +354,20 @@ export default async function DashboardPage({
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-muted-foreground text-sm font-medium">
-              {t("statusTitle")}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Badge variant={connected ? "default" : "secondary"}>
-              {connected ? t("statusConnected") : t("statusDisconnected")}
-            </Badge>
-          </CardContent>
-        </Card>
+        {isOperator && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-muted-foreground text-sm font-medium">
+                {t("statusTitle")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Badge variant={connected ? "default" : "secondary"}>
+                {connected ? t("statusConnected") : t("statusDisconnected")}
+              </Badge>
+            </CardContent>
+          </Card>
+        )}
 
         {showNextPayment && (
           <Card>
@@ -384,7 +396,7 @@ export default async function DashboardPage({
         )}
       </div>
 
-      {!connected && (
+      {isOperator && !connected && (
         <Callout variant="warning" title={t("ds24Title")} className="mt-6">
           {t.rich("ds24Body", { code: (chunks) => <code>{chunks}</code> })}
           <pre className="bg-background mt-2 overflow-x-auto rounded-md border p-2 font-mono text-xs">

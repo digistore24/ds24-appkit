@@ -48,6 +48,8 @@
 // layers*.
 
 export { sendBlockFor } from "./_blocks";
+export { activityByGroup, postCountByDiscussion } from "./activity";
+export type { GroupActivity } from "./activity";
 export { POST_IMAGE_SLOT } from "./_post-images";
 export type { PostImageUpload } from "./_post-images";
 export { addEmbeddedPost, embedAccessFor, embeddedDiscussionView, ensureEmbeddedDiscussion } from "./embedded";

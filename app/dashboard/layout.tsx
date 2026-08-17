@@ -9,7 +9,7 @@ import { chatConfig, isChatEnabled } from "@/lib/ai/chat-config";
 import { chatNavVisible, mayUseChat } from "@/lib/ai/rules";
 import { allowedMediaMarkers } from "@/lib/ai/knowledge";
 import { isOwner } from "@/lib/roles";
-import { MODULES } from "@/lib/modules/registry";
+import { moduleShellState } from "@/lib/modules/shell-state";
 import { hasPlan } from "@/lib/entitlements/manage";
 import { ChatLauncher } from "@/app/dashboard/chat/launcher";
 import { SiteFooter } from "@/components/site-footer";
@@ -80,22 +80,17 @@ export default async function DashboardLayout({
   // dots, resolved on the server and handed over as booleans.
   //
   // ⚠️ A module that is switched off answers `{}` without touching the
-  // database; the guard lives inside each module's `shellState()`, exactly
-  // inside each module's `shellState()`. With no module installed this is one
-  // `Promise.all` over an empty array.
-  const moduleShell = await Promise.all(
-    MODULES.map(async (mod) =>
-      mod.shellState
-        ? await mod.shellState({
-            memberId: session.user.id,
-            role: session.user.role,
-            impersonating: Boolean(session.user.impersonation),
-          })
-        : {},
-    ),
-  );
-  const moduleFeatures = Object.assign({}, ...moduleShell.map((s) => s.features ?? {}));
-  const moduleBadges = moduleShell.flatMap((s) => s.badges ?? []);
+  // database; the guard lives inside each module's `shellState()`. With no
+  // module installed this is one `Promise.all` over an empty array.
+  //
+  // The walk moved into `moduleShellState()` when the admin hub became the
+  // second surface asking the same question — that file says why one answer
+  // rather than two.
+  const { features: moduleFeatures, badges: moduleBadges } = await moduleShellState({
+    memberId: session.user.id,
+    role: session.user.role,
+    impersonating: Boolean(session.user.impersonation),
+  });
 
   return (
     <>

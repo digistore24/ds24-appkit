@@ -70,6 +70,18 @@ export interface ConversationRow {
   lastMessageAt: Date;
   /** A preview of the newest message, already blanked if it is not visible. */
   lastMessagePreview: string;
+  /**
+   * Whether the newest message is this viewer's own.
+   *
+   * ⚠️ **Decided here rather than on the page**, because this function is the
+   * one that holds `participantId`: an inbox that compared ids in the renderer
+   * would need the viewer's id handed to it a second time, and a second copy of
+   * "who am I" is a second chance to compare the wrong one.
+   *
+   * `false` when the newest message is not visible — a blanked preview gets no
+   * "You:" in front of it, because there is no sentence there to attribute.
+   */
+  lastMessageMine: boolean;
   unread: boolean;
 }
 
@@ -615,6 +627,11 @@ export async function listConversations(
         content: communityMessages.content,
         createdAt: communityMessages.createdAt,
         id: communityMessages.id,
+        // Who wrote it — for the "You:" the inbox puts in front of the
+        // preview. `null` once that account is gone, which compares false
+        // against a live `participantId` and is the right answer: a message
+        // from a deleted account is nobody's own.
+        authorId: communityMessages.authorId,
         deletedAt: communityMessages.deletedAt,
         deletedBy: communityMessages.deletedBy,
       })
@@ -666,6 +683,7 @@ export async function listConversations(
         lastMessagePreview: visible
           ? last.content.slice(0, PREVIEW_LENGTH)
           : "",
+        lastMessageMine: visible && last.authorId === participantId,
         // ⚠️ **A FULL tuple on both sides** — the newest message's
         // `(createdAt, id)` against the marker's. The room-side reads compare
         // timestamps only, because `lastActivityAt` has no id beside it and

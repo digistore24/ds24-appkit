@@ -14,6 +14,7 @@
 // the right Member by hand; the attach shares the same claim path as an
 // automatic sign-in claim (lib/digistore/claim.ts), so the two cannot drift.
 import { db } from "@/db";
+import { escapeLikeFragment } from "@/lib/sql-like";
 import { orders, users } from "@/db/schema";
 import {
   and,
@@ -28,7 +29,6 @@ import {
 import { claimOneOrder } from "./claim";
 import { isClaimable, type OrderStatus } from "./claimable";
 import {
-  escapeLikeFragment,
   PURCHASES_PAGE_SIZE,
   type PurchaseFilter,
 } from "./purchase-filter";

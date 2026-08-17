@@ -19,6 +19,15 @@ import { listConversation } from "@/lib/ai/conversation";
 import { allowedMediaMarkers } from "@/lib/ai/knowledge";
 import { ChatWindow } from "./ui";
 
+// The tab this page opens in — every other page under `app/dashboard/` sets
+// one, and without it the browser falls back to the layout's bare app name.
+// The assistant's name comes from `config/ai-chat.json`, so the title carries
+// it exactly as the heading does rather than saying "Chat".
+export async function generateMetadata() {
+  const t = await getTranslations("chat");
+  return { title: t("title", { name: chatConfig().name }) };
+}
+
 // The assistant.
 //
 // This page ALWAYS renders — switched off it shows a notice, not a 404 and not
@@ -45,8 +54,11 @@ export default async function ChatPage() {
 
   const offReason = chatOffReason();
   if (!isChatEnabled() && offReason) {
-    // WHO is asking decides what they are told, and this is the only place in
-    // the app where that distinction matters for a notice.
+    // WHO is asking decides what they are told. The second place that makes
+    // the same distinction is the dashboard's Digistore24 pair (the status
+    // card and its callout, both `isOperator &&`) — and the rule both follow
+    // is written down one page over, in `app/plans/page.tsx` → `SETUP_HINTS`:
+    // a real buyer must never be shown a terminal command.
     //
     // The Operator gets the diagnosis: they switched her on, they are the one
     // who can fix it, and the sentence names a file and an environment

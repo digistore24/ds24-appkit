@@ -4,7 +4,6 @@
 import { describe, it, expect } from "vitest";
 import {
   parsePurchaseFilter,
-  escapeLikeFragment,
   canAttachOrder,
   purchaseFilterHref,
   isFiltered,
@@ -94,28 +93,6 @@ describe("parsePurchaseFilter", () => {
     expect(isFiltered(parsePurchaseFilter({ assignment: "unassigned" }))).toBe(
       true,
     );
-  });
-});
-
-describe("escapeLikeFragment", () => {
-  it("leaves an ordinary address alone", () => {
-    expect(escapeLikeFragment("kunde@example.com")).toBe("kunde@example.com");
-  });
-
-  it("makes % a literal percent sign", () => {
-    // Unescaped, "100%" would match every row: % is LIKE's wildcard.
-    expect(escapeLikeFragment("100%")).toBe("100\\%");
-  });
-
-  it("makes _ a literal underscore", () => {
-    expect(escapeLikeFragment("a_b")).toBe("a\\_b");
-  });
-
-  it("escapes the backslash FIRST, so an escape cannot be forged", () => {
-    // Wrong order ("%" first, then "\") turns "%" into "\\%" — a literal
-    // backslash followed by the wildcard, i.e. the opposite of the intent.
-    expect(escapeLikeFragment("\\%")).toBe("\\\\\\%");
-    expect(escapeLikeFragment("c\\d")).toBe("c\\\\d");
   });
 });
 

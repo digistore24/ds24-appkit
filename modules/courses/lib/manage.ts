@@ -25,7 +25,7 @@ import { and, asc, count, desc, eq, ilike, isNotNull, isNull, inArray, ne, or, s
 import { db } from "@/db";
 import { users } from "@/db/schema-core";
 import { media } from "@/db/schema-media";
-import { escapeLikeFragment } from "@/lib/digistore/purchase-filter";
+import { escapeLikeFragment } from "@/lib/sql-like";
 
 import {
   coursesBlocks,

@@ -97,23 +97,6 @@ export function isFiltered(filter: PurchaseFilter): boolean {
 }
 
 /**
- * A fragment, safe to drop between two `%` in an `ILIKE` pattern.
- *
- * `%`, `_` and `\` are LIKE syntax: unescaped, an Operator who pastes an
- * address containing one gets a different result set than the one they asked
- * for — and a lone `%` matches everything. Postgres uses `\` as the default
- * escape character for LIKE/ILIKE, so no `ESCAPE` clause is needed; what is
- * needed is that the backslash is doubled FIRST, otherwise the escapes added
- * below would themselves be escaped away.
- */
-export function escapeLikeFragment(fragment: string): string {
-  return fragment
-    .replaceAll("\\", "\\\\")
-    .replaceAll("%", "\\%")
-    .replaceAll("_", "\\_");
-}
-
-/**
  * May this purchase be attached to an account by hand?
  *
  * Both conditions the attach actually enforces, in one place, so the button and

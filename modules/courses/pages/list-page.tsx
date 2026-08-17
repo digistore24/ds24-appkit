@@ -43,6 +43,8 @@ import { isOwner } from "@/lib/roles";
 import { courseAccessFor } from "../lib/access";
 import { courseConfigProblems, courseOffReason } from "../lib/config";
 import { usableCourses } from "../lib/courses";
+import { completedSlugsFor, courseOutline } from "../lib/manage";
+import { nextUnit, progress, unitRefs } from "../rules";
 
 export async function generateMetadata() {
   const t = await getTranslations("courses");
@@ -86,11 +88,36 @@ export default async function CourseListPage() {
   // is invisible to a member and named to the operator on the admin surface.
   // Rendering it here would offer somebody a course that cannot open.
   const courses = await usableCourses();
+  // ONE read for the whole page, not one per course: completions are keyed on
+  // the bare unit slug (`../schema.ts`), so the member's set answers for every
+  // course at once. A per-course query would be the same rows, N times.
+  const completed = await completedSlugsFor(memberId);
+  const now = new Date();
   const held = await Promise.all(
-    courses.map(async (course) => ({
-      course,
-      ...(await courseAccessFor(memberId, session.user.role, course)),
-    })),
+    courses.map(async (course) => {
+      const access = await courseAccessFor(memberId, session.user.role, course);
+      // 🚨 **The outline is read for a course this member HOLDS, and for no
+      // other.** The header's rule is that nothing about the inside of an
+      // unbought course may reach this page — a lesson count is exactly that,
+      // and the cheapest way to keep the rule is not to have the number. So the
+      // query is inside the branch rather than the render.
+      if (!access.entitled) return { course, ...access, standing: null };
+
+      const blocks = await courseOutline(course.id);
+      const units = unitRefs(blocks, access.startedAt, course.shape!, now);
+      return {
+        course,
+        ...access,
+        standing: {
+          done: units.filter((unit) => completed.has(unit.slug)).length,
+          total: units.length,
+          // The same answer the overview's card gives, from the same function:
+          // "carry on where you were" has to land on the same lesson on both
+          // pages or one of them is lying.
+          next: nextUnit(units, completed),
+        },
+      };
+    }),
   );
 
   return (
@@ -108,7 +135,7 @@ export default async function CourseListPage() {
         />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
-          {held.map(({ course, entitled, asOperator }) => (
+          {held.map(({ course, entitled, asOperator, standing }) => (
             <Card key={course.slug}>
               <CardHeader className="flex flex-row items-start justify-between gap-3">
                 <CardTitle>{course.title}</CardTitle>
@@ -122,13 +149,53 @@ export default async function CourseListPage() {
                 {course.summary ? (
                   <p className="text-muted-foreground text-sm">{course.summary}</p>
                 ) : null}
-                {/* 🚨 Nothing about what is INSIDE it for somebody who has not
-                    bought it — see the header. The two buttons differ in where
-                    they go, never in what they reveal. */}
+                {/* ⚠️ **This is what the page's own subtitle promises** — "und
+                    woran du schon dran bist" — and until 2026-08-17 the cards
+                    answered it with nothing at all: a badge saying "owned", and
+                    a button that read the same on a course somebody had
+                    finished and one they had never opened.
+
+                    🚨 Only for a course this member HOLDS. `standing` is null
+                    otherwise, and the query behind it never ran — a bar and a
+                    lesson count on an unbought course would be exactly the
+                    inside knowledge the header refuses. The two branches differ
+                    in what they REVEAL, not only in where they go. */}
+                {standing && standing.total > 0 ? (
+                  <div className="flex flex-col gap-2">
+                    <div
+                      role="progressbar"
+                      aria-valuenow={progress(standing.done, standing.total)}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label={t("progressTitle")}
+                      className="bg-muted h-2 w-full overflow-hidden rounded-full"
+                    >
+                      <div
+                        className="bg-primary h-full"
+                        style={{ width: `${progress(standing.done, standing.total)}%` }}
+                      />
+                    </div>
+                    <p className="text-muted-foreground text-sm">
+                      {t("progressCount", { done: standing.done, total: standing.total })}
+                    </p>
+                  </div>
+                ) : null}
                 {entitled ? (
+                  // 🚨 The button LEADS ON rather than merely opening: straight
+                  // to the lesson `nextUnit()` names, so "carry on" is one click
+                  // from the list. It falls back to the overview whenever there
+                  // is no open lesson — a fresh drip learner on day zero, or a
+                  // course with no blocks yet — because a button whose target
+                  // does not exist is worse than a plainer one that works.
                   <Button asChild>
-                    <Link href={`/dashboard/course/${encodeURIComponent(course.slug)}`}>
-                      {t("listOpen")}
+                    <Link
+                      href={
+                        standing?.next
+                          ? `/dashboard/course/${encodeURIComponent(course.slug)}/${encodeURIComponent(standing.next.slug)}`
+                          : `/dashboard/course/${encodeURIComponent(course.slug)}`
+                      }
+                    >
+                      {standing?.next && standing.done > 0 ? t("listResume") : t("listOpen")}
                     </Link>
                   </Button>
                 ) : (

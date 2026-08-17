@@ -137,10 +137,16 @@ describe("🚨 every featureKey is declared and resolved", () => {
 
 describe("the layout asks every module, and pays nothing for none", () => {
   const layout = readFileSync(join(ROOT, "app/dashboard/layout.tsx"), "utf8");
+  // The walk itself moved out of the layout when the admin hub became the
+  // second surface needing the same answer — one function, two callers, so a
+  // module that hides an entry from the menu cannot leave a card standing in
+  // the hub. What this file asserts is unchanged; only the file it reads it in.
+  const walk = readFileSync(join(ROOT, "lib/modules/shell-state.ts"), "utf8");
 
   it("resolves module features and badges through shellState()", () => {
-    expect(layout).toMatch(/MODULES\.map\(async \(mod\) =>/);
-    expect(layout).toContain("mod.shellState");
+    expect(walk).toMatch(/MODULES\.map\(async \(mod\) =>/);
+    expect(walk).toContain("mod.shellState");
+    expect(layout).toContain("moduleShellState(");
     expect(layout).toContain("...moduleFeatures");
     // The badges are handed over whole rather than spread: with the community
     // gone from the layout there is no core badge left to merge them with, and

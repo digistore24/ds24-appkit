@@ -13,6 +13,7 @@ import { PROVIDER_ERROR_CODES } from "@/lib/ai/providers/types";
 import { CONSENT_ERROR_CODES } from "@/lib/consent/rules";
 import { MEDIA_ERROR_CODES } from "@/lib/media/rules";
 import { ROLES } from "@/lib/roles";
+import { IMPERSONATION_END_REASONS } from "@/db/schema-impersonation";
 import { consentPurposes } from "@/lib/consent/config";
 import { CREDENTIAL_CHANGES } from "@/lib/email";
 import de from "@/messages/de.json";
@@ -187,6 +188,46 @@ describe("Role names", () => {
       (ALL_MESSAGES[DEFAULT_LOCALE] as { roles?: Record<string, string> }).roles ?? {},
     );
     expect(labelled.filter((key) => !declared.has(key))).toEqual([]);
+  });
+});
+
+describe("Impersonation end reasons", () => {
+  // The same hole again, and this one was PRODUCED rather than reasoned about:
+  // `app/dashboard/admin/impersonations/page.tsx` renders
+  // ``t(`endedBy_${row.endedBy}`)`` over a plain `text` column, and a value
+  // with no wording throws `MISSING_MESSAGE` into the log while the page still
+  // answers 200 — the exact shape CLAUDE.md → *Never ship a broken page* is
+  // about. The cast next to that call (`as "endedBy_operator"`) is what keeps
+  // `tsc` from noticing, and it has to stay: the column is text, so no type
+  // can promise what is in it.
+  //
+  // The four codes and their wordings sat in two files with nothing between
+  // them, so a fifth reason — added to `IMPERSONATION_END_REASONS` and closed
+  // in `closeImpersonation()`, which is one commit — would ship a row nobody
+  // can read. This is that gap as a build failure.
+  for (const locale of LOCALES) {
+    it(`${locale}: has a wording for every reason in db/schema-impersonation.ts`, () => {
+      for (const reason of IMPERSONATION_END_REASONS) {
+        const label = messageAt(ALL_MESSAGES[locale], `impersonation.endedBy_${reason}`);
+        expect(label, `${locale}: impersonation.endedBy_${reason}`).toBeTypeOf("string");
+        expect(
+          String(label).trim(),
+          `${locale}: impersonation.endedBy_${reason} is empty`,
+        ).not.toBe("");
+      }
+    });
+  }
+
+  it("has no wording for a reason that no longer exists", () => {
+    const declared = new Set<string>(IMPERSONATION_END_REASONS);
+    const orphans = Object.keys(
+      (ALL_MESSAGES[DEFAULT_LOCALE] as { impersonation?: Record<string, string> })
+        .impersonation ?? {},
+    )
+      .filter((key) => key.startsWith("endedBy_"))
+      .map((key) => key.slice("endedBy_".length))
+      .filter((reason) => !declared.has(reason));
+    expect(orphans).toEqual([]);
   });
 });
 

@@ -238,11 +238,13 @@ function mediaTitle(row: MediaRow, unitTitle: string): string {
  * answers in their language.
  *
  * ⚠️ **The zone is named, and it is not decoration.** `toISOString()` renders
- * in UTC, `startedAt` is a `min(created_at)` out of a zoneless column, and no
- * page in this app renders an opening date at all — so this line is the only
- * one anybody ever sees, with nothing to compare it against. For a member in
- * CEST whose grant was written at 23:30 local it names the day before. Saying
- * `(UTC)` is what stops the model from presenting a shifted date as a local one.
+ * in UTC and `startedAt` is a `min(created_at)` out of a zoneless column, so for
+ * a member in CEST whose grant was written at 23:30 local it names the day
+ * before. Saying `(UTC)` is what stops the model from presenting a shifted date
+ * as a local one. The course overview renders the same date since 2026-08-17 —
+ * `pages/course-page.tsx` → `opensSentence()`, which pins `timeZone: "UTC"` on
+ * the formatter for exactly this reason and takes the same three states this
+ * function does.
  */
 function lockedNote(opensAt: Date | null, startedAt: Date | null): string {
   if (startedAt === null) {

@@ -22,9 +22,10 @@
 //   on      → the gate, then the course.
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getTranslations } from "next-intl/server";
+import { getFormatter, getTranslations } from "next-intl/server";
 
 import { PageHeader } from "@/components/page-header";
+import { Badge } from "@/components/ui/badge";
 import { Callout } from "@/components/ui/callout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -35,7 +36,7 @@ import { courseAccessFor } from "../lib/access";
 import { courseConfigProblems, courseOffReason } from "../lib/config";
 import { courseBySlug } from "../lib/courses";
 import { courseOutline, completedSlugsFor } from "../lib/manage";
-import { isUnlocked, nextUnit, progress } from "../rules";
+import { isUnlocked, nextUnit, progress, unitRefs, unlockedAt } from "../rules";
 
 // The browser tab, which is not the page's heading.
 //
@@ -57,8 +58,19 @@ export async function generateMetadata() {
 
 export default async function CoursePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ course: string }>;
+  /**
+   * `?locked=<unit slug>` — set by the lesson page when it sends somebody back
+   * from a week that has not opened.
+   *
+   * 🚨 **A REFERENCE, never a message** (`CLAUDE.md` → UI, rule 1). The slug is
+   * looked up against this course's own lessons below and the sentence is built
+   * from the row; a URL carrying the sentence itself is a URL anybody can hand
+   * somebody else to make their app say whatever they typed.
+   */
+  searchParams: Promise<{ locked?: string | string[] }>;
 }) {
   if (courseOffReason() === "disabledInConfig") {
     notFound();
@@ -116,22 +128,75 @@ export default async function CoursePage({
 
   const [blocks, completed] = await Promise.all([courseOutline(course.id), completedSlugsFor(memberId)]);
   const now = new Date();
+  const format = await getFormatter();
 
-  const units = blocks.flatMap((block) =>
-    block.units.map((unit) => ({
-      slug: unit.slug,
-      title: unit.title,
-      blockPosition: block.position,
-      position: unit.position,
-      unlocked: isUnlocked(block.releaseAfterDays, startedAt, shape, now),
-    })),
-  );
+  // The flatten moved into `rules.ts` when the course LIST needed the same
+  // answer — same function, same arguments, so the two pages cannot disagree
+  // about how far somebody is.
+  const units = unitRefs(blocks, startedAt, shape, now);
   const done = units.filter((unit) => completed.has(unit.slug)).length;
   const next = nextUnit(units, completed);
+
+  /**
+   * When does this block open, in words the learner can act on?
+   *
+   * 🚨 **Until 2026-08-17 no page in this app rendered an opening date at all**
+   * — a locked week said "noch nicht freigeschaltet" and nothing else, so a
+   * learner could not tell tomorrow from six weeks away. The date was always
+   * there (`unlockedAt()`); only the sentence was missing. The assistant's
+   * `lockedNote()` in `../content-source.ts` has said it all along, which is
+   * why this function takes the same three states it does — and why that one's
+   * comment about being the only place is now this one's too.
+   *
+   * ⚠️ **`timeZone: "UTC"` is load-bearing.** `startedAt` is a `min(created_at)`
+   * out of a zoneless column read as UTC, so a formatter left on the server's
+   * zone names the day before for a member in CEST whose grant was written at
+   * 23:30. The same rule `accessUntil` keeps on the account page.
+   */
+  const opensSentence = (releaseAfterDays: number): string => {
+    // No active grant: nothing has a clock at all, and naming a date would
+    // invent one. The honest sentence is the one a paused member gets.
+    if (startedAt === null) return t("blockPaused");
+    const opensAt = unlockedAt(releaseAfterDays, startedAt, shape);
+    // An absurd `releaseAfterDays` — an unbounded `int4`, and the admin form
+    // carries no maximum — pushes the sum out of the representable range. The
+    // block is locked either way; only the day is unnameable.
+    if (opensAt === null || !Number.isFinite(opensAt.getTime())) return t("blockOpensUnknown");
+    return t("blockOpensOn", {
+      date: format.dateTime(opensAt, { dateStyle: "long", timeZone: "UTC" }),
+    });
+  };
+
+  // ⚠️ **A `<Callout>`, not a toast**, and the difference is the date in it: a
+  // toast is gone in four seconds, and "opens on the 24th" is the one thing
+  // this person came here to find out. `CLAUDE.md` → UI, rule 1 picks by where
+  // the result has to appear, and this one has to stay on screen.
+  //
+  // Nothing renders unless the slug names a lesson of THIS course that really
+  // is shut for THIS member — a hand-typed parameter gets silence rather than a
+  // sentence about a lesson somebody else's course holds.
+  const { locked } = await searchParams;
+  const lockedSlug = typeof locked === "string" ? locked : null;
+  const lockedUnit = lockedSlug
+    ? (units.find((unit) => unit.slug === lockedSlug && !unit.unlocked) ?? null)
+    : null;
+  const lockedBlock = lockedUnit
+    ? (blocks.find((block) => block.units.some((unit) => unit.slug === lockedUnit.slug)) ?? null)
+    : null;
 
   return (
     <>
       <PageHeader title={course.title} description={course.summary ?? undefined} />
+
+      {lockedUnit && lockedBlock ? (
+        <Callout
+          variant="info"
+          title={t("lockedNoticeTitle", { title: lockedUnit.title })}
+          className="mb-6"
+        >
+          {opensSentence(lockedBlock.releaseAfterDays)}
+        </Callout>
+      ) : null}
 
       {blocks.length === 0 ? (
         // Empty is the state most operators meet first, and the one nobody
@@ -191,8 +256,16 @@ export default async function CoursePage({
             const open = isUnlocked(block.releaseAfterDays, startedAt, shape, now);
             return (
               <Card key={block.slug}>
-                <CardHeader>
+                <CardHeader className="flex flex-row items-start justify-between gap-3">
                   <CardTitle>{block.title}</CardTitle>
+                  {/* The date sits on the BLOCK, because the clock does: a
+                      badge per lesson would repeat one fact per line and still
+                      leave the block's own heading silent. */}
+                  {open ? null : (
+                    <Badge variant="outline" className="shrink-0">
+                      {opensSentence(block.releaseAfterDays)}
+                    </Badge>
+                  )}
                 </CardHeader>
                 <CardContent>
                   {block.summary ? (

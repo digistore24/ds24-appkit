@@ -26,7 +26,9 @@ import {
   replyProblem,
   slotUploadProblem,
   mayOperatorWrite,
+  neighbours,
   nextUnit,
+  unitRefs,
   unitTextProblem,
   MAX_UNIT_BODY_CHARS,
   MAX_UNIT_TITLE_CHARS,
@@ -176,6 +178,91 @@ describe("the next step", () => {
   it("does not reorder the caller's array", () => {
     const units = [unit("b", 1, 2), unit("a", 1, 1)];
     nextUnit(units, new Set());
+    expect(units.map((u) => u.slug)).toEqual(["b", "a"]);
+  });
+});
+
+describe("flattening the outline", () => {
+  const block = (position: number, releaseAfterDays: number, slugs: string[]) => ({
+    position,
+    releaseAfterDays,
+    units: slugs.map((slug, index) => ({ slug, title: `Titel ${slug}`, position: index + 1 })),
+  });
+
+  it("carries every lesson, with its block's clock", () => {
+    const blocks = [block(1, 0, ["a", "b"]), block(2, 7, ["c"])];
+    const refs = unitRefs(blocks, START, "drip", START);
+    expect(refs.map((u) => u.slug)).toEqual(["a", "b", "c"]);
+    expect(refs.map((u) => u.unlocked)).toEqual([true, true, false]);
+    expect(refs.map((u) => u.blockPosition)).toEqual([1, 1, 2]);
+    expect(refs.map((u) => u.position)).toEqual([1, 2, 1]);
+  });
+
+  it("🚨 keeps locked lessons in the list", () => {
+    // Progress counts the whole course. Dropping the shut weeks would tell a
+    // drip learner "2 of 2 — done" in week one, and `nextUnit()` does its own
+    // filtering anyway.
+    const refs = unitRefs([block(1, 0, ["a"]), block(2, 7, ["b"])], START, "drip", START);
+    expect(refs).toHaveLength(2);
+  });
+
+  it("obeys the shape, not only the column", () => {
+    // The same both-directions rule `unlockedAt()` keeps, asserted through the
+    // function the pages actually call.
+    const blocks = [block(1, 28, ["a"])];
+    expect(unitRefs(blocks, START, "self-study", START)[0].unlocked).toBe(true);
+    expect(unitRefs(blocks, START, "drip", START)[0].unlocked).toBe(false);
+  });
+
+  it("locks everything for a learner with no clock", () => {
+    // A suspended grant: `startedAt` is null and no week has an opening date.
+    const refs = unitRefs([block(1, 0, ["a"])], null, "drip", START);
+    expect(refs[0].unlocked).toBe(false);
+  });
+
+  it("carries the lesson's title", () => {
+    expect(unitRefs([block(1, 0, ["a"])], START, "drip", START)[0].title).toBe("Titel a");
+  });
+});
+
+describe("the lesson either side", () => {
+  const unit = (slug: string, block: number, pos: number, unlocked = true): UnitRef => ({
+    slug,
+    title: `Titel ${slug}`,
+    blockPosition: block,
+    position: pos,
+    unlocked,
+  });
+
+  it("reads in block-then-unit order, whatever order it was handed", () => {
+    const units = [unit("c", 2, 1), unit("a", 1, 1), unit("b", 1, 2)];
+    expect(neighbours(units, "b").previous?.slug).toBe("a");
+    expect(neighbours(units, "b").next?.slug).toBe("c");
+  });
+
+  it("is null at both ends of the course", () => {
+    const units = [unit("a", 1, 1), unit("b", 1, 2)];
+    expect(neighbours(units, "a").previous).toBeNull();
+    expect(neighbours(units, "b").next).toBeNull();
+  });
+
+  it("🚨 answers with a LOCKED lesson rather than skipping it", () => {
+    // The lesson page has to tell "this was the last one" from "the next one
+    // opens on the 20th", and only it can say the second. A function that
+    // filtered locked units away would make both look like the end of the
+    // course — a dead end at the end of every drip week.
+    const units = [unit("a", 1, 1), unit("b", 2, 1, false)];
+    expect(neighbours(units, "a").next?.slug).toBe("b");
+    expect(neighbours(units, "a").next?.unlocked).toBe(false);
+  });
+
+  it("answers null twice for a slug that is not in the course", () => {
+    expect(neighbours([unit("a", 1, 1)], "nope")).toEqual({ previous: null, next: null });
+  });
+
+  it("does not reorder the caller's array", () => {
+    const units = [unit("b", 1, 2), unit("a", 1, 1)];
+    neighbours(units, "a");
     expect(units.map((u) => u.slug)).toEqual(["b", "a"]);
   });
 });

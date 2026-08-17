@@ -37,6 +37,7 @@
     "fieldFirstPost": "Dein erster Beitrag",
     "fieldFirstPostPlaceholder": "Schreib, was du fragen oder erzählen möchtest.",
     "startedBy": "von {name}",
+    "postCount": "{count, plural, one {Ein Beitrag} other {# Beiträge}}",
     "replyLabel": "Antworten",
     "replyPlaceholder": "Deine Antwort …",
     "replySubmit": "Antwort senden",
@@ -65,6 +66,8 @@
     "nextPage": "Weiter",
     "pageOf": "Seite {page} von {pages}",
     "unread": "Neu",
+    "groupActivity": "{topics, plural, one {Ein Gespräch} other {# Gespräche}} · zuletzt {when}",
+    "groupQuiet": "Hier ist es noch still",
     "embedEmptyTitle": "Noch keine Beiträge",
     "embedEmptyDescription": "Schreib den ersten Beitrag zu diesem Abschnitt.",
     "embedShowingLatest": "Die {count} neuesten Beiträge von insgesamt {total}.",
@@ -223,7 +226,8 @@
     "list_reportsIgnored_offBody": "Ihre künftigen Meldungen zählen dann wieder normal. Bereits angelegte bleiben, wie sie sind.",
     "listsTitle": "Listen",
     "listsSubtitle": "Wer geschützt, von Hand gesperrt oder dessen Meldungen ignoriert werden.",
-    "listsEmpty": "Niemand steht auf einer Liste."
+    "listsEmpty": "Niemand steht auf einer Liste.",
+    "messagePreviewMine": "Du: {preview}"
   },
   "communityAdmin": {
     "title": "Gruppen",

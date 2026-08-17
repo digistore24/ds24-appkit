@@ -16,7 +16,7 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { getFormatter, getTranslations } from "next-intl/server";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 
 import { LegalBody } from "@/components/legal-body";
 import { PageHeader } from "@/components/page-header";
@@ -44,9 +44,15 @@ import { MemberText } from "../../components/member-text";
 import { courseAccessFor } from "../../lib/access";
 import { courseOffReason } from "../../lib/config";
 import { courseBySlug } from "../../lib/courses";
-import { blockById, completedSlugsFor, submissionFor, unitBySlug } from "../../lib/manage";
+import {
+  blockById,
+  completedSlugsFor,
+  courseOutline,
+  submissionFor,
+  unitBySlug,
+} from "../../lib/manage";
 import { unitMedia } from "../../lib/media";
-import { MAX_SUBMISSION_CHARS, isUnlocked } from "../../rules";
+import { MAX_SUBMISSION_CHARS, isUnlocked, neighbours, unitRefs } from "../../rules";
 import { CompletionToggle, TaskForm } from "./ui";
 
 // The three texts on this page that somebody typed — the prompt, the member's
@@ -118,8 +124,17 @@ export default async function CourseUnitPage({
   // course and a lesson that does not exist are the same thing.
   if (block.courseId !== course.id) notFound();
 
-  if (!isUnlocked(block.releaseAfterDays, startedAt, course.shape!, new Date())) {
-    redirect(`/dashboard/course/${encodeURIComponent(course.slug)}`);
+  const now = new Date();
+  if (!isUnlocked(block.releaseAfterDays, startedAt, course.shape!, now)) {
+    // ⚠️ **It says WHY, now.** The redirect was wordless until 2026-08-17: a
+    // learner who followed a link to a week that has not opened landed back on
+    // the overview with nothing changed on the page and no idea what had just
+    // happened. The parameter is a REFERENCE — the overview looks the slug up
+    // in its own lessons and builds the sentence from the row, so nothing a
+    // stranger types into the URL becomes text on the page.
+    redirect(
+      `/dashboard/course/${encodeURIComponent(course.slug)}?locked=${encodeURIComponent(unit.slug)}`,
+    );
   }
 
   // 🚨 **Both conditions, and this line is where they meet.** A hand-in surface
@@ -129,6 +144,28 @@ export default async function CourseUnitPage({
   // Either one missing and there is nothing here: no task, no form, and no read
   // of the submissions table at all.
   const taskPrompt = course.shape! === "workshop" ? unit.taskPrompt : null;
+
+  // 🚨 **Where am I, and what comes next** — the two questions a lesson page
+  // could not answer until 2026-08-17. It rendered one lesson with a way back
+  // to the overview and nothing else: after ticking a lesson off, the learner
+  // went back, found their place in the list again by eye, and clicked on. In a
+  // course of thirteen lessons that is twelve trips through a list.
+  //
+  // The outline is read for the course this page has ALREADY gated (the two
+  // checks above: the course's own gate, and the block belonging to it), so no
+  // lesson of a course somebody has not bought can reach this array.
+  const outline = await courseOutline(course.id);
+  const { previous, next } = neighbours(
+    unitRefs(outline, startedAt, course.shape!, now),
+    unit.slug,
+  );
+  // Which lesson of which block this is — the same two numbers the overview
+  // orders by, said in words. Read off the OUTLINE rather than off `block`:
+  // `blockById()` answers with the bare row, which carries no units, and
+  // loading them a second time to count to three would be a query for a
+  // subtitle.
+  const siblings = outline.find((entry) => entry.id === block.id)?.units ?? [];
+  const inBlock = siblings.findIndex((sibling) => sibling.slug === unit.slug) + 1;
 
   const [media, completed, submission] = await Promise.all([
     // 🚨 The access check is inside `unitMedia()` — `mayAccess()` before
@@ -153,13 +190,28 @@ export default async function CourseUnitPage({
     <>
       <PageHeader title={unit.title} />
 
-      <div className="mb-4">
+      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
         <Button asChild variant="ghost" size="sm">
           <Link href={`/dashboard/course/${encodeURIComponent(course.slug)}`}>
             <ArrowLeft aria-hidden="true" />
             {t("backToCourse")}
           </Link>
         </Button>
+        {/* Where this lesson sits. The block's TITLE, because that is what the
+            learner reads on the overview ("Woche 2 — Das Angebot"), and the
+            two numbers behind it because a course is worked through rather
+            than browsed. `siblings` is empty only for a block whose units
+            vanished between two queries, and then the count is left off rather
+            than printed as "0 von 0". */}
+        {siblings.length > 0 ? (
+          <p className="text-muted-foreground text-sm">
+            {t("lessonWhere", {
+              block: block.title,
+              index: inBlock,
+              total: siblings.length,
+            })}
+          </p>
+        ) : null}
       </div>
 
       <div className="flex flex-col gap-6">
@@ -361,6 +413,53 @@ export default async function CourseUnitPage({
           labelDone={t("markUndone")}
           labelOpen={t("markDone")}
         />
+
+        {/* ── Where to go from here ──────────────────────────────────────
+            🚨 **The next lesson is a LINK exactly while it is open**, which is
+            the same rule the overview's list keeps and for the same reason:
+            `page.tsx` (this file) sends a locked lesson straight back, so a
+            link into one would bounce off itself.
+
+            A shut next lesson is not silence either — it is the sentence that
+            says a week is waiting, without a date, because the date belongs to
+            the overview where the whole clock is on screen. Nothing at all is
+            printed only at the true end of the course, which is the one place
+            where "there is no next lesson" is the honest answer. */}
+        {previous || next ? (
+          <nav
+            aria-label={t("lessonNavLabel")}
+            className="flex flex-wrap items-center justify-between gap-3 border-t pt-4"
+          >
+            <div>
+              {previous && previous.unlocked ? (
+                <Button asChild variant="outline">
+                  <Link
+                    href={`/dashboard/course/${encodeURIComponent(course.slug)}/${encodeURIComponent(previous.slug)}`}
+                  >
+                    <ArrowLeft aria-hidden="true" />
+                    <span className="max-w-[16rem] truncate">{previous.title}</span>
+                  </Link>
+                </Button>
+              ) : null}
+            </div>
+            <div>
+              {next ? (
+                next.unlocked ? (
+                  <Button asChild>
+                    <Link
+                      href={`/dashboard/course/${encodeURIComponent(course.slug)}/${encodeURIComponent(next.slug)}`}
+                    >
+                      <span className="max-w-[16rem] truncate">{next.title}</span>
+                      <ArrowRight aria-hidden="true" />
+                    </Link>
+                  </Button>
+                ) : (
+                  <p className="text-muted-foreground text-sm">{t("lessonNextLocked")}</p>
+                )
+              ) : null}
+            </div>
+          </nav>
+        ) : null}
       </div>
     </>
   );

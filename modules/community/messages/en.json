@@ -37,6 +37,7 @@
     "fieldFirstPost": "Your first post",
     "fieldFirstPostPlaceholder": "Write what you want to ask or tell.",
     "startedBy": "by {name}",
+    "postCount": "{count, plural, one {One post} other {# posts}}",
     "replyLabel": "Reply",
     "replyPlaceholder": "Your reply …",
     "replySubmit": "Send reply",
@@ -65,6 +66,8 @@
     "nextPage": "Next",
     "pageOf": "Page {page} of {pages}",
     "unread": "New",
+    "groupActivity": "{topics, plural, one {One conversation} other {# conversations}} · last {when}",
+    "groupQuiet": "Still quiet in here",
     "embedEmptyTitle": "No posts yet",
     "embedEmptyDescription": "Write the first post about this section.",
     "embedShowingLatest": "The {count} most recent posts of {total}.",
@@ -223,7 +226,8 @@
     "list_reportsIgnored_offBody": "Their future reports count normally again. Ones already written stay as they are.",
     "listsTitle": "Lists",
     "listsSubtitle": "Who is protected, blocked by hand, or has their reports ignored.",
-    "listsEmpty": "Nobody is on a list."
+    "listsEmpty": "Nobody is on a list.",
+    "messagePreviewMine": "You: {preview}"
   },
   "communityAdmin": {
     "title": "Groups",

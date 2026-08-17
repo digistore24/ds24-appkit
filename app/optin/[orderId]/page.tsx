@@ -17,6 +17,14 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { OrderProcessing } from "./order-processing";
 
+// The tab the buyer lands in straight after paying. It is the first page of
+// this app many of them ever see, and without a title of its own the browser
+// shows the bare app name — so it says the same thing the page does.
+export async function generateMetadata() {
+  const t = await getTranslations("optin");
+  return { title: t("title") };
+}
+
 // Public thank-you page (the thankyou_url target after a purchase) — and a
 // ROUTER, not a destination. It polls until the IPN has created the order and
 // then sends the buyer where they can actually use what they paid for. No

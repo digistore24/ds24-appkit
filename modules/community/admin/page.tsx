@@ -7,7 +7,13 @@ import { getTranslations } from "next-intl/server";
 import { PageHeader } from "@/components/page-header";
 import { requireOwner } from "@/lib/authz";
 import { isCommunityEnabled } from "@/modules/community/lib/config";
-import { listGroups, listedMembers, moderatorCandidates } from "@/modules/community/lib/manage";
+import {
+  listGroups,
+  listedMembers,
+  memberWithProfile,
+  moderatorCandidates,
+} from "@/modules/community/lib/manage";
+import { displayNameFor } from "@/modules/community/lib/rules";
 import { StandingControls } from "@/modules/community/pages/blocks/ui";
 import { allProducts } from "@/lib/digistore/products";
 
@@ -56,6 +62,33 @@ export default async function CommunityAdminPage() {
     .filter((product) => product.kind !== "token")
     .map((product) => ({ key: product.key, name: product.name }));
 
+  // 🚨 The lists name PEOPLE, and this surface used to print the member id.
+  // `/dashboard/community/blocks` renders the very same rows through
+  // `displayNameFor()`, so an operator taking somebody off a list read a name
+  // on one page and a UUID on the other — for the one act on this page that is
+  // about a person rather than a room. Same resolution as over there, right
+  // down to `profileName: null`: it is the ACCOUNT that is silenced, and a
+  // member who never chose a community name still has to be nameable here.
+  //
+  // One lookup per row rather than a join, for the reason `blocks/page.tsx`
+  // states: this table holds one row per LISTED member, which is a handful in
+  // any community small enough for an operator to be reading this page at all.
+  const listedNames = new Map(
+    await Promise.all(
+      listed.map(
+        async (row) =>
+          [row.memberId, (await memberWithProfile(row.memberId))?.accountName ?? null] as const,
+      ),
+    ),
+  );
+  const nameOf = (memberId: string) =>
+    displayNameFor({
+      profileName: null,
+      accountName: listedNames.get(memberId) ?? null,
+      memberId,
+      placeholderLabel: community("memberPlaceholder"),
+    });
+
   return (
     <>
       <PageHeader
@@ -96,7 +129,7 @@ export default async function CommunityAdminPage() {
                 key={row.memberId}
                 className="bg-card flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"
               >
-                <span className="text-sm">{row.memberId}</span>
+                <span className="text-sm">{nameOf(row.memberId)}</span>
                 <span className="flex flex-wrap gap-2">
                   <StandingControls
                     memberId={row.memberId}

@@ -13,9 +13,11 @@
 // requireOwner() on top of that (belt and braces).
 import { db } from "@/db";
 import { setupAudit, users } from "@/db/schema";
-import { eq, count, asc } from "drizzle-orm";
+import { and, asc, count, eq, ilike, isNotNull, isNull, or, type SQL } from "drizzle-orm";
 import { requireActiveUser } from "@/lib/authz";
 import type { Role } from "@/lib/roles";
+import { escapeLikeFragment } from "@/lib/sql-like";
+import { USERS_PAGE_SIZE, type UserFilter } from "./list-filter";
 import { MODULES } from "@/lib/modules/registry";
 import {
   canCreateUser,
@@ -49,9 +51,89 @@ const USER_COLUMNS = {
   blockedAt: users.blockedAt,
 } as const;
 
-/** All users, oldest first. */
+/**
+ * All users, oldest first.
+ *
+ * ⚠️ **Unpaged, and its remaining callers are the ones that need every row**:
+ * the purchases screen's "attach to which account" dropdown and the setup
+ * surface's `user_list`. The SCREEN stopped using it — a customer list is the
+ * one table here that grows with sales — and asks `listUsersPage()` instead.
+ */
 export async function listUsers(): Promise<UserRow[]> {
   return db.select(USER_COLUMNS).from(users).orderBy(asc(users.createdAt));
+}
+
+/** What the paged list answers with — the shape `listOrders()` already uses. */
+export interface UserPage {
+  rows: UserRow[];
+  /** How many match the filter, ignoring the page. */
+  total: number;
+  page: number;
+  hasMore: boolean;
+}
+
+/**
+ * The filter as a `where` clause.
+ *
+ * 🚨 **The search covers the address AND the name**, because an operator
+ * looking somebody up has whichever of the two the customer gave them on the
+ * phone. `escapeLikeFragment()` is not optional: a pasted `%` would otherwise
+ * match every row and quietly answer a different question
+ * (`lib/sql-like.ts` carries the argument).
+ *
+ * `undefined` when nothing is narrowed — drizzle drops the clause entirely
+ * rather than adding a `where true`.
+ */
+function userWhere(filter: UserFilter): SQL | undefined {
+  const clauses: SQL[] = [];
+
+  if (filter.query) {
+    const pattern = `%${escapeLikeFragment(filter.query)}%`;
+    // A member who signed in by magic link has NO name (`users.name` is null),
+    // so `or()` rather than a concatenation: comparing `email || ' ' || name`
+    // would be null for exactly those rows and match nothing.
+    clauses.push(or(ilike(users.email, pattern), ilike(users.name, pattern))!);
+  }
+  if (filter.role) clauses.push(eq(users.role, filter.role));
+  if (filter.blocked === "blocked") clauses.push(isNotNull(users.blockedAt));
+  if (filter.blocked === "active") clauses.push(isNull(users.blockedAt));
+
+  return clauses.length === 0 ? undefined : and(...clauses);
+}
+
+/**
+ * One page of users, narrowed by what the operator typed.
+ *
+ * Two statements rather than one windowed query, exactly as `listOrders()`
+ * does it: the count is over the same `where` and the rows carry `limit + 1`
+ * so "is there a next page" needs no second count.
+ *
+ * ⚠️ **`users.id` joins the ordering.** `createdAt` alone is not unique — the
+ * seed writes two accounts in the same millisecond, and an import writes
+ * hundreds — and an unstable sort under `OFFSET` shows a row twice on page two
+ * while another never appears at all.
+ */
+export async function listUsersPage(filter: UserFilter): Promise<UserPage> {
+  const where = userWhere(filter);
+  const offset = (filter.page - 1) * USERS_PAGE_SIZE;
+
+  const [rows, [counted]] = await Promise.all([
+    db
+      .select(USER_COLUMNS)
+      .from(users)
+      .where(where)
+      .orderBy(asc(users.createdAt), asc(users.id))
+      .limit(USERS_PAGE_SIZE + 1)
+      .offset(offset),
+    db.select({ n: count() }).from(users).where(where),
+  ]);
+
+  return {
+    rows: rows.slice(0, USERS_PAGE_SIZE),
+    total: Number(counted?.n ?? 0),
+    page: filter.page,
+    hasMore: rows.length > USERS_PAGE_SIZE,
+  };
 }
 
 /** Number of admins — the basis for the "last admin" rule. */

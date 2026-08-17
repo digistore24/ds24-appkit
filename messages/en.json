@@ -215,11 +215,18 @@
     "setupKeysTitle": "Setup by agent",
     "setupKeysBody": "Keys your coding agent uses to set this environment up — and the record of what it did.",
     "setupKeysCta": "Manage keys",
-    "setupAuditCta": "View the record"
+    "setupAuditCta": "View the record",
+    "impersonationsTitle": "Access to accounts",
+    "impersonationsBody": "Every time an admin signed in as a customer — who, whose account and for how long. It records the ACCESS, not what was done inside.",
+    "impersonationsCta": "View access records",
+    "moduleSurfacesTitle": "From your modules",
+    "moduleSurfacesBody": "Operator pages this app has because a module brought them. What stands here follows config/modules.json — not a list kept in this page.",
+    "moduleSurfaceCta": "Open"
   },
   "users": {
     "title": "Users",
     "description": "{count, plural, =0 {No users yet} one {# user} other {# users}} · you are signed in as {email}",
+    "descriptionFiltered": "{count, plural, =0 {No user matches} one {# user matches} other {# users match}} your search",
     "createTrigger": "Create user",
     "createTitle": "Create user",
     "createDescription": "The new user signs in with a link they request themselves. They can give themselves a password later — you cannot set one for them.",
@@ -262,7 +269,22 @@
     "impersonate": "Sign in as this user",
     "impersonateTitle": "Sign in as {email}?",
     "impersonateBody": "You will see the app exactly as this customer does and can act on their behalf. A banner will show whose account you are in, the session ends by itself after 30 minutes, and it is recorded.",
-    "impersonateConfirm": "Sign in as this user"
+    "impersonateConfirm": "Sign in as this user",
+    "filterQuery": "Search",
+    "filterQueryPlaceholder": "Name or part of the email address",
+    "filterRole": "Role",
+    "filterAnyRole": "Any role",
+    "filterBlocked": "State",
+    "blocked_all": "All",
+    "blocked_active": "Active only",
+    "blocked_blocked": "Blocked only",
+    "filterSubmit": "Search",
+    "filterReset": "Reset",
+    "filterEmptyTitle": "Nobody matches",
+    "filterEmptyBody": "No user matches this search. Reset it to see everybody again.",
+    "pageIndicator": "Page {page}",
+    "pagePrev": "Previous",
+    "pageNext": "Next"
   },
   "memberBilling": {
     "title": "Billing state",

@@ -289,6 +289,28 @@ export function PurchasesTable({
 
   const filtered = isFiltered(filter);
 
+  /**
+   * What to call a product in the table.
+   *
+   * ⚠️ **The key is the FALLBACK, not the answer.** The column printed
+   * `basic_monthly` at an operator until 2026-08-17 while the filter above it
+   * offered "Basic (monthly)" — one page, two names for one thing, and the
+   * developer-facing one in the row somebody reads while a customer is on the
+   * phone.
+   *
+   * 🚨 And the key has to survive as a fallback rather than being resolved
+   * through `getProduct()`: `orders.productKey` is what Digistore24 sent at the
+   * time, the registry is a file somebody edits, and a plan that was renamed or
+   * deleted leaves rows nothing can look up (`lib/digistore/products.ts` →
+   * `findProduct`). Printing the raw key there is honest; throwing on a
+   * five-year-old order is not.
+   *
+   * The map comes off the `products` prop the filter dropdown already uses, so
+   * both take the same name from the same list.
+   */
+  const productName = (key: string) =>
+    products.find((product) => product.key === key)?.name ?? key;
+
   // Nothing has ever been bought — the filter form would only be noise.
   if (total === 0 && !filtered) {
     return (
@@ -358,7 +380,7 @@ export function PurchasesTable({
                       )}
                     </TableCell>
                     <TableCell className="hidden sm:table-cell">
-                      {row.productKey ?? tCommon("none")}
+                      {row.productKey === null ? tCommon("none") : productName(row.productKey)}
                     </TableCell>
                     <TableCell className="hidden sm:table-cell">
                       {row.amount

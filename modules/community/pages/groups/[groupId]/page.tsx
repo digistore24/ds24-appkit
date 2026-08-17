@@ -15,6 +15,7 @@ import {
   DISCUSSIONS_PER_PAGE,
   discussionsFor,
   groupFor,
+  postCountByDiscussion,
   postImagePolicy,
   profileFor,
   unreadByDiscussion,
@@ -94,6 +95,12 @@ export default async function CommunityGroupPage({
     memberId,
     rows.map((row) => row.id),
   );
+  // How long each of them is. Same scope and same argument as the dots above:
+  // the page's own ids, already access-checked, one statement for all of them.
+  // A thread list without it tells a member which conversation is NEW and never
+  // which one is a conversation at all — a question with one answer and one
+  // with forty read identically.
+  const posts = await postCountByDiscussion(rows.map((row) => row.id));
   const pages = Math.max(1, Math.ceil(total / DISCUSSIONS_PER_PAGE));
   const placeholderLabel = t("memberPlaceholder");
 
@@ -170,7 +177,13 @@ export default async function CommunityGroupPage({
                 {format.dateTime(discussion.lastActivityAt, {
                   dateStyle: "medium",
                   timeStyle: "short",
-                })}
+                })}{" "}
+                {/* ⚠️ Every post, tombstones included — the count and the
+                    thread that opens are the same set, because `postsFor()`
+                    renders a removed post as one line saying so. A count that
+                    quietly skipped them would promise a shorter conversation
+                    than the one on the next page. */}
+                · {t("postCount", { count: posts.get(discussion.id) ?? 0 })}
               </p>
             </li>
           ))}
