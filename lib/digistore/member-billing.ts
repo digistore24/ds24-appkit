@@ -38,7 +38,7 @@ export interface InvoiceInsert {
 // transaction_id — those return null and add no row. Split out so the mapping
 // is testable without a database.
 export function invoiceRowFromIpn(body: IpnParams): InvoiceInsert | null {
-  const ds24OrderId = body["order_id"] || body["ds24_order_id"] || "";
+  const ds24OrderId = body["order_id"] || "";
   const invoiceUrl = body["invoice_url"] || "";
   const ds24TransactionId = body["transaction_id"] || "";
   // All three are load-bearing: without the transaction id there is no

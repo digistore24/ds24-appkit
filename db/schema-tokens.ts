@@ -3,9 +3,10 @@
 
 // Billing models beyond one-off and recurring purchases:
 //
-//  - subscriptions:  a customer's recurring subscription. Holds the DS24
-//                    `purchase_id` (for stopRebilling + createBillingOnDemand)
-//                    and the management links DS24 supplies (change payment
+//  - subscriptions:  a customer's recurring subscription. Holds the DS24 order
+//                    id (which stopRebilling and createBillingOnDemand take as
+//                    their `purchase_id` parameter) and the management links
+//                    DS24 supplies (change payment
 //                    details, cancel, invoice). Status and interval are
 //                    maintained through IPN events.
 //  - tokenAccounts:  prepaid balance per customer (whole-number "tokens" /
@@ -47,8 +48,12 @@ export const subscriptions = pgTable(
     id: text("id")
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
-    // DS24 purchase_id — the basis for stopRebilling & createBillingOnDemand.
-    // Globally unique: one subscription per purchase.
+    // The DS24 ORDER id — the basis for stopRebilling & createBillingOnDemand,
+    // both of which take it as their `purchase_id` parameter. The column name
+    // is history: the IPN has no `purchase_id` field to read, so this now
+    // carries the same value as ds24_order_id below, and renaming it would be a
+    // migration in every deployed app (lib/digistore/payment-event.ts).
+    // Globally unique: one subscription per order.
     ds24PurchaseId: text("ds24_purchase_id").notNull(),
     // Original order ID (link to `orders`).
     ds24OrderId: text("ds24_order_id"),
@@ -132,7 +137,8 @@ export const tokenAccounts = pgTable(
     autoReloadThreshold: integer("auto_reload_threshold").notNull().default(0),
     // Which package (key from lib/tokens/packages.ts) gets topped up.
     autoReloadPackageKey: text("auto_reload_package_key"),
-    // DS24 purchase_id charged via createBillingOnDemand.
+    // The DS24 order id charged via createBillingOnDemand, which takes it as
+    // its `purchase_id` parameter.
     ds24PurchaseId: text("ds24_purchase_id"),
     // Concurrency lock against double charging: set before the
     // billing-on-demand call, released once the IPN has booked the credit (or

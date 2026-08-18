@@ -4,9 +4,13 @@
 
 // What does Digistore24 say about this order? (read-only)
 //
-// `getPurchase` takes an order/purchase id and returns Digistore24's own view
-// of it: the status, the product, the buyer, the billing type, the next payment
-// and the management links (invoice, receipt, cancel, update payment details).
+// `getPurchase` takes an ORDER id and returns Digistore24's own view of it: the
+// status, the product, the buyer, the billing type, the next payment and the
+// management links (invoice, receipt, cancel, update payment details). The API
+// calls that parameter `purchase_id` and documents it as "the Digistore24 order
+// id" — so passing an order id here is correct, and there is no other id to
+// pass: the IPN sends no `purchase_id` field at all
+// (lib/digistore/payment-event.ts).
 //
 // This exists so that "the purchase worked but nothing happened in the app" can
 // be ANSWERED rather than guessed. There are two sides to that sentence, and
@@ -40,7 +44,8 @@ const orderId = args.order ?? args.purchase ?? args.id;
 if (typeof orderId !== "string" || !orderId.trim()) {
   console.error(
     "ERROR: --order <order id> required.\n" +
-      "  The id from the thank-you page, the buyer's mail or orders.ds24PurchaseId.",
+      "  The order id from the thank-you page, the buyer's mail, or the\n" +
+      "  orders.ds24PurchaseId column — which holds an order id.",
   );
   process.exit(2);
 }

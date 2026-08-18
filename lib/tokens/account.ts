@@ -294,9 +294,12 @@ export async function creditTokens(args: {
    *  row so a top-up is distinguishable from a manual purchase. */
   origin?: string | null;
   /**
-   * purchase_id of the purchase — remembered as the charge target for auto
+   * The ORDER id of the purchase — remembered as the charge target for auto
    * top-ups if the account does not have one yet (e.g. on the first token
-   * purchase with force_rebilling).
+   * purchase with force_rebilling). It is the value createBillingOnDemand
+   * later passes as its `purchase_id` parameter; the column it lands in is
+   * still called `ds24_purchase_id` and holds an order id
+   * (lib/digistore/payment-event.ts).
    */
   linkPurchaseId?: string;
   now?: Date;
@@ -349,7 +352,7 @@ export async function creditTokens(args: {
     if (inserted.length === 0) {
       // Already booked — but the purchase LINKAGE and the lock release are not
       // the booking, and returning here dropped both. A claim credits first
-      // with no purchase id (orders.ds24PurchaseId was still NULL), the IPN
+      // with no order id (orders.ds24PurchaseId was still NULL), the IPN
       // redelivery then carries the real one and lost it, so the auto top-up
       // mandate stayed unlinked and `autoReloadIfNeeded` answered
       // "not-configured" forever, silently.
@@ -373,7 +376,7 @@ export async function creditTokens(args: {
       .update(tokenAccounts)
       .set({
         balance: newBalance,
-        // Only remember the purchase_id if none is stored yet.
+        // Only remember the order id if none is stored yet.
         ...(args.linkPurchaseId && !acct.ds24PurchaseId
           ? { ds24PurchaseId: args.linkPurchaseId }
           : {}),
@@ -698,7 +701,7 @@ export async function disarmAutoReload(args: {
  * hands back a stale snapshot that clobbers a mandate the IPN has just linked.
  *
  * Enabling REQUIRES a stored mandate and a package. It cannot invent one — the
- * chargeable `purchase_id` only comes into being through a purchase — so this
+ * chargeable order only comes into being through a purchase — so this
  * returns false rather than arming something that would answer
  * "not-configured" for ever, silently.
  *
@@ -759,9 +762,10 @@ export interface AutoReloadResult {
 
 /**
  * Checks an account and starts an auto top-up if needed: take the lock →
- * createBillingOnDemand against the stored purchase_id. The credit follows via
- * IPN (which also releases the lock). If the charge fails, the lock is released
- * immediately and the error is thrown.
+ * createBillingOnDemand against the stored order id (which the API takes as
+ * its `purchase_id` parameter). The credit follows via IPN (which also releases
+ * the lock). If the charge fails, the lock is released immediately and the
+ * error is thrown.
  *
  * Call it e.g. right after consumeTokens, or from a cron job across all
  * accounts with a low balance.

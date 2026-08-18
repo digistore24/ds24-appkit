@@ -83,7 +83,7 @@ export async function startCheckoutAction(formData: FormData): Promise<void> {
           kind: purchaseOriginFor(def.kind),
           // Travels as one more pair in tracking[custom] (AD-5) rather than a
           // column, because the thing it will be attached to does not exist yet:
-          // the chargeable purchase_id is created when Digistore24 confirms this
+          // the chargeable order is created when Digistore24 confirms this
           // payment. The IPN reads the pair back and arms the mandate then.
           armAutoReload: wantsAutoReload && def.kind === "token",
         }),

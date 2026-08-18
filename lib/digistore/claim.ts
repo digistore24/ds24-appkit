@@ -283,6 +283,17 @@ async function grantClaimedOrders(memberId: string): Promise<number> {
     // Provenance is a CHECK constraint on `grants`. Skipping here rather than
     // in applyGrantTransition keeps this pass from logging the same warning on
     // every single sign-in.
+    //
+    // ⚠️ A row written before the order-id fix (lib/digistore/payment-event.ts)
+    // has NULL here and is skipped for ever, although the money is recorded and
+    // the product key is known. One statement repairs it, and then the next
+    // sign-in grants what was bought:
+    //
+    //     update orders set ds24_purchase_id = ds24_order_id
+    //     where ds24_purchase_id is null;
+    //
+    // Repairing it HERE instead was considered and rejected: this pass runs on
+    // every sign-in and must not start writing columns it exists to read.
     if (!row.ds24PurchaseId) continue;
 
     // Skip a productKey the registry no longer knows — its kind is

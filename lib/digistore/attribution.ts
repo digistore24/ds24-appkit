@@ -123,8 +123,9 @@ export function shouldCreditTokens(input: {
  *    payment falls back to a unique buyer-email match, which may be a
  *    **different Member**. Arming them points a card charge at somebody who
  *    never asked for one.
- *  - **`purchaseId`** — no mandate without it. `setAutoReload` would store null
- *    and `autoReloadIfNeeded` would answer "not-configured" for ever, silently.
+ *  - **`purchaseId`** — the order id this payment carries; no mandate without
+ *    it. `setAutoReload` would store null and `autoReloadIfNeeded` would answer
+ *    "not-configured" for ever, silently.
  *  - **`isTokenPackage`** — a subscription has no balance to top up.
  *  - **`creditWasBooked`** — this delivery placed the credit, rather than being
  *    a redelivery of one already booked. The credit block around this runs on
@@ -138,6 +139,7 @@ export function shouldCreditTokens(input: {
 export function shouldArmAutoReload(input: {
   armAutoReload: boolean;
   reason: AttributionReason;
+  /** The order id to charge against later — see lib/digistore/payment-event.ts. */
   purchaseId: string | null;
   isTokenPackage: boolean;
   /** Did THIS delivery actually book the credit? See below — load-bearing. */

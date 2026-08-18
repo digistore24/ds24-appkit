@@ -60,8 +60,8 @@ export type CustomValue =
        * The buyer ticked "keep my balance topped up" at checkout (`r:1`).
        *
        * It travels HERE rather than in a column because at checkout time there
-       * is nothing to store it against: the chargeable `purchase_id` does not
-       * exist until Digistore24 confirms the payment. The IPN reads it back
+       * is nothing to store it against: the chargeable order does not exist
+       * until Digistore24 confirms the payment. The IPN reads it back
        * beside the mandate it is arming — one round trip, no intent table, no
        * migration. Exactly what AD-5 means by "a new id is a new pair".
        *

@@ -128,7 +128,11 @@ const state = (dbModule as unknown as { __state: State }).__state;
 // refuses half an identity outright, which is the point of the shapes.
 const MEMBER = "3f1a2b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b";
 const TOKEN = "Ab3xY9zQ71";
-const PURCHASE = "PUR-1";
+// ONE identifier, and that is the point of it: Digistore24 sends `order_id` and
+// nothing else that could key a grant (lib/digistore/payment-event.ts). This
+// file used to carry a second constant, written into a payload field that does
+// not exist — so every assertion below agreed with the handler about a value
+// neither of them ever sees in production.
 const ORDER = "ORD-1";
 // A real key out of THIS app's registry, and a real `subscription`. A made-up
 // key would resolve to null and quietly take every case down the orphan path.
@@ -146,7 +150,6 @@ function payload(event: string, over: Record<string, string> = {}) {
   return {
     event,
     order_id: ORDER,
-    purchase_id: PURCHASE,
     buyer_email: "kaeufer@example.com",
     custom: `m:${MEMBER};t:${TOKEN};p:${PLAN_PICK.key ?? ""}`,
     ...over,
@@ -189,8 +192,51 @@ describe("onPaymentEvent — which transition reaches the entitlement", () => {
     expect(target).toMatchObject({
       memberId: MEMBER,
       productKey: plan,
-      ds24PurchaseId: PURCHASE,
+      ds24PurchaseId: ORDER,
     });
+  });
+
+  it("🚨 keys the grant on the ORDER id — the payload carries no other", async (ctx) => {
+    const [plan] = keysOrSkip(ctx, PLAN_PICK);
+    // The regression this file exists to prevent, and it is worth stating on its
+    // own rather than leaving it implicit in the case above.
+    //
+    // The handler used to read `purchase_id`, a field Digistore24 does not send
+    // — measured on a captured live payment of 173 parameters
+    // (./ipn-vectors.json → `captured-on-payment`). `activateGrant` then refused
+    // for want of a key and the paying customer got nothing, in every app, with
+    // this suite green: the fixture supplied the invented field, so the test and
+    // the handler agreed with each other and with nothing else.
+    //
+    // So the payload below is the SHAPE Digistore24 really sends, and the
+    // assertion is the exact value rather than "something truthy".
+    expect(payload("on_payment")).not.toHaveProperty("purchase_id");
+    await onPaymentEvent(payload("on_payment"));
+
+    expect(transition()[1].ds24PurchaseId).toBe(ORDER);
+  });
+
+  it("🚨 ignores a purchase_id even if one shows up — there is no fallback", async (ctx) => {
+    const [plan] = keysOrSkip(ctx, PLAN_PICK);
+    // `purchase_id || order_id` was the obvious repair and is the wrong one: a
+    // field that appears on the payment and not on the refund keys the two
+    // differently, and a refund that keys differently closes nothing. This pins
+    // the decision, because the cheap fallback is what somebody adds back.
+    await onPaymentEvent(payload("on_payment", { purchase_id: "PID-99" }));
+
+    expect(transition()[1].ds24PurchaseId).toBe(ORDER);
+  });
+
+  it("🚨 a refund with no `custom` looks the grant up under the SAME key", async (ctx) => {
+    const [plan] = keysOrSkip(ctx, PLAN_PICK);
+    // What the shared key BUYS, and the reason the fix belongs at one read
+    // point. A refund typically arrives without `custom`, so the product does
+    // not resolve and the handler falls back to the grant row itself — by the
+    // identifier the payment created it under. Two identifiers here would leave
+    // a refunded customer with access and log nothing.
+    await onPaymentEvent(payload("on_refund", { custom: "" }));
+
+    expect(openPurchaseGrantByPurchase).toHaveBeenCalledWith(ORDER);
   });
 
   it("a refund ENDS it, and says which reason", async (ctx) => {
@@ -431,7 +477,7 @@ describe("onPaymentEvent — a token package credits a balance, not a grant", ()
 
     expect(disarmAutoReload).toHaveBeenCalledWith({
       memberId: MEMBER,
-      onlyForPurchaseId: PURCHASE,
+      onlyForPurchaseId: ORDER,
       clearMandate: true,
     });
   });

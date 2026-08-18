@@ -58,16 +58,52 @@ import { normalizeEmail } from "@/lib/users/rules";
 import { invoiceRowFromIpn } from "./member-billing";
 
 export async function onPaymentEvent(body: IpnParams): Promise<void> {
-  const event = body["event"] || body["order_event"] || "";
+  // Every field read here is one Digistore24 really sends —
+  // ./ipn-fields.test.ts holds that against a captured live message, so a
+  // fallback onto a name nobody sends cannot creep back in. Four such names
+  // used to sit in this file as `||` alternatives (`order_event`,
+  // `ds24_order_id`, `ds24_product_id`, `billing_interval`); they were dead in
+  // every app that has ever run, and dead alternatives are how the real defect
+  // below hid in plain sight — the code LOOKED like it knew several spellings.
+  const event = body["event"] || "";
   const status = mapEventToStatus(event);
-  const orderId = body["order_id"] || body["ds24_order_id"];
+  const orderId = body["order_id"];
   // The RAW address, exactly as Digistore24 sent it. Stored verbatim because
   // an order is a financial record of what the buyer actually entered; it is
   // normalised only for comparison (see below). Balances are no longer keyed
   // on it — that is `memberId` now — so do not "tidy" this into a lowercased
   // write.
   const buyerEmail = body["buyer_email"] || body["email"] || null;
-  const purchaseId = body["purchase_id"] || null;
+  // 🚨 THE KEY EVERYTHING BELOW HANGS ON, and it is `order_id` — read here,
+  // once, so that the payment, the refund, the chargeback and the end of the
+  // paid period all arrive under the SAME identifier. A refund that keys
+  // differently from the purchase closes nothing, and nothing goes red.
+  //
+  // It used to be `body["purchase_id"]`, and **Digistore24 does not send that
+  // field**. It appears in no IPN parameter table Digistore24 publishes — not
+  // in the current "Order Events" list, not in the IPN guide — and a captured
+  // live `on_payment` carries 173 parameters without it (see
+  // ./ipn-vectors.json → `captured-on-payment`, the message this line was
+  // fixed against). Where Digistore24 DOES use the name it means this same
+  // value: the API's `getPurchase` documents `purchase_id` as "the Digistore24
+  // order id", which is why scripts/ds24/purchase-info.mjs passes an order id
+  // to it.
+  //
+  // What that cost, measured in a real app before the fix: the order row was
+  // written, the money was recorded, and `activateGrant` refused for want of a
+  // key — a paid customer with no access, in EVERY app built from this
+  // template, with a green test suite and a 200 on the webhook.
+  //
+  // ⚠️ Deliberately NOT `body["purchase_id"] || orderId`. A fallback is only
+  // safe while the field is absent EVERYWHERE; the day it appears on the
+  // payment and not on the refund, the two key differently again and this
+  // exact defect is back. There is nothing to fall back to: the field does not
+  // exist.
+  //
+  // The COLUMN is still called `ds24_purchase_id` (orders, grants,
+  // subscriptions, token_accounts) — renaming it would be a migration in every
+  // deployed app for no behavioural gain. What it holds is the order id.
+  const purchaseId = orderId ?? null;
 
   // --- 1. Whose payment is this? --------------------------------------------
   const parsed = parseCustom(body["custom"]);
@@ -105,7 +141,7 @@ export async function onPaymentEvent(body: IpnParams): Promise<void> {
       .values({
         memberId,
         ds24OrderId: orderId,
-        ds24ProductId: body["product_id"] || body["ds24_product_id"] || null,
+        ds24ProductId: body["product_id"] || null,
         ds24PurchaseId: purchaseId,
         // Recorded now, never reconstructed later: the credits change when the
         // operator edits the registry, and a reverse lookup is only safe while
@@ -558,7 +594,7 @@ function resolveProduct(
     if (def) return { key: def.key, kind: def.kind };
   }
 
-  const byId = productByDs24Id(body["product_id"] || body["ds24_product_id"]);
+  const byId = productByDs24Id(body["product_id"]);
   return byId ? { key: byId.key, kind: byId.kind } : null;
 }
 
@@ -611,7 +647,7 @@ async function upsertSubscription(
 ): Promise<void> {
   const now = new Date();
   const billingInterval =
-    body["billing_interval"] || body["other_billing_intervals"] || null;
+    body["other_billing_intervals"] || null;
   const managementUrls = {
     renewUrl: body["renew_url"] || null,
     rebillingStopUrl: body["rebilling_stop_url"] || null,

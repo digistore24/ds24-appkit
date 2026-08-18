@@ -697,7 +697,14 @@ export async function revokeGrantByHand(args: {
 export interface PurchaseGrantRef {
   memberId: string;
   productKey: string;
-  /** The DS24 purchase id. Provenance — and the idempotency key. */
+  /**
+   * The Digistore24 ORDER id. Provenance — and the idempotency key.
+   *
+   * Named after the column (`ds24_purchase_id`), not after its content; the
+   * IPN field `purchase_id` this once read does not exist. The value matters
+   * more than the name: every transaction of one order carries the same order
+   * id, so the refund finds what the payment created.
+   */
   ds24PurchaseId: string | null;
 }
 
@@ -1010,8 +1017,15 @@ async function activateGrant(ref: PurchaseGrantRef): Promise<boolean> {
   // same unfixable payload forever. Refuse loudly instead. The order row is
   // written either way, so the Operator can still attach it by hand.
   if (!ref.ds24PurchaseId) {
-    console.warn(
-      `[entitlements] paid purchase of "${ref.productKey}" carries no purchase id — no grant created`,
+    // 🚨 A paid purchase that hands out no access. This branch was reached by
+    // EVERY purchase in every app while the read point looked for an IPN field
+    // Digistore24 does not send, and the line below is all it said — invisible
+    // to `node run.mjs errors`, which needs an error object (lib/diagnostics/
+    // parse.mjs). `console.error` so the app's own diagnostics see it: the one
+    // failure here that a customer notices before the operator does.
+    console.error(
+      `[entitlements] paid purchase of "${ref.productKey}" carries no order id — no grant created:`,
+      new Error("no ds24PurchaseId on the payment event"),
     );
     return false;
   }

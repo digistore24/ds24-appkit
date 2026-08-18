@@ -53,9 +53,14 @@ export const orders = pgTable("orders", {
   // Digistore24 order ID — unique, for idempotency of incoming IPN calls.
   ds24OrderId: text("ds24_order_id").notNull().unique(),
   ds24ProductId: text("ds24_product_id"),
-  // Digistore24 purchase id — the handle createBillingOnDemand charges
-  // against. Without it a later claim could credit the balance but could never
+  // The handle createBillingOnDemand charges against, and the key a grant is
+  // keyed on. Without it a later claim could credit the balance but could never
   // restore the auto top-up mandate the customer paid for.
+  //
+  // It holds the Digistore24 **order id** — the API's own `purchase_id`
+  // parameter is documented as "the Digistore24 order id", and the IPN sends
+  // no other. See lib/digistore/payment-event.ts for why the column is not
+  // named after what it carries.
   ds24PurchaseId: text("ds24_purchase_id"),
   // WHAT was bought, resolved at payment time and stored — never reconstructed
   // later. The registry cannot be reverse-looked-up: product ids are null

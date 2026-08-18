@@ -39,8 +39,14 @@ export async function POST(request: Request) {
   // Identifiers for the IPN log. Read here for logging only — the payment
   // handler reads them again itself. UNTRUSTED until the signature verifies,
   // which is why the log row also carries signatureValid.
-  const event = body["event"] || body["order_event"] || "";
-  const ds24OrderId = body["order_id"] || body["ds24_order_id"] || null;
+  const event = body["event"] || "";
+  const ds24OrderId = body["order_id"] || null;
+  // RAW, and deliberately not the order id: this row records what ARRIVED.
+  // Digistore24 sends no `purchase_id` (see lib/digistore/payment-event.ts), so
+  // in practice this column stays NULL — and the day a payload does carry the
+  // field, the log is where that becomes visible. The handler keys on the order
+  // id; do not "align" this line with it, or the log stops being evidence and
+  // starts being a copy of our own assumption.
   const ds24PurchaseId = body["purchase_id"] || null;
 
   // Signature check — fail closed. Without a passphrase nothing is processed.

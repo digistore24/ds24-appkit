@@ -157,7 +157,7 @@ Build the **subscription self-service** into the customer dashboard:
    anonymous checkouts and for purchases made before this shipped. Either way
    `forceRebilling` (`settings[force_rebilling]=Y`) is set automatically.
    **`forceRebilling` is not optional:** it stores the payment details and thus
-   creates the chargeable `purchase_id`. Without it, step 5's auto top-up has
+   creates the chargeable order. Without it, step 5's auto top-up has
    nothing to charge against and silently cannot work.
 3. **Crediting**: happens automatically in the IPN (`creditTokens`, idempotent)
    — don't credit anything synchronously. It requires an attributed payment:
@@ -216,7 +216,7 @@ Build the **subscription self-service** into the customer dashboard:
 5. **Auto top-up is already wired end to end** — you do not call anything:
    - The buyer ticks a checkbox on the token card at `/plans`. The wish travels
      as one more pair in `tracking[custom]` (`r:1`), because at checkout time
-     the chargeable `purchase_id` does not exist yet.
+     the chargeable order does not exist yet.
    - The **IPN arms it** once the payment confirms and the mandate exists
      (`shouldArmAutoReload` in `lib/digistore/attribution.ts`) — only on a
      resolved identity, and only on the delivery that actually booked the
@@ -234,11 +234,13 @@ Build the **subscription self-service** into the customer dashboard:
 
 ### How the on-demand charge works
 
-`createBillingOnDemand` charges against an **existing `purchase_id`** (no new
-checkout). Prerequisites: a writable key + the DS24 permission "billing on
-demand" + a chargeable purchase_id — a subscription, or a purchase that was
-bought with `settings[force_rebilling]=Y` (see step 4.2). DS24 limit: 10
-charges/day, 1/minute per purchase_id.
+`createBillingOnDemand` charges against an **existing chargeable order** (no new
+checkout). DS24's API takes that order as the parameter `purchase_id`, and its
+value is the order id — the IPN sends no field of that name at all
+(`lib/digistore/payment-event.ts`). Prerequisites: a writable key + the DS24
+permission "billing on demand" + a chargeable order — a subscription, or a
+purchase that was bought with `settings[force_rebilling]=Y` (see step 4.2).
+DS24 limit: 10 charges/day, 1/minute per order.
 
 ## Step 5 — Tests & database
 

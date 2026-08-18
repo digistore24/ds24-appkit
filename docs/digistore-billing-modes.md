@@ -175,8 +175,8 @@ site.
 
 `checkoutLinksFor` sets two things per token package by itself: the
 `tokens:<key>` marker the IPN books the credit against, and
-`settings[force_rebilling]=Y` — without which no chargeable `purchase_id` comes
-into being and the auto-reload below cannot work. URLs are cached for 20h
+`settings[force_rebilling]=Y` — without which no chargeable order comes into
+being and the auto-reload below cannot work. URLs are cached for 20h
 (`buy_url_cache`) and regenerate whenever the offer changes. Blueprint:
 `app/plans/page.tsx`. Which environment's product a link sells follows
 `APP_ENV` (`docs/environments.md`).
@@ -189,19 +189,21 @@ locale decides which of the offer's DS24 products they are sent to.
 ## 1. Prepaid tokens: buying more & auto-reload (`createBillingOnDemand`)
 
 `createBillingOnDemand` charges a further payment against an **existing
-`purchase_id`** — the customer's payment method is already authorized, **no new
-checkout** is needed. That is exactly what carries buying more tokens and the auto-reload.
+chargeable order** — the customer's payment method is already authorized, **no
+new checkout** is needed. (DS24's API calls that parameter `purchase_id` and its
+value is the order id; the IPN sends no field of that name at all — the whole
+reasoning is in `lib/digistore/payment-event.ts`.) That is exactly what carries buying more tokens and the auto-reload.
 
 ### Prerequisites
 
 - A **writable API key** and, in the DS24 account, the **"billing on demand"** right.
-- A **chargeable `purchase_id`**. It comes into being through:
-  - a **subscription** (every subscription `purchase_id` is chargeable), or
+- A **chargeable order**. It comes into being through:
+  - a **subscription** (every subscription order is chargeable), or
   - a purchase made with **`settings[force_rebilling]=Y`** — that keeps the
     payment method on file for later on-demand charges. `checkoutLinksFor` sets
     this for every `kind: "token"` entry (`forceRebilling` in
     `lib/digistore/checkout.ts`).
-- **DS24 limits:** 10 charges/day and 1/minute per `purchase_id` (production).
+- **DS24 limits:** 10 charges/day and 1/minute per order (production).
 
 ### Flow (important: credit only via IPN)
 
@@ -241,8 +243,9 @@ The `custom` identity string and `settings[force_rebilling]=Y` are set by
 `checkoutLinksFor` itself. The latter is what makes the later auto-reload
 possible at all — it is what keeps the payment method on file.
 
-The IPN credits the tokens **and** remembers the `purchase_id` on the token
-account (`linkPurchaseId`) — the basis for the later auto-reload.
+The IPN credits the tokens **and** remembers the order id on the token account
+(`linkPurchaseId`, column `ds24_purchase_id`) — the value the later auto-reload
+hands to `createBillingOnDemand` as its `purchase_id`.
 
 ### Auto-reload
 
@@ -250,7 +253,7 @@ account (`linkPurchaseId`) — the basis for the later auto-reload.
 
 1. The buyer ticks a checkbox on the token card at `/plans`. The wish travels to
    Digistore24 as one more pair in `tracking[custom]` (`r:1`), because at
-   checkout time the chargeable `purchase_id` does not exist yet.
+   checkout time the chargeable order does not exist yet.
 2. The **IPN arms it** once the payment confirms and the mandate exists —
    `shouldArmAutoReload` (`lib/digistore/attribution.ts`). Only on a resolved
    identity, and only on the delivery that actually booked the credit, so a
@@ -310,7 +313,7 @@ accounts with a low balance is the one legitimate addition, and it replaces
 nothing — it catches the Member who stops using the app mid-drain.
 
 **Do not build a dashboard control that calls `setAutoReload({ enabled: true })`
-with a `purchaseId` you chose.** Arming belongs to the IPN, which is the only
+with an order id you chose.** Arming belongs to the IPN, which is the only
 place that knows a mandate is real. The Member-facing switch is
 `setAutoReloadEnabled`, which flips the flag and refuses when no mandate is
 stored.

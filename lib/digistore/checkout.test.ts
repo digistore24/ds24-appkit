@@ -47,8 +47,8 @@ describe("offerFor", () => {
   });
 
   it("forces stored payment details on token packages", () => {
-    // settings[force_rebilling]=Y. Without it there is no chargeable
-    // purchase_id, and auto top-up (createBillingOnDemand) cannot work.
+    // settings[force_rebilling]=Y. Without it there is no chargeable order,
+    // and auto top-up (createBillingOnDemand) cannot work.
     expect(offerFor(tokens).forceRebilling).toBe(true);
     expect(offerFor(sub).forceRebilling).toBe(false);
   });

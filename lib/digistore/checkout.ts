@@ -55,8 +55,9 @@ export type CheckoutLink =
  *    number_of_installments from it).
  *  - Token packages set `forceRebilling`, i.e. settings[force_rebilling]=Y.
  *    That stores the payment details, and WITHOUT it there is no chargeable
- *    purchase_id later — auto top-up via createBillingOnDemand then cannot
- *    work at all (see lib/tokens/account.ts, docs/digistore-billing-modes.md).
+ *    ORDER later — auto top-up via createBillingOnDemand, which charges against
+ *    exactly such an order, then cannot work at all (see lib/tokens/account.ts,
+ *    docs/digistore-billing-modes.md).
  */
 export function offerFor(
   def: ProductDef,

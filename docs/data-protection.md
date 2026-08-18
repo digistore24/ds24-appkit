@@ -41,7 +41,7 @@ Two things about it worth saying out loud in a privacy policy:
 
 | Where | What |
 |---|---|
-| `orders` | buyer email, first and last name, amounts, currency, Digistore24 order/purchase ids, status, `is_gdpr_country`, and the member it belongs to once attributed |
+| `orders` | buyer email, first and last name, amounts, currency, the Digistore24 order id, status, `is_gdpr_country`, and the member it belongs to once attributed |
 | `subscriptions`, `invoices` | billing state and Digistore24-hosted invoice links |
 | `token_accounts`, `token_ledger` | prepaid balance and every movement of it |
 | `grants` | which plan a member holds, and where it came from |

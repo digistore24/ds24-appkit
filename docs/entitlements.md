@@ -232,6 +232,36 @@ the last paid day closed. A redelivered payment event cannot hand access back to
 a refunded customer, and an operator restarting the rebilling months after
 expiry lifts nothing.
 
+### And they all have to arrive under the SAME key
+
+Which grant an event acts on is decided by one column, `grants.ds24_purchase_id`
+— and what it holds is the Digistore24 **order id**, because that is the only
+identifier an IPN payload carries. Every transaction of one order shares it
+(Digistore24 documents it as *"multiple transactions of the same order have the
+same order-ID"*), so the refund arrives under the same key the payment created
+the grant with. That property is the whole reason a refund can find anything: a
+refund typically comes with no `custom` at all, nothing in it names the product,
+and the handler has only the key.
+
+🚨 **The column is named after a field that does not exist**, and the story is
+worth knowing before anybody "tidies" it. The handler used to read
+`body["purchase_id"]`; Digistore24 sends no such field, so the value was NULL,
+`activateGrant` refused for want of a key, and every paying customer of every app
+built from this template got no access at all — with the order row written, the
+webhook answering 200 and the whole test suite green. The read point
+(`lib/digistore/payment-event.ts`) carries the post-mortem, `ipn-fields.test.ts`
+refuses the class, and `scripts/deploy-ipn.mjs` in the factory now buys, refunds
+and checks over real HTTP on every `make test`.
+
+⚠️ **An app deployed before that fix has orders with a NULL key**, and they are
+not lost: the money and the product key are recorded, so one statement puts them
+back into reach, and the next sign-in turns them into grants by itself (the claim
+pass in `lib/digistore/claim.ts`).
+
+```sql
+update orders set ds24_purchase_id = ds24_order_id where ds24_purchase_id is null;
+```
+
 Do **not** try to reproduce this from a mapped status. The mapping collapses
 `on_rebill_cancelled` and `last_paid_day` into the same value, and those two
 mean opposite things about access — which is precisely why

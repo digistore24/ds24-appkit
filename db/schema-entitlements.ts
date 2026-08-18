@@ -52,8 +52,16 @@ export const grants = pgTable(
     // `node run.mjs ds24-sync` has run.
     productKey: text("product_key").notNull(),
     source: grantSourceEnum("source").notNull(),
-    // Provenance for source = 'purchase'. The DS24 purchase id, so a later
-    // refund/cancellation event finds the grant it must close.
+    // Provenance for source = 'purchase', so a later refund/cancellation event
+    // finds the grant it must close.
+    //
+    // What it HOLDS is the Digistore24 **order id** — the identifier every
+    // transaction of one order shares, which is exactly the property the
+    // closing event needs. The column name is historical: it was written from
+    // an IPN field `purchase_id` that Digistore24 never sends, and the read
+    // point (lib/digistore/payment-event.ts) carries the whole story. Renaming
+    // the column would be a migration in every deployed app for no behavioural
+    // gain.
     ds24PurchaseId: text("ds24_purchase_id"),
     // Provenance for source = 'manual' — history, not a constraint. `set null`
     // so deleting the Operator who issued it stays possible; the CHECK in the
