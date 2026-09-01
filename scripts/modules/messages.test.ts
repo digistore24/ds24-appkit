@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { SHARED_NAMESPACES, mergeModuleMessages } from "@/lib/modules/messages-merge";
+import { LOCALES } from "@/i18n/config";
 import { availableModules } from "./registry.mjs";
 import { blankComments } from "@/scripts/lib/source-text.mjs";
 
@@ -113,7 +114,13 @@ describe("what a module may put in a shared namespace", () => {
     for (const { id, dir, manifest } of records) {
       const messages = manifest.messages as { dir: string } | undefined;
       if (!messages) continue;
-      for (const locale of ["de", "en"]) {
+      // 🚨 `LOCALES`, never a pair written out here. This loop said
+      // `["de", "en"]` for as long as the app spoke two languages, and the day
+      // it learned two more that line stopped being shorthand and became a
+      // SKIP: `existsSync` is false for nothing, so the two new catalogues were
+      // simply never opened, and a module could have put a stray key in the
+      // shared `errors` namespace of `es.json` with every test still green.
+      for (const locale of LOCALES) {
         const file = join(ROOT, dir, messages.dir, `${locale}.json`);
         if (!existsSync(file)) continue;
         const catalogue = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
@@ -135,5 +142,47 @@ describe("what a module may put in a shared namespace", () => {
     // The second half of the guard: records exist, but if none of them declared
     // a `messages` dir the loop would still assert nothing.
     expect(read, "no module catalogue was read at all").toBeGreaterThan(1);
+  });
+});
+
+describe("a module names itself in every language the app speaks", () => {
+  // The half `scripts/modules/manifest.mjs` structurally cannot ask. That
+  // validator is pure — it judges a manifest that may have been written for
+  // another app — so it can only demand the `de`/`en` floor. Which languages
+  // THIS app speaks is `LOCALES`, and it is readable here.
+  //
+  // What the gap looked like: `module.json` carried `title: { de, en }` while
+  // the app spoke four languages, so `node run.mjs module list` and the
+  // operator's own module page named every module in German to a Spanish
+  // operator — with `manifestProblems()` returning nothing, every message file
+  // complete, and the whole suite green. A title is the one piece of a module's
+  // display text that does NOT live in its message catalogue, which is exactly
+  // why it was the piece that got left behind.
+  const records = availableModules(ROOT).map((id) => ({
+    id,
+    manifest: JSON.parse(readFileSync(join(ROOT, "modules", id, "module.json"), "utf8")) as {
+      title?: Record<string, string>;
+    },
+  }));
+
+  it(`checks the ${records.length} available module(s) against ${LOCALES.length} locale(s)`, () => {
+    expect(records.length, "no modules found in the tree").toBeGreaterThan(1);
+    expect(LOCALES.length, "no locales to check against").toBeGreaterThan(1);
+
+    let checked = 0;
+    for (const { id, manifest } of records) {
+      for (const locale of LOCALES) {
+        const title = manifest.title?.[locale];
+        expect(
+          typeof title === "string" && title.trim().length > 0,
+          `modules/${id}/module.json has no "title.${locale}" — the operator would be shown ` +
+            `this module's name in another language than the rest of their surface`,
+        ).toBe(true);
+        checked += 1;
+      }
+    }
+    // The non-vacuity marker: records and locales both exist, but a manifest
+    // shape this test no longer understands would assert nothing at all.
+    expect(checked).toBe(records.length * LOCALES.length);
   });
 });

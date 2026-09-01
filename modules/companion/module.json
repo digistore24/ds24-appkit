@@ -2,7 +2,12 @@
   "id": "companion",
   "version": "1.0.0",
   "requiresTemplate": "0.19.0",
-  "title": { "de": "KI-Begleiter", "en": "AI companion" },
+  "title": {
+    "de": "KI-Begleiter",
+    "en": "AI companion",
+    "es": "Acompañante de IA",
+    "fr": "Compagnon IA"
+  },
   "summary": "the app working alongside its customer while they work, not only delivering to them",
   "docs": "docs/ai-in-product.md",
   "skill": "ai-companion",

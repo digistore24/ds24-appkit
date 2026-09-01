@@ -5,7 +5,9 @@
   "requires": ["api"],
   "title": {
     "de": "Community",
-    "en": "Community"
+    "en": "Community",
+    "es": "Comunidad",
+    "fr": "Communauté"
   },
   "summary": "a place for members: rooms, discussions under the pages they belong to, private messages",
   "docs": "docs/community.md",

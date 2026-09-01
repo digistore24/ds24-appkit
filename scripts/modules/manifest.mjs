@@ -217,9 +217,28 @@ export function manifestProblems(raw, where) {
       (typeof m.requiresTemplate !== "string" || !VERSION.test(m.requiresTemplate))) {
     say('"requiresTemplate" must look like 0.19.0');
   }
+  // ⚠️ A FLOOR, not the whole rule, and the split is deliberate. This function
+  // is pure — it validates a manifest that may have been written for some other
+  // app, and it cannot see which languages THIS one speaks. So it asks only for
+  // the two every manifest in this product carries, plus that whatever else is
+  // in there is a real title rather than an empty string.
+  //
+  // "a title for every language the app speaks" is the app's question and is
+  // measured where the app's `LOCALES` are readable: `modules/messages.test.ts`
+  // → *a module names itself in every language the app speaks*. Without that
+  // half, a four-language app shows the operator a German module name in its
+  // Spanish surface and nothing says so.
   if (!isObject(m.title) || typeof m.title.de !== "string" || typeof m.title.en !== "string" ||
       !m.title.de.trim() || !m.title.en.trim()) {
     say('"title" needs a non-empty "de" and "en" — it is shown to the operator');
+  } else {
+    const blank = Object.entries(m.title)
+      .filter(([, value]) => typeof value !== "string" || !value.trim())
+      .map(([locale]) => locale);
+    if (blank.length) {
+      say(`"title" has an empty name for ${blank.join(", ")} — an empty title is not a ` +
+        `shorter title, it is a module the operator cannot tell from its neighbours`);
+    }
   }
 
   // 🚨 Required, and for the same reason `commands` requires a `help` line: a

@@ -153,7 +153,7 @@ line flags, raw SQL, dates — are **[`docs/conventions.md`](docs/conventions.md
 - **Database changes only via migration.** `db/schema.ts` → `node run.mjs db-generate` → `node run.mjs db-migrate`; the file in `drizzle/` is checked in and never edited again after it has been applied. `db:push` only against an empty local DB, never against staging or production — [`docs/database.md`](docs/database.md).
 - **Environments are binding: DEV / STAGING / PROD** (`APP_ENV`). In STAGING and PROD mail delivery is a start condition, `APP_URL` is another — 🚨 **every link the app MAILS OUT takes its origin from it, never from the request** — and the sign-in mails' sender must live on the app's own domain. The development sign-in (`lib/auth/dev-login.ts`) holds in DEV only, under the four conditions [`docs/environments.md`](docs/environments.md) names: 🚨 **never soften that gate, it is an auth bypass.**
 - **Use the design system — never rebuild anything yourself.** No raw `<button>`, `<input>`, `<select>` or `<table>`, no hand-picked colour classes; what is missing gets fetched with `npx shadcn@latest add <component>`. See **UI**.
-- **All visible text goes through i18n.** Every sentence lives in `messages/de.json` **and** `messages/en.json`. See **Languages**.
+- **All visible text goes through i18n.** Every sentence lives in every `messages/<code>.json` — the languages are `LOCALES` in `i18n/config.ts`, never a pair written out by hand. See **Languages**.
 - **Messages always as a `Callout`** with one of its four intents, never with hand-picked colour classes. What must stay on screen is a `Callout`, what may drift past is a toast — three mechanisms, never a fourth. See **UI**.
 - **Light and dark both count.** Every new piece of UI MUST be readable in both, which follows by itself as long as colours come from the tokens.
 - **Tests are mandatory, and green is the commit condition rather than a courtesy** — nothing runs them for you after a push, so a red test that gets committed stays red until somebody looks. `.githooks/pre-commit` refuses on red, and a shipped test that fails is a finding about your change, never an obstacle to weaken or delete.
@@ -191,7 +191,7 @@ class, no fourth feedback mechanism.
 2. **Everything destructive asks first** — `<AlertDialog>`, naming *what* gets hit,
    confirm button `variant="destructive"` and never the accent.
 3. **Every new page has a way in, in the same commit** — one line in `NAVIGATION`
-   (`components/app-shell.tsx`) plus its text in both language files, or a **link** if it
+   (`components/app-shell.tsx`) plus its text in every language file, or a **link** if it
    is a `[param]` page; and its `<EmptyState>`, the state most customers meet first.
 4. **Both modes, always.** Colours come from tokens, never from Tailwind palettes, and
    **every dial is set in BOTH blocks, not only `:root`** (`--radius` excepted).
@@ -204,14 +204,26 @@ person in front of it is [`docs/ux.md`](docs/ux.md), audited by `ux-gateway`.
 
 ## Languages
 
-The app is bilingual (German, English) — **without a language prefix in the URL**.
-It is wired up in `i18n/`, and the texts live in `messages/de.json` and
-`messages/en.json`.
+The app speaks German, English, Spanish and French — **without a language prefix
+in the URL**. It is wired up in `i18n/`, and the texts live in one
+`messages/<code>.json` per language.
+
+**The list is `LOCALES` in `i18n/config.ts` and nowhere else.** Read it there
+rather than counting the files or trusting this sentence: a hand-written pair in
+a loop is how a language silently stops being checked — measured here, where
+`scripts/modules/messages.test.ts` walked `["de", "en"]` and stopped opening two
+catalogues without going red.
 
 **The rule: no visible text in the code.** Every sentence, label, placeholder and
-error message belongs in *both* language files. `i18n/messages.test.ts` breaks the
-build when one language is missing a key, a placeholder or an error code, and it
-is never switched off.
+error message belongs in *every* language file. `i18n/messages.test.ts` breaks
+the build when one language is missing a key, a placeholder or an error code, and
+it is never switched off — and it renders every message, so an ICU plural whose
+braces no longer balance fails the build instead of putting its own key on a page
+that answers 200.
+
+**All four address the reader informally** — `du`, `tú`, `tu`. A new sentence
+written formally in one language is a different product speaking in that
+language; the reasoning is in `docs/conventions.md`.
 
 Two refusals follow from it. **Rule and database layers return codes, not
 sentences** (`lib/users/rules.ts` → `"selfDelete"`) — only the Server Action
@@ -219,8 +231,13 @@ translates them. And **dates and prices are formatted, never spelled by hand**:
 `useFormatter().dateTime(…)` or `formatPrice(def, locale)`, never
 `toLocaleDateString("de-DE")`.
 
-Identifiers, what is deliberately not translated, how to add a third language and
-the formatting helpers: **[`docs/conventions.md`](docs/conventions.md)**.
+🚨 **Adding a language is five steps, and three of them fail SILENTLY** — the
+static import map in `lib/ai/nav-labels.ts`, `NAMES_A_MACHINE` in
+`lib/ai/disclosure.mjs`, and `content/legal/<slug>.<code>.md`. The recipe, with
+what each silence looks like, is the header of `i18n/config.ts`.
+
+Identifiers, what is deliberately not translated, how to add a language and the
+formatting helpers: **[`docs/conventions.md`](docs/conventions.md)**.
 
 ## Never ship a broken page
 
@@ -275,7 +292,8 @@ notification. Errors that are not what they look like are
    OUTSIDE `/dashboard` needs its line in `app/route-protection.test.ts`.
 3. Assemble the UI from `components/ui/`; `npx shadcn@latest add <component>` fetches
    what is missing.
-4. **Texts in `messages/de.json` and `messages/en.json`** — both.
+4. **Texts in every `messages/<code>.json`** — all of them, and the list is
+   `LOCALES` in `i18n/config.ts`.
 5. **Write tests** (`vitest`) for the new logic and rules.
 6. `npm run typecheck && npm run test`, green, before the deploy.
 7. **`node run.mjs start && node run.mjs smoke && node run.mjs errors`** — call the new

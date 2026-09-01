@@ -4,7 +4,9 @@
   "requiresTemplate": "0.19.0",
   "title": {
     "de": "HTTP-API",
-    "en": "HTTP API"
+    "en": "HTTP API",
+    "es": "API HTTP",
+    "fr": "API HTTP"
   },
   "summary": "the HTTP API a customer's own programs talk to, on per-member bearer keys",
   "docs": "docs/api.md",

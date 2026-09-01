@@ -27,8 +27,7 @@ import { MODULE_GATES } from "@/lib/modules/gate-registry";
 import type { ModuleGate } from "@/lib/modules/gate";
 import { MODULE_MESSAGES } from "@/lib/modules/messages";
 import { mergeModuleMessages } from "@/lib/modules/messages-merge";
-import de from "@/messages/de.json";
-import en from "@/messages/en.json";
+import { STATIC_MESSAGES } from "@/i18n/static-messages";
 
 /**
  * The entries a MEMBER sees, in sidebar order.
@@ -102,18 +101,24 @@ export function visibleMemberNavKeys(): readonly string[] {
   return [...MEMBER_NAV_KEYS, ...moduleMemberNavKeys()];
 }
 
-/** The message files, by locale. A new language is added here as well. */
-// ⚠️ MERGED, not `{ de, en }`. A module's nav label lives in ITS message file
-// and reaches the app through `mergeModuleMessages` — reading the core files
-// alone would resolve every module entry to `undefined` and put a hole in the
-// cached prompt.
+// The message files, by locale.
+//
+// 🚨 They have to be STATIC imports, because this map feeds the CACHED half of
+// the system prompt (see `navMenus()` below): a dynamic `import()` would make
+// the block async and put a `Promise` where a label belongs. That is why the
+// map lives in `i18n/static-messages.ts` rather than here — it used to be a
+// `{ de, en }` literal on this line, a second hand-kept list beside `LOCALES`,
+// and a locale missing from it resolves to `undefined` with nothing red until
+// somebody sends a chat message in that language.
+//
+// ⚠️ MERGED, not the bare catalogue. A module's nav label lives in ITS message
+// file and reaches the app through `mergeModuleMessages` — reading the core
+// files alone would resolve every module entry to `undefined` and put a hole in
+// the cached prompt.
 const MESSAGES = Object.fromEntries(
   LOCALES.map((locale) => [
     locale,
-    mergeModuleMessages(
-      { de, en }[locale] as unknown as Record<string, unknown>,
-      MODULE_MESSAGES[locale] ?? {},
-    ),
+    mergeModuleMessages(STATIC_MESSAGES[locale] ?? {}, MODULE_MESSAGES[locale] ?? {}),
   ]),
 ) as Record<Locale, { nav: Record<string, string> }>;
 

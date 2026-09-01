@@ -168,10 +168,21 @@ describe("formatMicros", () => {
 });
 
 describe("recommendedCurrency", () => {
-  it("suggests EUR for German and USD otherwise", () => {
+  it("suggests EUR for the euro-area languages", () => {
+    // German, Spanish and French. The proxy is crude and the function's own
+    // comment says so — it is a SUGGESTION `ai-check` prints, never a rule, and
+    // the alternative to being crude here is asking an operator for a country
+    // the app has no other use for.
     expect(recommendedCurrency("de")).toBe("EUR");
+    expect(recommendedCurrency("es")).toBe("EUR");
+    expect(recommendedCurrency("fr")).toBe("EUR");
+  });
+
+  it("suggests USD for English and for a language it does not know", () => {
+    // English is deliberately NOT in the euro set: it is the language the rest
+    // of the world shares, so its likeliest operator is outside the euro area.
     expect(recommendedCurrency("en")).toBe("USD");
-    expect(recommendedCurrency("fr")).toBe("USD");
+    expect(recommendedCurrency("xx")).toBe("USD");
   });
 });
 

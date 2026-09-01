@@ -7,7 +7,9 @@
   ],
   "title": {
     "de": "Kurs",
-    "en": "Course"
+    "en": "Course",
+    "es": "Curso",
+    "fr": "Cours"
   },
   "summary": "a course whose blocks and lessons live in tables: self-study, week by week, or accompanied",
   "docs": "docs/courses.md",

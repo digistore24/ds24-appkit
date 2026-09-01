@@ -1,0 +1,24 @@
+{
+  "companion": {
+    "disclaimer": "Lo que escribes aquí lo lee y lo responde una IA. Puede equivocarse: para cuestiones de dinero y acceso, mejor pregunta al soporte.",
+    "emptyBody": "Escribe en qué estás trabajando ahora mismo: recibirás una respuesta.",
+    "emptyTitle": "Aún no se ha hablado de nada",
+    "loading": "Cargando …",
+    "offBrokenConfig": "Los ajustes están incompletos o son contradictorios. En el terminal: node run.mjs ai-check",
+    "offDisabledInConfig": "Está desactivada. Pon \"enabled\" en true en config/ai-companion.json.",
+    "offNoApiKey": "Para la tarea \"companion\" (config/ai-models.json) no hay ninguna clave de proveedor registrada en el .env. En el terminal: node run.mjs ai-check",
+    "offTitle": "Este acompañamiento no está disponible",
+    "placeholder": "Escribe aquí en qué estás trabajando …",
+    "send": "Enviar",
+    "sending": "Leyendo …"
+  },
+  "errors": {
+    "companionBadSubject": "No se encuentra nada al respecto.",
+    "companionEmptyMessage": "Por favor, escribe algo a lo que se pueda responder.",
+    "companionFailed": "Esto no ha funcionado ahora mismo. Por favor, inténtalo de nuevo.",
+    "companionInsufficientBalance": "Tu saldo no es suficiente para eso. No se ha cobrado nada.",
+    "companionMessageTooLong": "Es demasiado largo. Por favor, acórtalo un poco.",
+    "companionRateLimited": "Demasiadas solicitudes en poco tiempo. Por favor, espera un momento.",
+    "companionUnavailable": "Este acompañamiento no está disponible en este momento."
+  }
+}

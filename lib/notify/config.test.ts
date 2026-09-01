@@ -14,6 +14,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import raw from "@/config/notifications.json";
+import { LOCALES } from "@/i18n/config";
 
 import {
   DEFAULT_NOTIFY_CONFIG,
@@ -53,7 +54,10 @@ describe("the shipped config", () => {
 
   it("is coherent, and names a language this app has", () => {
     expect(notifyConfigProblems()).toEqual([]);
-    expect(["de", "en"]).toContain(operatorLocale());
+    // Read off LOCALES rather than a copy of it: the claim is "a language this
+    // app has", and a hand-kept pair here said that only for as long as the app
+    // had exactly those two.
+    expect(LOCALES as readonly string[]).toContain(operatorLocale());
   });
 
   it("carries its explanation in underscore keys, which are ignored", () => {
@@ -86,7 +90,12 @@ describe("a file that cannot be trusted", () => {
     // The failure it prevents is specific: `createTranslator` on a catalogue
     // that was never loaded renders every sentence as its own key, in a mail
     // nobody proof-reads.
-    const mod = await readerFor({ enabled: true, locale: "fr" });
+    //
+    // 🚨 `xx` rather than a real code. This fixture said `fr` until the app
+    // learned French, at which point it stopped testing the refusal and started
+    // testing a valid configuration — with the assertion still demanding a
+    // problem. A code ISO 639-1 does not assign cannot be overtaken that way.
+    const mod = await readerFor({ enabled: true, locale: "xx" });
     expect(mod.notifyConfigProblems()).toHaveLength(1);
     expect(mod.notifyConfigProblems()[0]).toContain("locale");
     expect(mod.isOperatorNotifyEnabled()).toBe(false);
@@ -100,7 +109,7 @@ describe("a file that cannot be trusted", () => {
   });
 
   it("reports the problem rather than 'enabled is false'", async () => {
-    const mod = await readerFor({ enabled: true, locale: "fr" });
+    const mod = await readerFor({ enabled: true, locale: "xx" });
     expect(mod.notifyOffReason()).toContain("locale");
   });
 

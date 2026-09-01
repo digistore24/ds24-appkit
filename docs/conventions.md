@@ -320,6 +320,16 @@ t.rich("hint", { code: (chunks) => <code>{chunks}</code> })
   placeholder or an error code. It is the reason the second language does not rot,
   and it is never switched off.
 
+**All four languages address the reader informally** — German `du`, Spanish `tú`,
+French `tu`, and English's implicit one. That is a decision, not an accident, and
+it is written down because it is invisible in any single string and expensive to
+reverse once half a catalogue has drifted the other way. The German is the
+original voice and it says `du` in 132 sentences against `Sie` in four, so a
+`vous` in the French would be a different product speaking rather than a
+translation. French commerce leans towards `vous` and somebody will propose it;
+the answer is that these apps are sold to their buyers, not to their buyers'
+procurement departments. A fifth language follows the same rule.
+
 **Not translated, deliberately:** product names, plan features and descriptions from
 `config/digistore-products.json` — that is your product copy, and at Digistore24 the
 same text is on file. Likewise the app name (`lib/app.ts`) and the terminal output of
@@ -331,8 +341,28 @@ preference. It is wired in `i18n/` and nowhere else — so a page never has to
 know which language it is being rendered in, and a link a customer shares works
 for whoever opens it rather than dragging `/de/` along.
 
-**A third language** is a file in `messages/` plus its code registered in
-`i18n/config.ts` (`LOCALES` + `LOCALE_LABELS`) — done.
+**Another language** is five steps, not the two this paragraph used to claim.
+That sentence read *"a file in `messages/` plus its code in `i18n/config.ts` —
+done"*, and it was written when the app spoke two languages and nothing had ever
+been added. Adding Spanish and French found the other three, all of them things
+that fail without an error:
+
+| | why it is silent |
+|---|---|
+| `messages/<code>.json`, and one per installed module under `modules/<id>/messages/` | not silent — `i18n/messages.test.ts` fails the build |
+| the code in `LOCALES` and `LOCALE_LABELS` (`i18n/config.ts`) | not silent — the same test fails |
+| the catalogue imported in `lib/ai/nav-labels.ts` | that map is built from STATIC imports, because it feeds the CACHED half of the assistant's system prompt. A missing locale is `undefined`, the menu block goes out with a hole in it, and nothing red |
+| the language's word for a machine in `NAMES_A_MACHINE` (`lib/ai/disclosure.mjs`) | `node run.mjs legal-check` then reports *"cannot check automatically"* for the AI-Act notice in that language — not a failure, and not a pass either |
+| `content/legal/<slug>.<code>.md` for every legal page | `legalDocument()` FALLS BACK rather than 404ing (which is right — a policy in the wrong language is readable, a missing one is a violation). So the page renders, answers 200, and shows a French reader the German privacy policy |
+
+The recipe in full, with these reasons beside each step, is the header of
+`i18n/config.ts`.
+
+🚨 **And nothing in the tree may write the language list out by hand.** Read it
+from `LOCALES`. `scripts/modules/messages.test.ts` looped over `["de", "en"]`,
+which was correct prose for a year and became a SKIP the day the app spoke four:
+`existsSync` is false for a file nobody asks about, so the two newest catalogues
+were never opened and the shared-namespace rule went unchecked in them, green.
 
 ## Where a decision gets written down
 

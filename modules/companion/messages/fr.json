@@ -1,0 +1,24 @@
+{
+  "companion": {
+    "disclaimer": "Ce que tu écris ici est lu et traité par une IA. Elle peut se tromper — pour tout ce qui touche à l'argent et à l'accès, demande plutôt au support.",
+    "emptyBody": "Écris ce sur quoi tu travailles en ce moment — tu recevras un retour.",
+    "emptyTitle": "Rien n'a encore été abordé",
+    "loading": "Chargement …",
+    "offBrokenConfig": "Les réglages sont incomplets ou contradictoires. Dans le terminal : node run.mjs ai-check",
+    "offDisabledInConfig": "Elle est désactivée. Mets \"enabled\" sur true dans config/ai-companion.json.",
+    "offNoApiKey": "Pour la tâche \"companion\" (config/ai-models.json), aucune clé de fournisseur n'est enregistrée dans le .env. Dans le terminal : node run.mjs ai-check",
+    "offTitle": "Cet accompagnement n'est pas disponible",
+    "placeholder": "Écris ici ce sur quoi tu travailles …",
+    "send": "Envoyer",
+    "sending": "Lecture en cours …"
+  },
+  "errors": {
+    "companionBadSubject": "Rien ne peut être trouvé à ce sujet.",
+    "companionEmptyMessage": "Écris s'il te plaît quelque chose à quoi on puisse répondre.",
+    "companionFailed": "Cela n'a pas fonctionné à l'instant. Réessaie s'il te plaît.",
+    "companionInsufficientBalance": "Ton solde n'est pas suffisant pour cela. Rien n'a été débité.",
+    "companionMessageTooLong": "C'est trop long. Raccourcis-le un peu s'il te plaît.",
+    "companionRateLimited": "Trop de requêtes en peu de temps. Attends un instant s'il te plaît.",
+    "companionUnavailable": "Cet accompagnement n'est pas disponible pour le moment."
+  }
+}

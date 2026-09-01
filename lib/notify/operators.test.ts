@@ -201,7 +201,13 @@ describe("the off states — quiet, and each one measured", () => {
   });
 
   it("a broken preference file is off, and says which of the two it is", async () => {
-    const { notifyOperators } = await channel({ enabled: true, locale: "fr" });
+    // 🚨 `xx`, and not a real language code. This said `locale: "fr"`, which was
+    // a broken file for as long as the app spoke two languages — and became a
+    // perfectly valid one the day it spoke four, at which point the test
+    // measured the HAPPY path while still asserting a refusal. A code ISO 639-1
+    // does not assign cannot be overtaken that way. Same fixture in
+    // `lib/notify/config.test.ts`.
+    const { notifyOperators } = await channel({ enabled: true, locale: "xx" });
     const result = await notifyOperators(DIGEST);
 
     expect(result.reason).toBe("brokenConfig");
@@ -216,7 +222,7 @@ describe("the off states — quiet, and each one measured", () => {
     // off — "off, because broken" is the more useful of the two answers. The
     // two separate cases above measured the two separate causes; this is the
     // one where they meet, and it was the only one nobody had run.
-    const { notifyOperators } = await channel({ enabled: false, locale: "fr" });
+    const { notifyOperators } = await channel({ enabled: false, locale: "xx" });
 
     expect((await notifyOperators(DIGEST)).reason).toBe("brokenConfig");
     expect(statements()).toEqual([]);

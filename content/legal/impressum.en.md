@@ -9,7 +9,8 @@ register entry and VAT identification number where you have them.
 
 Run the skill **`compliance-check`** in the terminal. It asks for exactly the
 details your legal form requires and writes this file
-(`content/legal/impressum.en.md`) and its German counterpart.
+(`content/legal/impressum.en.md`) and its counterparts in the app's other
+languages.
 
 `node run.mjs legal-check` tells you at any time which legal pages still carry
 this placeholder.

@@ -4,7 +4,9 @@
   "requiresTemplate": "0.33.0",
   "title": {
     "de": "Kennzahlen",
-    "en": "Metrics"
+    "en": "Metrics",
+    "es": "Indicadores",
+    "fr": "Indicateurs"
   },
   "summary": "onboarding funnel, retention cohorts and split tests, counted in this app's own database",
   "docs": "docs/metrics.md",

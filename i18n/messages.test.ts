@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect } from "vitest";
+import { createTranslator } from "next-intl";
 import { LOCALES, DEFAULT_LOCALE, matchLocale, isLocale } from "./config";
 import { USER_ERROR_CODES } from "@/lib/users/rules";
 import { TOKEN_ERROR_CODES } from "@/lib/tokens/rules";
@@ -16,10 +17,9 @@ import { ROLES } from "@/lib/roles";
 import { IMPERSONATION_END_REASONS } from "@/db/schema-impersonation";
 import { consentPurposes } from "@/lib/consent/config";
 import { CREDENTIAL_CHANGES } from "@/lib/email";
-import de from "@/messages/de.json";
 import { MODULE_MESSAGES } from "@/lib/modules/messages";
 import { mergeModuleMessages } from "@/lib/modules/messages-merge";
-import en from "@/messages/en.json";
+import { STATIC_MESSAGES, catalogueCoverage } from "./static-messages";
 import { moduleErrorCodes } from "@/scripts/modules/inventory.mjs";
 
 // The guardian of the translations.
@@ -29,17 +29,43 @@ import { moduleErrorCodes } from "@/scripts/modules/inventory.mjs";
 // suddenly see the key ("users.createTitle") instead of a heading. This test
 // breaks the build instead.
 //
-// New language? Create the file in `messages/`, add it to ALL_MESSAGES here.
+// New language? Create the file in `messages/` and add its import to
+// `i18n/static-messages.ts` — this file builds itself from LOCALES and needs no
+// edit. 🚨 It used to carry its own `{ de, en }` literal, which is why the
+// coverage test below exists: a locale in `LOCALES` with no catalogue behind it
+// made every assertion in this file compare against `undefined`, and the
+// failures then named twenty-seven missing keys rather than the one missing
+// import that caused them.
 //
-// ⚠️ Merged the same way `i18n/request.ts` merges it, and NOT a plain `{de, en}`.
+// ⚠️ Merged the same way `i18n/request.ts` merges it, and NOT a plain catalogue.
 // A module's error codes live in the shared `errors` namespace — that is where
 // `t(`errors.${code}`)` looks — so a catalogue read straight off the core files
 // would report every module code as missing while the running app renders them
 // perfectly. Measured the moment the first module was installed.
-const ALL_MESSAGES: Record<string, unknown> = {
-  de: mergeModuleMessages(de as Record<string, unknown>, MODULE_MESSAGES.de ?? {}),
-  en: mergeModuleMessages(en as Record<string, unknown>, MODULE_MESSAGES.en ?? {}),
-};
+const ALL_MESSAGES: Record<string, unknown> = Object.fromEntries(
+  LOCALES.map((locale) => [
+    locale,
+    mergeModuleMessages(STATIC_MESSAGES[locale] ?? {}, MODULE_MESSAGES[locale] ?? {}),
+  ]),
+);
+
+describe("The static catalogue map", () => {
+  // The one list in this app that a new language really does have to be written
+  // into by hand. Everything else derives from `LOCALES`; this cannot, because
+  // a bundler needs the import to be a literal path.
+  it("covers exactly the locales this app speaks", () => {
+    const { missing, extra } = catalogueCoverage();
+    expect(
+      missing,
+      `i18n/static-messages.ts has no import for ${missing.join(", ")} — the assistant's ` +
+        `cached menu block would go out with a hole in it and nothing else would say so`,
+    ).toEqual([]);
+    expect(
+      extra,
+      `i18n/static-messages.ts still imports ${extra.join(", ")}, which is not in LOCALES`,
+    ).toEqual([]);
+  });
+});
 
 /** All keys of a nested object as "a.b.c". */
 function keyPaths(obj: unknown, prefix = ""): string[] {
@@ -289,7 +315,114 @@ describe("Credential-change mail texts", () => {
   }
 });
 
+describe("Every message parses as ICU", () => {
+  // 🚨 The gap the three tests above structurally leave open. They compare the
+  // catalogues against each other — same keys, same placeholders, nothing
+  // empty — and a message can satisfy all three and still be unparseable:
+  // `{count, plural, one {# Datei} other {# Dateien}` is missing one brace, has
+  // exactly the right placeholder set, and throws the moment the page that uses
+  // it renders. next-intl does not throw on a bad message; it reports through
+  // `onError` and renders the KEY, so the page answers 200 with
+  // "users.deleteCount" where a sentence belongs. Nothing else here looks.
+  //
+  // It mattered little while a human wrote two files. It matters now: four
+  // catalogues of 1,491 keys, and an ICU plural is the one construct a
+  // translation has to REBUILD rather than copy — the branch keywords are
+  // syntax, the text inside them is not.
+  //
+  // `createTranslator` is the synchronous core of next-intl and is the same code
+  // path the app takes (`i18n/translator.ts` explains why it is reachable here
+  // and `getTranslations` is not).
+  //
+  // ⚠️ **The probe has to be right, or it measures itself.** Its first version
+  // bound every placeholder to a number and called `t()`, and reported 48
+  // failures in four symmetrical batches — every one of them a message that
+  // uses rich text or a date, and not one a defect in the catalogues. So the
+  // argument TYPE is read out of the message rather than guessed, and a message
+  // carrying tags goes through `rich()`, which is what the app does with it.
+  const TAG = /<(\w+)>/g;
+  /** `{name, date, medium}` → the kind of value ICU will try to format. */
+  const ARGUMENT = /\{\s*(\w+)\s*(?:,\s*(\w+))?/g;
+
+  function valuesFor(message: string): Record<string, unknown> {
+    const values: Record<string, unknown> = {};
+    for (const [, name, type] of message.matchAll(ARGUMENT)) {
+      if (type === "date" || type === "time") values[name] = new Date("2026-01-01T12:00:00Z");
+      else if (type === "number" || type === "plural" || type === "selectordinal") values[name] = 2;
+      else if (type === "select") values[name] = "other";
+      else values[name] = "x";
+    }
+    // Rich text: the tag names are bound in the CODE (`t.rich("hint", { code })`),
+    // so here they are bound to something that merely proves they were reached.
+    for (const [, tag] of message.matchAll(TAG)) {
+      values[tag] = (chunks: unknown) => String(chunks);
+    }
+    return values;
+  }
+
+  const stringLeaves = keyPaths(ALL_MESSAGES[DEFAULT_LOCALE]).filter(
+    (path) => typeof messageAt(ALL_MESSAGES[DEFAULT_LOCALE], path) === "string",
+  ).length;
+
+  for (const locale of LOCALES) {
+    it(`${locale}: every message renders without an IntlError`, () => {
+      const errors: string[] = [];
+      const messages = ALL_MESSAGES[locale] as Record<string, unknown>;
+      const translator = createTranslator({
+        locale,
+        messages: messages as never,
+        timeZone: "Europe/Berlin",
+        onError: (error) => errors.push(String(error)),
+      }) as unknown as {
+        (key: string, values?: Record<string, unknown>): string;
+        rich: (key: string, values?: Record<string, unknown>) => unknown;
+      };
+
+      const paths = keyPaths(messages);
+      expect(paths.length, `${locale}: no messages to check`).toBeGreaterThan(100);
+
+      let checked = 0;
+      for (const path of paths) {
+        const message = messageAt(messages, path);
+        if (typeof message !== "string") continue;
+        const values = valuesFor(message);
+        try {
+          if (TAG.test(message)) translator.rich(path, values);
+          else translator(path, values);
+          TAG.lastIndex = 0;
+        } catch (error) {
+          errors.push(`${path}: ${String(error)}`);
+        }
+        checked += 1;
+      }
+
+      // The non-vacuity marker, derived rather than a number typed in here: a
+      // `keyPaths` that stopped returning leaf paths would leave `errors` empty
+      // and the assertion below perfectly satisfied. Every locale has the same
+      // key set — the parity test above is what says so — so the count has to
+      // match the reference catalogue's exactly.
+      expect(checked, `${locale}: rendered ${checked} of ${stringLeaves} message(s)`).toBe(
+        stringLeaves,
+      );
+      expect(errors, `${locale}: ${errors.length} unrenderable message(s)`).toEqual([]);
+    });
+  }
+});
+
 describe("matchLocale", () => {
+  // 🚨 The "language this app does not have" is `xx`, and it is not a real
+  // language on purpose. These three cases used to name FRENCH, which was true
+  // for as long as the app spoke two languages and quietly stopped being a test
+  // the day it spoke four: `matchLocale("fr-FR,fr;q=0.9")` returns `fr` now, and
+  // the assertion that it falls back would have gone red — the lucky outcome.
+  // The unlucky one is the case above it, where a supported `fr` beating `en` on
+  // quality weight is the CORRECT answer, so the test would have had to be
+  // rewritten to say the opposite of what it was written to say.
+  //
+  // `xx` is unassigned in ISO 639-1 and will not be assigned, so no future
+  // language can turn these back into assertions about something else.
+  const UNKNOWN = "xx";
+
   it("takes the first supported language from the browser header", () => {
     expect(matchLocale("en-US,en;q=0.9")).toBe("en");
   });
@@ -299,14 +432,24 @@ describe("matchLocale", () => {
   });
 
   it("honors the quality weights", () => {
-    // We do not know French, but we do know English — so English.
-    expect(matchLocale("fr;q=1.0,en;q=0.8")).toBe("en");
+    // We do not know xx, but we do know English — so English.
+    expect(matchLocale(`${UNKNOWN};q=1.0,en;q=0.8`)).toBe("en");
   });
 
   it("falls back to the default language", () => {
-    expect(matchLocale("fr-FR,fr;q=0.9")).toBe(DEFAULT_LOCALE);
+    expect(matchLocale(`${UNKNOWN}-XX,${UNKNOWN};q=0.9`)).toBe(DEFAULT_LOCALE);
     expect(matchLocale(null)).toBe(DEFAULT_LOCALE);
     expect(matchLocale("")).toBe(DEFAULT_LOCALE);
+  });
+
+  it("finds every language this app speaks", () => {
+    // Non-vacuity guard for the three above: they say what happens to a language
+    // the app does NOT have, and would all still pass on an app that matched
+    // nothing at all.
+    for (const locale of LOCALES) {
+      expect(matchLocale(`${locale}-XX,${locale};q=0.9`), locale).toBe(locale);
+    }
+    expect(LOCALES.length).toBeGreaterThan(1);
   });
 });
 

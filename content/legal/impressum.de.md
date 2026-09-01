@@ -10,7 +10,8 @@ Umsatzsteuer-Identifikationsnummer, falls du eine hast.
 
 Starte im Terminal den Skill **`compliance-check`**. Er fragt genau die Angaben
 ab, die für deine Rechtsform nötig sind, und schreibt diese Datei
-(`content/legal/impressum.de.md`) und ihr englisches Gegenstück.
+(`content/legal/impressum.de.md`) und ihre Gegenstücke in den übrigen
+Sprachen der App.
 
 `node run.mjs legal-check` sagt dir jederzeit, welche Rechtsseiten noch auf
 diesem Text stehen.

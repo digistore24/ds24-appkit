@@ -4,7 +4,9 @@
   "requiresTemplate": "0.19.0",
   "title": {
     "de": "Interaktive Elemente",
-    "en": "Interactive elements"
+    "en": "Interactive elements",
+    "es": "Elementos interactivos",
+    "fr": "Éléments interactifs"
   },
   "summary": "what a course's customer DOES — exercises and checks, judged on the server",
   "docs": "docs/learning.md",

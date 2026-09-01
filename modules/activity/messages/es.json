@@ -1,0 +1,22 @@
+{
+  "activity": {
+    "loading": "Cargando …",
+    "attemptsOf": "{count} de {max} intentos utilizados",
+    "checkpointSaved": "Progreso guardado.",
+    "passedYes": "¡Aprobado!",
+    "passedNo": "Esta vez no lo has aprobado.",
+    "finished": "Completado.",
+    "accountExportNote": "Tus resultados de los ejercicios: qué has trabajado, cuántas veces, cuántos puntos y si ha sido suficiente.",
+    "accountDeletionNote": "Tus resultados de los ejercicios, por completo."
+  },
+  "errors": {
+    "activityUnavailable": "Este elemento no está disponible en este momento.",
+    "activityNoAccess": "Este elemento pertenece a un producto que todavía no tienes.",
+    "activityRateLimited": "Respira un momento: enseguida puedes continuar.",
+    "activityBadSubject": "Esta solicitud era incorrecta.",
+    "activityMaxAttempts": "Se han agotado todos los intentos.",
+    "activityInsufficientBalance": "Tu saldo no es suficiente para esto.",
+    "activityNotRecorded": "Ya está hecho: este intento no se ha contado dos veces.",
+    "activityFailed": "Esto no ha funcionado ahora mismo. Inténtalo de nuevo."
+  }
+}
