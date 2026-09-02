@@ -617,6 +617,10 @@ the code**, and prices do not belong on the DS24 product at all. One offering is
 one product **per language**, one product SET **per environment** —
 [`docs/environments.md`](docs/environments.md).
 
+🚨 **The DS24 product keeps a default plan nobody set (~27 €), its own order form
+charges it, and such an order still lands and GRANTS** — on a subscription for
+ever: **[`docs/digistore-integration.md`](docs/digistore-integration.md)**.
+
 What this app sells is `billingMode` in that same file (`"subscriptions" |
 "tokens" | "both"`, read through `lib/billing-mode.ts`, never by re-reading the
 JSON). Two rules make it safe to flip on a live app; the rest is

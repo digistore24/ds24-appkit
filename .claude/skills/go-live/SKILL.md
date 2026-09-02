@@ -102,13 +102,25 @@ one, and only **after the app is deployed and answers**: registering the IPN nee
      form in the wrong language, and fixing it later means new products, new
      approvals and dead links you already handed out.
 3. Nothing to do about **prices** — they travel with the checkout call, so create no
-   payment plans in the Digistore24 interface.
+   payment plans in the Digistore24 interface. 🚨 **What IS there is Digistore24's
+   own default plan** (about 27 €, single payment), on every product, and the live
+   set is no exception. The app never charges it; the product's **order form**
+   does — and step 4 is what makes that form publicly findable. Say this to the
+   user now, in one sentence, or they will find it in their backoffice and read it
+   as a fault:
+   [`docs/digistore-integration.md`](../../../docs/digistore-integration.md) →
+   *The plan on the product*.
 4. `node run.mjs ds24-approval --apply`, once the product description and the app are
    mature. Read the dry run first, then check that **every** row reaches `approved`
    and not only the first — a bilingual plan is two products at two marketplaces, and
    the second gets forgotten. **A Direct Seller has no approval step at all**: the
    command says so and writes nothing. That rule and every refusal `--apply` makes on
    purpose: [`docs/digistore-integration.md`](../../../docs/digistore-integration.md).
+   ⚠️ **Approval is a marketplace LISTING, so it is also the moment the product's
+   own order form becomes something strangers find.** They then buy at the plan
+   from item 3, not at yours — and that purchase lands, attributes and grants like
+   any other. Approve because you want the marketplace, and know that this comes
+   with it.
 5. `node run.mjs ds24-testpay --recreate` — rotate the test-purchase key. It is
    account-level, so an old copy on a live checkout URL unlocks free purchases.
 6. **Get the IPN secrets to the host.** Step 2 wrote `…_PROD` reference copies of

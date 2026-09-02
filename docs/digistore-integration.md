@@ -429,6 +429,74 @@ plan is fixed: free trials (`test_interval`), upgrades and downgrades
 when the plan travels with the checkout call. **One price, one place.**
 Details: `docs/digistore-createbuyurl.md`, `docs/digistore-billing-modes.md`.
 
+### The plan on the product — the price you did NOT set
+
+The paragraph above is about the price the app charges. This one is about the
+one it never charges, because that one exists anyway, it is visible, and it is
+the single most confusing thing about this integration.
+
+**A Digistore24 product created without a payment plan does not have none — it
+has Digistore24's default.** (Observed 2026-09-02 on a real account: 27,00 €,
+single payment. Look at your own product rather than trusting that number; what
+does not change is that *some* plan is there.) This template cannot set it —
+`data[amount]` is discarded — and deliberately does not create one, for the
+reasons one paragraph up. So it is there, it is not yours, and **it is what your
+Digistore24 backoffice shows you** next to a product your app sells for
+something else. Nothing is broken. There is nothing to repair.
+
+**Every link the app hands out ignores it.** `buildBuyUrlBody()`
+(`lib/digistore/buyUrl.ts`) sends a complete `payment_plan[…]` on every single
+`createBuyUrl` call, and a plan that travels with the call wins over the
+product's own. There is no path — `/plans`, a salespage, an auto top-up — that
+could charge the product's plan instead.
+
+**But the product also has an order form of its own.** Its URL exists from the
+moment the product does, and `node run.mjs ds24-approval --apply` additionally
+puts it on a **marketplace** (one per language, per marketplace — the two
+sections above). Whoever arrives by either route buys at the product's plan, not
+at yours.
+
+🚨 **And such an order does not bounce off. It lands, and it grants access.**
+Three mechanisms in a row see to that, and all three are working as intended:
+
+- `resolveProduct()` (`lib/digistore/payment-event.ts`) recovers the Product Key
+  from `product_id` against the registry. That fallback exists *precisely* for a
+  purchase carrying no `custom`.
+- `chooseAttribution()` (`lib/digistore/attribution.ts`) falls back to a unique
+  buyer-email match, so a buyer who already has an account is granted at once.
+- Failing that the order simply waits, and `claimOrdersFor()`
+  (`lib/digistore/claim.ts`) grants it at the buyer's first sign-in. The
+  thank-you URL sits on the **product** as well (`ds24-sync` writes it), so that
+  buyer even lands on `/optin/[ORDER_ID]` and is told to sign in.
+
+They get exactly the access your own checkout would have given them — at the
+other price.
+
+🚨 **On a subscription plan, that access never ends.** A single-payment plan
+sends one `on_payment` and then no rebilling events at all: no
+`on_payment_missed`, no `on_rebill_cancelled`, no `last_paid_day`. Nothing ever
+closes the grant that `on_payment` opened, `hasPlan()` goes on answering true,
+and no scheduled job comes back to look. One payment at the product's price, for
+a monthly plan, for good.
+
+⚠️ **A missing `custom` is NOT the marker of such an order** — reading it as one
+is the mistake to avoid, and it is an easy one to make. `customTrackingFor()`
+(`lib/digistore/checkout.ts`) returns `undefined` for `subscription` and
+`one_time`, so a **signed-out visitor buying on your own `/plans` page**
+produces exactly the same `custom`-less checkout as a marketplace buyer. The log
+line `[ipn] order … unattributed` therefore says nothing whatever about where an
+order came from. What distinguishes the two is the **amount** — your registry
+price, or the product's own plan — and nothing in the app compares them today.
+
+**What to do about it: know that it is there.** Do not maintain a matching plan
+at Digistore24 — that is the second price list the paragraph above rules out,
+and it would not close the door anyway: a matching plan makes a direct order
+charge the right money, it does not turn a single payment into a subscription.
+Read `node run.mjs ds24-approval --apply` as what it is: the moment your order
+form becomes publicly findable. And when an order surprises you, read its
+amount — `/dashboard/admin/purchases`, or
+`node run.mjs ds24-purchase --order ABC12345`.
+
 ---
 
 ## Shape A — the operator is the only vendor

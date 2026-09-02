@@ -146,7 +146,7 @@ That is not an error — it is the last look before products exist:
 Later runs pass straight through: an offering that has been synced carries an
 id, so nothing is being created and nothing is asked. Updates are never gated.
 
-Four more things to do while it runs, and only the first is a command:
+Five more things to do while it runs, and only the first is a command:
 
 - **Run it plain.** Without `--env` it follows `APP_ENV`, so on the user's machine
   it maintains the **DEV** set and the live set stays untouched. The prod set is a
@@ -165,6 +165,18 @@ Four more things to do while it runs, and only the first is a command:
 - **A skipped IPN is not a failed sync** — the products are done. It skips only when
   it truly cannot (app not running, `cloudflared` missing) and names which; fix that
   and run it again.
+- 🚨 **Tell them what they will see in their Digistore24 backoffice — before they
+  see it.** The products now exist there with a **payment plan nobody set**:
+  Digistore24 gives a product created without one its own default (about 27 €,
+  single payment — look, do not quote). Your prices are not there and are not
+  supposed to be; they travel with every checkout call. So: *"the price in your
+  backoffice is not yours and the app never charges it — but the product has an
+  order form of its own that does, and a purchase made there really does unlock
+  access."* A vendor who is not told this either panics or starts maintaining a
+  second price list. The whole story, including why such an order never expires on
+  a subscription plan:
+  [`docs/digistore-integration.md`](../../../docs/digistore-integration.md) →
+  *The plan on the product*.
 
 ## 4. Check the connection
 

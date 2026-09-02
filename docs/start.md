@@ -208,7 +208,6 @@ running:
 
 ```
 Read https://ds24-appkit.com/start.md and follow it.
-I want to build a SaaS product I can sell through Digistore24.
 Here is my product brief:
 
 <paste the brief here>
