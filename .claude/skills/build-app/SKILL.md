@@ -106,7 +106,8 @@ before deciding, and put the choice to the user** — it holds what to build per
 archetype, the ✅ defaults steps 1b–1d propose, and the Gated-Tool warnings.
 
 All archetypes use the same base: **auth (`auth.ts`)** for who is signed in, and
-the **entitlement API** (`lib/entitlements/manage.ts`) for what they may use.
+the **entitlement API** (`lib/entitlements/manage.ts` — its signatures are in
+`docs/api-map.md`, read that section, not the file) for what they may use.
 The Digistore IPN feeds both — it records the payment and maintains the grant
 behind it. Reference: `docs/entitlements.md`.
 
@@ -171,7 +172,7 @@ somebody actually decides on, and neither is in the archetype table.
 `node run.mjs ai-check` prints what one generated picture costs today;
 [`docs/visuals.md`](../../../docs/visuals.md) is where the rest of it is. The
 verbatim menu to show, and the two things not to ask here, are in
-[`references/menus.md`](references/menus.md).
+[`references/menus-1b.md`](references/menus-1b.md).
 
 Whatever is chosen, the code for it exists — `docs/visuals.md` is the reference
 (store, upload, generation, and the recipes for charts and video), and
@@ -195,7 +196,7 @@ rows come from — per archetype, with what each costs and how it is gated — a
 [`docs/ai-providers.md`](../../../docs/ai-providers.md) is the mechanics behind
 it. The verbatim menu — its prices are an order of magnitude, said as rough
 numbers — the two things not to ask, and what a chosen number becomes in
-`modules/companion/companions.ts` are in [`references/menus.md`](references/menus.md). **One
+`modules/companion/companions.ts` are in [`references/menus-1c.md`](references/menus-1c.md). **One
 surface, several call sites — never a second panel**, and do not build it now:
 this step decides, Step 2 gives it its columns and Step 3 its surface.
 
@@ -203,7 +204,7 @@ Whatever is chosen, the code for it exists — what a chosen row switches on
 (the config switch, the registry entry with its member-scoped `load()`, the
 panel, the legally required disclosure, and the access decision: `hasPlan()`
 for a plan, `spendTokens()` for metered use, never a billing table) is listed
-in [`references/menus.md`](references/menus.md), and `node run.mjs legal-check`
+in [`references/menus-1c.md`](references/menus-1c.md), and `node run.mjs legal-check`
 reports a companion switched on without its notice.
 
 ## Step 1d — What the customer DOES, and how it is judged
@@ -251,8 +252,26 @@ write the agreed picture into `docs/plan.md`** — the shape is
 on disk says what is still TO be built, and a plan that lives in the transcript
 is gone when the session is.
 
+## After the yes — the build runs in stages, and every stage ends in their hands
+
+**Steps 2–4b below are run once per `- [ ]` line of `docs/plan.md`, in the
+order the lines stand — never for the whole list in one turn.** Step 2 runs in
+full only in the first stage: 1b–1d decided the columns, and a second migration
+for something the first could have carried is the mistake this skill warns
+about twice above. A stage is done when the customer can OPEN it — tests green,
+`node run.mjs start && smoke && errors` clean, committed, its entry in
+`docs/app.md`, its plan line ticked — and then the turn ENDS: the address, what
+they will see there, what the next stage is and roughly how long, and wait.
+Three answers, all valid: *go*, a correction, or **"run through without
+stopping"** — written once into `docs/plan.md` as its `Pace:` line, never asked
+again. Why a turn ends there rather than running on, the hand-back wording, and
+what to do when a session was cut in the middle of a stage:
+[`references/stages.md`](references/stages.md).
+
 ## Step 2 — Extend the data model
 
+- **In the first stage, the whole agreed data model.** A later stage adds a
+  column only where its plan line needs one that 1b–1d could not foresee.
 - **Before the first content table, settle who authors the content** — decide it
   before `db-generate`, and record the answer in `docs/app.md`. The fork is
   [`docs/content-authority.md`](../../../docs/content-authority.md), what each
@@ -292,8 +311,11 @@ surface is built**, not later. A page that returns nothing but paragraphs is a
 decision, and so is a page that answers work with nothing but "saved" — so make
 both visible: either put something there, or note in `docs/app.md` why not. The
 reasoning, and the two references it points at, are in
-[`references/menus.md`](references/menus.md).
+[`references/menus-3.md`](references/menus-3.md).
 
+- **Before you open a shipped page as a model, read `docs/api-map.md` → *Page
+  shape*** — the four parts every page has, each with its grep anchor — and
+  then a RANGE of the model, never the file.
 - Protected pages under `app/dashboard/…` (already secured via `proxy.ts`).
   Anything you put OUTSIDE that folder is **public the moment it exists** —
   `app/route-protection.test.ts` will stop the build and ask you to say what
@@ -361,19 +383,11 @@ area plus the "Users" entry are in the navigation on that first page load. So
 the whole step is one sentence to the user: *open http://localhost:3000/login
 and sign in with whatever address you like; that account is the admin.*
 
-The rule is `lib/users/bootstrap.ts` and it is narrow on purpose: **the very
-first account, in DEV only.** Anything after it is a `member`, and outside DEV
-every account is, including the first — a freshly deployed instance has an empty
-user table too, and the first person to sign in there may be a customer. Handing
-them user management would be an account takeover.
-
-**Two cases still need the CLI** (`node run.mjs user-create --email <address>
---role owner --apply`), and neither is this step: **STAGING and PROD**, where
-the bootstrap deliberately does not fire (that belongs to `setup-hosting` /
-`go-live`), and **when YOU need `smoke`'s signed-in pass before the user has
-signed in once** — then run the command and say that you did. Both cases in
-full, and the sign-in details (magic link, dev login, optional passwords,
-`requireOwner()` for admin pages), are in
+The rule is `lib/users/bootstrap.ts`, and it is narrow on purpose: **the very
+first account, in DEV only** — outside DEV the first person to sign in may be a
+customer, and handing them user management would be an account takeover.
+**Two cases still need the CLI** (STAGING/PROD, and `smoke`'s signed-in pass
+before anybody has signed in), and both, with the sign-in details, are in
 [`references/owner-account.md`](references/owner-account.md).
 
 ## Step 4 — Write tests AND run them (mandatory)
@@ -401,33 +415,21 @@ node run.mjs smoke                # opens every page, reports server errors
 ```
 
 5xx means: fix it before you go on — find the cause with `node run.mjs logs`.
+`smoke` runs twice, anonymously and then **signed in as the owner**; the line
+`N protected page(s) NOT checked — <reason>` means **they were not** (usually no
+owner has signed in yet — step 3b, and `smoke` never creates one). Fix the
+reason or open the pages yourself; never report them as working. The verdicts in
+full are `CLAUDE.md` → *Never ship a broken page*, loaded in every session.
+Dynamic pages (`[id]`) are skipped either way — open those once by hand.
 
-`smoke` runs twice: anonymously, then **signed in as the owner** for every page
-that sent it to `/login` — so your new protected pages are really rendered. Two
-lines in its output are worth reading rather than skimming:
-
-- `Signed in as … — the N protected page(s) again` → they were checked.
-- `N protected page(s) NOT checked — <reason>` → **they were not.** Usually
-  nobody has signed in yet, so there is no `owner` account for it to use
-  (step 3b — `smoke` never creates one), or mail delivery is configured, which
-  switches the development login off. Fix the reason or open the pages yourself;
-  do not report them as working.
-
-Dynamic pages (`[id]`) are skipped either way — open those once by hand with a
-real record.
-
-**If you have a way to open a real browser, use it here too** — `smoke` proves
-every page answers, not that it looks right. If you have none, `ux-gateway`
-explains how to offer the user the Playwright MCP server (a one-minute change
-to their own program, not to this app); seeing the pages once now is cheaper
-than meeting them broken in the `ux-gateway` pass later.
-
-Only then tell the user that they can take a look — and write down what they
-will see and at which address.
+Then **hand the stage back and END THE TURN** — the address, what they will see,
+what comes next. The wording, and the real-browser look that belongs here, are
+in [`references/stages.md`](references/stages.md).
 
 ## Step 4b — Write down what you built (`docs/app.md`)
 
-**Create `docs/app.md` now, with the first feature in it.** This is the app's own
+**Create `docs/app.md` now, with this stage's feature in it — and tick the
+stage's line in `docs/plan.md`.** This is the app's own
 notebook, and the reason it exists is that a session is short and a project is
 not: whoever adds the fifth feature was not there for the first four. CLAUDE.md
 says what the *template* is; `docs/app.md` says what *this app* is. What is not
@@ -472,20 +474,13 @@ Then run the skill **`billing-modes`** afterwards.
 
 ## Step 6 — Before the launch: secure it, scale it, legal & live
 
-One after another:
-1. **`salespage`** — make the home page sell THIS product. `app/page.tsx` still
-   carries the template's placeholder (three feature cards about sign-in and
-   billing), and a stranger lands there first. It needs the products and prices
-   from step 5, which is why it sits here and not earlier.
-2. **`ux-gateway`** — look at the app the way the customer will: the first five
-   minutes after a purchase, dead ends, actions that report nothing back, dark
-   mode and the phone. Early, because what it finds changes the interface.
-3. **`security-gateway`** — scan the app for security holes and fix them.
-4. **`performance-gateway`** — make sure ~100 parallel users run smoothly.
-5. **`compliance-check`** — legal pages (imprint/privacy/terms/withdrawal), GDPR.
-6. **`go-live`** — put the app online and verify it live.
-7. **`go-to-market`** — positioning, channels, launch plan and finished content
-   (landing page copy, emails, video scripts).
+**`salespage`** first — `app/page.tsx` still carries the template's placeholder
+and a stranger lands there first; it needs step 5's products and prices, which
+is why it sits here and not earlier. Then the path as `CLAUDE.md` → *The path*
+lays it out from 2.5 on: `ux-gateway`, `security-gateway`,
+`performance-gateway`, `compliance-check`, then `setup-hosting` → `go-live`,
+then `go-to-market`. Each is its own skill with its own step 0 — one at a time,
+each in its own turn, and each ends by naming the next.
 
 ## The golden rules (don't work against them)
 

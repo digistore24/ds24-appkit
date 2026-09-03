@@ -35,6 +35,21 @@ does not exist are indistinguishable until something tries.
 
 ---
 
+## Contents
+
+_Read the section you need, not the file — it is long, and sessions read it whole. A `grep -n "^## "` lists the same._
+
+- *Where the files live, and why that is not a detail*
+- *How a file reaches a visitor*
+- *Putting files in*
+- *Letting the app draw*
+- *What to build instead of a wall of text*
+- *Asking a customer to produce or choose something*
+- *Recipes*
+- *What is taken off an image, and what is not*
+- *The construction kit*
+- *Where things are*
+
 ## Where the files live, and why that is not a detail
 
 **In development:** nothing to set up. Files go to `.data/media/` on your

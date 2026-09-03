@@ -80,7 +80,7 @@ Whatever is decided — including a `0` — goes into `docs/app.md` under
 stops the same conversation happening again in three sessions.
 
 🚨 **A `0` is written with the verbatim entry, and that entry has one home** —
-[`build-app`'s menus reference](../build-app/references/menus.md) → *Step 1b*,
+[`build-app`'s menu for step 1b](../build-app/references/menus-1b.md) → *Step 1b*,
 because this step and that one ask the same question and two copies of one entry
 are two wordings waiting to disagree. It opens
 `- **No customer-facing visuals.**`, and those three words are load-bearing: they

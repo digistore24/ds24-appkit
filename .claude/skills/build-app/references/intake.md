@@ -13,8 +13,10 @@ the person who wonders for thirty minutes whether anything is going right.
 
 > "Good — I can build that. Five short questions first, about two minutes, so I
 > don't decide things for you that you should decide. After that I'll show you
-> what your app will look like when I'm done, and only then start building —
-> that part runs about twenty minutes, and I'll say where I am as I go."
+> what your app will look like when I'm done, and only then start building — in
+> stages of roughly ten minutes each. After every stage you can open the app
+> and look at it, and I stop and ask before the next one. If you'd rather I ran
+> straight through, say so then."
 
 Adjust the numbers to the truth, never downward for comfort.
 
@@ -100,7 +102,9 @@ in front of the user in plain words and **wait for a yes**:
 
 Half a page, no file paths, no table names. Then: *"Shall I build that? Say what
 is wrong and I'll change it — after this it becomes code, and changing it then
-costs real time."*
+costs real time. I'll build it in stages, one line of that list at a time, and
+after each one you can open it and look."* The yes starts the FIRST stage, not
+the whole list — [`stages.md`](stages.md) is what happens after it.
 
 **Then write it down, and write it down as they agreed it.** The same four points
 go into `docs/plan.md` — the shape is

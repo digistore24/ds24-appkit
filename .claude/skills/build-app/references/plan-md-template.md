@@ -23,6 +23,8 @@ this says what is not there yet._
 - **Bills:** <one purchase | subscription | by usage>
 - **Look:** <"docs/design.md — <the direction chosen>", or "the shipped look,
   decided <date>">
+- **Pace:** <"in stages" (the default: one line below per turn, the app opens
+  after each), or "run through without stopping — asked for on <date>">
 
 ## What the customer will be able to do
 
@@ -47,6 +49,13 @@ to while the end picture was being agreed left no trace at all, so it came back
 as a proposal three sessions later, from an agent with no way of knowing it was
 settled. The rule `coach` works by — **a recorded "no" is an answer** — can only
 reach what somebody wrote down.
+
+**Each unticked line is one STAGE of the build** — built, opened, handed back,
+and only then ticked (`build-app` → *After the yes*, and
+[`stages.md`](stages.md)). So a session that finds unticked lines and
+uncommitted files knows exactly where the last one stopped. The `Pace:` line is
+the one place "run through without stopping" is recorded; a session that reads
+it there does not ask again.
 
 **And what is deliberately NOT in here.** No ids, no estimates, no acceptance
 criteria, no file per heading, and no status vocabulary beyond the checkbox: the

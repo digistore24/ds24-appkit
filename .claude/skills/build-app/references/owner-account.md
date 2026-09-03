@@ -2,9 +2,15 @@
 
 # The operator account — the CLI cases and the sign-in details
 
-_Read from `build-app`, step 3b. Locally the first account makes itself (the
-rule is in the skill); this file holds the two cases that still need the CLI,
-and how sign-in works._
+_Read from `build-app`, step 3b. Locally the first account makes itself; this
+file holds why that rule is as narrow as it is, the two cases that still need
+the CLI, and how sign-in works._
+
+**The rule is `lib/users/bootstrap.ts`, and it is narrow on purpose: the very
+first account, in DEV only.** Anything after it is a `member`, and outside DEV
+every account is, including the first — a freshly deployed instance has an
+empty user table too, and the first person to sign in there may be a customer.
+Handing them user management would be an account takeover.
 
 **Two cases still need the CLI**, and neither is step 3b:
 

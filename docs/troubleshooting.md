@@ -653,3 +653,73 @@ said, and how often it has failed. It is the answer that survives a restart,
 and it is what `node run.mjs health --url …` asks on your behalf. Use `errors`
 to find out **what** broke; use `cron --list` to find out **that** something
 did.
+
+## The build stopped half-way — a usage limit, not a bug
+
+The symptom: the agent had been building for a long stretch — tool calls
+scrolling past, files appearing — and then the program stopped with a line
+like *"You've hit your limit · resets at …"*. `node run.mjs start` fails, or a
+page answers 500, and there are no more turns until the window resets. It
+looks like the template broke. It did not: **the account's usage window ended
+in the middle of one turn**, and everything that turn had not finished is
+exactly as far along as it got.
+
+**What state the project is in.** The build runs in stages — one line of
+`docs/plan.md` per turn, each handed back committed and running (`build-app` →
+*After the yes*). So:
+
+- every line ticked in `docs/plan.md` is a stage that was committed on green
+  and started once; `git log` shows one commit per stage;
+- the first unticked line is the stage that was cut, and `git status` shows
+  what it left behind — uncommitted files, possibly a migration that ran
+  locally and is not in a commit;
+- nothing before it is lost, and nothing after it was started.
+
+**What to do when the window is back.** Say *"continue"*. The agent reads
+`docs/plan.md` and `git status`, names the interrupted stage, and finishes that
+one first — never starts over, never skips it (`build-app` →
+`references/stages.md`, *When a session was cut*). If you need the app running
+before then, the last committed stage does run: `git stash` parks the
+half-built one and `node run.mjs start` brings up what was there. The stash is
+the interrupted stage; the agent brings it back before anything new.
+
+**Two things about the program, not the app.** Recent versions of Claude Code
+offer to wait and continue by themselves when a limit is hit (`/rate-limit-options`);
+if yours does, the interrupted stage is simply finished when the window resets.
+And a stage boundary is a checkpoint: `/rewind` can take the project back to
+any hand-back, which is one more reason the build stops there.
+
+**Why the build is staged at all.** The template cannot see which plan the
+person at the keyboard is on — that information reaches the status line and
+nothing else — so it works the same way for everybody: a stage is sized to fit
+comfortably inside a window, it ends with something to open, and the one
+sentence it costs somebody on a large plan is *"run through"*, recorded once as
+the `Pace:` line of `docs/plan.md`. A build that ran forty minutes in one turn
+was the shape that produced this section, reported by a customer whose own
+plan had room for it and who asked what happens to the ones whose does not.
+
+## The read guard said no — read a range
+
+The symptom: a `Read`, or a `cat` in a command, comes back refused with a
+sentence like *"`app/dashboard/account/page.tsx` has 409 lines. Whole-file
+reads stay in your context for every request after, so read a RANGE …"*. That
+is `scripts/dev/hooks/read-guard.mjs`, a Claude Code `PreToolUse` hook shipped
+in `.claude/settings.json`, and it is doing what it is for.
+
+**What to do:** read the part you need — `Read` with `offset` and `limit`, or
+`sed -n '120,180p'`, or `grep -n` for the name you are after. A doc over the
+threshold has a *Contents* block or sections; `docs/api-map.md` has one section
+per file. A `cat … | head -60` passes, because it is a range.
+
+**Why it exists.** Measured over two archived build sessions: thirteen whole
+reads of files over 200 lines put 51,000 tokens into a context that every one
+of the next 150 requests then re-read — about a fifth of what the build cost.
+The sentence in `CLAUDE.md` → *Reading the tree* had said "in a RANGE rather
+than whole" the whole time; a refusal is what a sentence becomes when it is
+measured being ignored.
+
+**What not to do:** remove the hook, or read the file in two halves to get
+around it. The threshold is 200 lines and it is stated in the script with the
+numbers it was chosen from. Codex, OpenCode and Antigravity run no hooks, so
+there the sentence is the only guard — read the same way.
+

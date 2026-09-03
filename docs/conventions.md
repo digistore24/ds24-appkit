@@ -302,6 +302,13 @@ const t = await getTranslations("users");
 t.rich("hint", { code: (chunks) => <code>{chunks}</code> })
 ```
 
+**Finding a key: grep, never the catalogue.** `messages/de.json` is a file
+sessions read whole, 25 times in 11 field runs, to find one key. The key is a
+grep away — `grep -n '"title"' messages/de.json` — and the catalogue's shape is
+already known: one object per namespace, one string per key, the same keys in
+every `messages/<code>.json`. Read the catalogue only to add to it, and then
+the namespace, not the file.
+
 - **Dates and prices are formatted, never spelled by hand.**
   `useFormatter().dateTime(…)` or `formatPrice(def, locale)`, never
   `toLocaleDateString("de-DE")`.

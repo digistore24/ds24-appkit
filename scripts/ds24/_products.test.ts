@@ -90,7 +90,13 @@ describe("script and app agree", () => {
       // different one, so the app side is reproduced from the same rule it
       // documents: a token is contradicted by "subscriptions", anything else
       // by "tokens".
+      // …and a PARKED product (`"sell": false`) contradicts nothing — the rule
+      // `contradictingProducts()` applies and this reproduction has to apply
+      // too. Measured 2026-09-03 on a throwaway deploy: build-app step 1 tells
+      // the customer to park a sample product exactly this way, and this test
+      // then went red on an app with no line of its own code.
       const expected = Object.entries(registry.products)
+        .filter(([, p]) => isSold(p as { sell?: boolean }))
         .filter(([, p]) =>
           (p as { kind: string }).kind === "token"
             ? mode === "subscriptions"
@@ -99,6 +105,20 @@ describe("script and app agree", () => {
         .map(([key]) => key);
       expect(contradictingProducts(shifted), mode).toEqual(expected);
     }
+  });
+
+  it("a PARKED product (sell: false) contradicts nothing — build-app step 1 says to park one", () => {
+    // A fixture, deliberately not the shipped registry: an app that followed the
+    // skill and parked its first sample product must not turn this test red
+    // (the first version of it did exactly that — it assumed the shipped
+    // registry unparked, the same mistake in green).
+    const parked = {
+      billingMode: "tokens" as BillingMode,
+      products: { abo: { kind: "subscription", sell: false }, einmal: { kind: "one_time" } },
+    };
+    expect(contradictingProducts(parked)).toEqual(["einmal"]);
+    // The counter-test: unparked, the same plan is named.
+    expect(contradictingProducts({ ...parked, products: { ...parked.products, abo: { kind: "subscription" } } })).toEqual(["abo", "einmal"]);
   });
 });
 

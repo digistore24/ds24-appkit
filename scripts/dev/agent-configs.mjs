@@ -51,6 +51,15 @@ export const NODE_PROBE =
 /** The greeting every program runs at session start. */
 export const GREETER = "node scripts/dev/session-start.mjs";
 
+/**
+ * The read guard — Claude Code only, because only Claude Code runs a
+ * `PreToolUse` hook. It refuses a whole-file `Read` (no offset/limit) and an
+ * unpiped `cat` on a file over 200 lines, with the line count and the two
+ * ways that work. The rule it enforces is CLAUDE.md → *Reading the tree*; the
+ * measurement behind it is in the script's header.
+ */
+export const READ_GUARD = "node scripts/dev/hooks/read-guard.mjs";
+
 const claudeSettings = `{
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "hooks": {
@@ -65,6 +74,17 @@ const claudeSettings = `{
           {
             "type": "command",
             "command": ${JSON.stringify(GREETER)}
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Read|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ${JSON.stringify(READ_GUARD)}
           }
         ]
       }

@@ -117,6 +117,14 @@ const TASKS = {
       await npm("test");
     },
   },
+  "api-map": {
+    group: "Tests & quality",
+    // The signatures behind every lib/ file the guidance names, plus the
+    // tables — so a session reads a section instead of a 14 kB file.
+    // `scripts/api-map.test.ts` fails when the map is behind the tree.
+    help: "Regenerate docs/api-map.md — the signatures behind the lib/ files the guidance names (--check: only compare)",
+    run: (args) => script("scripts/dev/api-map.mjs", args),
+  },
   typecheck: {
     group: "Tests & quality",
     help: "TypeScript check on its own",

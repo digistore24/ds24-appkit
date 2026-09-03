@@ -2,6 +2,10 @@
 
 # Gating examples — entitlement check and token charge
 
+_The signatures of every function used below, and of every other `lib/` file the
+guidance names, are in `docs/api-map.md` — one section per file. Read the
+section; open the source only when a signature is not enough._
+
 _Read from `build-app`, step 3: the two worked snippets. The rules around them
 — check → work → charge in that order, never a member id in `spendTokens`'
 signature, never answering access from a billing table — stay in the skill

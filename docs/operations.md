@@ -190,6 +190,13 @@ The routine, and how each answer is rated, is `CLAUDE.md` → *Never ship a brok
 page*. Getting the app onto a host so that there is something to ask at all is
 [`docs/DEPLOY.md`](DEPLOY.md).
 
+**A page fetched as the owner, from a script.** Locally, `scripts/dev/sign-in.mjs`
+exports `signInAsOwner(baseUrl)` — what `smoke`'s second pass uses. It answers
+`{ cookie, as, role }` (send `cookie` as the `cookie` header), `{ skipped, reason }`
+when no owner exists yet (the reason names the `user-create` command), or
+`{ refused }`; DEV only, because it goes through the development login. That is
+the whole API; the script does not need reading.
+
 **How these are misread.** `smoke`'s line *"9 protected page(s) NOT checked"* is
 **not** a pass — those are the pages carrying the real queries; provision the
 sign-in once with `node run.mjs smoke-account --apply` and run it again.

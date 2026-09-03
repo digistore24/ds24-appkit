@@ -44,6 +44,21 @@ Digistore24 asks for and who decides are
 [`docs/compliance.md`](compliance.md) §6.5, and the skill is
 `compliance-check`.
 
+## Contents
+
+_Read the section you need, not the file — it is long, and sessions read it whole. A `grep -n "^## "` lists the same._
+
+- *The module, and the one file you set*
+- *Which shape is this vendor's course?*
+- *Where the rows come from — and how they reach PROD*
+- *Shape 1 — the self-study course*
+- *Shape 2 — the week-by-week programme*
+- *Shape 3 — the accompanied workshop*
+- *When none of these fit*
+- *Subjects — the one convention all shapes share*
+- *Over the API — the course, for a member's own program*
+- *Planning from a corpus*
+
 ## The module, and the one file you set
 
 The course is a MODULE — `node run.mjs module add courses`, then `db-migrate`.

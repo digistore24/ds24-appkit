@@ -79,6 +79,18 @@ their way around one skill has then found their way around all of them:
   four minutes. They were not short of text. They were short of a thread — every
   line said what was happening and none of them said where it ended, which from
   the other chair is indistinguishable from a machine going in circles.
+- **Anything that would run unattended for more than a few minutes is handed
+  back in pieces the customer can OPEN — and the turn ends at each one.** The
+  rule above is about narration; this one is about stopping, and narration does
+  not replace it: measured over the field-test archive, the build turn after the
+  customer's yes ran 17–30 minutes in fourteen runs while speaking every minute,
+  and a customer measured 44 on a slower model. The person at the keyboard may
+  be on a plan whose usage window one such turn exhausts, and the template
+  cannot see which plan that is, so the shape is the same for everybody: a piece
+  is something they can open (`build-app` → *After the yes*, one `docs/plan.md`
+  line per turn), it is committed before it is handed back, and the hand-back
+  names the address and asks. The customer who does not want the stops says so
+  once — "run through" — and that answer is written down, never re-asked.
 - **No technical word arrives unexplained.** Commit, branch, pull request, port,
   migration, schema, environment variable — each is a word somebody here is
   meeting for the first time. Use it where it is the right word, and put its

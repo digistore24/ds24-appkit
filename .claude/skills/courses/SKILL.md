@@ -176,7 +176,7 @@ differs" is answered without downloading the course. It writes nothing and exits
 exactly where it is — and a slug the operator authored on the admin surface is in
 its own list, *would be refused*, because `content-apply` refuses the whole run
 rather than writing around such a row. Details:
-[`docs/courses.md`](../../../docs/courses.md).
+[`docs/courses.md`](../../../docs/courses.md) → *Where the rows come from — and how they reach PROD*.
 
 ### 5a. "There is already a beginners' course" — stop and ask
 

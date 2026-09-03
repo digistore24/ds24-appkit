@@ -103,6 +103,8 @@ sessions it outweighs every command and every check together. A broad question
 ("where is X used") is worth a **subagent** where you have one: measured, it hands
 back one part in sixty-five. Where you have none, and for a file you already
 know, read directly — in a RANGE rather than whole, and never through `cat`.
+In Claude Code a hook enforces that above 200 lines (`scripts/dev/hooks/read-guard.mjs`)
+and answers with the line count; elsewhere it is still the rule.
 
 ## The path
 
@@ -293,7 +295,7 @@ notification. Errors that are not what they look like are
 3. Assemble the UI from `components/ui/`; `npx shadcn@latest add <component>` fetches
    what is missing.
 4. **Texts in every `messages/<code>.json`** — all of them, and the list is
-   `LOCALES` in `i18n/config.ts`.
+   `LOCALES` in `i18n/config.ts`. Find a key with grep, never by reading a catalogue.
 5. **Write tests** (`vitest`) for the new logic and rules.
 6. `npm run typecheck && npm run test`, green, before the deploy.
 7. **`node run.mjs start && node run.mjs smoke && node run.mjs errors`** — call the new
@@ -345,7 +347,9 @@ moderator may actually do: **[`docs/community.md`](docs/community.md)**.
 
 ## Access — what a Member may use
 
-Three functions, all in `lib/entitlements/manage.ts`, and nothing else:
+Three functions, all in `lib/entitlements/manage.ts`, and nothing else —
+their signatures, and every other `lib/` file's the guidance names, are in
+**[`docs/api-map.md`](docs/api-map.md)**; read the section there before the file:
 
 ```ts
 import { hasPlan, entitlementsFor, planStartedAt } from "@/lib/entitlements/manage";

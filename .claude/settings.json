@@ -15,6 +15,17 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Read|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node scripts/dev/hooks/read-guard.mjs"
+          }
+        ]
+      }
     ]
   }
 }
