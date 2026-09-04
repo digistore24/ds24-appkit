@@ -74,6 +74,14 @@ Three answers, all valid, none negotiated:
 | **a correction** | fix it inside THIS stage first, hand back again, then ask again |
 | **"run through" / "don't stop"** | write `- **Pace:** run through without stopping — asked for on <date>` into `docs/plan.md`, and from then on hand each stage back in one paragraph WITHOUT the question, in the same turn. Never ask again in this project: a session that reads the `Pace:` line has its answer |
 
+**Files and function names, if you name them at all, go under their own line
+at the very END.** The customer reads the first lines, whoever reads code reads
+the last; the example above names none. A hand-back that opens with
+`whatPaysFor()` and two sibling functions before it says what the customer can
+now see has its two readers the wrong way round — measured on a customer's app,
+2026-09-04, and the rule is `CLAUDE.md` → *Rules*, the shape with an example
+`docs/guidance.md` → *How a skill works*.
+
 **The address is not optional.** A hand-back that says "done" without saying
 where to look leaves the customer with nothing to open — measured in a field
 run whose closing line was *"fertig gebaut und läuft"* and named no page.
@@ -108,6 +116,19 @@ are the reasons, in the customer's words if they ask:
 And it costs the customer who does not need it exactly one sentence — "run
 through" — which is why the default is the careful one.
 
+**The same announcement names the third door: a fresh session.** One sentence,
+once — *"You can also close this and start a new session in the project folder
+whenever you like; it reads `docs/plan.md` and `git status` and carries on at
+the first open line."* Everything a stage needs is on disk by the time the
+turn ends — that is what the checklist above is FOR — so a session is
+disposable at every hand-back, and a developer who keeps their context clean
+by starting over should hear that the path is built, not discover it. Say it
+once and not at every hand-back: a fresh session pays the entry again
+(`CLAUDE.md`, this skill, its references — measured over 26 sessions, reading
+the tree outweighs everything else), and starting one level up is the step
+`docs/start.md` names as the one that goes wrong most often. "go" stays the
+default; the sentence makes the other door visible.
+
 ## When a session was cut in the middle of a stage
 
 A new session in this project reads two things before it does anything:
@@ -116,6 +137,16 @@ files is an interrupted stage**, and it is finished FIRST — not started over,
 not skipped, not left beside a new one. Say which line it is, look at what is
 there, and carry that stage through the checklist above to its hand-back. Only
 then the next line.
+
+**Ticked lines, a clean tree, and the customer says "go", "continue" or
+"weiter" — that is not a cut session and not a new build.** The first
+unticked line of `docs/plan.md` is the next stage; start it with the same
+checklist, in the same turn. Do NOT run the intake again, do not ask for the
+end picture again, do not treat "build my app" as a first contact: a
+`docs/plan.md` with open lines IS the agreed picture, and a session that asks
+the five questions over a plan already written measures nothing but its own
+memory. If the plan's last line is ticked, the build is done — say so, and
+name what the LAST hand-back names (the placeholders and their skills).
 
 If the customer needs the app running NOW and the interrupted stage is far from
 green, `git stash` parks the half-built stage and the last committed one

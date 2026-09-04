@@ -96,6 +96,35 @@ their way around one skill has then found their way around all of them:
   meeting for the first time. Use it where it is the right word, and put its
   plain meaning in the same sentence, once. A question nobody can parse gets
   answered at random, and that answer then travels on as if it were a decision.
+- **The hand-back is written for the person who does not read code — and the
+  files come last.** Every turn that ends, ends in somebody's hands, and the
+  first paragraph is the one they read. It says what has CHANGED for them —
+  what they can now open, do, or no longer see — and what is still open, in the
+  words step 0 of `CLAUDE.md` → *Adding a feature* used for "done when". Then,
+  under its own line at the very end, the part for whoever reads the code:
+
+  > **What changed for you:** a subscriber whose plan is paused now sees "Your
+  > plan is on hold — nothing is lost" on the invoice page instead of being
+  > asked to choose a plan; I set that state up and looked at the page. The
+  > data download now includes the invoicing data. Three labels were renamed
+  > so a word no longer means two things in one sidebar.
+  >
+  > **Still open:** the German label for "History" — say which of the two.
+  >
+  > **For whoever reads the code:** `lib/billing/rules.ts` → `pausedPlanKey()`,
+  > four tests; `lib/privacy/export.ts` five new sections; `docs/app.md`
+  > carries the two traps.
+
+  A function name in the first paragraph is the rule broken, however good the
+  work. Measured on a customer's app on 2026-09-04: a session closed a critical
+  finding and opened with *"`whatPaysFor()` now has a paused case fed by
+  `pausedKeys()` + `suspendedKeysFor()`"* — three function names before the
+  sentence the customer was waiting for — and the customer asked for exactly the
+  shape above, in their own words: *what has changed for the customer and what is
+  still open; the file paths could be added at the bottom.* The archive agrees:
+  of 155 hand-backs in 30 field runs, 32 open with a file or function name and
+  THREE put them last (`scripts/dogfood/observe.mjs` reads it off every run as
+  *Übergabe*, in the Turns table).
 - **Look before you ask.** Almost everything a skill needs to know is on disk:
   `.env`, the files under `config/`, the tables in `db/`, the reports in
   `docs/reports/`. Ask only about what genuinely leaves no trace, and then in
