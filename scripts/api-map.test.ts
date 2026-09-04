@@ -131,8 +131,27 @@ describe("tablesOf lists each column once", () => {
 
   it("names the table and its columns, once each, without the index argument", () => {
     expect(tablesOf(source)).toEqual([
-      { constant: "users", table: "users", columns: ["id", "name", "ownerId", "createdAt"] },
+      {
+        constant: "users",
+        table: "users",
+        columns: ["id", "name", "ownerId", "createdAt"],
+        // The builder is the type — the one fact a page needs before it can
+        // show the value (a `numeric` is a string on the way out).
+        types: { id: "text", name: "text", ownerId: "text", createdAt: "timestamp" },
+      },
     ]);
+  });
+
+  it("a numeric column is shown with its type, a text column without", () => {
+    const source = [
+      'export const offers = pgTable("offers", {',
+      "  id: text().primaryKey(),",
+      '  areaSqm: numeric("area_sqm", { precision: 10, scale: 2 }).notNull(),',
+      '  coats: integer("coats").notNull(),',
+      "});",
+    ].join("\n");
+    const [t] = tablesOf(source);
+    expect(t.types).toEqual({ id: "text", areaSqm: "numeric", coats: "integer" });
   });
 
   it("🚨 needle: the real schema has no duplicated column", () => {

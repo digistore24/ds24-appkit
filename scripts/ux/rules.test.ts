@@ -34,6 +34,9 @@ import {
   findUnnamedIconButtons,
   findImagesWithoutAlt,
   findPlaceholderHome,
+  findNumberInputsWithoutStep,
+  findExampleProducts,
+  SHIPPED_EXAMPLE_PRODUCT_NAMES,
   navHrefs,
   routeShape,
   RAW_ELEMENT_EXCEPTIONS,
@@ -1023,5 +1026,63 @@ describe("findRawElements reads a whole tag, not up to the first `>`", () => {
       found: "<button>",
       kind: "hard",
     });
+  });
+});
+
+describe("findNumberInputsWithoutStep", () => {
+  it("flags a number input that never says its step", () => {
+    const hits = findNumberInputsWithoutStep(
+      '<Input\n  name="travelKm"\n  type="number"\n  min="0"\n/>',
+    );
+    expect(hits).toHaveLength(1);
+    expect(hits[0].line).toBe(1);
+  });
+
+  it("accepts a step, whichever way it is written", () => {
+    expect(findNumberInputsWithoutStep('<Input type="number" step="0.1" />')).toEqual([]);
+    expect(findNumberInputsWithoutStep('<input type="number" step={1} />')).toEqual([]);
+    expect(findNumberInputsWithoutStep('<Input type="number" step="any" />')).toEqual([]);
+  });
+
+  it("is not fooled by a comment or by a text input", () => {
+    expect(findNumberInputsWithoutStep('// `type="number"` is convenience\n<Input type="text" />')).toEqual([]);
+  });
+});
+
+describe("findExampleProducts", () => {
+  const registry = (products: Record<string, unknown>) => JSON.stringify({ products });
+
+  it("flags a product on sale under a shipped example name", () => {
+    expect(
+      findExampleProducts(registry({ basic_monthly: { name: "Basic (monthly)", sell: true } })),
+    ).toEqual([{ key: "basic_monthly", name: "Basic (monthly)" }]);
+  });
+
+  it("a missing sell field is on sale — the registry's own default", () => {
+    expect(findExampleProducts(registry({ basic_yearly: { name: "Basic (yearly)" } }))).toHaveLength(1);
+  });
+
+  it("a parked example and a renamed product are not findings", () => {
+    expect(
+      findExampleProducts(
+        registry({
+          starter_tokens: { name: "Starter Tokens", sell: false },
+          basic_monthly: { name: "Streichpreis Abo", sell: true },
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("answers nothing for a registry it cannot read", () => {
+    expect(findExampleProducts("{ not json")).toEqual([]);
+  });
+
+  it("the list is what the shipped registry says today", () => {
+    // The factory holds the same list against template/config/digistore-products.json;
+    // here the local copy is read so a renamed example is red in the app too.
+    const names = Object.values(
+      JSON.parse(readFileSync(join(__dirname, "..", "..", "config", "digistore-products.json"), "utf8")).products,
+    ).map((def) => (def as { name: string }).name);
+    for (const name of names) expect(SHIPPED_EXAMPLE_PRODUCT_NAMES).toContain(name);
   });
 });

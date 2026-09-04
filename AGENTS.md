@@ -80,7 +80,7 @@ itself. Read those as capabilities, not as tool names:
 | *"ask the user"* / a multiple-choice question | Ask in plain prose and wait for the answer. Never assume one and carry on. |
 | *"in Claude Code they can type `!`"* | That is a shortcut for running one command inline. Elsewhere: tell the user the command and ask them to paste the output back. |
 | *"search the web"* | All four have it. If yours does not, say so rather than answering from memory — it is used for prices and current APIs. |
-| *"open the page and look"* (`ux-gateway`) | That skill says what to do without a browser tool, and stopping is one of the options. |
+| *"open the page and look"* (`ux-gateway`) | Ask, then `node run.mjs agent-browser --apply` gives you one (Playwright, headless, next session). That skill says what to do until then, and stopping is one of the options. |
 
 **One capability is not yours but the machine's: is the person at this screen?**
 The greeting says so when the answer is no (`[Machine: no browser here …]`), and
@@ -104,7 +104,11 @@ sessions it outweighs every command and every check together. A broad question
 back one part in sixty-five. Where you have none, and for a file you already
 know, read directly — in a RANGE rather than whole, and never through `cat`.
 In Claude Code a hook enforces that above 200 lines (`scripts/dev/hooks/read-guard.mjs`)
-and answers with the line count; elsewhere it is still the rule.
+and answers with the line count; elsewhere it is still the rule. 🚨 **And a
+subagent is waited for inside the turn that started it** — keep working on what
+does not depend on it, or block on it; never end the turn with "I'll get back to
+you when it is done". A turn that ends is over, and the person then has to
+restart it (measured: a build that stalled on exactly that sentence).
 
 ## The path
 
@@ -194,7 +198,8 @@ class, no fourth feedback mechanism.
    confirm button `variant="destructive"` and never the accent.
 3. **Every new page has a way in, in the same commit** — one line in `NAVIGATION`
    (`components/app-shell.tsx`) plus its text in every language file, or a **link** if it
-   is a `[param]` page; and its `<EmptyState>`, the state most customers meet first.
+   is a `[param]` page; **its card on `/dashboard`** (`app/dashboard/overview-links.test.ts`);
+   and its `<EmptyState>`, the state most customers meet first.
 4. **Both modes, always.** Colours come from tokens, never from Tailwind palettes, and
    **every dial is set in BOTH blocks, not only `:root`** (`--radius` excepted).
    `node run.mjs ux-check` fails on a token defined in one block only.
@@ -246,7 +251,9 @@ formatting helpers: **[`docs/conventions.md`](docs/conventions.md)**.
 **Before you tell the user that something is done, you MUST call the page up yourself.**
 Without exception — green tests and a successful build do NOT rule out an app that
 greets the user with "Internal Server Error"
-([`docs/conventions.md`](docs/conventions.md) → *What checks a component*).
+([`docs/conventions.md`](docs/conventions.md) → *What checks a component*). The three
+commands below see the SERVER; a page is seen in a browser. Without a browser tool,
+ask, then `node run.mjs agent-browser --apply` gives you one for the next session.
 
 ```bash
 node run.mjs start                # DB + migrations + app
@@ -286,9 +293,10 @@ notification. Errors that are not what they look like are
    things out is exempt. A feature too big for one session writes its plan down first,
    as a dated `Planned:` line in `docs/app.md`.
 1. Extend `db/schema.ts` → `node run.mjs db-generate` → check the file →
-   `node run.mjs db-migrate`; the migration belongs in the commit. Content the operator
-   authors himself belongs in code, not tables:
-   [`docs/content-authority.md`](docs/content-authority.md).
+   `node run.mjs db-migrate`; the migration belongs in the commit. A table keyed on
+   the Member joins `docs/data-protection.md` and `lib/privacy/export.ts` in the
+   same commit (`lib/privacy/inventory.test.ts`). Content the operator authors
+   himself belongs in code, not tables: [`docs/content-authority.md`](docs/content-authority.md).
 2. Build the protected page under `app/dashboard/…` and gate purchase-dependent content
    with `hasPlan(memberId, productKey)` — never on a billing table. A page deliberately
    OUTSIDE `/dashboard` needs its line in `app/route-protection.test.ts`.

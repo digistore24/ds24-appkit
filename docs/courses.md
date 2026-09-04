@@ -418,7 +418,7 @@ A course area OUTSIDE `/dashboard` needs the three edits `CLAUDE.md` →
 `docs/app.md` as code, never as prose:
 
 ```ts
-if (!(await hasPlan(memberId, "course_complete"))) redirect("/plans");
+if (!(await hasPlan(memberId, "course_complete"))) redirect("/plans?needs=course_complete");
 ```
 
 No per-unit gate. This shape's defining property is that nothing stands

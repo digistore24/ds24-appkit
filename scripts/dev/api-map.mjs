@@ -173,6 +173,7 @@ export function tablesOf(source) {
   const out = [];
   for (const hit of blanked.matchAll(/export const ([A-Za-z0-9_$]+)\s*=\s*pgTable\(\s*"([a-z0-9_]+)"\s*,\s*\{/g)) {
     const columns = [];
+    const types = {};
     let depth = 1;
     let at = hit.index + hit[0].length;
     let lineStart = true;
@@ -184,13 +185,16 @@ export function tablesOf(source) {
       if (depth === 1 && lineStart) {
         // Only the key on THIS line. `\s*` would run across the blank lines a
         // blanked comment leaves behind and count the next key once per line.
-        const m = blanked.slice(at).match(/^[ \t]*([A-Za-z0-9_$]+)\s*:/);
-        if (m) { key = m[1]; columns.push(key); }
+        // The builder after the colon is the column's TYPE — `numeric(`,
+        // `integer(`, `text(`, an enum's name — and it is kept because one of
+        // them changes what a page must do with the value (see `types`).
+        const m = blanked.slice(at).match(/^[ \t]*([A-Za-z0-9_$]+)\s*:\s*([A-Za-z0-9_$]+)\s*\(/);
+        if (m) { key = m[1]; columns.push(key); types[key] = m[2]; }
       }
       lineStart = ch === "\n";
       at += 1;
     }
-    out.push({ constant: hit[1], table: hit[2], columns });
+    out.push({ constant: hit[1], table: hit[2], columns, types });
   }
   return out;
 }
@@ -232,6 +236,46 @@ parts, in this order, and each has a grep anchor:
 The navigation entry is one line in \`NAVIGATION\` (\`components/app-shell.tsx\`,
 grep \`NAVIGATION\`) plus its label in every \`messages/<code>.json\` — find a key
 with grep, never by reading a catalogue.
+
+Three things a field run got wrong on the first app built with this map, each
+now a rule in \`docs/ux.md\` and repeated here because this is where a page is
+laid out:
+
+- **Actions go straight into \`<PageHeader>\` as its children** — never inside a
+  wrapper \`<div className="flex">\` of your own. The header's own container
+  wraps at 390 px; your div does not, and the page scrolled sideways.
+- **Your app's card is the FIRST card on \`/dashboard\`**, above the shipped
+  "Das hast du" and "Abrechnung": a member came for the product, and on a phone
+  the third card is below two scrolls (\`docs/ux.md\` → *0. What a page is built
+  from*).
+- **A table on a phone shows the column that IS the product first**, or becomes
+  cards below \`sm:\`; and copy never says "rechts", "unten" or "links" — every
+  layout stacks on a phone (\`docs/ux.md\` → *6. Small screens*, *4. Words*).
+
+Five more from the second app, found by looking at it rather than at its
+tests — \`docs/ux.md\` owns each, this is where they are needed:
+
+- **Gated-Tool: the RESULT is a \`<Card>\` ABOVE the form, and the form keeps
+  what was typed** (\`defaultValue\` from the last action state). Measured: the
+  quote landed below the form, a phone had to scroll for it, and every field
+  was empty again — changing one number meant retyping four.
+- **Your app's card is the FIRST card on \`/dashboard\`**, with the state in it
+  and the button. \`app/dashboard/overview-links.test.ts\` is red for a section
+  of yours the overview never links; the order is the skill \`ux-gateway\`'s.
+  Measured twice: "Basic (monthly) · not connected" was all a buyer saw.
+- **A document the member hands to THEIR customer has a minimum form** —
+  recipient, the member's own details, number and date, every position as
+  quantity × unit price, a VAT line, and the member's voice ("Angebot Nr. 7"),
+  never the app's ("Dein Angebot"). Measured: a 1.3 KB PDF with three totals
+  and no m² anywhere, which nobody could send.
+- **A gate sends the member to \`/plans?needs=<productKey>\`**, never to a bare
+  \`/plans\`: the page then says which plan the click was waiting for. The
+  parameter is a key the registry knows, never a sentence (\`app/plans/needs.ts\`).
+- **Every \`<Input type="number">\` says its \`step\`** — \`"1"\` for a count,
+  the unit's grain (\`0.01\` money and m², \`0.1\` km) otherwise, \`"any"\` when
+  it does not matter; \`node run.mjs ux-check\` refuses one without. The
+  browser's own refusal speaks the browser's language, so the binding range
+  check lives in the action, translated.
 `;
 
 /**
@@ -265,7 +309,10 @@ export function renderApiMap(root = ROOT) {
     const found = tablesOf(readFileSync(join(root, file), "utf8"));
     if (found.length === 0) continue;
     tables += found.length;
-    const rows = found.map((t) => `- \`${t.table}\` (\`${t.constant}\`): ${t.columns.map((c) => `\`${c}\``).join(", ")}`);
+    // A column's type is shown only where it is not `text` — that is where a
+    // page has to do something with the value before it can be shown.
+    const shown = (t, c) => (t.types[c] && t.types[c] !== "text" ? `\`${c}\` (${t.types[c]})` : `\`${c}\``);
+    const rows = found.map((t) => `- \`${t.table}\` (\`${t.constant}\`): ${t.columns.map((c) => shown(t, c)).join(", ")}`);
     tableSections.push(`### ${file}\n\n${rows.join("\n")}\n`);
   }
 
@@ -298,6 +345,19 @@ ${sections.join("\n")}
 Core schema first, then each module's. Columns only; indexes and constraints
 live in the file. A table's column named \`memberId\` is the customer
 (\`users.id\`); \`NULL\` means "not", a timestamp means "since when".
+
+🚨 **A \`numeric\` column arrives as a STRING** — Drizzle hands you \`"40.00"\`,
+not \`40\` — so it is formatted on the way out (\`useFormatter().number()\` /
+\`getFormatter()\`, with a unit or \`style: "currency"\`), never rendered raw
+and never \`toFixed\`-ed by hand; an input's \`defaultValue\` is formatted the
+same way. Measured in a field run: \`{offer.areaSqm} m²\` printed \`40.00 m²\`
+on a German quote beside a correctly formatted \`367,50 €\`. The rule is
+\`docs/conventions.md\` → *Text, dates and prices*.
+
+**And a table keyed on the member is personal data**: the moment it exists it
+gets its row in \`docs/data-protection.md\` and its section in
+\`lib/privacy/export.ts\` (a module: its \`privacy/sections\`), in the same
+commit — \`lib/privacy/inventory.test.ts\` fails the build otherwise.
 
 ${tableSections.join("\n")}`;
 }

@@ -118,6 +118,8 @@ export function SetupKeys({ rows }: { rows: KeyRowView[] }) {
                     id="lifetimeDays"
                     name="lifetimeDays"
                     type="number"
+
+                    step="1"
                     min={0}
                     max={3650}
                     placeholder={t("lifetimePlaceholder")}

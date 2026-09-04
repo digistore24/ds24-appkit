@@ -45,6 +45,46 @@ The navigation entry is one line in `NAVIGATION` (`components/app-shell.tsx`,
 grep `NAVIGATION`) plus its label in every `messages/<code>.json` — find a key
 with grep, never by reading a catalogue.
 
+Three things a field run got wrong on the first app built with this map, each
+now a rule in `docs/ux.md` and repeated here because this is where a page is
+laid out:
+
+- **Actions go straight into `<PageHeader>` as its children** — never inside a
+  wrapper `<div className="flex">` of your own. The header's own container
+  wraps at 390 px; your div does not, and the page scrolled sideways.
+- **Your app's card is the FIRST card on `/dashboard`**, above the shipped
+  "Das hast du" and "Abrechnung": a member came for the product, and on a phone
+  the third card is below two scrolls (`docs/ux.md` → *0. What a page is built
+  from*).
+- **A table on a phone shows the column that IS the product first**, or becomes
+  cards below `sm:`; and copy never says "rechts", "unten" or "links" — every
+  layout stacks on a phone (`docs/ux.md` → *6. Small screens*, *4. Words*).
+
+Five more from the second app, found by looking at it rather than at its
+tests — `docs/ux.md` owns each, this is where they are needed:
+
+- **Gated-Tool: the RESULT is a `<Card>` ABOVE the form, and the form keeps
+  what was typed** (`defaultValue` from the last action state). Measured: the
+  quote landed below the form, a phone had to scroll for it, and every field
+  was empty again — changing one number meant retyping four.
+- **Your app's card is the FIRST card on `/dashboard`**, with the state in it
+  and the button. `app/dashboard/overview-links.test.ts` is red for a section
+  of yours the overview never links; the order is the skill `ux-gateway`'s.
+  Measured twice: "Basic (monthly) · not connected" was all a buyer saw.
+- **A document the member hands to THEIR customer has a minimum form** —
+  recipient, the member's own details, number and date, every position as
+  quantity × unit price, a VAT line, and the member's voice ("Angebot Nr. 7"),
+  never the app's ("Dein Angebot"). Measured: a 1.3 KB PDF with three totals
+  and no m² anywhere, which nobody could send.
+- **A gate sends the member to `/plans?needs=<productKey>`**, never to a bare
+  `/plans`: the page then says which plan the click was waiting for. The
+  parameter is a key the registry knows, never a sentence (`app/plans/needs.ts`).
+- **Every `<Input type="number">` says its `step`** — `"1"` for a count,
+  the unit's grain (`0.01` money and m², `0.1` km) otherwise, `"any"` when
+  it does not matter; `node run.mjs ux-check` refuses one without. The
+  browser's own refusal speaks the browser's language, so the binding range
+  check lives in the action, translated.
+
 ## lib/ai/chat-config.ts
 
 - `chatConfig(): ChatConfig` — The configured assistant, with every unreadable field replaced by its default.
@@ -393,102 +433,115 @@ Core schema first, then each module's. Columns only; indexes and constraints
 live in the file. A table's column named `memberId` is the customer
 (`users.id`); `NULL` means "not", a timestamp means "since when".
 
+🚨 **A `numeric` column arrives as a STRING** — Drizzle hands you `"40.00"`,
+not `40` — so it is formatted on the way out (`useFormatter().number()` /
+`getFormatter()`, with a unit or `style: "currency"`), never rendered raw
+and never `toFixed`-ed by hand; an input's `defaultValue` is formatted the
+same way. Measured in a field run: `{offer.areaSqm} m²` printed `40.00 m²`
+on a German quote beside a correctly formatted `367,50 €`. The rule is
+`docs/conventions.md` → *Text, dates and prices*.
+
+**And a table keyed on the member is personal data**: the moment it exists it
+gets its row in `docs/data-protection.md` and its section in
+`lib/privacy/export.ts` (a module: its `privacy/sections`), in the same
+commit — `lib/privacy/inventory.test.ts` fails the build otherwise.
+
 ### db/schema-ai-usage.ts
 
-- `ai_usage` (`aiUsage`): `id`, `task`, `provider`, `model`, `memberId`, `inputTokens`, `outputTokens`, `cachedInputTokens`, `cacheWriteTokens`, `thinkingTokens`, `images`, `unexplainedTokens`, `usageReported`, `costMicros`, `currency`, `costSource`, `outcome`, `latencyMs`, `createdAt`
+- `ai_usage` (`aiUsage`): `id`, `task`, `provider`, `model`, `memberId`, `inputTokens` (integer), `outputTokens` (integer), `cachedInputTokens` (integer), `cacheWriteTokens` (integer), `thinkingTokens` (integer), `images` (integer), `unexplainedTokens` (integer), `usageReported` (boolean), `costMicros` (bigint), `currency`, `costSource`, `outcome`, `latencyMs` (integer), `createdAt` (timestamp)
 
 ### db/schema-chat.ts
 
-- `chat_messages` (`chatMessages`): `id`, `memberId`, `conversationId`, `role`, `content`, `links`, `createdAt`
+- `chat_messages` (`chatMessages`): `id`, `memberId`, `conversationId`, `role` (chatRoleEnum), `content`, `links`, `createdAt` (timestamp)
 
 ### db/schema-consent.ts
 
-- `consent_records` (`consentRecords`): `id`, `memberId`, `purpose`, `granted`, `textVersion`, `locale`, `createdAt`
+- `consent_records` (`consentRecords`): `id`, `memberId`, `purpose`, `granted` (boolean), `textVersion`, `locale`, `createdAt` (timestamp)
 
 ### db/schema-core.ts
 
-- `users` (`users`): `id`, `name`, `email`, `emailVerified`, `image`, `role`, `createdAt`, `checkoutToken`, `blockedAt`, `passwordHash`
-- `accounts` (`accounts`): `userId`, `type`, `provider`, `providerAccountId`, `refresh_token`, `access_token`, `expires_at`, `token_type`, `scope`, `id_token`, `session_state`
-- `sessions` (`sessions`): `sessionToken`, `userId`, `expires`
+- `users` (`users`): `id`, `name`, `email`, `emailVerified` (timestamp), `image`, `role`, `createdAt` (timestamp), `checkoutToken`, `blockedAt` (timestamp), `passwordHash`
+- `accounts` (`accounts`): `userId`, `type`, `provider`, `providerAccountId`, `refresh_token`, `access_token`, `expires_at` (integer), `token_type`, `scope`, `id_token`, `session_state`
+- `sessions` (`sessions`): `sessionToken`, `userId`, `expires` (timestamp)
 
 ### db/schema-cron.ts
 
-- `cron_runs` (`cronRuns`): `job`, `lockedAt`, `lastStartedAt`, `lastFinishedAt`, `lastOutcome`, `lastDetail`, `runs`, `failures`
+- `cron_runs` (`cronRuns`): `job`, `lockedAt` (timestamp), `lastStartedAt` (timestamp), `lastFinishedAt` (timestamp), `lastOutcome`, `lastDetail`, `runs` (integer), `failures` (integer)
 
 ### db/schema-digistore.ts
 
-- `orders` (`orders`): `id`, `memberId`, `ds24OrderId`, `ds24ProductId`, `ds24PurchaseId`, `productKey`, `credits`, `status`, `buyerEmail`, `buyerFirstName`, `buyerLastName`, `amount`, `currency`, `isGdprCountry`, `rebillingStopUrl`, `renewUrl`, `createdAt`, `updatedAt`
-- `ipn_events` (`ipnEvents`): `id`, `receivedAt`, `event`, `ds24OrderId`, `ds24PurchaseId`, `signatureValid`, `result`, `detail`, `payload`
-- `invoices` (`invoices`): `id`, `ds24OrderId`, `ds24TransactionId`, `invoiceUrl`, `amount`, `currency`, `paySequenceNo`, `createdAt`
-- `buy_url_cache` (`buyUrlCache`): `id`, `offerKey`, `offerHash`, `url`, `expiresAt`, `createdAt`, `updatedAt`
+- `orders` (`orders`): `id`, `memberId`, `ds24OrderId`, `ds24ProductId`, `ds24PurchaseId`, `productKey`, `credits` (integer), `status` (orderStatusEnum), `buyerEmail`, `buyerFirstName`, `buyerLastName`, `amount` (numeric), `currency`, `isGdprCountry` (boolean), `rebillingStopUrl`, `renewUrl`, `createdAt` (timestamp), `updatedAt` (timestamp)
+- `ipn_events` (`ipnEvents`): `id`, `receivedAt` (timestamp), `event`, `ds24OrderId`, `ds24PurchaseId`, `signatureValid` (boolean), `result` (ipnResultEnum), `detail`, `payload`
+- `invoices` (`invoices`): `id`, `ds24OrderId`, `ds24TransactionId`, `invoiceUrl`, `amount` (numeric), `currency`, `paySequenceNo` (integer), `createdAt` (timestamp)
+- `buy_url_cache` (`buyUrlCache`): `id`, `offerKey`, `offerHash`, `url`, `expiresAt` (timestamp), `createdAt` (timestamp), `updatedAt` (timestamp)
 
 ### db/schema-email-changes.ts
 
-- `email_changes` (`emailChanges`): `id`, `memberId`, `newEmail`, `tokenHash`, `requestedAt`, `expiresAt`
+- `email_changes` (`emailChanges`): `id`, `memberId`, `newEmail`, `tokenHash`, `requestedAt` (timestamp), `expiresAt` (timestamp)
 
 ### db/schema-entitlements.ts
 
-- `grants` (`grants`): `id`, `memberId`, `productKey`, `source`, `ds24PurchaseId`, `issuedBy`, `note`, `accessUntil`, `suspendedAt`, `endedAt`, `endedReason`, `createdAt`, `updatedAt`
+- `grants` (`grants`): `id`, `memberId`, `productKey`, `source` (grantSourceEnum), `ds24PurchaseId`, `issuedBy`, `note`, `accessUntil` (timestamp), `suspendedAt` (timestamp), `endedAt` (timestamp), `endedReason`, `createdAt` (timestamp), `updatedAt` (timestamp)
 
 ### db/schema-impersonation.ts
 
-- `impersonations` (`impersonations`): `id`, `operatorId`, `memberId`, `startedAt`, `expiresAt`, `endedAt`, `endedBy`
+- `impersonations` (`impersonations`): `id`, `operatorId`, `memberId`, `startedAt` (timestamp), `expiresAt` (timestamp), `endedAt` (timestamp), `endedBy`
 
 ### db/schema-media.ts
 
-- `media` (`media`): `id`, `ownerId`, `kind`, `visibility`, `planKeys`, `storageKey`, `mime`, `filename`, `bytes`, `width`, `height`, `durationSeconds`, `variants`, `sha256`, `source`, `alt`, `prompt`, `provider`, `model`, `createdAt`
-- `media_uploads` (`mediaUploads`): `id`, `ownerId`, `storageKey`, `namespace`, `category`, `kind`, `claimedMime`, `filename`, `visibility`, `planKeys`, `expiresAt`, `consumedAt`, `createdAt`
+- `media` (`media`): `id`, `ownerId`, `kind` (mediaKindEnum), `visibility` (mediaVisibilityEnum), `planKeys`, `storageKey`, `mime`, `filename`, `bytes` (integer), `width` (integer), `height` (integer), `durationSeconds` (integer), `variants` (integer), `sha256`, `source` (mediaSourceEnum), `alt`, `prompt`, `provider`, `model`, `createdAt` (timestamp)
+- `media_uploads` (`mediaUploads`): `id`, `ownerId`, `storageKey`, `namespace`, `category`, `kind` (mediaKindEnum), `claimedMime`, `filename`, `visibility` (mediaVisibilityEnum), `planKeys`, `expiresAt` (timestamp), `consumedAt` (timestamp), `createdAt` (timestamp)
 
 ### db/schema-notify.ts
 
-- `notification_sends` (`notificationSends`): `key`, `claimedAt`
+- `notification_sends` (`notificationSends`): `key`, `claimedAt` (timestamp)
 
 ### db/schema-setup.ts
 
-- `setup_keys` (`setupKeys`): `id`, `ownerId`, `name`, `tokenHash`, `prefix`, `createdAt`, `lastUsedAt`, `expiresAt`, `revokedAt`
-- `setup_confirmations` (`setupConfirmations`): `tokenHash`, `keyId`, `tool`, `inputHash`, `appEnv`, `createdAt`, `expiresAt`, `spentAt`
-- `setup_audit` (`setupAudit`): `id`, `keyId`, `ownerId`, `subjectMemberId`, `appEnv`, `tool`, `target`, `role`, `reason`, `outcome`, `code`, `rows`, `createdAt`
+- `setup_keys` (`setupKeys`): `id`, `ownerId`, `name`, `tokenHash`, `prefix`, `createdAt` (timestamp), `lastUsedAt` (timestamp), `expiresAt` (timestamp), `revokedAt` (timestamp)
+- `setup_confirmations` (`setupConfirmations`): `tokenHash`, `keyId`, `tool`, `inputHash`, `appEnv` (setupEnvEnum), `createdAt` (timestamp), `expiresAt` (timestamp), `spentAt` (timestamp)
+- `setup_audit` (`setupAudit`): `id`, `keyId`, `ownerId`, `subjectMemberId`, `appEnv` (setupEnvEnum), `tool`, `target`, `role`, `reason`, `outcome` (setupOutcomeEnum), `code`, `rows` (integer), `createdAt` (timestamp)
 
 ### db/schema-tokens.ts
 
-- `subscriptions` (`subscriptions`): `id`, `ds24PurchaseId`, `ds24OrderId`, `ds24ProductId`, `memberId`, `buyerEmail`, `status`, `billingInterval`, `amount`, `currency`, `nextPaymentAt`, `renewUrl`, `rebillingStopUrl`, `invoiceUrl`, `supportUrl`, `createdAt`, `updatedAt`
-- `token_accounts` (`tokenAccounts`): `id`, `memberId`, `balance`, `autoReloadEnabled`, `autoReloadThreshold`, `autoReloadPackageKey`, `ds24PurchaseId`, `reloadLockedAt`, `lastReloadAt`, `reloadAttempts`, `createdAt`, `updatedAt`
-- `token_ledger` (`tokenLedger`): `id`, `accountId`, `type`, `amount`, `balanceAfter`, `ds24OrderId`, `note`, `issuedBy`, `origin`, `createdAt`
+- `subscriptions` (`subscriptions`): `id`, `ds24PurchaseId`, `ds24OrderId`, `ds24ProductId`, `memberId`, `buyerEmail`, `status` (subscriptionStatusEnum), `billingInterval`, `amount` (numeric), `currency`, `nextPaymentAt` (date), `renewUrl`, `rebillingStopUrl`, `invoiceUrl`, `supportUrl`, `createdAt` (timestamp), `updatedAt` (timestamp)
+- `token_accounts` (`tokenAccounts`): `id`, `memberId`, `balance` (integer), `autoReloadEnabled` (boolean), `autoReloadThreshold` (integer), `autoReloadPackageKey`, `ds24PurchaseId`, `reloadLockedAt` (timestamp), `lastReloadAt` (timestamp), `reloadAttempts` (integer), `createdAt` (timestamp), `updatedAt` (timestamp)
+- `token_ledger` (`tokenLedger`): `id`, `accountId`, `type` (tokenLedgerTypeEnum), `amount` (integer), `balanceAfter` (integer), `ds24OrderId`, `note`, `issuedBy`, `origin`, `createdAt` (timestamp)
 
 ### modules/activity/schema.ts
 
-- `activity_results` (`activityResults`): `id`, `memberId`, `activityId`, `subject`, `state`, `score`, `maxScore`, `passed`, `attempts`, `startedAt`, `updatedAt`, `completedAt`
+- `activity_results` (`activityResults`): `id`, `memberId`, `activityId`, `subject`, `state` (jsonb), `score` (integer), `maxScore` (integer), `passed` (boolean), `attempts` (integer), `startedAt` (timestamp), `updatedAt` (timestamp), `completedAt` (timestamp)
 
 ### modules/api/schema.ts
 
-- `api_keys` (`apiKeys`): `id`, `memberId`, `name`, `tokenHash`, `prefix`, `scope`, `audience`, `createdAt`, `lastUsedAt`, `expiresAt`, `revokedAt`
+- `api_keys` (`apiKeys`): `id`, `memberId`, `name`, `tokenHash`, `prefix`, `scope` (keyScopeEnum), `audience` (keyAudienceEnum), `createdAt` (timestamp), `lastUsedAt` (timestamp), `expiresAt` (timestamp), `revokedAt` (timestamp)
 
 ### modules/community/schema.ts
 
-- `community_profiles` (`communityProfiles`): `memberId`, `displayName`, `about`, `avatarMediaId`, `createdAt`, `updatedAt`
-- `community_groups` (`communityGroups`): `id`, `name`, `description`, `position`, `accessLevel`, `planKeys`, `archivedAt`, `createdAt`
-- `community_group_moderators` (`communityGroupModerators`): `groupId`, `memberId`, `createdAt`
-- `community_discussions` (`communityDiscussions`): `id`, `groupId`, `subjectKey`, `title`, `createdBy`, `lockedAt`, `lastActivityAt`, `createdAt`
-- `community_posts` (`communityPosts`): `id`, `discussionId`, `authorId`, `content`, `createdAt`, `editedAt`, `deletedAt`, `deletedBy`, `removedReason`, `hiddenAt`
-- `community_post_media` (`communityPostMedia`): `postId`, `mediaId`, `position`
-- `community_conversations` (`communityConversations`): `id`, `participantAId`, `participantBId`, `createdAt`
-- `community_messages` (`communityMessages`): `id`, `conversationId`, `authorId`, `content`, `createdAt`, `deletedAt`, `deletedBy`, `removedReason`
-- `community_spam_reports` (`communitySpamReports`): `id`, `reporterId`, `reportedMemberId`, `postId`, `messageId`, `reason`, `attachedMessageIds`, `createdAt`, `consumedAt`
-- `community_member_standing` (`communityMemberStanding`): `memberId`, `protectedAt`, `writeBlockedAt`, `reportsIgnoredAt`, `createdAt`, `updatedAt`
-- `community_moderation_audit` (`communityModerationAudit`): `id`, `actorId`, `act`, `targetMemberId`, `postId`, `discussionId`, `reason`, `exposedMessageIds`, `createdAt`
-- `community_follows` (`communityFollows`): `id`, `followerId`, `followedId`, `createdAt`
-- `community_member_blocks` (`communityMemberBlocks`): `id`, `blockerId`, `blockedId`, `createdAt`
-- `community_read_markers` (`communityReadMarkers`): `memberId`, `discussionId`, `conversationId`, `lastReadCreatedAt`, `lastReadId`, `updatedAt`
+- `community_profiles` (`communityProfiles`): `memberId`, `displayName`, `about`, `avatarMediaId`, `createdAt` (timestamp), `updatedAt` (timestamp)
+- `community_groups` (`communityGroups`): `id`, `name`, `description`, `position` (integer), `accessLevel` (communityGroupAccessEnum), `planKeys`, `archivedAt` (timestamp), `createdAt` (timestamp)
+- `community_group_moderators` (`communityGroupModerators`): `groupId`, `memberId`, `createdAt` (timestamp)
+- `community_discussions` (`communityDiscussions`): `id`, `groupId`, `subjectKey`, `title`, `createdBy`, `lockedAt` (timestamp), `lastActivityAt` (timestamp), `createdAt` (timestamp)
+- `community_posts` (`communityPosts`): `id`, `discussionId`, `authorId`, `content`, `createdAt` (timestamp), `editedAt` (timestamp), `deletedAt` (timestamp), `deletedBy` (communityDeletedByEnum), `removedReason`, `hiddenAt` (timestamp)
+- `community_post_media` (`communityPostMedia`): `postId`, `mediaId`, `position` (integer)
+- `community_conversations` (`communityConversations`): `id`, `participantAId`, `participantBId`, `createdAt` (timestamp)
+- `community_messages` (`communityMessages`): `id`, `conversationId`, `authorId`, `content`, `createdAt` (timestamp), `deletedAt` (timestamp), `deletedBy` (communityDeletedByEnum), `removedReason`
+- `community_spam_reports` (`communitySpamReports`): `id`, `reporterId`, `reportedMemberId`, `postId`, `messageId`, `reason`, `attachedMessageIds`, `createdAt` (timestamp), `consumedAt` (timestamp)
+- `community_member_standing` (`communityMemberStanding`): `memberId`, `protectedAt` (timestamp), `writeBlockedAt` (timestamp), `reportsIgnoredAt` (timestamp), `createdAt` (timestamp), `updatedAt` (timestamp)
+- `community_moderation_audit` (`communityModerationAudit`): `id`, `actorId`, `act`, `targetMemberId`, `postId`, `discussionId`, `reason`, `exposedMessageIds`, `createdAt` (timestamp)
+- `community_follows` (`communityFollows`): `id`, `followerId`, `followedId`, `createdAt` (timestamp)
+- `community_member_blocks` (`communityMemberBlocks`): `id`, `blockerId`, `blockedId`, `createdAt` (timestamp)
+- `community_read_markers` (`communityReadMarkers`): `memberId`, `discussionId`, `conversationId`, `lastReadCreatedAt` (timestamp), `lastReadId`, `updatedAt` (timestamp)
 
 ### modules/courses/schema.ts
 
-- `courses_courses` (`coursesCourses`): `id`, `slug`, `origin`, `title`, `summary`, `position`, `shape`, `planKeys`, `createdAt`
-- `courses_blocks` (`coursesBlocks`): `id`, `courseId`, `slug`, `origin`, `title`, `summary`, `position`, `releaseAfterDays`, `createdAt`
-- `courses_units` (`coursesUnits`): `id`, `blockId`, `slug`, `origin`, `title`, `position`, `body`, `coverMediaId`, `videoMediaId`, `subtitleMediaId`, `worksheetMediaId`, `taskPrompt`, `createdAt`
-- `courses_completions` (`coursesCompletions`): `memberId`, `unitSlug`, `completedAt`
-- `courses_submissions` (`coursesSubmissions`): `id`, `memberId`, `unitSlug`, `body`, `submittedAt`, `reply`, `repliedAt`, `repliedBy`
+- `courses_courses` (`coursesCourses`): `id`, `slug`, `origin`, `title`, `summary`, `position` (integer), `shape`, `planKeys`, `createdAt` (timestamp)
+- `courses_blocks` (`coursesBlocks`): `id`, `courseId`, `slug`, `origin`, `title`, `summary`, `position` (integer), `releaseAfterDays` (integer), `createdAt` (timestamp)
+- `courses_units` (`coursesUnits`): `id`, `blockId`, `slug`, `origin`, `title`, `position` (integer), `body`, `coverMediaId`, `videoMediaId`, `subtitleMediaId`, `worksheetMediaId`, `taskPrompt`, `createdAt` (timestamp)
+- `courses_completions` (`coursesCompletions`): `memberId`, `unitSlug`, `completedAt` (timestamp)
+- `courses_submissions` (`coursesSubmissions`): `id`, `memberId`, `unitSlug`, `body`, `submittedAt` (timestamp), `reply`, `repliedAt` (timestamp), `repliedBy`
 
 ### modules/metrics/schema.ts
 
-- `metrics_events` (`metricsEvents`): `id`, `memberId`, `event`, `experiment`, `variant`, `occurredAt`
-- `metrics_daily` (`metricsDaily`): `id`, `day`, `event`, `experiment`, `variant`, `members`, `events`, `computedAt`
+- `metrics_events` (`metricsEvents`): `id`, `memberId`, `event`, `experiment`, `variant`, `occurredAt` (timestamp)
+- `metrics_daily` (`metricsDaily`): `id`, `day`, `event`, `experiment`, `variant`, `members` (integer), `events` (integer), `computedAt` (timestamp)

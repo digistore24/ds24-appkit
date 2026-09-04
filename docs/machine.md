@@ -35,6 +35,18 @@ a machine with no screen is a machine nobody is watching. It is recorded in
 `.dev/setup-ok.json` alongside the platform, so the same project folder opened
 somewhere else does not inherit the answer.
 
+### What it does NOT say: whether the agent can open a page
+
+That line is about the person. The agent's browser is a different thing — a
+tool inside its own program, headless, and it works on exactly the machines the
+line above says no about. It is not there by default: measured over five field
+runs, an agent without one asks the user to open the page and look, every time.
+`node run.mjs agent-browser` says whether this app is wired for it, and
+`--apply` adds Playwright's MCP server to whichever program this app is set up
+for and fetches Chromium (~150 MB) — after asking, because it is the user's own
+setup that changes. `node run.mjs doctor` carries it as the check
+`agent-browser`, severity `info`. The tools appear in the next session.
+
 ## What changes when the answer is no
 
 ### 1. A link is something you hand over, not something you open

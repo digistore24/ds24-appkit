@@ -136,6 +136,15 @@ describe("the install offer's source", () => {
     expect(findPaletteClasses(code)).toEqual([]);
   });
 
+  it("lets the buttons wrap under the text on a phone", () => {
+    // Measured 2026-09-03 on a field-test app at 390 px: with `min-w-0` on
+    // the paragraph, flex shrank the TEXT to one word per line beside the two
+    // buttons. A minimum width on the paragraph is what makes `flex-wrap`
+    // move the buttons instead.
+    expect(code).toMatch(/<p className="min-w-\[\d+rem\] flex-1">/);
+    expect(code).not.toMatch(/<p className="min-w-0 flex-1">/);
+  });
+
   it("is not sticky", () => {
     // `AppShell`'s header is `sticky top-0 z-30`; a second sticky element on
     // the same edge is the collision components/impersonation-banner.tsx

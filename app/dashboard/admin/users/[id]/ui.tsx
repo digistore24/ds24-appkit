@@ -729,8 +729,18 @@ export function MemberBilling({
                           {/* The Product Key verbatim — it is what the
                               registry and every grant row call this plan, and
                               translating it would hide the value support has
-                              to quote. */}
-                          <span className="font-medium">{row.productKey}</span>
+                              to quote. The NAME stands beside it, because the
+                              form above offers "Angebotsblitz" and a table
+                              that then says `basic_monthly` reads like a
+                              different plan (measured in a field run). */}
+                          <span className="font-medium">
+                            {grantableProducts.find((p) => p.key === row.productKey)?.name ?? row.productKey}
+                            {grantableProducts.some((p) => p.key === row.productKey) && (
+                              <span className="text-muted-foreground ml-2 font-normal text-xs">
+                                {row.productKey}
+                              </span>
+                            )}
+                          </span>
                           {row.note && (
                             <span className="text-muted-foreground text-sm">
                               {row.note}

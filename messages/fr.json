@@ -521,6 +521,8 @@
     "buy": "Acheter maintenant",
     "checkoutFailedTitle": "Le checkout n'a pas pu être lancé",
     "checkoutFailedBody": "Réessaie dans quelques instants. Rien n'a été débité.",
+    "needsTitle": "Il te faut {product} pour ça",
+    "needsBody": "La page d'où tu viens fait partie de ce plan. Dès que tu l'as, tu peux continuer là-bas.",
     "emptyTitle": "Pas encore de forfaits",
     "emptyBody": "Les forfaits se trouvent dans <code>config/digistore-products.json</code> — crée-les là et ils apparaîtront ici.",
     "blocked_notSynced": "Pas encore créé chez Digistore24",

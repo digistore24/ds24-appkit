@@ -521,6 +521,8 @@
     "buy": "Jetzt buchen",
     "checkoutFailedTitle": "Der Checkout konnte nicht gestartet werden",
     "checkoutFailedBody": "Bitte versuche es in Kürze noch einmal. Es wurde nichts abgebucht.",
+    "needsTitle": "Dafür brauchst du {product}",
+    "needsBody": "Die Seite, von der du kommst, gehört zu diesem Tarif. Sobald du ihn hast, geht es dort weiter.",
     "emptyTitle": "Noch keine Tarife",
     "emptyBody": "Die Tarife stehen in <code>config/digistore-products.json</code> — dort anlegen, dann erscheinen sie hier.",
     "blocked_notSynced": "Noch nicht bei Digistore24 angelegt",

@@ -379,7 +379,13 @@ export function InstallHint() {
       <Callout variant="info" hideIcon className="mb-6">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <Smartphone aria-hidden className="size-4 shrink-0" />
-          <p className="min-w-0 flex-1">
+          {/* `min-w-[16rem]`, not `min-w-0`: with `min-w-0` the paragraph
+              SHRINKS beside the two buttons instead of the buttons wrapping
+              under it — measured at 390 px as one word per line, the first
+              thing on every page of a phone. A floor of 16rem makes the row
+              too wide for a phone, and `flex-wrap` puts the buttons on the
+              next line. */}
+          <p className="min-w-[16rem] flex-1">
             <span className="font-semibold">{t("hintTitle")}</span> {t("hintBody")}
           </p>
           <span className="flex shrink-0 gap-2">

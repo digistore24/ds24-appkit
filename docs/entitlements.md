@@ -175,7 +175,7 @@ export default async function ReportsPage() {
 
   // Not entitled? Send them where they can become entitled.
   if (!(await hasPlan(session.user.id, "basic_monthly"))) {
-    redirect("/plans");
+    redirect("/plans?needs=basic_monthly");
   }
 
   return <p>The paid feature.</p>;
@@ -190,8 +190,11 @@ Three things this small example is doing deliberately:
 2. **It is derived per request**, never cached as a boolean on the user row or
    in the session. A stored "yes" survives the chargeback that should have
    revoked it. The check is one indexed query; you do not need to save it.
-3. **`redirect("/plans")`, not a 404.** The customer who is not entitled is
-   usually a customer who would like to be.
+3. **`redirect("/plans?needs=<key>")`, not a 404.** The customer who is not entitled is
+   usually a customer who would like to be. The key in the query is how `/plans`
+   says which plan the click was waiting for (`app/plans/needs.ts`); a bare
+   `/plans` reads as the price list, and a member who arrived there from a
+   page has no idea why — measured on a field-test app.
 
 ---
 

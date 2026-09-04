@@ -521,6 +521,8 @@
     "buy": "Comprar ahora",
     "checkoutFailedTitle": "No se pudo iniciar el checkout",
     "checkoutFailedBody": "Vuelve a intentarlo en unos instantes. No se ha cobrado nada.",
+    "needsTitle": "Para eso necesitas {product}",
+    "needsBody": "La página de la que vienes pertenece a este plan. En cuanto lo tengas, podrás seguir allí.",
     "emptyTitle": "Todavía no hay planes",
     "emptyBody": "Los planes están en <code>config/digistore-products.json</code> — créalos ahí y aparecerán aquí.",
     "blocked_notSynced": "Todavía no creado en Digistore24",

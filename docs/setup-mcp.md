@@ -334,6 +334,12 @@ programs, from one source (`scripts/dev/agent-configs.mjs`):
 `node run.mjs agent-setup` prunes the three you do not use, and puts them back
 byte for byte if you change your mind.
 
+A second server can join the same four files: `node run.mjs agent-browser
+--apply` adds Playwright's MCP server, which gives the agent a browser
+([`machine.md`](machine.md) → *What it does NOT say*). Opt-in, never shipped —
+it starts a third party's package at every session and downloads Chromium, and
+that is the user's decision, not the template's.
+
 ⚠️ **Three of the four gate on trust or approval**, each differently, and until
 you clear it the server is simply absent — no error, no tools:
 

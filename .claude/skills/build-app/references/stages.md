@@ -26,7 +26,9 @@ only where its line needs a column nobody could foresee.
 Every item, every time — a stage that skips one is not done, it is abandoned:
 
 1. The pages and logic of its line exist, gated through the entitlement API
-   where the line depends on a purchase.
+   where the line depends on a purchase — and every table the line added that
+   is keyed on the member has its row in `docs/data-protection.md` and its
+   section in `lib/privacy/export.ts` (the customer's quotes are her data).
 2. `npm run typecheck && npm run test` green — `node run.mjs test` does both.
 3. `node run.mjs start && node run.mjs smoke && node run.mjs errors` clean,
    with the signed-in pass really run (Step 4's `NOT checked` line read).
@@ -75,6 +77,15 @@ Three answers, all valid, none negotiated:
 **The address is not optional.** A hand-back that says "done" without saying
 where to look leaves the customer with nothing to open — measured in a field
 run whose closing line was *"fertig gebaut und läuft"* and named no page.
+
+**The LAST hand-back names what is still a placeholder.** "Alles fertig" with
+the home page still describing the template, the legal pages still saying
+"not filled in" and no Digistore24 product behind the buy button is finished
+code, not a finished product — so the closing paragraph says which of the
+three the path still owes and which skill does it: `salespage` (2.4),
+`compliance-check` (2.8), `setup-digistore` (2.2). Measured: a closing text
+that named only the last of the three, over a home page that said "Dieses
+Template ist für den Verkauf über Digistore24 vorbereitet".
 
 ## Why the turn ends here — say this once, in the announcement, not every time
 

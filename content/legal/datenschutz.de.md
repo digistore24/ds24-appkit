@@ -10,10 +10,10 @@ tatsächlich passieren: dass IP-Adressen fünfzehn Minuten lang im Arbeitsspeich
 gezählt werden, dass die rohen Digistore24-Webhooks 60 Tage lang gespeichert
 bleiben, welches KI-Unternehmen deine Chat-Eingaben empfängt.
 
-Die Grundlage steht schon fest: **`docs/data-protection.md`** ist das Inventar
+Die Grundlage steht schon fest: **docs/data-protection.md** ist das Inventar
 und wurde aus dem Code gelesen, nicht aus der Erinnerung. Der Skill
-**`compliance-check`** schreibt die Erklärung daraus und fragt dich nur, was
+**compliance-check** schreibt die Erklärung daraus und fragt dich nur, was
 nicht auf der Platte steht.
 
-`node run.mjs legal-check` sagt dir jederzeit, welche Rechtsseiten noch auf
+**node run.mjs legal-check** sagt dir jederzeit, welche Rechtsseiten noch auf
 diesem Text stehen.

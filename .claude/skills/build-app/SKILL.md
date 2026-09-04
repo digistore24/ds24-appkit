@@ -123,6 +123,7 @@ product exists:
 Which archetype sells which, why the shipped `"both"` should not simply stay
 (the mode is display-only and safe to set), and what to do with the sample products they do not sell (delete, or park with `"sell": false`):
 the billing-mode section of [`references/archetypes.md`](references/archetypes.md).
+**And name the one they DO sell** — `name`, `tagline`, `features` are English examples a buyer reads on `/plans`; `ux-check` warns while one is on sale.
 Everything else about billing is the `billing-modes` skill.
 
 ### The grammar of steps 1b–1d — asked once, answered in three ways
@@ -285,6 +286,9 @@ what to do when a session was cut in the middle of a stage:
   proof are in [`references/content-rules.md`](references/content-rules.md).
 - New tables in `db/schema.ts` (model: `db/schema-digistore.ts`) — **one of them
   must be able to date Step 1f's activation event**, or the event was wrong.
+  **A table keyed on the Member is personal data**: its row in
+  `docs/data-protection.md` and its section in `lib/privacy/export.ts` go into
+  the same commit (`lib/privacy/inventory.test.ts` refuses the build otherwise).
 - Link purchase-dependent content to the **Member** (`users.id`, the same id
   `orders.memberId` carries) — never to a column that is not the buyer: content
   keyed on anything else is content every customer can see. What the Member may
@@ -314,16 +318,17 @@ reasoning, and the two references it points at, are in
 [`references/menus-3.md`](references/menus-3.md).
 
 - **Before you open a shipped page as a model, read `docs/api-map.md` → *Page
-  shape*** — the four parts every page has, each with its grep anchor — and
-  then a RANGE of the model, never the file.
+  shape*** (the four parts, each with its grep anchor), then a RANGE of the model, never the file.
 - Protected pages under `app/dashboard/…` (already secured via `proxy.ts`).
   Anything you put OUTSIDE that folder is **public the moment it exists** —
   `app/route-protection.test.ts` will stop the build and ask you to say what
   guards it (one line in its `PUBLIC` list) or to move it in. Answer it when it
   asks; it is the cheapest security review this app has.
 - **Purchase-dependent content asks the entitlement API**, and it needs a
-  signed-in Member — the worked snippet (auth, then `hasPlan()`, then redirect)
-  is in [`references/gating-examples.md`](references/gating-examples.md).
+  signed-in Member — the worked snippet (auth, `hasPlan()`, then
+  `redirect("/plans?needs=<key>")`) is in [`references/gating-examples.md`](references/gating-examples.md).
+- **Done when the FIRST card on `/dashboard` is your app's**, state and button in
+  it — measured twice as missing; `app/dashboard/overview-links.test.ts` is red for a section it never links.
 
   A purchase made without an account is attached at the first sign-in, so the
   buyer never has to do anything but sign in. Never answer this from a billing

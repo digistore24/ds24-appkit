@@ -51,6 +51,7 @@ import {
 import { readEnvValue } from "../lib/env-write.mjs";
 import { canOpenBrowser, capture, hasCommand, isWindows } from "../lib/proc.mjs";
 import { configuredDriver, dbDriver } from "../db/driver.mjs";
+import { browserWired, chromiumInstalled } from "./browser-tool.mjs";
 import { depsFresh } from "./deps.mjs";
 import { portInUse, urlPort } from "./ports.mjs";
 import { writeStamp } from "./setup-stamp.mjs";
@@ -449,6 +450,24 @@ export async function inspect({ quick = false } = {}) {
         "Nothing to install — it means the person is somewhere else. Print links " +
         "instead of opening them, and read docs/machine.md before promising a localhost address.",
     }),
+  });
+
+  // The OTHER browser question, and not the same one: can the AGENT open a
+  // page. `browser` above is about the person at the screen; this is about a
+  // tool in the agent's own program, and headless works on the machines the
+  // check above says no about. Opt-in on purpose (browserServer() in
+  // agent-configs.mjs says why), so `info`: an app without it runs, and the
+  // agent then judges pages from code — which `ux-gateway` calls a guess.
+  const wired = browserWired();
+  add({
+    id: "agent-browser",
+    label: "Browser tool for the agent",
+    ok: wired && chromiumInstalled(),
+    detail: wired
+      ? "the Playwright MCP server is wired, but no Chromium is in Playwright's cache"
+      : "no browser tool in this app's wiring — the agent cannot open a page itself, only fetch it",
+    severity: "info",
+    fix: FIXES["agent-browser"],
   });
 
   return checks;

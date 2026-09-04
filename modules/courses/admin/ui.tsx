@@ -141,6 +141,8 @@ function ReleaseField({
         id={id}
         name="releaseAfterDays"
         type="number"
+
+        step="1"
         min={0}
         defaultValue={defaultValue ?? 0}
       />
@@ -207,6 +209,8 @@ export function CreateBlockDialog({
                 id="block-position"
                 name="position"
                 type="number"
+
+                step="1"
                 min={0}
                 defaultValue={nextPosition}
               />
@@ -282,6 +286,8 @@ export function CreateUnitDialog({
                 id="unit-position"
                 name="position"
                 type="number"
+
+                step="1"
                 min={0}
                 defaultValue={nextPosition}
               />
@@ -661,6 +667,8 @@ function MoveDialog({
                 id={`move-${id}`}
                 name="position"
                 type="number"
+
+                step="1"
                 min={0}
                 defaultValue={position}
               />

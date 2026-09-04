@@ -23,9 +23,21 @@ import { requireOwner } from "@/lib/authz";
 import { findUser } from "@/lib/users/manage";
 import { adjustTokens } from "@/lib/tokens/account";
 import { TokenError } from "@/lib/tokens/rules";
+import { findProduct } from "@/lib/digistore/products";
 import { grantByHand, revokeGrantByHand } from "@/lib/entitlements/manage";
 import { accessUntilFromDay, GrantError } from "@/lib/entitlements/grant-rules";
 import { UserError, type Actor } from "@/lib/users/rules";
+
+
+/**
+ * What a grant is called in a message: the product's NAME with the Product Key
+ * beside it — the same pair the grants table shows, so the toast and the row
+ * read as one thing. A key the registry no longer holds is shown as the key.
+ */
+function grantLabel(productKey: string): string {
+  const name = findProduct(productKey)?.name;
+  return name ? `${name} (${productKey})` : productKey;
+}
 
 const PAGE = "/dashboard/admin/users";
 
@@ -184,10 +196,13 @@ export async function grantPlanAction(
     revalidatePath(`${PAGE}/${memberId}`);
 
     const t = await getTranslations("memberBilling");
-    // The Product Key verbatim — it is what the registry, the grants table and
-    // every support conversation call this plan.
+    // The NAME with the Product Key beside it — the name is what the Operator
+    // chose in the form, the key is what the registry, the grants table and
+    // every support conversation call this plan. Same pair as the table below
+    // the form; a toast saying `basic_monthly` alone was read as a code.
+    const product = grantLabel(granted.productKey);
     if (!granted.accessUntil) {
-      return { error: null, ok: t("grantDone", { product: granted.productKey }) };
+      return { error: null, ok: t("grantDone", { product }) };
     }
     // Named with the DAY access still covers, not with the stored instant: the
     // off-by-one §D2 is about should be visible in words, not only in data.
@@ -195,7 +210,7 @@ export async function grantPlanAction(
     return {
       error: null,
       ok: t("grantDoneUntil", {
-        product: granted.productKey,
+        product,
         date: format.dateTime(granted.accessUntil, {
             // UTC, load-bearing and not decoration. `accessUntil` is stored as
             // the last millisecond of the chosen day IN UTC, so rendering it in

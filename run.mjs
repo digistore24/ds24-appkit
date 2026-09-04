@@ -584,6 +584,14 @@ const TASKS = {
     // fresh clone is exactly when it is wanted.
     run: (args) => script("scripts/dev/agent-setup.mjs", args),
   },
+  "agent-browser": {
+    group: "Setup",
+    help: "Give the agent a browser — wire Playwright's MCP server in (--apply writes, fetches Chromium; --remove)",
+    // No `needs`: it moves text files and downloads a browser, and the first
+    // session in a fresh clone is exactly when it is wanted. Ask before
+    // --apply — it changes the user's own program setup (the script says so).
+    run: (args) => script("scripts/dev/agent-browser.mjs", args),
+  },
   greet: {
     group: "Setup",
     help: "The session greeting — where this project stands and what to do next",

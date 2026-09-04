@@ -11,9 +11,9 @@ verdad: que las direcciones IP se cuentan en memoria durante quince minutos, que
 los webhooks sin procesar de Digistore24 se conservan 60 días, y qué empresa de
 IA recibe lo que tus clientes escriben en el chat.
 
-La base ya existe: **`docs/data-protection.md`** es el inventario, y se leyó del
-código en lugar de recordarse. El skill **`compliance-check`** redacta la
+La base ya existe: **docs/data-protection.md** es el inventario, y se leyó del
+código en lugar de recordarse. El skill **compliance-check** redacta la
 política a partir de él y solo te pregunta lo que no está en el disco.
 
-`node run.mjs legal-check` te dice en cualquier momento qué páginas legales
+**node run.mjs legal-check** te dice en cualquier momento qué páginas legales
 siguen mostrando este texto.

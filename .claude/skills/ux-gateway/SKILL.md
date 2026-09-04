@@ -68,8 +68,11 @@ node run.mjs errors         # what the log caught behind a 200
 
 `ux-check` is the narrow half and it takes two seconds: contrast of every token
 pair in both modes, hard-coded colours, hand-built elements, icon buttons with
-no name, images with no `alt`, and pages under `/dashboard` that nothing leads
-to — in no menu AND with no page linking to them. ⚠️ Since template 0.27.0 that
+no name, images with no `alt`, number inputs with no `step` (the browser then
+refuses every decimal in ITS language), and pages under `/dashboard` that nothing
+leads to — in no menu AND with no page linking to them. It also WARNS, never
+fails, while a product is still on sale under one of the template's example
+names ("Basic (monthly)") — a name nobody chose is a name the buyer reads. ⚠️ Since template 0.27.0 that
 includes `[param]` pages: a lesson or a group page is reached by a link and
 never by a menu entry, so for those the only sensible answer to a finding is the
 link, never a `NAVIGATION` line. Before 0.27.0 they were skipped, and that is how
@@ -93,19 +96,24 @@ it and say so in the report. If it is not, say *that* — "judged from the code,
 not opened" belongs in **Worth a look**, not in the count. An unseen page is not
 a passed page.
 
-**And if you have none, you can usually get one.** All four programs this
+**And if you have none, there is a command for that.** All four programs this
 template supports speak MCP, and Playwright ships an MCP server that gives you a
-browser — navigate, click, screenshot. That is a change to the user's own setup,
-not to this app, so **offer it and let them decide**:
+browser — navigate, click, read the page, screenshot. `node run.mjs agent-browser`
+wires it into whichever program this app is set up for, headless, and fetches
+Chromium; `--apply` does it. That is a change to the user's own setup and a
+download of ~150 MB, not a change to this app, so **offer it and let them decide**:
 
-> "I can only judge these pages from the code. If you add the Playwright MCP
-> server to <your program>, I can open them and actually look. Shall I walk you
-> through it? It takes a minute, and it is useful well beyond this check."
+> "I can only judge these pages from the code. One command gives me a browser
+> for the next session — `node run.mjs agent-browser --apply`, which adds
+> Playwright's MCP server to <your program> and downloads Chromium (~150 MB).
+> Shall I run it? It is useful well beyond this check."
 
-If they say no, or it does not work, carry on and be honest in the report about
-which checks were done on a screen and which were not. Checks 5 and 7 (`kit`,
-`access`) are the ones that suffer most; `node run.mjs ux-check` already covers
-their measurable half, and that half needs no browser at all.
+The tools appear in the **next** session, not this one — a config is read at
+session start — so say that too. If they say no, or it does not work, carry on
+and be honest in the report about which checks were done on a screen and which
+were not. Checks 5 and 7 (`kit`, `access`) are the ones that suffer most;
+`node run.mjs ux-check` already covers their measurable half, and that half
+needs no browser at all.
 
 ## What counts as a finding
 

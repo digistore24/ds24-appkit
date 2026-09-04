@@ -57,6 +57,7 @@ import path from "node:path";
 import {
   AGENTS,
   PROFILE_FILE,
+  configFilesFor,
   detectAgent,
   gateNotice,
   gateSummary,
@@ -64,6 +65,7 @@ import {
   readAgentProfile,
 } from "./agent-configs.mjs";
 import { stubFor } from "./agent-skills.mjs";
+import { browserWired } from "./browser-tool.mjs";
 import { flagsFrom } from "../lib/args.mjs";
 
 const ROOT = process.cwd();
@@ -71,6 +73,30 @@ const PROFILE = PROFILE_FILE;
 const STUBS = ".agents/skills";
 
 const abs = (file) => path.join(ROOT, file);
+
+// ── the browser variant ─────────────────────────────────────────────────────
+//
+// `node run.mjs agent-browser --apply` adds Playwright's MCP server to the
+// MCP-bearing configs, and the result is still OURS — a file this command
+// wrote, in a second shape, not one the developer changed. Two things follow.
+// A file in either shape may be removed (it can be regenerated in either); and
+// a file written back — a kept one that is absent, or everything on `--undo` —
+// comes back in the shape the app currently has, read off the files that are
+// there. Without this, wiring the browser and then switching programs reported
+// every MCP config as "kept — you changed this one" and restored the other
+// programs WITHOUT the browser, which nobody asked for.
+const BROWSER = browserWired(ROOT);
+
+/** This program's files in the shape this app has them. */
+const filesFor = (agent) => Object.entries(configFilesFor(agent, { browser: BROWSER }));
+
+/** Is this text one of the two shapes we write for `file`? */
+function ours(agent, file, text) {
+  return (
+    text === AGENTS[agent].files[file] ||
+    text === configFilesFor(agent, { browser: true })[file]
+  );
+}
 
 /** The stub files, derived from whatever skills this app currently has. */
 function stubFiles() {
@@ -103,9 +129,9 @@ function planFor(agent) {
   const keep = [];
   const drop = [];
 
-  for (const [name, { files }] of Object.entries(AGENTS)) {
-    for (const [file, content] of Object.entries(files)) {
-      (name === agent ? keep : drop).push({ file, content });
+  for (const name of Object.keys(AGENTS)) {
+    for (const [file, content] of filesFor(name)) {
+      (name === agent ? keep : drop).push({ file, content, agent: name });
     }
   }
 
@@ -114,6 +140,11 @@ function planFor(agent) {
   const stubs = stubFiles();
   if (AGENTS[agent].stubs) keep.push(...stubs);
   else drop.push(...stubs);
+
+  // "Still holds what we put there" — either shape of a config, or the stub
+  // as it would be regenerated.
+  const isOurs = ({ file, content, agent: owner }) =>
+    owner ? ours(owner, file, read(file)) : read(file) === content;
 
   const present = drop.filter(({ file }) => existsSync(abs(file)));
 
@@ -125,15 +156,15 @@ function planFor(agent) {
   // that was not there. The header of this file promises the opposite in so many
   // words. A kept file is written only when it is ABSENT.
   const changedKeep = keep.filter(
-    ({ file, content }) => content !== undefined && existsSync(abs(file)) && read(file) !== content,
+    (entry) => entry.content !== undefined && existsSync(abs(entry.file)) && !isOurs(entry),
   );
 
   return {
     write: keep.filter(
       ({ content, file }) => content !== undefined && !existsSync(abs(file)),
     ),
-    remove: present.filter(({ file, content }) => read(file) === content),
-    yours: [...present.filter(({ file, content }) => read(file) !== content), ...changedKeep],
+    remove: present.filter(isOurs),
+    yours: [...present.filter((entry) => !isOurs(entry)), ...changedKeep],
   };
 }
 
@@ -202,8 +233,8 @@ if (asked && !AGENTS[asked]) {
 
 if (undo) {
   const restore = [
-    ...Object.values(AGENTS).flatMap(({ files }) =>
-      Object.entries(files).map(([file, content]) => ({ file, content })),
+    ...Object.keys(AGENTS).flatMap((name) =>
+      filesFor(name).map(([file, content]) => ({ file, content })),
     ),
     ...stubFiles(),
     // 🚨 Only what is ABSENT. The filter used to be `read(file) !== content` —

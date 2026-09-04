@@ -36,6 +36,8 @@ import {
   findUnnamedIconButtons,
   findImagesWithoutAlt,
   findPlaceholderHome,
+  findNumberInputsWithoutStep,
+  findExampleProducts,
   navHrefs,
   routeShape,
   partitionAcceptedControls,
@@ -302,6 +304,7 @@ function checkSources() {
   const unnamed = [];
   const noAlt = [];
   const bypasses = [];
+  const noStep = [];
 
   const files = sourceFiles();
   for (const file of files) {
@@ -310,6 +313,7 @@ function checkSources() {
     for (const hit of findRawElements(source)) raw.push({ file, ...hit });
     for (const hit of findUnnamedIconButtons(source)) unnamed.push({ file, ...hit });
     for (const hit of findImagesWithoutAlt(source)) noAlt.push({ file, ...hit });
+    for (const hit of findNumberInputsWithoutStep(source)) noStep.push({ file, ...hit });
     // Each hit names the dial it bypasses — the finding is not "you wrote a
     // class", it is "you turned nothing".
     for (const hit of findDialBypasses(source)) {
@@ -357,6 +361,15 @@ function checkSources() {
       "Images without alt",
       'Every image needs alt text — alt="" if it is decoration, which is a ' +
         "decision and reads as one.",
+    ),
+    report(
+      noStep,
+      "Number inputs without a step",
+      "Without step the browser refuses every decimal itself, in ITS language, " +
+        'and the page says nothing. Write the decision down: step="1" for a count, ' +
+        'the unit\'s grain (0.01 for money and m², 0.1 for km) otherwise, ' +
+        'step="any" when it does not matter — and keep the binding range check ' +
+        "in the action, translated.",
     ),
     reportWarning(
       softOpen,
@@ -541,6 +554,31 @@ function checkHomePage() {
   );
   if (!found) ok("app/page.tsx is no longer the shipped placeholder");
 }
+
+  // The registry: is the app still SELLING the template's examples? A warning
+  // for the same reason the placeholder home is one — a test app keeps them,
+  // and so does an app before its own products exist. The list of names is in
+  // rules.mjs and the factory holds it against the shipped registry.
+  const registryPath = join(ROOT, "config", "digistore-products.json");
+  if (existsSync(registryPath)) {
+    const examples = findExampleProducts(readFileSync(registryPath, "utf8")).map((h) => ({
+      file: "config/digistore-products.json",
+      line: 0,
+      found: `${h.key}: "${h.name}"`,
+    }));
+    if (
+      !reportWarning(
+        examples,
+        "Products on sale under the template's example names",
+        "These are the names, taglines and feature lines the template shipped " +
+          "as examples — in English, about nothing. A customer reads them on " +
+          "/plans, on the dashboard and in every grant. Name what this app " +
+          'sells in config/digistore-products.json, or park an example with "sell": false.',
+      )
+    ) {
+      ok("No product is on sale under an example name");
+    }
+  }
 
 function checkNavigation() {
   console.log("\nNavigation\n");

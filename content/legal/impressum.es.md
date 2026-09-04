@@ -8,10 +8,10 @@ postal (no un apartado de correos), una dirección de correo electrónico y una
 segunda vía rápida de contacto, además del registro mercantil y su número, y el
 número de identificación fiscal si tienes uno.
 
-Ejecuta en el terminal el skill **`compliance-check`**. Pregunta exactamente los
+Ejecuta en el terminal el skill **compliance-check**. Pregunta exactamente los
 datos que exige tu forma jurídica y escribe este archivo
-(`content/legal/impressum.es.md`) y sus equivalentes en los demás idiomas de la
+(**content/legal/impressum.es.md**) y sus equivalentes en los demás idiomas de la
 aplicación.
 
-`node run.mjs legal-check` te dice en cualquier momento qué páginas legales
+**node run.mjs legal-check** te dice en cualquier momento qué páginas legales
 siguen mostrando este texto.

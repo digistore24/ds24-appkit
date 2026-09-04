@@ -95,16 +95,18 @@ const claudeSettings = `{
 
 // Codex keeps hooks behind a feature flag and reads them from the same
 // config.toml. The probe runs first for the same reason it does everywhere else.
-const codexConfig = `# Codex reads AGENTS.md by itself — the only thing it needs from us is the
+const codexConfig = (servers) => `# Codex reads AGENTS.md by itself — the only thing it needs from us is the
 # greeting, and the flag that turns hooks on at all.
 
 [features]
 codex_hooks = true
 
-[mcp_servers.ds24-setup]
-command = "node"
-args = ["scripts/mcp/server.mjs"]
-
+${servers
+  .map(
+    ({ name, command, args }) =>
+      `[mcp_servers.${name}]\ncommand = ${JSON.stringify(command)}\nargs = ${JSON.stringify(args)}\n`,
+  )
+  .join("\n")}
 [[hooks.SessionStart]]
 command = ${JSON.stringify(NODE_PROBE)}
 
@@ -203,18 +205,78 @@ export const SessionGreeting = async ({ directory }) => {
 //
 // The server is inert until `config/setup.json` says `"enabled": true`, so
 // shipping the wiring switches nothing on.
-const MCP_COMMAND = "node";
-const MCP_ARGS = ["scripts/mcp/server.mjs"];
-const MCP_NAME = "ds24-setup";
+const SETUP_SERVER = { name: "ds24-setup", command: "node", args: ["scripts/mcp/server.mjs"] };
+
+// ── The browser server — OPT-IN, never shipped ──────────────────────────────
+//
+// Playwright's MCP server gives the agent a browser: navigate, click, read the
+// accessibility tree, screenshot. CLAUDE.md → *Never ship a broken page* asks
+// the agent to LOOK at a page before calling it done, and `smoke` cannot look —
+// it sees status codes. Measured over five field runs: an agent without a
+// browser tool hands the looking back to the user ("magst du kurz selbst
+// reinschauen") every time.
+//
+// It is wired by `node run.mjs agent-browser --apply` and not by the template,
+// for four reasons that each stand alone:
+//
+//   · a name clash with the same server in the user's own program-wide config
+//     (the ordinary way people install it);
+//   · an unpinned third-party `npx` in a TRACKED file, started at every session
+//     — the thing `security-gateway` refuses in a module;
+//   · three of the four programs gate a new server on trust, Antigravity per
+//     TOOL, and this one brings ~25 — a fresh clone would open on a wall of
+//     questions;
+//   · Chromium is ~150 MB nobody asked for.
+//
+// So `AGENTS[*].files` below stays the shipped state (one server), and
+// `configFilesFor(agent, { browser: true })` is the same four files with this
+// one added — the variant `agent-browser` writes and `agent-setup` recognises
+// as its own. Both versions are PINNED: the MCP package, and the `playwright`
+// it depends on (read off `npm view @playwright/mcp@<v> dependencies`), because
+// `playwright install` fetches the Chromium build of the version that runs it,
+// and a browser from another version is the one the server cannot find.
+export const BROWSER_SERVER_NAME = "playwright";
+export const BROWSER_MCP_VERSION = "0.0.80";
+export const BROWSER_PLAYWRIGHT_VERSION = "1.63.0-alpha-2026-08-31";
+/** Where its screenshots land — inside `.dev/`, where CLAUDE.md keeps session artifacts. */
+export const BROWSER_OUTPUT_DIR = ".dev/browser";
+
+/**
+ * The browser server's declaration, for THIS platform.
+ *
+ * `--headless`: a window is never wanted, and this is what makes it work on the
+ * machines `canOpenBrowser()` says no about — the agent's browser is not the
+ * person's. `--isolated`: profile in memory, so a `db-reset` cannot leave the
+ * browser signed in as a user that no longer exists.
+ *
+ * 🚨 `npx` on Windows is `npx.cmd`, a shim, and a program spawning it without a
+ * shell gets ENOENT — Claude Code's own MCP docs prescribe `cmd /c npx …` there.
+ * Chosen by platform at WRITE time, which is why this is a function.
+ */
+export function browserServer(platform = process.platform) {
+  const npx = [
+    "npx",
+    "-y",
+    `@playwright/mcp@${BROWSER_MCP_VERSION}`,
+    "--headless",
+    "--isolated",
+    "--output-dir",
+    BROWSER_OUTPUT_DIR,
+  ];
+  return platform === "win32"
+    ? { name: BROWSER_SERVER_NAME, command: "cmd", args: ["/c", ...npx] }
+    : { name: BROWSER_SERVER_NAME, command: npx[0], args: npx.slice(1) };
+}
 
 // ⚠️ Claude Code reads `.mcp.json` at the repo root, NOT `.claude/settings.json`.
-const claudeMcp = `{
+const claudeMcp = (servers) => `{
   "mcpServers": {
-    ${JSON.stringify(MCP_NAME)}: {
-      "type": "stdio",
-      "command": ${JSON.stringify(MCP_COMMAND)},
-      "args": ${JSON.stringify(MCP_ARGS)}
-    }
+${servers
+  .map(
+    ({ name, command, args }) =>
+      `    ${JSON.stringify(name)}: {\n      "type": "stdio",\n      "command": ${JSON.stringify(command)},\n      "args": ${JSON.stringify(args)}\n    }`,
+  )
+  .join(",\n")}
   }
 }
 `;
@@ -225,14 +287,15 @@ const claudeMcp = `{
 // planned) — and this template already ships `.opencode/plugins/`, so the
 // tree's own symmetry invites exactly that mistake. Note also its spelling:
 // ONE array carrying the command and its arguments together.
-const opencodeMcp = `{
+const opencodeMcp = (servers) => `{
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    ${JSON.stringify(MCP_NAME)}: {
-      "type": "local",
-      "command": ${JSON.stringify([MCP_COMMAND, ...MCP_ARGS])},
-      "enabled": true
-    }
+${servers
+  .map(
+    ({ name, command, args }) =>
+      `    ${JSON.stringify(name)}: {\n      "type": "local",\n      "command": ${JSON.stringify([command, ...args])},\n      "enabled": true\n    }`,
+  )
+  .join(",\n")}
   }
 }
 `;
@@ -251,15 +314,82 @@ const opencodeMcp = `{
 // It shares `.agents/` with the skill stubs, which is a coincidence worth
 // naming: `.agents/skills/` is exactly where this program looks for skills, so
 // the stub tree that was built for Codex serves it too, unchanged.
-const antigravityMcp = `{
+const antigravityMcp = (servers) => `{
   "mcpServers": {
-    ${JSON.stringify(MCP_NAME)}: {
-      "command": ${JSON.stringify(MCP_COMMAND)},
-      "args": ${JSON.stringify(MCP_ARGS)}
-    }
+${servers
+  .map(
+    ({ name, command, args }) =>
+      `    ${JSON.stringify(name)}: {\n      "command": ${JSON.stringify(command)},\n      "args": ${JSON.stringify(args)}\n    }`,
+  )
+  .join(",\n")}
   }
 }
 `;
+
+/**
+ * The four MCP-bearing files, rendered for a list of servers.
+ *
+ * Keyed by program so `AGENTS` below and `configFilesFor()` read the same
+ * table. The two files that carry no server (`.claude/settings.json`, the
+ * OpenCode plugin) are not here — they are the same in every variant.
+ */
+const mcpFilesFor = (servers) => ({
+  claude: { ".mcp.json": claudeMcp(servers) },
+  codex: { ".codex/config.toml": codexConfig(servers) },
+  antigravity: { ".agents/mcp_config.json": antigravityMcp(servers) },
+  opencode: { "opencode.json": opencodeMcp(servers) },
+});
+
+/** What ships: the setup server, and nothing else. */
+const SHIPPED = mcpFilesFor([SETUP_SERVER]);
+
+/**
+ * A program's config files — shipped, or with the browser server added.
+ *
+ * `browser: true` is the variant `agent-browser --apply` writes. `platform`
+ * exists for the tests; a real call takes the machine it runs on, because the
+ * Windows spelling of `npx` differs (see `browserServer()`).
+ *
+ * @returns {Record<string, string>} file → content
+ */
+export function configFilesFor(agent, { browser = false, platform = process.platform } = {}) {
+  const files = { ...AGENTS[agent].files };
+  if (!browser) return files;
+  return { ...files, ...mcpFilesFor([SETUP_SERVER, browserServer(platform)])[agent] };
+}
+
+/** The config files that carry MCP servers at all, with their program. */
+export function mcpConfigFiles() {
+  return Object.entries(SHIPPED).flatMap(([agent, files]) =>
+    Object.keys(files).map((file) => ({ agent, file })),
+  );
+}
+
+/**
+ * Does this config text declare an MCP server called `name`?
+ *
+ * Three answers: `true`, `false`, and `null` for a file that cannot be read
+ * as what it claims to be — a broken JSON is not "no server", and a caller
+ * that merged into it would be writing over somebody's half-typed edit.
+ * The TOML half is a line match, because the one TOML file here is generated
+ * from a template and its header line is the whole grammar that matters.
+ */
+export function declaresMcpServer(file, content, name) {
+  if (file.endsWith(".toml")) {
+    return new RegExp(`^\\[mcp_servers\\.${name.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}\\]\\s*$`, "m").test(content);
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  const table = parsed.mcpServers ?? parsed.mcp;
+  if (table === undefined) return false;
+  if (!table || typeof table !== "object" || Array.isArray(table)) return null;
+  return Object.hasOwn(table, name);
+}
 
 // ── What is still the operator's to do, once the wiring is written ──────────
 //
@@ -353,14 +483,14 @@ export const AGENTS = {
     label: "Claude Code",
     detect: (env) => Boolean(env.CLAUDECODE || env.CLAUDE_CODE_ENTRYPOINT),
     stubs: false,
-    files: { ".claude/settings.json": claudeSettings, ".mcp.json": claudeMcp },
+    files: { ".claude/settings.json": claudeSettings, ...SHIPPED.claude },
     gate: "asks you to approve the server; a cloned repo cannot pre-approve itself.",
   },
   codex: {
     label: "OpenAI Codex CLI",
     detect: (env) => Boolean(env.CODEX_SANDBOX || env.CODEX_HOME || env.CODEX_SESSION_ID),
     stubs: true,
-    files: { ".codex/config.toml": codexConfig },
+    files: { ...SHIPPED.codex },
     gate: "ignores the whole .codex/ layer until you trust the project.",
   },
   // 🚨 The one program with NO greeting, and that is a property of the program
@@ -388,7 +518,7 @@ export const AGENTS = {
     // calls the mechanism, detection being only ever the convenience.
     detect: () => false,
     stubs: true,
-    files: { ".agents/mcp_config.json": antigravityMcp },
+    files: { ...SHIPPED.antigravity },
     gate:
       "asks once whether you trust this workspace, and then asks again per tool: " +
       "an MCP tool nobody has ruled on defaults to Ask.",
@@ -397,7 +527,7 @@ export const AGENTS = {
     label: "OpenCode",
     detect: (env) => Boolean(env.OPENCODE || env.OPENCODE_BIN_PATH || env.OPENCODE_SESSION_ID),
     stubs: false,
-    files: { ".opencode/plugins/session-start.js": opencodePlugin, "opencode.json": opencodeMcp },
+    files: { ".opencode/plugins/session-start.js": opencodePlugin, ...SHIPPED.opencode },
     // The one program with nothing to clear. Written out rather than left off:
     // an absent key and "no gate" would be the same thing to a reader, and this
     // is the field where those two must not look alike.

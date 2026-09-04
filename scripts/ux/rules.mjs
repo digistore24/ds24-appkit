@@ -706,6 +706,72 @@ export function findPlaceholderHome(source) {
   return hits.sort((a, b) => a.line - b.line);
 }
 
+/**
+ * `<Input type="number">` (or a raw `<input>`) that does not say its `step`.
+ *
+ * Without one the browser defaults to whole numbers and REFUSES the decimal on
+ * its own, with a tooltip in the BROWSER's language — measured on a field-test
+ * app: "Anfahrt (km)" took `12` and answered `12.5` with "Please enter a valid
+ * value. The two nearest valid values are 12 and 13." on a German page, past
+ * every catalogue in messages/, and nothing else on the page said a word.
+ *
+ * So the step is a decision and is written down: `step="1"` when whole numbers
+ * are the point (a count, a position), the unit's grain otherwise (`0.01` for
+ * money and m², `0.1` for km), `step="any"` when it does not matter. The
+ * binding range check lives in the action with a translated code either way —
+ * the attribute is a convenience, never the refusal (docs/ux.md § 2).
+ *
+ * Reads through blankComments(): a JSDoc that mentions `type="number"` is not
+ * an input.
+ */
+export function findNumberInputsWithoutStep(source) {
+  source = blankComments(source);
+  const hits = [];
+  // A tag from `<Input` / `<input` to its closing `>`, across lines. `[^>]`
+  // deliberately: an arrow function inside an attribute would end the match
+  // early, and a number input carrying one is rare enough to accept.
+  for (const m of source.matchAll(/<(?:Input|input)\b[^>]*?type=["']number["'][^>]*>/g)) {
+    if (/\bstep=/.test(m[0])) continue;
+    hits.push({ line: lineAt(source, m.index), found: 'type="number" without step' });
+  }
+  return hits;
+}
+
+/**
+ * The product NAMES the template ships as examples. An app that still SELLS a
+ * product under one of these names has not named what it sells — measured on
+ * a field-test app: a German quote tool for painters offered "Basic (monthly)
+ * — The uncomplicated way in — Cancel monthly" on /plans and on its dashboard.
+ *
+ * Hand-kept on purpose: the customer's tree has no other record of what the
+ * examples were called. The factory checks this list against the shipped
+ * registry (scripts/shipped-lists.test.mjs), so a renamed example cannot
+ * silently leave the rule matching nothing.
+ */
+export const SHIPPED_EXAMPLE_PRODUCT_NAMES = ["Basic (monthly)", "Basic (yearly)", "Starter Tokens"];
+
+/**
+ * Products on sale under a shipped example name — `{ key, name }` each.
+ * A parked entry (`"sell": false`) is a template somebody keeps, never a hit.
+ * Reported as a WARNING by the caller: a test app keeps the examples
+ * legitimately, and so does an app before its products exist.
+ */
+export function findExampleProducts(registrySource) {
+  let registry;
+  try {
+    registry = JSON.parse(registrySource);
+  } catch {
+    return [];
+  }
+  const hits = [];
+  for (const [key, def] of Object.entries(registry?.products ?? {})) {
+    if (!def || typeof def !== "object") continue;
+    if (def.sell === false) continue;
+    if (SHIPPED_EXAMPLE_PRODUCT_NAMES.includes(def.name)) hits.push({ key, name: def.name });
+  }
+  return hits;
+}
+
 /** The `href`s declared in NAVIGATION, or null if the list cannot be found. */
 export function navHrefs(appShellSource) {
   // TWO shapes, because a menu is declared in two places and only one of them

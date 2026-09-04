@@ -38,6 +38,26 @@ The rule behind all five rows: **the thing the customer came for sits above
 the fold and above the form.** A page that opens with settings and buries the
 result is the layout mistake this table exists to prevent.
 
+Two more things about the Gated-Tool row, both measured on a field-test app
+(2026-09-04) whose calculator was otherwise right:
+
+- **The form keeps what was typed.** After the action the inputs are rendered
+  from the last state (`defaultValue`), so changing one number is one edit —
+  not four, on a form that reset itself.
+- **A document the member hands to THEIR customer has a minimum form.** A quote,
+  an invoice, a certificate: the recipient, the member's own details, a number
+  and a date, every position as quantity × unit price, a VAT line, and the
+  MEMBER's voice ("Angebot Nr. 7"), never the app's ("Dein Angebot" is what
+  the app says to the member on screen, not what the member says to a client).
+  Measured: a 1.3 KB PDF with three totals and no m² anywhere, which nobody
+  could send — and that download is the activation the product was built for.
+
+**The same rule on `/dashboard`: your app's card is the FIRST card**, above the
+shipped "Das hast du" and "Abrechnung" — a member came for the product, and on
+a phone the third card sits below two scrolls. Measured on a field-test app: the
+quote calculator's tile, with the promised big figure in it, was the third card
+at 390 px, and the shipped card above it was half empty.
+
 ---
 
 ## 1. The first five minutes
@@ -95,7 +115,7 @@ common way an app reads as faulty when it is merely new.
 ## 2. Every action reports back
 
 The three mechanisms and when to use which are in `CLAUDE.md` § **UI**, rule 1.
-They are not repeated here. Three things that file cannot say from where it sits:
+They are not repeated here. Five things that file cannot say from where it sits:
 
 - **The place feedback goes missing is the page boundary.** The code that knows
   something worked ends by sending the person somewhere else, and the page they
@@ -117,6 +137,18 @@ They are not repeated here. Three things that file cannot say from where it sits
   `purchaseNoticeFor(memberId, id)` — scoped to whoever is signed in — before
   naming the plan that was unlocked or the tokens that were credited. Copy
   that shape for any message that has to survive a `redirect()`.
+- **A gate is a redirect, and it carries the reason as a reference.**
+  `redirect("/plans?needs=<productKey>")`, never a bare `/plans`: the plans
+  page names the plan the click was waiting for (`app/plans/needs.ts`), and a
+  key it does not know says nothing. Measured: both core pages of a field-test
+  app sent a member without a plan to the price list without a word.
+- **The browser's own validation is not feedback.** `min`, `max`, `step` and
+  `required` stop a submit with a tooltip in the BROWSER's language, past every
+  catalogue in `messages/` — measured: "Please enter a valid value" on a German
+  page, because a km field had no `step` and refused `12.5`. Every
+  `<Input type="number">` therefore says its `step` (`node run.mjs ux-check`
+  refuses one without), and the binding check lives in the action, with a
+  translated code — the attribute is a convenience, never the refusal.
 
 ---
 
@@ -152,6 +184,13 @@ What that file does not cover is what the sentences say:
   keys belong in support tools, not on the account page.
 - **Say the number.** "Your access ends on 3 August" beats "your access will end
   soon", and it is the same query.
+- **A card's title names the card, not its first field.** "Firmenname" over a
+  card holding the company name AND seven prices is the first field's label
+  promoted to a heading; the card is "Meine Preise" or "Deine Preise", and the
+  field keeps its own label.
+- **Never say where on the screen something is.** "Die Summe erscheint rechts"
+  was true at 1280 px and false at 390 px, where the preview sits below the
+  form; every layout stacks on a phone. Say what appears, not where.
 
 ---
 
@@ -203,7 +242,13 @@ checkout return lands there too. Four things break and they are always the
 same four:
 
 - **Tables.** A `<Table>` does not wrap. Put it in a container that scrolls
-  (`overflow-x-auto`), or render cards below `sm:`.
+  (`overflow-x-auto`), or render cards below `sm:` — and the column that IS the
+  product comes first, because a scrolling table shows its first columns and
+  hides its last: a quote list whose "Summe" was the last column hid the one
+  number the app is sold on.
+- **Action rows.** Put a page's actions straight into `<PageHeader>` as its
+  children; its own container wraps at 390 px. A `<div className="flex">` of
+  your own around two buttons does not, and the page scrolls sideways.
 - **Dialogs.** A form in a `<Dialog>` on a 380 px screen needs its own scroll,
   or the submit button ends up under the keyboard.
 - **Fixed widths.** `w-[720px]` is a horizontal scrollbar on the whole page.

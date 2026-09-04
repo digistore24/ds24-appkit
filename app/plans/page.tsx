@@ -29,6 +29,7 @@ import { startCheckoutAction } from "./actions";
 import { PublicHeader } from "@/components/public-header";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
+import { neededProduct, PLANS_NEEDS_PARAM } from "./needs";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -204,7 +205,11 @@ async function PlanCard({
 export default async function PlansPage({
   searchParams,
 }: {
-  searchParams: Promise<{ checkout?: string; preview?: string | string[] }>;
+  searchParams: Promise<{
+    checkout?: string;
+    preview?: string | string[];
+    [PLANS_NEEDS_PARAM]?: string | string[];
+  }>;
 }) {
   const t = await getTranslations("plans");
   const locale = await getLocale();
@@ -225,6 +230,10 @@ export default async function PlansPage({
   const signedIn = Boolean(session?.user);
   const sp = await searchParams;
   const checkoutFailed = sp.checkout === "error";
+  // A gated page sent the member here — `redirect("/plans?needs=<key>")`.
+  // Named before anything else on the page, or the page reads as a price list
+  // rather than as the answer to the click they just made (./needs.ts).
+  const needed = neededProduct(sp[PLANS_NEEDS_PARAM]);
 
   // The DEV fixture (lib/digistore/preview.ts): `?preview=checkout` renders the
   // buy forms of an app that has no Digistore24 products yet, so they can be
@@ -284,6 +293,11 @@ export default async function PlansPage({
           </p>
         </div>
 
+        {needed && (
+          <Callout variant="info" title={t("needsTitle", { product: needed.name })}>
+            {t("needsBody")}
+          </Callout>
+        )}
         {checkoutFailed && (
           <Callout variant="danger" title={t("checkoutFailedTitle")}>
             {t("checkoutFailedBody")}

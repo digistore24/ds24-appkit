@@ -78,6 +78,20 @@
       },
       "win32": { "command": "winget install --id Cloudflare.cloudflared" }
     },
+    "agent-browser": {
+      "linux": {
+        "command": "node run.mjs agent-browser --apply",
+        "note": "ask first — it changes the user's own program setup and downloads Chromium (~150 MB); the tools appear in the next session"
+      },
+      "darwin": {
+        "command": "node run.mjs agent-browser --apply",
+        "note": "ask first — it changes the user's own program setup and downloads Chromium (~150 MB); the tools appear in the next session"
+      },
+      "win32": {
+        "command": "node run.mjs agent-browser --apply",
+        "note": "ask first — it changes the user's own program setup and downloads Chromium (~150 MB); the tools appear in the next session"
+      }
+    },
     "shell": {
       "linux": { "note": "nothing to do — any shell works here" },
       "darwin": { "note": "nothing to do — any shell works here" },
