@@ -134,6 +134,23 @@ export function rgbToHex([r, g, b]) {
   return `#${[r, g, b].map((c) => c.toString(16).padStart(2, "0")).join("")}`;
 }
 
+/**
+ * `hsl(190 90% 26%)` from a token → `#076a7e`, or it THROWS.
+ *
+ * The one conversion every literal copy of a token is held to — `OG_ACCENT`
+ * in `lib/pwa/manifest.ts`, `DEFAULT_ACCENT` in `lib/email.ts`, the browser-bar
+ * colours — and what `node run.mjs brand colors --apply` uses to say which of
+ * those copies it did NOT rewrite. It throws on a token it cannot read rather
+ * than returning null, because every caller is a comparison: a null there
+ * would make the copy and the token "not equal" and read as drift, or, worse,
+ * be the shape a `??` quietly turns into a pass.
+ */
+export function tokenHex(value) {
+  const rgb = parseHsl(value);
+  if (!rgb) throw new Error(`not an hsl() token: ${value}`);
+  return rgbToHex(rgb);
+}
+
 /** WCAG 2.1 relative luminance. */
 export function relativeLuminance([r, g, b]) {
   const channel = (c) => {

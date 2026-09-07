@@ -76,10 +76,10 @@ second skill — you ask exactly one question first:
   written record of what is being built must exist BEFORE the code does — an app
   whose requirements live only in a chat transcript is rebuilt from memory later.
 - **No idea, or a vague one** ("don't know", "something with…", an industry,
-  "roughly, but it's fuzzy") → start the skill **`market-research`**. It asks for
-  the idea as it stands FIRST — an answer to the switch that already was the idea
-  is carried over, never asked twice — then interviews where the idea is silent,
-  researches the audience and writes `docs/product-brief.md`. Then step 1, here.
+  "roughly, but it's fuzzy") → start the skill **`market-research`** and pass on
+  what they said; it asks for the idea first and interviews where it is silent.
+  🚨 Their word decides, not yours: an idea that sounds buildable once you hear
+  it is still THIS branch (measured: "lässt sich gut bauen", then the intake).
 
 Don't guess. A vague answer is a no — better to turn off into research once too
 often than to build an app nobody buys.

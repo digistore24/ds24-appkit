@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { parseHsl, parseTokens } from "@/scripts/ux/rules.mjs";
+import { parseTokens, tokenHex } from "@/scripts/ux/rules.mjs";
 
 import {
   buildManifest,
@@ -45,13 +45,6 @@ function pngSize(file: string): { width: number; height: number } {
   }
   if (bytes.toString("latin1", 12, 16) !== "IHDR") throw new Error(`${file}: no IHDR chunk`);
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
-}
-
-/** `hsl(190 90% 26%)` from a token, as the `#rrggbb` a manifest can carry. */
-function tokenHex(value: string): string {
-  const rgb = parseHsl(value);
-  if (!rgb) throw new Error(`not an hsl() token: ${value}`);
-  return `#${rgb.map((c: number) => c.toString(16).padStart(2, "0")).join("")}`;
 }
 
 const tokens = parseTokens(readFileSync(GLOBALS_CSS, "utf8"));

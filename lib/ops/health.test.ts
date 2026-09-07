@@ -17,9 +17,11 @@
 
 import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import { notChecked } from "@/lib/test-not-checked";
 
 import {
   IPN_ACTIVE_DAYS,
@@ -206,13 +208,47 @@ describe("defaultProbes.localStoreWritable — 'not there' is not 'not writable'
     rmSync(parent, { recursive: true, force: true });
   });
 
-  it("🚨 still refuses when neither the directory nor its parent exists", async () => {
-    // The needle. Without it the branch above would pass against a probe that
+  it("passes when the directory AND its parent are absent but an ancestor can create them", async () => {
+    // The shipped default is `.data/media`, and on an app that has never
+    // stored a file `.data/` is missing too. The store creates both in one
+    // `mkdir` — a probe that asked only the parent said "not writable" about
+    // every fresh app (reported from a customer's app, 2026-09-07).
+    const root = tmp();
+    process.env.MEDIA_LOCAL_DIR = join(root, "not-yet", "media");
+    await expect(defaultProbes.localStoreWritable()).resolves.toBeUndefined();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("🚨 still refuses when the nearest existing ancestor cannot be written", async (ctx) => {
+    // The needle. Without it the branches above would pass against a probe that
     // swallows every error, which is exactly the shape that turns a guard silent.
-    const parent = tmp();
-    process.env.MEDIA_LOCAL_DIR = join(parent, "gone", "deeper");
-    rmSync(parent, { recursive: true, force: true });
-    await expect(defaultProbes.localStoreWritable()).rejects.toThrow();
+    // Read-only means chmod, which Windows ignores and root overrides — a
+    // spoken skip there, never a green.
+    if (process.platform === "win32") return notChecked(ctx, "a directory cannot be made read-only on Windows");
+    if (process.getuid?.() === 0) return notChecked(ctx, "root may write anywhere, so nothing is unwritable");
+    const root = tmp();
+    chmodSync(root, 0o500);
+    process.env.MEDIA_LOCAL_DIR = join(root, "gone", "deeper");
+    try {
+      await expect(defaultProbes.localStoreWritable()).rejects.toThrow();
+    } finally {
+      chmodSync(root, 0o700);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("🚨 and reports anything that is not 'not there' as it was", async () => {
+    // A FILE where a directory should be is ENOTDIR, not ENOENT — the walk must
+    // not climb past it and bless the parent.
+    const root = tmp();
+    const file = join(root, "a-file");
+    writeFileSync(file, "");
+    process.env.MEDIA_LOCAL_DIR = join(file, "media");
+    try {
+      await expect(defaultProbes.localStoreWritable()).rejects.toThrow();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("passes on a directory that is really there", async () => {

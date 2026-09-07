@@ -60,12 +60,38 @@ import { describe, expect, it } from "vitest";
 
 import { notChecked } from "@/lib/test-not-checked";
 
+import { PROFILE_FILE, isPrunedPath, readAgentProfile } from "./dev/agent-configs.mjs";
 import { capture, hasCommand, whichCommand } from "./lib/proc.mjs";
 import { DEVELOPER_KEY_PATHS } from "./security/patterns.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (file: string) => readFileSync(path.join(ROOT, file), "utf8");
 const there = (file: string) => existsSync(path.join(ROOT, file));
+
+/**
+ * 🚨 This app does not always have all four agent programs on disk.
+ * `node run.mjs agent-setup --apply` is a SHIPPED command whose purpose is to
+ * remove the wiring of the three programs this app does not use — and six of
+ * the `nobody` entries below ARE that wiring. Until 2026-09-07 this file did
+ * not know that: the step the setup skill prescribes deleted five inventory
+ * entries and wrote `.agent-profile.json` at the root, and two tests here
+ * went red in every app that followed the guidance (reported from a customer's
+ * app; `scripts/dev/agent-configs.mjs` names the two tests that had been
+ * taught to read the profile, and this was the third that had not).
+ *
+ * What agent-setup removed it records in `.agent-profile.json`; an inventory
+ * entry the profile says was pruned is not a rotted entry.
+ */
+const PROFILE = readAgentProfile(ROOT);
+
+/** The inventory entries that name a file this tree does not have — pruned ones excepted. */
+export function rottedEntries<T extends { file: string }>(
+  entries: T[],
+  profile: { pruned: string[] },
+  present: (file: string) => boolean,
+): T[] {
+  return entries.filter((entry) => !present(entry.file) && !isPrunedPath(profile, entry.file));
+}
 
 /** The sentence a `nobody` file has to carry, where its format allows a comment. */
 const SPOKEN = /nobody loads this file/i;
@@ -281,6 +307,9 @@ const NOT_FOREIGN_CONFIG = new Set([
   "run.mjs",
   ".env.example",
   ".template-version",
+  // Written by `node run.mjs agent-setup --apply`, read by `node run.mjs update`
+  // and by three tests in this tree (this one included) — ours, not foreign.
+  PROFILE_FILE,
 ]);
 
 /** Generated or machine-local, and never committed — not this inventory's business. */
@@ -308,9 +337,39 @@ describe("the inventory of foreign-tool configuration", () => {
     expect(byFile.size).toBe(INVENTORY.length);
   });
 
-  it("names only files that are really there", () => {
-    const gone = INVENTORY.filter((entry) => !there(entry.file)).map((entry) => entry.file);
-    expect(gone, "the inventory names files this tree does not have — it has rotted").toEqual([]);
+  it("names only files that are really there — or that agent-setup says it removed", () => {
+    // The third state first: a profile that exists but cannot be read would
+    // otherwise be indistinguishable from "nobody ever ran agent-setup", and
+    // every pruned entry would then count as rot.
+    expect(PROFILE.problem, `${PROFILE.problem}`).toBeNull();
+    const gone = rottedEntries(INVENTORY, PROFILE, there).map((entry) => entry.file);
+    expect(
+      gone,
+      `the inventory names files this tree does not have and no ${PROFILE_FILE} says why — it has rotted`,
+    ).toEqual([]);
+  });
+
+  it("🚨 counts a file the profile pruned as absent-on-purpose, and nothing else", () => {
+    // The needle for the rule above, against a profile this test writes itself:
+    // a pruned entry stops being rot; an entry that is merely missing stays rot,
+    // and a folder in the profile covers everything under it.
+    const entries = [
+      { file: ".codex/config.toml" },
+      { file: ".opencode/plugins/session-start.js" },
+      { file: ".agents/skills/some-stub/SKILL.md" },
+      { file: "drizzle/meta/0000_snapshot.json" },
+    ];
+    const profile = { pruned: [".codex/config.toml", ".agents/skills"] };
+    const nothingThere = () => false;
+    expect(rottedEntries(entries, profile, nothingThere).map((entry) => entry.file)).toEqual([
+      ".opencode/plugins/session-start.js",
+      "drizzle/meta/0000_snapshot.json",
+    ]);
+    // A shipped app — no profile — is held to every entry.
+    expect(rottedEntries(entries, { pruned: [] }, nothingThere)).toHaveLength(4);
+    // And the shipped profile-less tree is what this file measures today: the
+    // agent files are all there, or the test above would have said so.
+    expect(rottedEntries(entries.slice(0, 2), PROFILE, there)).toEqual([]);
   });
 
   it("🚨 leaves nothing at the app root unclassified", () => {

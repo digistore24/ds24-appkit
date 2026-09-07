@@ -95,9 +95,15 @@ function packageInstalled() {
  */
 async function installPackage() {
   console.log("→ Postgres for this machine is missing — fetching it now (about 60 MB, once).");
-  // --save-dev on purpose: from now on this project genuinely depends on it for
-  // development, and the next `npm install` has to bring it back.
-  const code = await runNpm(["install", "--save-dev", PACKAGE]);
+  // 🚨 `--no-save`, and the doc comment above is the reason: this package
+  // must never reach package.json. `scripts/setup.test.ts` → "ships no
+  // embedded Postgres by default" reads the app's OWN package.json, so a
+  // `--save-dev` here turned that test red on every Docker-less machine after
+  // the first `setup` — and the pre-commit hook then refused every commit in
+  // a freshly set up app (reported 2026-09-07, a Mac without Docker). A later
+  // `npm install` may prune it as extraneous; `packageInstalled()` above
+  // notices and this function fetches it again, from npm's cache.
+  const code = await runNpm(["install", "--no-save", PACKAGE]);
   if (code !== 0) {
     throw new Error(
       `✗ ${PACKAGE} could not be installed.\n` +

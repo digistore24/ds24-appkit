@@ -51,16 +51,26 @@ usable comes back, ask for the hex.
   The command reports where their site keeps its own mark and deliberately does
   not download it: whose image that is, is not visible from here.
 
-  🚨 **"Their site uses Söhne" has one answer, and it is a name from the five.**
-  Say what they have, then offer the **nearest pairing by name** out of
-  [`tokens.md`](tokens.md) — *"the closest of the five here is Hanken Grotesk;
-  it is the same kind of shape, cooler"* — and let them take it or keep the
-  shipped face. Never a download, never a sixth family added to that list, and
-  never a `@font-face` pointing at their CDN. A face this app does not ship is a
-  face `npm run build` would have to fetch on their deploy host, which is the
-  property [`tokens.md`](tokens.md) exists to protect. **Nothing here detects a
-  font**: you are matching what the user TELLS you, and if they do not know,
-  that is a fine answer too — the shipped pairing is a decision.
+  🚨 **"Their site uses Söhne" has ONE question, and it is not "is it one of
+  the five".** It is: does Fontsource ship it as files? `npm view
+  @fontsource/<family> version` (and `@fontsource-variable/`) answers in a
+  second. **Yes** — then it is theirs to have, on the same terms as the five
+  ([`tokens.md`](tokens.md): install the package, `next/font/local` at a file
+  inside it, one weight means the `h1` rule's `font-synthesis-weight: none`
+  matters), and a script or display face is fine as the HEADING face because
+  that face reaches `h1` alone. **No** — Söhne is licensed, and a licensed or
+  CDN-only face is one `npm run build` would have to fetch on their deploy
+  host, the property [`tokens.md`](tokens.md) exists to protect — then say
+  that, and offer the **nearest pairing by name** — *"the closest of the five
+  here is Hanken Grotesk; it is the same kind of shape, cooler"* — and let them
+  take it or keep the shipped face. Never a download, never a `@font-face`
+  pointing at their CDN. **Nothing here detects a font**: you are matching what
+  the user TELLS you, and if they do not know, that is a fine answer too — the
+  shipped pairing is a decision. Once, a session told a brand owner their
+  Fontsource-packaged script face was "not an option" on the strength of the
+  list being five and of a taste about pricing tables it never reaches; both
+  reasons were the session's, neither was the template's. Say which "no" you
+  mean.
 - **One command run, one proposal, one confirmation.** No second round. Same
   budget as Branch B, and for the same reason: a design conversation that keeps
   going is this skill's failure mode.
@@ -115,4 +125,10 @@ Four rules about that block:
 - `app/icon.png`, `app/apple-icon.png`, `public/icons/icon-{192,512,maskable-512}.png`
 - `--primary`, `--primary-foreground`, `--ring` in **both** blocks of
   `app/globals.css` — by `brand colors --apply`
+- 🚨 `OG_ACCENT` in `lib/pwa/manifest.ts` and `DEFAULT_ACCENT` in `lib/email.ts`
+  — **by you, by hand**, to the hex the command prints in its closing lines. A
+  share card and a mail client cannot read a CSS variable, so each carries the
+  accent as a literal, and the command does not edit TypeScript. Until both
+  match, every mail goes out in the OLD colour and `npm run test` says so
+  (`lib/email.test.ts`, `lib/pwa/manifest.test.ts`)
 - `docs/design.md`, which is written FIRST (Step 3)

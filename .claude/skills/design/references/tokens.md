@@ -67,6 +67,24 @@ registry whether the name resolves at all. Nothing here claims a pairing has
 been looked at on a screen; a table that promises what npm cannot deliver is
 worse than no table.
 
+🚨 **A menu, not a fence — and say which one you mean.** Nothing in the app
+holds a page to these five: `app/globals.heading.test.ts` accepts any installed
+package, and `scripts/design-pairings.test.ts` checks THIS TABLE, not
+`app/layout.tsx`. The condition a face has to meet is the paragraph above and
+nothing more: an npm package whose files are already on disk, and
+`next/font/local` pointing at one of them. A brand's own face that Fontsource
+carries meets it exactly like the five do — `npm view @fontsource/<family>
+version` (or `@fontsource-variable/`) says whether it exists; then install it,
+read its `files/` directory, point the `localFont()` call at the right cut. So
+when somebody arrives with a face of their own, there are three different
+"no"s and only one of them is this template's: *not on npm as files* (a
+licensed face, a CDN-only face — that is the rule, and the answer is the
+nearest of the five); *the list is five* (a menu size, never a reason to refuse
+a sixth); and *I would not put a script face there* (your taste — say so as
+taste, and remember the heading face reaches `h1` alone, see below, so
+"unreadable in a table" is not a thing that can happen). A session once sold
+the second and third as the first, to a customer with a brand.
+
 | Pairing | Carries | Elevation | The one package it adds | The file `next/font/local` points at |
 |---|---|---|---|---|
 | **Figtree** (shipped) | warm, geometric-humanist — the default | `flat` | `@fontsource-variable/figtree` — already a dependency | one variable file, `files/figtree-latin-wght-normal.woff2`, `weight: "300 900"`. Nothing to do |
@@ -132,6 +150,23 @@ and a label on the home page) — a display face there is a defect, not a look.
 The nested `var(--a, var(--b))` is load-bearing too: with the comma form,
 deleting the `localFont()` call drops the declaration and headings inherit,
 rather than falling back onto the body sans.
+
+**And that reach is what makes a display or script face USABLE**, which is the
+sentence a brand owner needs before anything else: the heading face never
+arrives in `h2`–`h4`, in a `CardTitle`, in a table, a price or a button. A
+face that would be unreadable at 14 px in a pricing table is never asked to
+be — it sets one title per page, at 2xl or larger. Two things to know when the
+face is theirs:
+
+- **One weight? Then the rule already has the line for it.** Every `h1` in the
+  tree carries `font-semibold`, and a face with a single cut (most script
+  faces — Kaushan Script, for one) has no 600 to answer with; the browser
+  would invent one and the title looks smeared. The shipped `h1` rule carries
+  `font-synthesis-weight: none` for exactly this, and
+  `app/globals.heading.test.ts` holds it there — do not take it out when you
+  replace the face, and if you write the rule anew, keep it.
+- **Check it at 375 px on the longest title the app has** — a legal page's
+  (`Datenschutzerklärung`) is a fair worst case — in both modes.
 
 Never a `font-[…]` class on a page.
 

@@ -28,6 +28,7 @@ import { extractBrandColors, darkTwinOf } from "./rank.mjs";
 import { readSite } from "./fetch-site.mjs";
 import { adjustAccent } from "./contrast.mjs";
 import { replaceTokens } from "./write-tokens.mjs";
+import { accentCopies, staleCopies } from "./copies.mjs";
 import { readLogo, renderIcons } from "./render.mjs";
 
 const ROOT = process.cwd();
@@ -292,8 +293,21 @@ async function runColors(args) {
   }
   writeFileSync(GLOBALS, result.css);
   console.log(`\n  ${ok("✓")} app/globals.css — ${result.replaced.length} token(s)`);
-  console.log(dim(`    next:  git diff app/globals.css`));
+  // The copies this command does NOT write. A share card and a mail button
+  // cannot read a CSS variable, so each holds the accent as a literal — and
+  // after a recolour each still holds the OLD one until somebody edits it.
+  // Their tests say so on the next `npm run test`; this says so now, while the
+  // person who asked for the colour is still looking. See copies.mjs.
+  const stale = staleCopies(accentCopies(ROOT), rgbToHex(parseHsl(blocks.light.primary)));
+  if (stale.length > 0) {
+    console.log(`\n  ${bad("⚠")} ${stale.length} literal cop${stale.length === 1 ? "y" : "ies"} of the accent still carr${stale.length === 1 ? "ies" : "y"} the old colour — set each to ${blocks.light.primary} as hex (${rgbToHex(parseHsl(blocks.light.primary))}):`);
+    for (const copy of stale) {
+      console.log(`      ${copy.file}  ${copy.name}${copy.value ? ` = "${copy.value}"` : " (not found where this template put it)"}  — ${copy.role}`);
+    }
+  }
+  console.log(dim(`\n    next:  git diff app/globals.css`));
   console.log(dim(`           node run.mjs ux-check`));
+  console.log(dim(`           npm run test   (holds every copy above to the new token)`));
   if (existsSync(join(ROOT, "docs", "design.md"))) {
     console.log(dim(`           record the new values in docs/design.md § Tokens`));
   }

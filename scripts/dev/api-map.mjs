@@ -133,27 +133,46 @@ export function exportsOf(source) {
     // The signature runs from `export` to the `{` that opens the body — over as
     // many lines as the parameter list takes. Read off the blanked text so a
     // brace inside a comment cannot end it early.
+    //
+    // 🚨 Which `{` is the body's is the whole question, and until 2026-09-07 it
+    // was answered twice, differently: the scan below found the right one, and
+    // the cut afterwards took the FIRST brace in the text — so every function
+    // whose parameter is an inline object type (`grantByHand(args: {` …) went
+    // on the map as `grantByHand(args:` and nothing else, 24 of 224. The body
+    // brace is the one at depth 0 that no type syntax precedes: after `)`,
+    // `>`, `]`, `}` or a type name it opens the body; after `:`, `|`, `&` or
+    // `=>` it opens an object type in the return position.
     let depth = 0;
-    let end = null;
+    let end = null; // [line, column] of the body's `{`
+    let before = ""; // the last non-space character seen, for the rule above
     for (let j = i; j < blankedLines.length && end === null; j += 1) {
-      for (const ch of blankedLines[j]) {
-        if (ch === "(" || ch === "<") depth += 1;
-        else if (ch === ")" || ch === ">") depth -= 1;
-        else if (ch === "{" && depth <= 0) { end = j; break; }
+      const text = blankedLines[j];
+      for (let c = 0; c < text.length; c += 1) {
+        const ch = text[c];
+        if (ch === "{") {
+          const typeOpener = /[:|&]$/.test(before) || before.endsWith("=>");
+          if (depth <= 0 && !typeOpener) { end = [j, c]; break; }
+          depth += 1;
+        } else if (ch === "(" || ch === "<" || ch === "[") depth += 1;
+        else if (ch === ")" || ch === ">" || ch === "]" || ch === "}") depth -= 1;
+        if (!/\s/.test(ch)) before = (before + ch).slice(-2);
       }
     }
-    if (end === null) end = i;
     // Printed from the BLANKED lines too: a comment inside the parameter list
     // is spaces there, and collapses away below instead of landing in the map.
-    const raw = blankedLines.slice(i, end + 1).join(" ");
+    const raw = end === null
+      ? blankedLines[i]
+      : [...blankedLines.slice(i, end[0]), blankedLines[end[0]].slice(0, end[1])].join(" ");
     // `hasPlan(memberId: string, productKey: string): Promise<boolean>` — the
     // `function` keyword says nothing the signature does not, and `async` is
     // visible in the `Promise<…>` return type; both are dropped, 4 kB over the map.
     const signature = raw
-      .replace(/\{[^]*$/, "")
       .replace(/^export\s+(?:async\s+)?function\s+/, "")
       .replace(/\s+/g, " ")
       .replace(/\(\s+/g, "(")
+      .replace(/\{\s+/g, "{ ")
+      .replace(/\s+\}/g, " }")
+      .replace(/;\s*\}/g, " }")
       .replace(/,\s*\)/g, ")")
       .replace(/\s+\)/g, ")")
       .trim();

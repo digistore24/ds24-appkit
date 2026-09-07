@@ -354,8 +354,18 @@
      a breadcrumb and a label rather than headings), not a wider rule here.
 
      components/page-header.tsx INHERITS this — it renders a plain <h1> — so the
-     rule stays in one place. */
+     rule stays in one place.
+
+     `font-synthesis-weight: none` is here for the face this app does NOT ship.
+     Every <h1> in the tree carries `font-semibold`. Source Serif 4 has 600 on
+     its axis, so for the shipped face the line changes nothing — but a brand's
+     display or script face often comes in ONE weight, and without this line
+     the browser invents a bold for it and the title looks smeared. Reported
+     from a customer's app on 2026-09-07 (Kaushan Script, one cut): easy to
+     misread as "the font is just ugly", and nothing here said otherwise. With
+     it, a one-weight face renders at the weight it has. */
   h1 {
     font-family: var(--font-heading);
+    font-synthesis-weight: none;
   }
 }

@@ -28,7 +28,7 @@ describe("an argument on its way to cmd.exe", () => {
   // Everything this template actually passes is a plain token. It has to come
   // out the other side untouched — a stray pair of quotes around `run` would
   // make npm look for a script by that name including the quotes.
-  it.each(["run", "typecheck", "install", "--save-dev", "db:migrate", "whoami", "embedded-postgres@16.14.0-beta.17"])(
+  it.each(["run", "typecheck", "install", "--no-save", "db:migrate", "whoami", "embedded-postgres@16.14.0-beta.17"])(
     "leaves the literal %s alone",
     (argument) => {
       expect(cmdQuote(argument)).toBe(argument);
@@ -76,8 +76,8 @@ describe("the command line proc.mjs hands to cmd.exe", () => {
     // what runs on Windows rather than only how it is started.
     expect(cmdLine("npm", ["run", "typecheck"])).toBe("npm run typecheck");
     expect(cmdLine("npm", ["install"])).toBe("npm install");
-    expect(cmdLine("npm", ["install", "--save-dev", "embedded-postgres@16.14.0-beta.17"])).toBe(
-      "npm install --save-dev embedded-postgres@16.14.0-beta.17",
+    expect(cmdLine("npm", ["install", "--no-save", "embedded-postgres@16.14.0-beta.17"])).toBe(
+      "npm install --no-save embedded-postgres@16.14.0-beta.17",
     );
   });
 

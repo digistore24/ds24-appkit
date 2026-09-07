@@ -585,8 +585,12 @@ export function detectAgent(env = process.env) {
 //
 // The record is `.agent-profile.json`, written by agent-setup and read by
 // `node run.mjs update` (so an update does not put the wiring back) and by
-// those two tests. The rule that a pruned path covers everything under it had
-// three copies before this one existed; a fourth is what this replaces.
+// those two tests — and, since 2026-09-07, by `scripts/foreign-config.test.ts`,
+// which lists six of the pruned files in its inventory and was the third
+// checker that assumed four (two of its tests red in a customer's app after
+// the step the setup skill prescribes). The rule that a pruned path covers
+// everything under it had three copies before this one existed; a fourth is
+// what this replaces.
 
 /** Where agent-setup records what this app was reduced to. */
 export const PROFILE_FILE = ".agent-profile.json";

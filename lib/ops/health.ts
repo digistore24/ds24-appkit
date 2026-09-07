@@ -46,8 +46,8 @@
 // What that cannot catch is a bucket that accepts `HEAD` and refuses `PUT`. If
 // that ever turns out to matter, the honest answer is a `--deep` flag on the
 // COMMAND that writes — never a scheduled writer.
-import { access, constants } from "node:fs/promises";
-import { dirname } from "node:path";
+import { access, constants, stat } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 
 import { db } from "@/db";
 import { ipnEvents, orders } from "@/db/schema";
@@ -234,17 +234,36 @@ export const defaultProbes: OpsProbes = {
   mediaEnabled: () => isMediaEnabled(),
   headObject: (key, signal) => mediaStore().head(key, signal),
   localStoreWritable: async () => {
-    const dir = localDirFromEnv(process.env);
-    try {
-      await access(dir, constants.W_OK);
-    } catch (error) {
-      // 🚨 "Not there" is not "not writable". `lib/media/local.ts` creates the
-      // directory on the FIRST `put()`, so every app that has never stored a
-      // file answers ENOENT here — and this probe's finding mails the operator.
-      // What decides is whether the store will be ABLE to create it, so the
-      // parent is asked; anything else is reported as it was.
-      if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") throw error;
-      await access(dirname(dir), constants.W_OK);
+    // 🚨 "Not there" is not "not writable". `lib/media/local.ts` creates the
+    // directory on the FIRST `put()` — `mkdir(…, { recursive: true })`, any
+    // depth — so every app that has never stored a file answers ENOENT here,
+    // and this probe's finding mails the operator. What decides is whether the
+    // store will be ABLE to create it, so the nearest ancestor that EXISTS is
+    // asked; anything other than "not there" is reported as it was.
+    //
+    // The nearest existing ancestor, not the parent: until 2026-09-07 this
+    // asked `dirname(dir)` once, and the shipped default is `.data/media` in
+    // an app whose `.data/` does not exist either until something is stored.
+    // So a fresh app — no upload yet, nothing wrong with it — got "local media
+    // directory is not writable" from `node run.mjs errors`, as a HIGH finding.
+    let dir = resolve(localDirFromEnv(process.env));
+    for (;;) {
+      try {
+        await access(dir, constants.W_OK);
+        // A FILE in the way is not a directory the store can create into.
+        // Linux says ENOTDIR one level down and never gets here; Windows says
+        // ENOENT for the same path, and would otherwise climb up to the file
+        // and bless it because it is writable.
+        if (!(await stat(dir)).isDirectory()) {
+          throw new Error(`${dir} is a file, not a directory — the media store cannot create ${localDirFromEnv(process.env)} under it`);
+        }
+        return;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") throw error;
+        const parent = dirname(dir);
+        if (parent === dir) throw error; // the filesystem root answered ENOENT
+        dir = parent;
+      }
     }
   },
   sellingProducts: () => {

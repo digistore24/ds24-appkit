@@ -259,4 +259,18 @@ describe("both database drivers are handled", () => {
     const declared = { ...pkg.dependencies, ...pkg.devDependencies };
     expect(Object.keys(declared)).not.toContain("embedded-postgres");
   });
+
+  it("🚨 and the on-demand fetch never writes it into package.json either", () => {
+    // The test above reads the SHIPPED package.json, and it is also what a
+    // customer's own `npm run test` reads. Until 2026-09-07 the fetch ran
+    // `npm install --save-dev`, so on every machine without Docker the first
+    // `node run.mjs setup` put the package into package.json, the test above
+    // went red in that app for good, and the pre-commit hook refused every
+    // commit. The two halves of one rule: not shipped, and not saved.
+    const src = read("scripts/db/local.mjs");
+    const install = src.match(/runNpm\(\[([^\]]*)\]\)/);
+    expect(install, "the npm install call in scripts/db/local.mjs").toBeTruthy();
+    expect(install![1]).toContain('"--no-save"');
+    expect(install![1]).not.toContain("--save");
+  });
 });

@@ -324,6 +324,18 @@ describe("app — the heading family", () => {
     );
     expect(carrying.map((r) => r.selector)).toEqual([SELECTOR]);
   });
+
+  it("refuses a synthesised bold — a one-weight heading face renders at the weight it has", () => {
+    // Every <h1> in the tree carries `font-semibold`. The shipped serif has a
+    // 600 on its axis; a customer's script or display face often has one cut,
+    // and without this declaration the browser fakes a bold for it (reported
+    // from a customer's app, 2026-09-07). It lives on the same rule as the
+    // face, so a swap cannot leave it behind.
+    const base = bodyOf(blankComments(CSS), "@layer base");
+    const rule = rulesOf(base!).find((r) => r.selector === SELECTOR);
+    expect(rule, `a "${SELECTOR}" rule in @layer base`).toBeTruthy();
+    expect(rule!.declarations.replace(/\s+/g, " ")).toContain("font-synthesis-weight: none");
+  });
 });
 
 // ── The needle probe ─────────────────────────────────────────────────────────

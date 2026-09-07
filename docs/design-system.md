@@ -83,7 +83,7 @@ through `--font-sans` and `--font-heading` in `app/globals.css`:
 | Variable | The shipped face | Where it reaches |
 |---|---|---|
 | `--font-app-sans` | Figtree | `body`, and everything that inherits from it |
-| `--font-app-heading` | Source Serif 4 | **`h1` only**, through one rule in `@layer base` — not `h2`–`h4`, see §3 |
+| `--font-app-heading` | Source Serif 4 | **`h1` only**, through one rule in `@layer base` — not `h2`–`h4`, not `CardTitle`, not a table, a price or a button. The reasoning is in the comment above that rule in `app/globals.css` |
 
 **Both are loaded with `next/font/local` from an npm package rather than
 `next/font/google`.** That is worth knowing before you change either:
@@ -92,6 +92,13 @@ runs on your host during a deploy. The shipped setup needs no network at build
 at all, and a font swap that reaches for Google Fonts gives that property up.
 Either way the file is served from your own origin, so the no-cookie-banner
 position in [`compliance.md`](compliance.md) is untouched.
+
+That `h1`-only reach is also what makes a display or script face a real option
+for a brand: it sets one title per page and is never asked to carry a table.
+The `h1` rule carries `font-synthesis-weight: none` for the same case — every
+`h1` in the tree is `font-semibold`, and a face with a single cut would
+otherwise get a bold the browser invents, which looks smeared and is easy to
+blame on the font.
 
 The CSS variables are named after their ROLE (`--font-app-sans`,
 `--font-app-heading`), not after the fonts currently sitting on them — the faces
@@ -419,6 +426,7 @@ built on this template agrees with every other:
 | `components/brand-mark.tsx` | the mark, and the `<img>`-only rule |
 | `config/brand.json` · `lib/brand.ts` | whether there is a logo, and where |
 | `lib/pwa/manifest.ts` | the icon list and the PWA colours, pinned to the tokens by a test |
+| `lib/email.ts` | `DEFAULT_ACCENT`, the mail button's colour when the stylesheet cannot be read — a literal, pinned to `--primary` by a test, and one `brand colors --apply` names but does not write |
 | `next.config.ts` | the security headers, including the brand folder's |
 | `scripts/ux/rules.mjs` | what `ux-check` measures, and the six ways past a dial it counts |
 | `scripts/design/dials.mjs` | the four dials as DATA, held against §8 from both sides by `dials.test.ts` — a fifth one fails the build here |

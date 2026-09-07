@@ -4,7 +4,7 @@
      scripts/api-map.test.ts compares this file with what the generator
      produces, and a hand edit is undone by the next run. -->
 
-_49 files, 207 exported functions, 46 tables. Regenerate
+_51 files, 224 exported functions, 46 tables. Regenerate
 with `node run.mjs api-map` after adding an export or a table; the suite says so
 when it is behind._
 
@@ -97,12 +97,12 @@ tests — `docs/ux.md` owns each, this is where they are needed:
 
 ## lib/ai/customer-text.ts
 
-- `buildFencedRequest(input: CustomerTextRequest):` — The request, as data.
+- `buildFencedRequest(input: CustomerTextRequest): { system: PromptBlock[]; messages: ChatMessage[] }` — The request, as data.
 
 ## lib/ai/disclosure.mjs
 
 - `mountFor(surfaceId)` — How a surface mounts the notice.
-- `disclosureProblems(` — What is wrong with the disclosures, as CODES.
+- `disclosureProblems({ locales, messagesFor, sourceOf, configFor })` — What is wrong with the disclosures, as CODES.
 
 ## lib/ai/knowledge.ts
 
@@ -149,7 +149,7 @@ tests — `docs/ux.md` owns each, this is where they are needed:
 - `bucketLabels(range: Range, granularity: Granularity, timeZone: string): string[]` — Every bucket a range contains, in order — including the empty ones.
 - `summaryFor(range: Range): Promise<Summary>`
 - `groupedFor(range: Range, dimension: Dimension, granularity: Granularity, timeZone: string): Promise<GroupRow[]>` — Spend, sliced.
-- `callsFor(range: Range, focus: CallFocus =` — The individual calls behind the numbers, newest first.
+- `callsFor(range: Range, focus: CallFocus = {}, granularity: Granularity = "none", timeZone = "UTC", limit = CALLS_LIMIT): Promise<CallRow[]>` — The individual calls behind the numbers, newest first.
 - `unpricedModels(range: Range): Promise<ModelCount[]>` — Which models the report could not price, and how often they were called.
 - `unexplainedModels(range: Range): Promise<ModelCount[]>` — Which models were billed for tokens they did not itemise (FR-43a).
 - `failuresFor(range: Range): Promise<OutcomeCount[]>` — What went wrong, and how often.
@@ -170,7 +170,7 @@ tests — `docs/ux.md` owns each, this is where they are needed:
 - `mergedBinding(config, task)` — What the config SAYS for one task, before `"auto"` is resolved.
 - `resolveProvider(provider, configuredProviders = [], kind = "text")` — Which company actually answers — `"auto"` turned into a name.
 - `resolveBinding(config, task, configuredProviders = [])` — The binding for one task: which provider, which model, what limits.
-- `bindingProblems(config, configuredProviders,` — Everything wrong with `config/ai-models.json`, as sentences naming the fix.
+- `bindingProblems(config, configuredProviders, { notes } = {})` — Everything wrong with `config/ai-models.json`, as sentences naming the fix.
 
 ## lib/ai/tasks.ts
 
@@ -239,8 +239,8 @@ tests — `docs/ux.md` owns each, this is where they are needed:
 ## lib/digistore/attribution.ts
 
 - `chooseAttribution(input: AttributionInput): Attribution`
-- `shouldCreditTokens(input:` — May this payment be credited to a token balance?
-- `shouldArmAutoReload(input:` — May this payment ARM an unattended top-up mandate?
+- `shouldCreditTokens(input: { packageKey: string | null; status: string | null; orderId: string | undefined; memberId: string | null }): boolean` — May this payment be credited to a token balance?
+- `shouldArmAutoReload(input: { armAutoReload: boolean; reason: AttributionReason; purchaseId: string | null; isTokenPackage: boolean; creditWasBooked: boolean }): boolean` — May this payment ARM an unattended top-up mandate?
 
 ## lib/digistore/billing.ts
 
@@ -248,7 +248,7 @@ tests — `docs/ux.md` owns each, this is where they are needed:
 - `createBillingOnDemand(apiKey: string, args: BillOnDemandArgs): Promise<BillOnDemandResult>` — Charges a payment against an existing purchase_id via createBillingOnDemand.
 - `stopRebilling(apiKey: string, purchaseId: string): Promise<void>` — Cancels a subscription: stops the recurring payments (rebilling) for a purchase_id.
 - `getPurchase(apiKey: string, purchaseId: string): Promise<PurchaseInfo>` — Reads a single purchase (subscription status + management links).
-- `listPurchases(apiKey: string, filter: Record<string, string> =` — Lists purchases/subscriptions (paginated).
+- `listPurchases(apiKey: string, filter: Record<string, string> = {}): Promise<PurchaseInfo[]>` — Lists purchases/subscriptions (paginated).
 
 ## lib/digistore/ipn.ts
 
@@ -286,13 +286,30 @@ tests — `docs/ux.md` owns each, this is where they are needed:
 - `decorateCheckoutUrl(url: string, paramName: string, key: string): string` — Appends the testpay parameter — but only onto a Digistore24 checkout URL.
 - `resetTestpayForTests(): void` — The module memoizes across requests; tests reset it between cases.
 - `fetchTestpayState(doRecreate = false): Promise<TestpayState>` — Fetches the key from Digistore24.
-- `withTestpayParam(url: string, opts: TestpayOptions =` — The one entry point the checkout uses (lib/digistore/checkout.ts → resolveOne).
+- `withTestpayParam(url: string, opts: TestpayOptions = {}): Promise<string>` — The one entry point the checkout uses (lib/digistore/checkout.ts → resolveOne).
 
 ## lib/email-change/manage.ts
 
 - `pendingChangeFor(userId: string): Promise<PendingChange | null>` — The change this Member is waiting on, if any.
-- `requestEmailChange(userId: string, rawEmail: unknown): Promise<` — Records that this Member would like to move to `rawEmail`, and returns the token to mail there.
+- `requestEmailChange(userId: string, rawEmail: unknown): Promise<{ newEmail: string; token: string; expiresAt: Date }>` — Records that this Member would like to move to `rawEmail`, and returns the token to mail there.
 - `confirmEmailChange(rawToken: string): Promise<ConfirmResult>` — Moves the account, for whoever proves they can read mail at the new address.
+
+## lib/email.ts
+
+- `isPostmarkConfigured(): boolean` — The detection lives in lib/env-guard.ts (pure env checks, without the nodemailer dependency) — here we only apply it to process.env, so t…
+- `isSmtpConfigured(): boolean`
+- `isEmailLoginEnabled(): boolean`
+- `emailFrom(): string` — Sender address (From), depending on the configured transport.
+- `accentFromCss(css: string): string | null` — The `--primary` value of a stylesheet as hex, or null when unreadable.
+- `renderMailHtml(layout: MailLayout): string`
+- `renderMailText(layout: MailLayout): string`
+- `imprintLines(markdown: string): string[]` — A legal document flattened to the plain lines a mail footer can carry.
+- `sendLoginEmail(to: string, url: string): Promise<void>` — Sends the magic link to the destination address.
+- `credentialBodies(texts: CredentialTexts): { html: string; text: string }` — The two bodies, built from finished texts.
+- `sendCredentialChangeEmail(to: string, change: CredentialChange, at: Date, detail?: string): Promise<void>` — Tells the Member that a credential on their account changed.
+- `sendEmailChangeConfirmation(to: string, url: string): Promise<void>` — The link that actually moves an account, sent to the address it would move TO — and to no other.
+- `sendOperatorMail(to: string, mail: OperatorMail): Promise<void>` — Sends one operator message to one address.
+- `buildEmailProvider(): Provider | null` — Builds the Auth.js email provider (magic link).
 
 ## lib/entitlements/manage.ts
 
@@ -303,18 +320,18 @@ tests — `docs/ux.md` owns each, this is where they are needed:
 - `hasPlan(memberId: string, productKey: string): Promise<boolean>` — May this Member use `productKey`?
 - `planStartedAt(memberId: string, productKey: string): Promise<Date | null>` — When did this Member's access to `productKey` START?
 - `listGrantsFor(memberId: string): Promise<GrantRow[]>` — EVERY grant this Member has ever held — no dedupe, no active filter.
-- `grantByHand(args:` — The Operator hands a Member a plan — no payment behind it (story 3.3).
+- `grantByHand(args: { actor: Actor; memberId: string; productKey: string; reason: unknown; accessUntil: Date | null; now?: Date }): Promise<ManualGrant>` — The Operator hands a Member a plan — no payment behind it (story 3.3).
 - `memberOfGrant(grantId: string): Promise<string | null>` — Whose grant this is, or null — for the setup trail's `subject_member_id`.
-- `revokeGrantByHand(args:`
+- `revokeGrantByHand(args: { actor: Actor; grantId: string }): Promise<RevokedGrant>`
 - `applyGrantTransition(transition: GrantTransition, ref: PurchaseGrantRef): Promise<boolean>` — Carries out what `chooseGrantTransition` decided.
-- `purchaseGrant(ds24PurchaseId: string, productKey: string): Promise<` — The grant behind a purchase, or null.
-- `openPurchaseGrantByPurchase(ds24PurchaseId: string): Promise<` — The open purchase grant behind a purchase id, WITHOUT needing to know what was bought.
+- `purchaseGrant(ds24PurchaseId: string, productKey: string): Promise<{ memberId: string; suspendedAt: Date | null; endedAt: Date | null } | null>` — The grant behind a purchase, or null.
+- `openPurchaseGrantByPurchase(ds24PurchaseId: string): Promise<{ memberId: string; productKey: string; suspendedAt: Date | null; endedAt: Date | null } | null>` — The open purchase grant behind a purchase id, WITHOUT needing to know what was bought.
 
 ## lib/entitlements/rules.ts
 
 - `chooseGrantTransition(input: GrantTransitionInput): GrantTransition` — The one decision point for the grant lifecycle.
 - `grantState(row: GrantStateInput, now: Date): GrantState` — What state is this grant in, seen from `now`?
-- `pausedKeys(active: readonly` — The Product Keys the Member should be told are PAUSED — suspended, and not covered by anything they can still use.
+- `pausedKeys(active: readonly { productKey: string }[], suspended: readonly string[]): string[]` — The Product Keys the Member should be told are PAUSED — suspended, and not covered by anything they can still use.
 
 ## lib/env-guard.ts
 
@@ -324,7 +341,7 @@ tests — `docs/ux.md` owns each, this is where they are needed:
 - `appEnv(value?: string): AppEnv` — Normalizes APP_ENV.
 - `isRealEnvironment(value?: string): boolean` — true for environments real users see (STAGING and PROD).
 - `checkEnvironment(env: EnvCheckInput): string[]` — Checks the environment and returns the list of violations (empty = fine).
-- `mediaProblem(environment: AppEnv, env:` — Media on a real environment: object storage, or the app does not start.
+- `mediaProblem(environment: AppEnv, env: { MEDIA_DRIVER?: string; mediaBucketConfigured?: boolean; mediaEnabled?: boolean }): string | null` — Media on a real environment: object storage, or the app does not start.
 
 ## lib/impersonation/session.ts
 
@@ -358,6 +375,12 @@ tests — `docs/ux.md` owns each, this is where they are needed:
 
 - `buildMemberExport(memberId: string): Promise<MemberExport>` — Build the export for ONE member — the caller's own.
 
+## lib/pwa/manifest.ts
+
+- `shortAppName(name: string, max = 12): string` — A name that survives a home screen: Android shows roughly twelve characters under an icon and truncates the rest with an ellipsis.
+- `originFrom(headers: { host?: string | null; forwardedHost?: string | null; forwardedProto?: string | null }): string` — The origin this request arrived on, taken from its headers.
+- `buildManifest(origin: string): MetadataRoute.Manifest` — The whole manifest.
+
 ## lib/rate-limit.ts
 
 - `withinWindow(timestamps: readonly number[], now: number, windowMs: number): number[]` — The hits still inside the window, oldest first.
@@ -377,34 +400,34 @@ tests — `docs/ux.md` owns each, this is where they are needed:
 ## lib/tokens/account.ts
 
 - `hasSufficientBalance(balance: number, cost: number): boolean` — Is the balance enough for a consumption?
-- `shouldAutoReload(account:` — Should we auto top up?
-- `reloadIsPaused(account:` — Has auto top-up charged this card too often without a credit coming back?
+- `shouldAutoReload(account: { balance: number; autoReloadEnabled: boolean; autoReloadThreshold: number }): boolean` — Should we auto top up?
+- `reloadIsPaused(account: { reloadAttempts: number }, limit: number = RELOAD_ATTEMPT_LIMIT): boolean` — Has auto top-up charged this card too often without a credit coming back?
 - `countPausedReloads(limit: number = RELOAD_ATTEMPT_LIMIT): Promise<number>` — How many accounts have stopped charging because nothing came back.
 - `isReloadLockStale(lockedAt: Date | null, now: Date, timeoutHours: number = RELOAD_LOCK_TIMEOUT_HOURS): boolean` — Is a set reload lock stale (timeout exceeded)?
 - `getTokenAccount(memberId: string)` — --- Database operations -----------------------------------------------------
 - `listLedgerFor(memberId: string, limit: number = LEDGER_PAGE_SIZE): Promise<LedgerRow[]>` — The Member's bookings, newest first — the audit trail behind the balance.
 - `getOrCreateTokenAccount(memberId: string)` — Creates an (empty) account if needed and returns it.
-- `consumeTokens(args:` — Subtracts tokens (consumption).
-- `creditTokens(args:` — Credits tokens after a confirmed payment.
-- `adjustTokens(args:` — The Operator corrects a balance by hand (story 3.2).
+- `consumeTokens(args: { memberId: string; amount: number; note?: string; now?: Date }): Promise<number>` — Subtracts tokens (consumption).
+- `creditTokens(args: { memberId: string; credits: number; ds24OrderId: string; note?: string; releaseReloadLock?: boolean; releaseLockedAt?: Date | null; origin?: string | null; linkPurchaseId?: string; now?: Date }): Promise<{ credited: boolean; balance: number }>` — Credits tokens after a confirmed payment.
+- `adjustTokens(args: { actor: Actor; memberId: string; amount: unknown; reason: unknown; now?: Date }): Promise<{ balance: number; delta: number }>` — The Operator corrects a balance by hand (story 3.2).
 - `claimReloadSlot(memberId: string, now: Date = new Date(), timeoutHours: number = RELOAD_LOCK_TIMEOUT_HOURS, attemptLimit: number = RELOAD_ATTEMPT_LIMIT): Promise<boolean>` — Atomically tries to take the auto-reload slot (lock).
 - `releaseReloadSlot(accountId: string, lockedAt: Date, now: Date = new Date()): Promise<void>` — Releases the reload lock — but only the one WE set.
-- `setAutoReload(args:` — Sets an account's auto-reload settings.
-- `disarmAutoReload(args:` — Stops unattended charging for one account, and forgets the mandate when the mandate itself is what went wrong.
-- `setAutoReloadEnabled(args:` — Flips ONLY the on/off switch, leaving threshold, package and mandate alone.
-- `autoReloadIfNeeded(args:` — Checks an account and starts an auto top-up if needed: take the lock → createBillingOnDemand against the stored order id (which the API t…
+- `setAutoReload(args: { memberId: string; enabled: boolean; threshold: number; packageKey: string | null; ds24PurchaseId: string | null; now?: Date }): Promise<void>` — Sets an account's auto-reload settings.
+- `disarmAutoReload(args: { memberId: string; clearMandate?: boolean; onlyForPurchaseId?: string; now?: Date }): Promise<boolean>` — Stops unattended charging for one account, and forgets the mandate when the mandate itself is what went wrong.
+- `setAutoReloadEnabled(args: { memberId: string; enabled: boolean; now?: Date }): Promise<boolean>` — Flips ONLY the on/off switch, leaving threshold, package and mandate alone.
+- `autoReloadIfNeeded(args: { memberId: string; apiKey: string; now?: Date; bill?: (apiKey: string, a: BillOnDemandArgs) => Promise<unknown> }): Promise<AutoReloadResult>` — Checks an account and starts an auto top-up if needed: take the lock → createBillingOnDemand against the stored order id (which the API t…
 
 ## lib/tokens/spend.ts
 
 - `isSpendableAmount(amount: number): boolean` — Is this a price this app may charge?
 - `spendErrorFor(err: unknown): TokenError | null` — The one error a Member is meant to read, as a translatable code — everything else stays itself.
-- `spendTokens(args:` — Charges the signed-in Member for something they just used.
+- `spendTokens(args: { amount: number; note?: string }): Promise<number>` — Charges the signed-in Member for something they just used.
 - `scheduleTopUp(memberId: string): void` — Runs the top-up AFTER the response has been sent.
 
 ## lib/users/bootstrap.ts
 
-- `isFirstUserOwnerAllowed(env:` — true if a first account may be promoted to owner in this environment.
-- `decideRoleForNewUser(input:` — The decision itself, as a pure function — it hands out user management, and that is worth a test of its own (lib/users/bootstrap.test.ts).
+- `isFirstUserOwnerAllowed(env: { APP_ENV?: string }): boolean` — true if a first account may be promoted to owner in this environment.
+- `decideRoleForNewUser(input: { APP_ENV?: string; usersExist: boolean }): Role` — The decision itself, as a pure function — it hands out user management, and that is worth a test of its own (lib/users/bootstrap.test.ts).
 - `usersExist(): Promise<boolean>` — Does the app already have users?
 - `roleForNewUser(): Promise<Role>` — The role an account that is being created RIGHT NOW gets — "member" as the normal case, "owner" for the very first one on a fresh DEV ins…
 
@@ -418,10 +441,10 @@ tests — `docs/ux.md` owns each, this is where they are needed:
 - `canChangeEmail(actor: Actor): Denial` — May `actor` change `target`'s email address?
 - `canSendLoginLink(actor: Actor, target: Target): Denial` — May `actor` send the user `target` a sign-in link?
 - `canImpersonate(actor: Actor, target: Target, context: ImpersonationContext): Denial` — May `actor` sign in as the user `target`?
-- `canStopImpersonating(context:` — May this session STOP impersonating?
+- `canStopImpersonating(context: { alreadyImpersonating: boolean }): Denial` — May this session STOP impersonating?
 - `impersonationExpired(expiresAt: number, now: number): boolean` — Has this impersonation run out?
 - `normalizeEmail(input: unknown): string | null` — Normalizes and validates an email input.
-- `checkDisplayName(value: unknown):` — Normalizes a member's own display name.
+- `checkDisplayName(value: unknown): { ok: true; name: string | null } | { ok: false }` — Normalizes a member's own display name.
 
 ## lib/utils.ts
 

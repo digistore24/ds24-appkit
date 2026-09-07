@@ -225,4 +225,21 @@ describe("the accent colour", () => {
     const css = await readFile("app/globals.css", "utf8");
     expect(accentFromCss(css)).toMatch(/^#[0-9a-f]{6}$/);
   });
+
+  it("🚨 keeps DEFAULT_ACCENT equal to --primary in :root", async () => {
+    // The comment above DEFAULT_ACCENT asks for exactly this and called the
+    // alternative "a drift nothing reports" — and until 2026-09-07 nothing did:
+    // the only assertion was the hex shape two tests up. `OG_ACCENT` in
+    // `lib/pwa/manifest.ts` has had this test since it existed; this is its
+    // sister, and the reason `node run.mjs brand colors --apply` now names both
+    // copies in its closing lines. Measured in a customer's app: recoloured
+    // through the command, every mail still carried the shipped petrol.
+    const { readFile } = await import("node:fs/promises");
+    const { parseTokens, tokenHex } = await import("@/scripts/ux/rules.mjs");
+    const css = await readFile("app/globals.css", "utf8");
+    expect(DEFAULT_ACCENT).toBe(tokenHex(parseTokens(css).light.primary));
+    // And the two readers agree on what the file says — otherwise the fallback
+    // could equal a value the sender never computes.
+    expect(accentFromCss(css)).toBe(DEFAULT_ACCENT);
+  });
 });

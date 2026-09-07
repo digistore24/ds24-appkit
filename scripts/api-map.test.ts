@@ -90,6 +90,39 @@ describe("exportsOf reads source as text — through blankComments()", () => {
     expect(fn.line).toBe(6);
   });
 
+  it("🚨 an inline object type in the parameter list is part of the signature, not its end", () => {
+    // 24 of 224 functions on the map read `grantByHand(args:` and stopped —
+    // the scan found the body's brace, the cut afterwards took the first one.
+    const source = [
+      "export async function grantByHand(args: {",
+      "  /** The Operator. */",
+      "  actor: Actor;",
+      "  memberId: string;",
+      "  reason: unknown;",
+      "}): Promise<GrantResult> {",
+      "  return go(args);",
+      "}",
+      "",
+      "export function originFrom(headers: { host?: string | null; forwardedProto?: string | null }): string {",
+      "  return '';",
+      "}",
+      "",
+      "export function shape(id: string): { ok: boolean; rows: string[] } {",
+      "  return { ok: true, rows: [id] };",
+      "}",
+      "",
+      "export function pick(items: [string, number][], by: (item: string) => boolean): void {",
+      "  items.filter(([s]) => by(s));",
+      "}",
+    ].join("\n");
+    expect(exportsOf(source).map((e) => e.signature)).toEqual([
+      "grantByHand(args: { actor: Actor; memberId: string; reason: unknown }): Promise<GrantResult>",
+      "originFrom(headers: { host?: string | null; forwardedProto?: string | null }): string",
+      "shape(id: string): { ok: boolean; rows: string[] }",
+      "pick(items: [string, number][], by: (item: string) => boolean): void",
+    ]);
+  });
+
   it("a `{` inside a comment in the parameter list does not end the signature", () => {
     const source = [
       "export function f(",

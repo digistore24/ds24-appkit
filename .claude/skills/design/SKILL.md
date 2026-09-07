@@ -188,6 +188,11 @@ Then apply it:
    Branch A: `node run.mjs brand colors … --apply` did this. Branch B: by hand,
    or `--hex` with the colour you agreed.
    The exact edits are [`references/tokens.md`](references/tokens.md).
+   🚨 **Either way, two literal copies of the accent are yours to set:**
+   `OG_ACCENT` in `lib/pwa/manifest.ts` and `DEFAULT_ACCENT` in `lib/email.ts`,
+   to the new `--primary` as hex (`--apply` prints it). The command writes CSS
+   and nothing else; until both match, every mail carries the old colour and
+   `npm run test` is red.
 2. **Type:** the wiring in `app/layout.tsx`, if the pairing changed — the package
    is installed first, and `next/font/local` points at a file inside it.
 3. **Elevation:** `--elevation-raised` and `--elevation-overlay`, in **both**
