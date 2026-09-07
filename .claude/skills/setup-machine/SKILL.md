@@ -23,6 +23,15 @@ the required list: where it is missing, the database runs without it (step 4).
 one sentence and carry on with what the user actually asked for. A setup
 walkthrough for somebody whose machine is already fine is pure noise.
 
+**When you land here at the start of a build — `build-app` step 0a, or a fresh
+clone whose greeting says `blocked` — say where this is going before you run
+anything.** One sentence: the project is being made ready to run, it takes a few
+minutes (longer when something has to be downloaded), nothing about their app is
+decided in it, and the questions about their app come right after. From the
+other chair, a program that installs for ten minutes after three typed words is
+a program building something nobody asked for — a customer said exactly that
+(2026-09-07), and what they were watching was `npm install`.
+
 ## Where the commands come from — the one rule
 
 Everything you need to know about this machine, you get from:

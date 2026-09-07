@@ -121,10 +121,12 @@ their way around one skill has then found their way around all of them:
   `pausedKeys()` + `suspendedKeysFor()`"* — three function names before the
   sentence the customer was waiting for — and the customer asked for exactly the
   shape above, in their own words: *what has changed for the customer and what is
-  still open; the file paths could be added at the bottom.* The archive agrees:
-  of 155 hand-backs in 30 field runs, 32 open with a file or function name and
-  THREE put them last (`scripts/dogfood/observe.mjs` reads it off every run as
-  *Übergabe*, in the Turns table).
+  still open; the file paths could be added at the bottom.* The field-test
+  archive agrees: of 162 hand-backs in 31 runs, 21 open with a code name — a
+  file, a function, a table — and 12 put them last (the field report reads it
+  off every run, in its Turns table). Where a stage ends on the question
+  whether to go on, the files line goes before that question, and nothing else
+  follows it.
 - **Look before you ask.** Almost everything a skill needs to know is on disk:
   `.env`, the files under `config/`, the tables in `db/`, the reports in
   `docs/reports/`. Ask only about what genuinely leaves no trace, and then in

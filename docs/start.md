@@ -164,6 +164,26 @@ From here the project speaks for itself. In the new session:
 3. Then just tell the user to say **"Build my app"** — or say it for them if they
    already told you what they want to build.
 
+**And say what those three words set in motion, before they type them.** The
+quarter of an hour after "Build my app" is the one that unsettles people most:
+they gave no concept, and they watch a program work — so what is it building?
+Nothing yet, and they should hear that from you first. Three lines, in their
+language:
+
+- **First the machine, not the app.** The project gets made ready to run —
+  dependencies, a database, a check that it starts. A few minutes; longer the
+  first time, when things are downloaded. Nothing about *their* app is decided
+  in that stretch.
+- **Then the questions.** What it is for, for whom, what the first version does
+  — or finding the idea together if there is none yet. Nothing is built before
+  they have seen what the result will be and said yes to it.
+- **Then the build, in stages** — each one something they can open before the
+  next begins.
+
+Adjust the minutes to the machine, never downward for comfort. If they have
+already told you their idea, say that it goes into the questions, not straight
+into a build.
+
 **Do not come back to this file.** It knows how to get the project; the project
 knows everything else.
 

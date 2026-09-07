@@ -14,19 +14,47 @@ Guide the user **step by step** through the following phases. Ask questions with
 the question tool (AskUserQuestion), summarize briefly after every phase and
 have it confirmed before you move on. Don't invent facts — research them.
 
+## Phase 0 — What they brought
+
+Most people who land here did not arrive with nothing. `build-app` step 0 sends
+over everybody whose answer was not a clear idea, and the usual answer is
+"roughly, but it's fuzzy" — that is a person WITH an idea. So before any
+question of your own:
+
+**Ask for the idea as it stands.** One question, nothing else in it:
+
+> "Tell me the idea the way it is in your head right now — rough is fine, two or
+> three sentences. Who is it for, and what would it do for them?"
+
+If they already said it when they answered the switch, do not ask again — repeat
+it back in one sentence and have it confirmed. Do not shape it yet and do not
+propose an audience yet: the sentence they confirm is the thing the rest of this
+skill sharpens, and every question from here on is aimed at a gap in it.
+
+Somebody who really has nothing — "no idea, I just want to sell something" —
+says so here, and the interview below runs from the beginning.
+
+The order is this way round because it was measured the other way round: a
+vendor who answered "rough, but fuzzy" was asked the interview questions below
+one after the other, each of them sensible, and never once asked what the idea
+was. Without the idea on the table there is nothing to sharpen against, and the
+questions go in a circle.
+
 ## Phase 1 — Interview: the starting point
 
-Ask questions (in 1–2 rounds) to understand expertise, motivation and assets:
+Ask questions (in 1–2 rounds) to understand expertise, motivation and assets —
+**and when an idea is on the table, only where the idea is silent.** An idea
+that already names its audience does not get the audience question again; it
+gets the question it leaves open.
 - **Expertise/background:** What do you really know your way around in
   (professionally, hobby, problems of your own you have solved)?
-- **Existing idea:** Do you already have a product idea or target audience in
-  mind?
 - **Reach/assets:** Do you already reach people (email list, social media,
   community, customers)? That often decides success.
 - **Goal & scope:** Side income or main business? How much time? One-off
   purchase or subscription preferred?
 
-Summarize the answers as a short profile and have it confirmed.
+Summarize the answers as a short profile — with the idea from Phase 0 at the
+top, where there is one — and have it confirmed.
 
 ## Phase 2 — Target audience candidates
 
@@ -34,6 +62,11 @@ Derive **2–4 concrete target audiences/niches** from the profile (specific, no
 "all self-employed people", but e.g. "alternative practitioners who sell courses
 online"). For each candidate name briefly: who, why you can credibly serve them,
 and whether experience shows they pay for digital products.
+
+**When Phase 0 produced an idea, its own audience is candidate number one** —
+stated more sharply than they said it — and beside it one or two neighbouring
+audiences the profile suggests. A list derived from the profile alone, with
+their idea left out, makes the vendor choose between strangers.
 
 Have the user **choose one target audience** (or add one of their own).
 
@@ -122,6 +155,8 @@ is. Keep the scope small; make the OUTPUT finished.
 Now derive **one concrete SAAS proposal** (2 variants to choose from if needed):
 - **Problem** (one clear statement) and **target user** (from phase 2).
 - **Value proposition** in one sentence.
+- **What changed from the sentence they brought** (Phase 0) — one line, so they
+  recognise their idea in the proposal and see what the research did to it.
 - **What the customer ends up holding** — one line, from the question above.
 - **MVP feature scope:** 3–5 core features — **deliberately small** and
   buildable on this template (auth + data model + a few pages, access tied to
@@ -200,6 +235,8 @@ billing).
 
 ## Principles
 
+- **Start from what they brought:** the idea first, then the questions — each
+  one aimed at what the idea leaves open (Phase 0).
 - **Research instead of guessing:** back up statements about the target audience
   with sources.
 - **Start small:** an MVP that stands on this template within a manageable time

@@ -75,8 +75,9 @@ Three answers, all valid, none negotiated:
 | **"run through" / "don't stop"** | write `- **Pace:** run through without stopping — asked for on <date>` into `docs/plan.md`, and from then on hand each stage back in one paragraph WITHOUT the question, in the same turn. Never ask again in this project: a session that reads the `Pace:` line has its answer |
 
 **Files and function names, if you name them at all, go under their own line
-at the very END.** The customer reads the first lines, whoever reads code reads
-the last; the example above names none. A hand-back that opens with
+at the very END — after the last sentence about the app, before nothing but
+the stage question.** The customer reads the first lines, whoever reads code
+reads the last; the example above names none. A hand-back that opens with
 `whatPaysFor()` and two sibling functions before it says what the customer can
 now see has its two readers the wrong way round — measured on a customer's app,
 2026-09-04, and the rule is `CLAUDE.md` → *Rules*, the shape with an example

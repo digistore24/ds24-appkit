@@ -75,11 +75,11 @@ second skill — you ask exactly one question first:
   is how steps 1b/1c know those questions are still open). Then step 1. The first
   written record of what is being built must exist BEFORE the code does — an app
   whose requirements live only in a chat transcript is rebuilt from memory later.
-- **No idea, or a vague one** ("don't know", "something with…", an industry) →
-  start the skill **`market-research`**. It interviews the user about expertise
-  and reach, researches a target audience along with their challenges and
-  delivers a concrete product proposal + product brief (`docs/product-brief.md`).
-  After that the user comes back here, and you continue with step 1.
+- **No idea, or a vague one** ("don't know", "something with…", an industry,
+  "roughly, but it's fuzzy") → start the skill **`market-research`**. It asks for
+  the idea as it stands FIRST — an answer to the switch that already was the idea
+  is carried over, never asked twice — then interviews where the idea is silent,
+  researches the audience and writes `docs/product-brief.md`. Then step 1, here.
 
 Don't guess. A vague answer is a no — better to turn off into research once too
 often than to build an app nobody buys.

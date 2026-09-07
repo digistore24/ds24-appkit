@@ -418,13 +418,19 @@ if (appUnderWay) {
   console.log("");
   console.log("No idea yet? Just say so, and we will find one together.");
   console.log("");
+  // What the three words set in motion — the stretch a customer watched for
+  // fifteen minutes without knowing whether anything was being built (2026-09-07).
+  console.log("What happens then: first I ask what your app should do. Nothing is");
+  console.log("built before you have seen what it will be and said yes.");
+  console.log("");
   console.log("Four phases, and every step in them is optional:");
   console.log(`  ${phaseNames("   ")}`);
 }
 
 if (blocked.length > 0) {
   console.log("");
-  console.log("(A couple of things still need setting up here — I will take care of that first.)");
+  console.log("(A couple of things still need setting up here — I will take care of that first:");
+  console.log(" a few minutes, and nothing about your app is decided in them.)");
 }
 
 console.log(line);
