@@ -98,8 +98,9 @@ Draft every section's text before touching the page, following
 `docs/salespage.md` → *Where every fact comes from*. The two rules that break
 on exactly this page:
 
-- **Both language files.** Every visible sentence goes into `messages/de.json`
-  **and** `messages/en.json` under a `home.*` key. The only exemption is the
+- **Every language file.** Every visible sentence goes into each
+  `messages/<code>.json` — the list is `LOCALES` in `i18n/config.ts` — under a
+  `home.*` key. The only exemption is the
   registry's product copy — which is also why registry `features[]` must not be
   promoted to page copy.
 - **Nothing invented.** No testimonials, numbers or guarantees that do not

@@ -54,6 +54,15 @@ import productsFile from "@/config/digistore-products.json";
 import { DEFAULT_LOCALE } from "@/i18n/config";
 
 /**
+ * The language a registry entry is in when it carries a single `productId`
+ * and names none. Registries from before per-language products were German —
+ * a fact about those files, not about the app, which is why this is not
+ * DEFAULT_LOCALE (English, or the first in LOCALES). Twin: FALLBACK_LANGUAGE in
+ * `scripts/ds24/_products.mjs`.
+ */
+const LEGACY_PRODUCT_LANGUAGE = "de";
+
+/**
  * The environment axis of the product sets — the TS side of
  * `scripts/ds24/_env.mjs` (the scripts are plain `.mjs` and cannot import
  * this file; `_env.test.ts` pins the two against each other).
@@ -198,7 +207,7 @@ export function productIdsOf(
   for (const [lang, id] of Object.entries(def.productIdByLanguage ?? {})) {
     if (id && !ids[lang]) ids[lang] = String(id);
   }
-  const legacyLang = def.language || DEFAULT_LOCALE;
+  const legacyLang = def.language || LEGACY_PRODUCT_LANGUAGE;
   if (def.productId && !ids[legacyLang]) ids[legacyLang] = String(def.productId);
   return ids;
 }

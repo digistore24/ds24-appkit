@@ -98,59 +98,11 @@ there.
 
 Anything else on that line is a question nobody answered.
 
-## What checks a component, and why it is not a unit test
+## What checks a component — moved
 
-`vitest.config.ts` runs with `environment: "node"` and no DOM. That is a
-decision, not an omission, and it is worth knowing before you write your first
-component test — because the thing it protects you from is the failure this
-whole repo is organised against.
-
-**What checks the pages is the running app.** `node run.mjs smoke` calls every
-page twice — anonymously and signed in — and `node run.mjs errors` reads what
-the log picked up, including on a clean 200 (CLAUDE.md → *Never ship a broken
-page*). A rendered-in-isolation test would tell you a component returns markup;
-those two tell you the page a customer opens actually works, with a real
-database, real translations and the real layout around it. For an app whose
-pages are mostly composition over a design system, the second question is the
-one worth paying for.
-
-**And a green BUILD rules out even less.** `npm run build` checks compilability
-— with no database and no real `.env` — so a page that greets its first visitor
-with *Internal Server Error* is perfectly compatible with a clean
-`npm run typecheck`, a green suite and a successful build. The three of them
-together answer *does it compile and is the logic right*; none of them answers
-*does the page come up*.
-
-⚠️ **A JSX test is COLLECTED, and it fails saying what is missing.** `include`
-is `**/*.test.{ts,tsx}` on purpose: with `.ts` alone such a file is not
-rejected, it is silently not collected — `vitest run` stays green and never
-mentions it. Now it runs and fails with `document is not defined`, which names
-the missing piece instead of hiding the test.
-
-**Where the server-side gaps are, ask the report rather than guess.**
-`npm run test:coverage` prints a summary and writes `coverage/`. It has no
-threshold and is not in `npm run test` — a percentage would be the wrong
-instrument here, because the files at 0 % include the `ui.tsx` this project
-deliberately checks another way, and a gate that asks for the wrong thing is the
-one somebody removes. What it is FOR is the list: server logic at or near zero.
-Read on 2026-08-13, that list named `lib/impersonation/session.ts` (0 %, and its
-one `operatorId !== caller` comparison is what the whole feature rests on),
-`lib/credentials/manage.ts`, `lib/email-change/manage.ts` and
-`lib/digistore/claim.ts`.
-
-**If a unit test really is the right tool** — a hook with awkward arithmetic, a
-component whose logic cannot be reached through a page — the usual answer is to
-pull the logic out into a plain function and test that; every `rules.ts` in this
-tree is that move. Where it genuinely is not, add a DOM environment yourself:
-
-```bash
-npm i -D jsdom @testing-library/react @testing-library/jest-dom
-```
-
-…and give the file its own environment rather than switching the whole suite
-over — `// @vitest-environment jsdom` at the top of that test. A tree-wide
-change would put a DOM under 349 files that neither need one nor are written
-for one, and slow every run to buy it.
+Why a client component is checked against the running app rather than rendered
+in a unit test, and the one case that gets a DOM:
+[`smoke.md`](smoke.md) → *What checks a component*.
 
 ## 🚨 In a `"use server"` file, a type re-export needs its `from`
 
@@ -288,88 +240,11 @@ The full post-mortem, with the measured example and the shape of the guard, is
 does with a column, and where the migration path runs, is
 [`database.md`](database.md).
 
-## Text, dates and prices — the formatting side of i18n
+## Languages — moved
 
-`CLAUDE.md` → *Languages* carries the refusal (no visible text in the code, both
-language files, always). These are the mechanics.
-
-```tsx
-// Server component (client components: useTranslations)
-const t = await getTranslations("users");
-<h1>{t("title")}</h1>
-
-// Text with markup (e.g. <code>) — don't stitch it together:
-t.rich("hint", { code: (chunks) => <code>{chunks}</code> })
-```
-
-**Finding a key: grep, never the catalogue.** `messages/de.json` is a file
-sessions read whole, 25 times in 11 field runs, to find one key. The key is a
-grep away — `grep -n '"title"' messages/de.json` — and the catalogue's shape is
-already known: one object per namespace, one string per key, the same keys in
-every `messages/<code>.json`. Read the catalogue only to add to it, and then
-the namespace, not the file.
-
-- **Dates and prices are formatted, never spelled by hand.**
-  `useFormatter().dateTime(…)` or `formatPrice(def, locale)`, never
-  `toLocaleDateString("de-DE")`.
-- **A price is only *written* differently, never converted.** What gets billed is
-  what is on file at Digistore24, and a conversion in the app would put a number in
-  front of the customer that the checkout then contradicts.
-- **Identifiers in the code are English**, and only what the customer SEES is
-  translated: `createUserAction`, `emailPlaceholder`, `selfDelete`. The message
-  keys are English too — the German text lives behind them, never in them.
-- **Error messages never come into being deep in the code.** Rule and database
-  layers return *codes* (`lib/users/rules.ts` → `"selfDelete"`); only the Server
-  Action translates them (`app/dashboard/admin/users/actions.ts`). A sentence born
-  in `lib/` is always in exactly one language.
-- **Only one file maintained is the failure this is guarded against.**
-  `i18n/messages.test.ts` breaks the build when one language is missing a key, a
-  placeholder or an error code. It is the reason the second language does not rot,
-  and it is never switched off.
-
-**All four languages address the reader informally** — German `du`, Spanish `tú`,
-French `tu`, and English's implicit one. That is a decision, not an accident, and
-it is written down because it is invisible in any single string and expensive to
-reverse once half a catalogue has drifted the other way. The German is the
-original voice and it says `du` in 132 sentences against `Sie` in four, so a
-`vous` in the French would be a different product speaking rather than a
-translation. French commerce leans towards `vous` and somebody will propose it;
-the answer is that these apps are sold to their buyers, not to their buyers'
-procurement departments. A fifth language follows the same rule.
-
-**Not translated, deliberately:** product names, plan features and descriptions from
-`config/digistore-products.json` — that is your product copy, and at Digistore24 the
-same text is on file. Likewise the app name (`lib/app.ts`) and the terminal output of
-the scripts under `scripts/`.
-
-**Where the language comes from**, and why there is no prefix in the URL: a
-cookie, set by the toggle in the sidebar, and on a first visit the browser's own
-preference. It is wired in `i18n/` and nowhere else — so a page never has to
-know which language it is being rendered in, and a link a customer shares works
-for whoever opens it rather than dragging `/de/` along.
-
-**Another language** is five steps, not the two this paragraph used to claim.
-That sentence read *"a file in `messages/` plus its code in `i18n/config.ts` —
-done"*, and it was written when the app spoke two languages and nothing had ever
-been added. Adding Spanish and French found the other three, all of them things
-that fail without an error:
-
-| | why it is silent |
-|---|---|
-| `messages/<code>.json`, and one per installed module under `modules/<id>/messages/` | not silent — `i18n/messages.test.ts` fails the build |
-| the code in `LOCALES` and `LOCALE_LABELS` (`i18n/config.ts`) | not silent — the same test fails |
-| the catalogue imported in `lib/ai/nav-labels.ts` | that map is built from STATIC imports, because it feeds the CACHED half of the assistant's system prompt. A missing locale is `undefined`, the menu block goes out with a hole in it, and nothing red |
-| the language's word for a machine in `NAMES_A_MACHINE` (`lib/ai/disclosure.mjs`) | `node run.mjs legal-check` then reports *"cannot check automatically"* for the AI-Act notice in that language — not a failure, and not a pass either |
-| `content/legal/<slug>.<code>.md` for every legal page | `legalDocument()` FALLS BACK rather than 404ing (which is right — a policy in the wrong language is readable, a missing one is a violation). So the page renders, answers 200, and shows a French reader the German privacy policy |
-
-The recipe in full, with these reasons beside each step, is the header of
-`i18n/config.ts`.
-
-🚨 **And nothing in the tree may write the language list out by hand.** Read it
-from `LOCALES`. `scripts/modules/messages.test.ts` looped over `["de", "en"]`,
-which was correct prose for a year and became a SKIP the day the app spoke four:
-`existsSync` is false for a file nobody asks about, so the two newest catalogues
-were never opened and the shared-namespace rule went unchecked in them, green.
+Which languages the app speaks, how a visitor's is chosen, how text, dates and
+prices are written, and how a language is added or removed:
+[`locales.md`](locales.md).
 
 ## Where a decision gets written down
 

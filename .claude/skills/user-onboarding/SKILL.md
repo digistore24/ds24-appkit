@@ -129,8 +129,8 @@ derived from no event are steps derived from taste.
    why.
 3. **Check the empty states point the same way** (§3 there): the page a step
    links to must, when empty, offer the same action the step names.
-4. Texts in **both** `messages/de.json` and `messages/en.json` under
-   `onboarding`.
+4. Texts in **every** `messages/<code>.json` (the list is `LOCALES` in
+   `i18n/config.ts`) under `onboarding`.
 5. Verify like any page work: `npm run typecheck && npm run test`, then
    `node run.mjs start`, sign in as a **member** — a second made-up address,
    never the owner, because the owner sees an app the customer does not — walk

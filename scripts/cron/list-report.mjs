@@ -71,7 +71,7 @@ const SAMPLE_MAX = 120;
  * than printing `it said:` with nothing after it.
  *
  * Split on `/\r?\n/`, never `"\n"` — CLAUDE.md → Three systems, and
- * `docs/machine.md` → *Line endings*. A proxy on a
+ * `docs/portability.md` → *Line endings*. A proxy on a
  * Windows host is exactly the kind of thing that sends CRLF.
  */
 export function firstLine(text) {

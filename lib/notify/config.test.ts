@@ -14,7 +14,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import raw from "@/config/notifications.json";
-import { LOCALES } from "@/i18n/config";
+import { DEFAULT_LOCALE, LOCALES } from "@/i18n/config";
 
 import {
   DEFAULT_NOTIFY_CONFIG,
@@ -103,9 +103,10 @@ describe("a file that cannot be trusted", () => {
 
   it("falls back as a WHOLE, never field by field", async () => {
     // `locale` here is perfectly good, and it is discarded with the rest.
-    const mod = await readerFor({ enabled: true, locale: "en", typo: 1 });
+    const other = LOCALES.find((code) => code !== DEFAULT_LOCALE)!;
+    const mod = await readerFor({ enabled: true, locale: other, typo: 1 });
     expect(mod.notifyConfig()).toEqual(mod.DEFAULT_NOTIFY_CONFIG);
-    expect(mod.operatorLocale()).toBe("de");
+    expect(mod.operatorLocale()).toBe(DEFAULT_LOCALE);
   });
 
   it("reports the problem rather than 'enabled is false'", async () => {

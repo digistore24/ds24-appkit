@@ -16,8 +16,11 @@ export const CONFIG_PATH = fileURLToPath(CONFIG_URL);
 const MESSAGES_DIR = fileURLToPath(new URL("../../messages", import.meta.url));
 
 /**
- * The language a registry entry is assumed to be in when it names none. The
- * app's DEFAULT_LOCALE (i18n/config.ts) — the twin rule below applies.
+ * The language a registry entry is assumed to be in when it carries a single
+ * `productId` and names none. Registries from before per-language products
+ * were German — a fact about those files, not about the app, so this is NOT
+ * the app's DEFAULT_LOCALE (English, or the first in LOCALES). Twin:
+ * LEGACY_PRODUCT_LANGUAGE in `lib/digistore/products.ts`.
  */
 export const FALLBACK_LANGUAGE = "de";
 

@@ -209,7 +209,7 @@ export const FINGERPRINT_VERSION = "courses-unit-v2";
 /**
  * Line endings out, and **`null` survives as `null`**.
  *
- * Not tidiness. `docs/machine.md` → *Line endings* carries the measured failure: Git
+ * Not tidiness. `docs/portability.md` → *Line endings* carries the measured failure: Git
  * for Windows checks text out as CRLF, and because the `.template-version`
  * hashes are taken over LF content, every guidance file looked "edited in this
  * app" and `node run.mjs update` did nothing, for ever. The rule that came out

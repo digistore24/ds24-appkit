@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect } from "vitest";
+
+import { DEFAULT_LOCALE } from "@/i18n/config";
 import { notChecked } from "@/lib/test-not-checked";
 import {
   allProducts,
@@ -160,8 +162,11 @@ describe("Sprache → Digistore24-Produkt", () => {
   it("faellt auf die Standardsprache zurueck statt den Verkauf zu verweigern", () => {
     // Ein Angebot, das es auf Franzoesisch nicht gibt, bleibt kaufbar — der
     // Kaeufer bekommt nur ein Formular in der falschen Sprache. Die Luecke
-    // meldet `node run.mjs ds24-sync`, nicht die Kasse.
-    expect(checkoutProductFor(zweisprachig, "fr")?.language).toBe("de");
+    // meldet `node run.mjs ds24-sync`, nicht die Kasse. Die Standardsprache
+    // ist DEFAULT_LOCALE (Englisch, sonst die erste der Liste) — nie ein
+    // hier ausgeschriebener Code.
+    expect(["de", "en"]).toContain(DEFAULT_LOCALE);
+    expect(checkoutProductFor(zweisprachig, "fr")?.language).toBe(DEFAULT_LOCALE);
   });
 
   it("nimmt irgendein vorhandenes Produkt, wenn auch die Standardsprache fehlt", () => {

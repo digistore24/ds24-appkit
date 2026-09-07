@@ -371,7 +371,7 @@ not \`40\` — so it is formatted on the way out (\`useFormatter().number()\` /
 and never \`toFixed\`-ed by hand; an input's \`defaultValue\` is formatted the
 same way. Measured in a field run: \`{offer.areaSqm} m²\` printed \`40.00 m²\`
 on a German quote beside a correctly formatted \`367,50 €\`. The rule is
-\`docs/conventions.md\` → *Text, dates and prices*.
+\`docs/locales.md\` → *Writing text*.
 
 **And a table keyed on the member is personal data**: the moment it exists it
 gets its row in \`docs/data-protection.md\` and its section in

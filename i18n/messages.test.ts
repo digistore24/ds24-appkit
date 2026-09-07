@@ -2,8 +2,13 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect } from "vitest";
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createTranslator } from "next-intl";
-import { LOCALES, DEFAULT_LOCALE, matchLocale, isLocale } from "./config";
+
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
+import { LOCALES, DEFAULT_LOCALE, fallbackLocaleFor, matchLocale, isLocale } from "./config";
 import { USER_ERROR_CODES } from "@/lib/users/rules";
 import { TOKEN_ERROR_CODES } from "@/lib/tokens/rules";
 import { GRANT_ERROR_CODES } from "@/lib/entitlements/grant-rules";
@@ -99,6 +104,30 @@ function messageAt(obj: unknown, path: string): unknown {
 }
 
 describe("Message files", () => {
+  it("🚨 messages/ holds exactly one catalogue per language in LOCALES — no more, no fewer", () => {
+    // Both directions, read off the DIRECTORY. The imports are held by
+    // catalogueCoverage() below; this is the file on disk. A catalogue left
+    // behind after its code came out of LOCALES is not harmless: two commands
+    // read the app's languages off this directory (`node run.mjs legal-check`,
+    // `node run.mjs ds24-sync`), and would go on treating the app as speaking a
+    // language it no longer offers. Removing a language is docs/locales.md.
+    const onDisk = readdirSync(join(ROOT, "messages"))
+      .filter((f) => f.endsWith(".json"))
+      .map((f) => f.slice(0, -".json".length))
+      .sort();
+    expect(onDisk).toEqual([...LOCALES].sort());
+  });
+
+  it("🚨 every legal page under content/legal/ belongs to a language in LOCALES", () => {
+    // A `<slug>.<code>.md` for a language the app no longer speaks is never
+    // served and never noticed — `legal-check` reports on the files it finds.
+    const stray = readdirSync(join(ROOT, "content", "legal"))
+      .filter((f) => f.endsWith(".md"))
+      .map((f) => f.split(".").at(-2))
+      .filter((code) => !isLocale(code));
+    expect(stray, "legal pages for a language not in LOCALES").toEqual([]);
+  });
+
   it("has a file for every language in LOCALES", () => {
     for (const locale of LOCALES) {
       expect(ALL_MESSAGES[locale], `messages/${locale}.json is missing`).toBeDefined();
@@ -442,6 +471,12 @@ describe("matchLocale", () => {
     expect(matchLocale("")).toBe(DEFAULT_LOCALE);
   });
 
+  it("🚨 never answers with a language the app does not speak", () => {
+    // Only LOCALES can win, whatever the browser prefers first.
+    expect(matchLocale(`${UNKNOWN};q=1.0,${LOCALES[0]};q=0.1`)).toBe(LOCALES[0]);
+    expect(isLocale(matchLocale(`${UNKNOWN},xx-YY;q=0.9,zz;q=0.8`))).toBe(true);
+  });
+
   it("finds every language this app speaks", () => {
     // Non-vacuity guard for the three above: they say what happens to a language
     // the app does NOT have, and would all still pass on an app that matched
@@ -450,6 +485,28 @@ describe("matchLocale", () => {
       expect(matchLocale(`${locale}-XX,${locale};q=0.9`), locale).toBe(locale);
     }
     expect(LOCALES.length).toBeGreaterThan(1);
+  });
+});
+
+describe("DEFAULT_LOCALE — English, or the first language in the list", () => {
+  it("is derived from LOCALES, never written by hand", () => {
+    expect(DEFAULT_LOCALE).toBe(fallbackLocaleFor(LOCALES));
+    expect(isLocale(DEFAULT_LOCALE)).toBe(true);
+  });
+
+  it("prefers English wherever it is in the list", () => {
+    expect(fallbackLocaleFor(["de", "en", "es"])).toBe("en");
+    expect(fallbackLocaleFor(["en"])).toBe("en");
+    expect(fallbackLocaleFor(["pt", "fr", "en"])).toBe("en");
+  });
+
+  it("falls back to the first language when English is not spoken", () => {
+    expect(fallbackLocaleFor(["pt", "fr"])).toBe("pt");
+    expect(fallbackLocaleFor(["de"])).toBe("de");
+  });
+
+  it("refuses an app with no language at all", () => {
+    expect(() => fallbackLocaleFor([])).toThrow();
   });
 });
 

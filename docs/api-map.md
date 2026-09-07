@@ -4,7 +4,7 @@
      scripts/api-map.test.ts compares this file with what the generator
      produces, and a hand edit is undone by the next run. -->
 
-_51 files, 224 exported functions, 46 tables. Regenerate
+_50 files, 221 exported functions, 46 tables. Regenerate
 with `node run.mjs api-map` after adding an export or a table; the suite says so
 when it is behind._
 
@@ -120,12 +120,6 @@ tests — `docs/ux.md` owns each, this is where they are needed:
 
 - `parseInline(line: string, options?: ParseOptions): Inline[]` — One line of text, split into its marked-up runs.
 - `parseAnswer(text: string, options?: ParseOptions): Block[]` — One answer, split into blocks.
-
-## lib/ai/nav-labels.ts
-
-- `moduleMemberNavKeys(nav: readonly ModuleNav[] = MODULE_NAV, gates: readonly ModuleGate[] = MODULE_GATES): string[]` — The member-facing labels the installed modules add, in menu order.
-- `visibleMemberNavKeys(): readonly string[]` — The entries THIS build actually shows a member.
-- `navMenus(): NavMenu[]` — The menu, per language.
 
 ## lib/ai/prompt.ts
 
@@ -462,7 +456,7 @@ not `40` — so it is formatted on the way out (`useFormatter().number()` /
 and never `toFixed`-ed by hand; an input's `defaultValue` is formatted the
 same way. Measured in a field run: `{offer.areaSqm} m²` printed `40.00 m²`
 on a German quote beside a correctly formatted `367,50 €`. The rule is
-`docs/conventions.md` → *Text, dates and prices*.
+`docs/locales.md` → *Writing text*.
 
 **And a table keyed on the member is personal data**: the moment it exists it
 gets its row in `docs/data-protection.md` and its section in

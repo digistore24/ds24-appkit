@@ -60,15 +60,13 @@ come into being and gives way at the first command that runs any of it.
 
 🚨 **No greeting at all is the same case, and the most important one to recognise.**
 Absence of a signal is never a signal: you MUST run `node run.mjs greet` before you
-touch a file — it prints the same line on demand. **In Antigravity CLI that is not
-the exception but the normal path**: it has no session-start event, so this app
-ships it no greeting hook at all rather than one that looks wired and does nothing.
+touch a file — it prints the same line on demand. **In Antigravity CLI that is the
+normal path**: it has no session-start event, so this app ships it no hook at all.
 
 One more line can appear, `[Operations: …]` — what is open about RUNNING this app.
 🚨 Its ABSENCE is a state, not an omission: silence means at least one check ran
-and nothing is open at HIGH or CRITICAL. Every sentence it can say:
-**[`docs/operations.md`](docs/operations.md)**. The greeting's three wirings:
-**[`docs/troubleshooting.md`](docs/troubleshooting.md)**.
+and nothing is open at HIGH or CRITICAL. Every sentence it can say, and the
+greeting's three wirings: **[`docs/greeting.md`](docs/greeting.md)**.
 
 ## What the skills assume you can do
 
@@ -102,13 +100,13 @@ trigger and never a summary you may work from. Claude Code and OpenCode read
 sessions it outweighs every command and every check together. A broad question
 ("where is X used") is worth a **subagent** where you have one: measured, it hands
 back one part in sixty-five. Where you have none, and for a file you already
-know, read directly — in a RANGE rather than whole, and never through `cat`.
-In Claude Code a hook enforces that above 200 lines (`scripts/dev/hooks/read-guard.mjs`)
-and answers with the line count; elsewhere it is still the rule. 🚨 **And a
-subagent is waited for inside the turn that started it** — keep working on what
-does not depend on it, or block on it; never end the turn with "I'll get back to
-you when it is done". A turn that ends is over, and the person then has to
-restart it (measured: a build that stalled on exactly that sentence).
+know, read directly — in a RANGE rather than whole, and never through `cat`. In
+Claude Code a hook refuses above 200 lines and answers with the line count
+([`docs/troubleshooting.md`](docs/troubleshooting.md) → *The read guard said no*);
+elsewhere it is still the rule. 🚨 **And a subagent is waited for inside the turn
+that started it** — keep working on what does not depend on it, or block on it;
+never end the turn with "I'll get back to you when it is done". A turn that ends
+is over, and the person has to restart it (measured: a build stalled on that).
 
 ## The path
 
@@ -213,49 +211,33 @@ person in front of it is [`docs/ux.md`](docs/ux.md), audited by `ux-gateway`.
 
 ## Languages
 
-The app speaks German, English, Spanish and French — **without a language prefix
-in the URL**. It is wired up in `i18n/`, and the texts live in one
-`messages/<code>.json` per language.
+The app speaks **`LOCALES` in `i18n/config.ts`** — shipped: German, English,
+Spanish, French — **without a language prefix in the URL**. Read the list there;
+never write a pair like `["de", "en"]` out by hand — that is how a language
+silently stops being checked.
 
-**The list is `LOCALES` in `i18n/config.ts` and nowhere else.** Read it there
-rather than counting the files or trusting this sentence: a hand-written pair in
-a loop is how a language silently stops being checked — measured here, where
-`scripts/modules/messages.test.ts` walked `["de", "en"]` and stopped opening two
-catalogues without going red.
+**A visitor's language is the cookie, else the browser, else `DEFAULT_LOCALE`** —
+English if the app speaks it, otherwise the first in `LOCALES`. Only a language
+in the list can win, and the default is derived, never written.
 
-**The rule: no visible text in the code.** Every sentence, label, placeholder and
-error message belongs in *every* language file. `i18n/messages.test.ts` breaks
-the build when one language is missing a key, a placeholder or an error code, and
-it is never switched off — and it renders every message, so an ICU plural whose
-braces no longer balance fails the build instead of putting its own key on a page
-that answers 200.
+**No visible text in the code.** Every sentence lives in *every*
+`messages/<code>.json`; `i18n/messages.test.ts` breaks the build on a missing
+key, placeholder or error code, and it is never switched off. **All languages
+address the reader informally** — `du`, `tú`, `tu`. Rule and database layers
+return **codes, not sentences**; dates and prices are **formatted, never spelled
+by hand** (`useFormatter().dateTime(…)`, `formatPrice(def, locale)`).
 
-**All four address the reader informally** — `du`, `tú`, `tu`. A new sentence
-written formally in one language is a different product speaking in that
-language; the reasoning is in `docs/conventions.md`.
-
-Two refusals follow from it. **Rule and database layers return codes, not
-sentences** (`lib/users/rules.ts` → `"selfDelete"`) — only the Server Action
-translates them. And **dates and prices are formatted, never spelled by hand**:
-`useFormatter().dateTime(…)` or `formatPrice(def, locale)`, never
-`toLocaleDateString("de-DE")`.
-
-🚨 **Adding a language is five steps, and three of them fail SILENTLY** — the
-static import map in `lib/ai/nav-labels.ts`, `NAMES_A_MACHINE` in
-`lib/ai/disclosure.mjs`, and `content/legal/<slug>.<code>.md`. The recipe, with
-what each silence looks like, is the header of `i18n/config.ts`.
-
-Identifiers, what is deliberately not translated, how to add a language and the
-formatting helpers: **[`docs/conventions.md`](docs/conventions.md)**.
+**Adding a language is seven steps, removing one is eight, and both lists are
+in one place**: the list, the fallback, writing text, adding and removing —
+**[`docs/locales.md`](docs/locales.md)**.
 
 ## Never ship a broken page
 
 **Before you tell the user that something is done, you MUST call the page up yourself.**
 Without exception — green tests and a successful build do NOT rule out an app that
-greets the user with "Internal Server Error"
-([`docs/conventions.md`](docs/conventions.md) → *What checks a component*). The three
-commands below see the SERVER; a page is seen in a browser. Without a browser tool,
-ask, then `node run.mjs agent-browser --apply` gives you one for the next session.
+greets the user with "Internal Server Error". The three commands below see the
+SERVER; a page is seen in a browser. Without a browser tool, ask, then
+`node run.mjs agent-browser --apply` gives you one for the next session.
 
 ```bash
 node run.mjs start                # DB + migrations + app
@@ -263,29 +245,26 @@ node run.mjs smoke                # calls EVERY page and reports server errors
 node run.mjs errors               # what the log picked up — including on a 200
 ```
 
-`smoke` finds the pages itself under `app/` and calls them in **two passes**: first
-anonymously, then signed in, so the pages with the real queries get rendered rather than
-counted as redirects. **When the second pass is unavailable it says so, in one line —
-read it**: "9 protected page(s) NOT checked" is not a pass. Its verdicts:
-
-- **5xx** → error. Fix it, don't argue it away, don't pass it on as a "known issue".
-- **307 to `/login` without a session** → correct, and says nothing about the page; the second pass is what renders it.
-- **307 to `/login` *with* a session** → error. The session did not take.
-- **307 anywhere else while signed in** → fine; a `hasPlan()` gate from the outside.
-- **a redirect to a `localhost` origin, on a DEPLOYED app** → error, and the one with no second symptom: the origin sits one level down, in the `callbackUrl` query. It means `APP_URL` at the host, never `AUTH_TRUST_HOST`.
-- **2xx** → fine.
+`smoke` calls every page in **two passes**, anonymously and signed in, so the pages
+with the real queries get rendered rather than counted as redirects. **When the
+second pass is unavailable it says so, in one line — read it**: "9 protected page(s)
+NOT checked" is not a pass. **A 5xx is an error, a 307 to `/login` *with* a session
+is an error, and a redirect to a `localhost` origin on a DEPLOYED app is an error**
+(`APP_URL` at the host, never `AUTH_TRUST_HOST`); every other 307 says nothing
+about the page.
 
 **A 200 is not proof that the page rendered, and green means it loaded, not that it is
 correct.** A bad date, a missing translation, a hydration mismatch and an unawaited
 promise all answer 200 over a visibly broken page — that is what `node run.mjs errors`
 is for, and it exits non-zero so it can gate a "done". 🚨 **`smoke` skips dynamic PAGES
 (`[id]`) and is signed in as ONE account**, so money, roles and customer data need your
-own eyes ([`docs/operations.md`](docs/operations.md) → *The errors a 200 hides*).
+own eyes.
 
 The deployed app answers both over `DIAGNOSTICS_SECRET`, and `node run.mjs health --url
 https://…` asks them plus the database, the jobs, the media store and the last payment
-notification. Errors that are not what they look like are
-**[`docs/troubleshooting.md`](docs/troubleshooting.md)**.
+notification. The verdicts in full, what a 200 hides, and why a component is checked
+this way rather than in a unit test: **[`docs/smoke.md`](docs/smoke.md)**. Errors that
+are not what they look like: **[`docs/troubleshooting.md`](docs/troubleshooting.md)**.
 
 ## Adding a feature
 
@@ -714,8 +693,7 @@ including what the update refuses and why, is in
 
 **This app has to run on Linux, macOS and Windows**, because Claude Code, Codex,
 Antigravity and OpenCode all do. What has to be installed, and the full table of
-shell tools that are not portable: **[`docs/machine.md`](docs/machine.md)** →
-*Three systems*.
+shell tools that are not portable: **[`docs/portability.md`](docs/portability.md)**.
 
 Four refusals hold for anything you write here:
 

@@ -259,7 +259,7 @@ together with check 8 — read it before running this check.
    acknowledgement is a step in the checklist, not a sentence pasted onto one
    page; a wrong colour is a token, not a class.
 3. **Use the kit.** Anything missing: `npx shadcn@latest add <component>`.
-4. **Both language files. Both modes.** Every time.
+4. **Every language file. Both modes.** Every time.
 5. **Look at it again** — open the page, do the thing, and re-run
    `node run.mjs ux-check`. Then `node run.mjs test` and `node run.mjs smoke`.
 6. **Update the report** — what was fixed, what stays open, and why.

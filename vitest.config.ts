@@ -36,7 +36,7 @@ export default defineConfig({
     // measurement says so rather than a preference.** Twelve shipped files sit
     // at 0 %, and six of them are `ui.tsx` — client components this project
     // checks with `node run.mjs smoke` + `errors` against the running app
-    // instead of by rendering them in isolation (docs/conventions.md → *What
+    // instead of by rendering them in isolation (docs/smoke.md → *What
     // checks a component*). A threshold would demand unit tests for exactly the
     // files it was decided not to unit-test, and a gate that asks for the wrong
     // thing is the brake somebody removes — taking the intent with it.

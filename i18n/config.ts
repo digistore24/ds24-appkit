@@ -3,24 +3,19 @@
 
 // The app's languages — one place for everything locale-related.
 //
-// To add a language:
-//   1. create `messages/<code>.json` (easiest: copy `de.json`), and one
-//      `modules/<id>/messages/<code>.json` per installed module,
-//   2. add the code here to LOCALES and LOCALE_LABELS,
-//   3. import the new catalogue in `lib/ai/nav-labels.ts` — its `MESSAGES` map
-//      is built from STATIC imports, so a locale missing there resolves to
-//      `undefined` and puts a hole in the assistant's cached system prompt,
-//   4. add the language's word for a machine to `NAMES_A_MACHINE` in
-//      `lib/ai/disclosure.mjs`, or `node run.mjs legal-check` can only report
-//      "cannot check automatically" for the AI-Act notice in that language,
-//   5. write `content/legal/<slug>.<code>.md` for every legal page the app has
-//      — `legalDocument()` falls back rather than 404ing, so a missing file is
-//      SILENT and serves a German privacy policy to a French reader.
-// The test `i18n/messages.test.ts` then automatically checks that no
-// translation is missing.
-//
-// 🚨 Steps 3 and 4 are the two the recipe used to leave out, and both fail
-// quietly: a hole in a cached prompt and a check that says it cannot judge.
+// To add a language <code>:
+//   1. `messages/<code>.json` — copy `de.json` and translate every string. The
+//      same for `modules/<id>/messages/<code>.json` in every installed module.
+//   2. `<code>` in LOCALES and its name in LOCALE_LABELS, below.
+//   3. The import and the entry in `i18n/static-messages.ts`.
+//   4. `title.<code>` in every `modules/<id>/module.json`.
+//   5. The language's word for a machine in `NAMES_A_MACHINE`,
+//      `lib/ai/disclosure.mjs`.
+//   6. `content/legal/<slug>.<code>.md` for every legal page in `content/legal/`.
+//   7. `<code>` in `productIds` of every product in
+//      `config/digistore-products.json`, then `node run.mjs ds24-sync` — one
+//      Digistore24 product per language.
+// `npm run test` holds steps 1 to 4; `node run.mjs legal-check` reads 5 and 6.
 //
 // Deliberately WITHOUT a locale prefix in the URL: /plans stays /plans. The
 // locale lives in a cookie (the switcher) and is derived from the browser on
@@ -29,8 +24,21 @@
 export const LOCALES = ["de", "en", "es", "fr"] as const;
 export type Locale = (typeof LOCALES)[number];
 
-/** The locale used when the browser offers nothing suitable. */
-export const DEFAULT_LOCALE: Locale = "de";
+/**
+ * The locale for a visitor whose browser asks for none of ours — English when
+ * the app speaks it, otherwise the first language in LOCALES.
+ *
+ * Derived, never written: an app that drops English must not keep sending
+ * strangers to it, and an app that never had it needs no edit here. The same
+ * value is what a mail, a legal page or a checkout falls back to when the
+ * locale it was given is not one of ours.
+ */
+export function fallbackLocaleFor<T extends string>(locales: readonly T[]): T {
+  if (locales.length === 0) throw new Error("fallbackLocaleFor: the app speaks no language at all");
+  return locales.find((code) => code === "en") ?? locales[0];
+}
+
+export const DEFAULT_LOCALE: Locale = fallbackLocaleFor(LOCALES);
 
 /** Name of the cookie holding the user's choice. */
 export const LOCALE_COOKIE = "NEXT_LOCALE";
@@ -51,8 +59,9 @@ export function isLocale(value: unknown): value is Locale {
  * Picks the best supported locale from an `Accept-Language` header.
  *
  * Deliberately plain: quality weights (`;q=`) are honored, regions ignored
- * (`de-AT` counts as `de`). If the browser knows none of our languages,
- * DEFAULT_LOCALE applies.
+ * (`de-AT` counts as `de`), and only a language the app speaks can win. If the
+ * browser knows none of ours, DEFAULT_LOCALE applies — English, or the first
+ * in LOCALES.
  */
 export function matchLocale(acceptLanguage: string | null | undefined): Locale {
   if (!acceptLanguage) return DEFAULT_LOCALE;

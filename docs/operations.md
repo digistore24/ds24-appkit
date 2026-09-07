@@ -173,52 +173,10 @@ This page deliberately does not say how many rungs there are. The number has
 moved repeatedly; `node run.mjs security-check` prints the current one, and a
 count written here would be a fact with an expiry date.
 
-## The errors a 200 hides
+## The errors a 200 hides — moved
 
-```bash
-node run.mjs smoke  --url https://your-app.example    # every page, called once
-node run.mjs errors --url https://your-app.example    # what its log picked up
-```
-
-A page that answers 200 and renders the wrong date, drops a translation or
-mismatches its hydration is a broken page with a green status code, and nothing
-about the status code will tell you. `errors --url` asks the deployed app for a
-bounded, redacted window of its own stderr over `DIAGNOSTICS_SECRET`; needs
-template 0.22.0.
-
-The routine, and how each answer is rated, is `CLAUDE.md` → *Never ship a broken
-page*. Getting the app onto a host so that there is something to ask at all is
-[`docs/DEPLOY.md`](DEPLOY.md).
-
-**A page fetched as the owner, from a script.** Locally, `scripts/dev/sign-in.mjs`
-exports `signInAsOwner(baseUrl)` — what `smoke`'s second pass uses. It answers
-`{ cookie, as, role }` (send `cookie` as the `cookie` header), `{ skipped, reason }`
-when no owner exists yet (the reason names the `user-create` command), or
-`{ refused }`; DEV only, because it goes through the development login. That is
-the whole API; the script does not need reading.
-
-**How these are misread.** `smoke`'s line *"9 protected page(s) NOT checked"* is
-**not** a pass — those are the pages carrying the real queries; provision the
-sign-in once with `node run.mjs smoke-account --apply` and run it again.
-The other line to read rather than skim is *"N of M dynamic API route(s)
-exercised"*. Against a **deployed** app that number is **0**, and it is not a
-defect: the pair behind it — `/api/media/[id]` asked as the item's owner and
-then as nobody — needs one item planted through the upload door, and `smoke`
-reads a deployed app without writing to it. (The one thing this template does
-put into a deployed app, the smoke account, is its own `--apply` command for
-exactly that reason.) Run `node run.mjs smoke` against a local app to exercise
-it; every route in that list carries the reason it was not.
-
-**What `smoke` does not reach at all.** It skips dynamic **pages** (`[id]`)
-entirely — only dynamic API routes are exercised, and only against a local app —
-and it is signed in as exactly ONE account. Money, roles and other people's data
-are therefore outside what it can answer, whatever colour it prints: those need
-your own eyes on the page, as the account that is supposed to see it and as one
-that is not.
-`errors --url` exits **1** for *found something* and **2** for *could not look*,
-and the refusal never prints a `✓`. Its window lives in one instance's memory
-and empties on every restart, which is why the success line always names the
-window it read.
+`smoke` and `errors` against the deployed app, what each exit code means and
+what neither can see: [`smoke.md`](smoke.md) → *The errors a 200 hides*.
 
 ## The scheduled jobs
 
@@ -350,65 +308,8 @@ without you:
 - the **session greeting** reads the last security record and prints one
   `[Operations: …]` line — only when something is open at HIGH or above, or the
   record is missing, damaged, stale or measured nothing at all. 🚨 Its absence
-  is a state, not an omission. Every sentence it can say is the table below.
-  Needs template 0.24.0.
-
-### `[Operations: …]` — every sentence it can say
-
-The line is composed from what the measuring things already wrote down —
-`.dev/security-check.json` from `node run.mjs security-check`, and the NAME of the
-newest `docs/reports/operations-*.md` the skill `operate` left behind — and it
-**measures nothing itself**: no rung, no network, no file opened, one small JSON
-read and one directory listing. **One line, one producer**, however many things it
-has to say: worst first, at most two named in full, the rest as `+N more`, ending
-in the command for the worst of them.
-
-🚨 **Its ABSENCE is a state, not an omission**, and reading it as "nobody has
-looked" is the one way to get this line wrong: silence means *at least one check
-ran and nothing is open at HIGH or CRITICAL*. Every other case has a sentence of
-its own —
-
-| The line says | What it means |
-|---|---|
-| *never checked on this machine* | no record at all, and this app has pages or a brief. On the untouched template this is deliberately silent: nobody has checked the app nobody has built |
-| *the last check's record cannot be read* | there IS a record and it is damaged. Not the same claim as "never" — somebody may well have looked |
-| *last checked `<date>` … past the 7-day bound* | too old to speak for this app. Advisory databases move daily |
-| *could not look at anything: `n` of `n` rungs not asked* | it ran and every rung skipped — typically a machine with no network. 🚨 This is the case where "nothing found" would be a lie |
-| *`n` CRITICAL, `n` HIGH open (checked `<date>`; `n` of `n` rungs not asked)* | something serious is open. The threshold is the command's own (`failsVerdict()`), so the line and the exit code can never disagree |
-| *the operating round last ran on `<date>` … past the 30-day bound* | the skill `operate` has not walked this app in a month. Read off the NAME of the newest `docs/reports/operations-*.md`; no file is ever opened |
-| *the operating round has never run here* | no such report at all, on an app that has pages or a brief. On the untouched template this is silent too — a fresh clone has never been live |
-| *(no line at all)* | at least one rung ran, nothing open at HIGH or above, and the round is not overdue |
-
-Three things follow from that, and each is deliberate. A MEDIUM or a LOW **in the
-security record** buys no line — meeting one at the start of every session for a
-week is how people learn to skip the whole block. `complete: false` buys no line
-**either**: `live` skips on every laptop for ever, `drift` skips with no network,
-and the two tier-2 rungs skip wherever their tool is not installed, so an
-incomplete ladder is the ORDINARY state of a developer's machine (see
-*`complete: false` is the ordinary state* above). And whenever the line does
-appear it names how many rungs were **not asked** — because "nothing found" and
-"nobody asked" must never look the same.
-
-⚠️ **The overdue round is itself an ℹ️ LOW, and that is not a contradiction.** It
-is a fact about the app, not a finding in a report, and its severity is doing one
-job: it ranks the round below every open security finding, so a session that has
-both meets the CRITICAL first and the housekeeping second — by the same sort that
-orders everything else on this line, never by a special case.
-
-It carries no finding: no package, no path, no host, no title — the record does not
-hold them, deliberately, and the round's report is never opened. The commands it
-names are `node run.mjs security-check`, which is what prints the findings, and the
-skill `operate`, which is what walks the round.
-
-🚨 **Neither of those is monitoring, and the difference is the one that matters
-at three in the morning: an app that is down cannot mail you about being down.**
-What buys that is something OUTSIDE the app — an uptime checker pointed at
-`/api/healthz` (the process answers) and `/api/readyz` (the database answers
-too), and an error tracker that reports the page a customer just met, while they
-are still on it. Those endpoints ship and answer; nothing in a fresh app calls
-them. Choosing a provider, getting its key in the right place, wiring it and
-proving one event really arrives is the skill
-[`setup-monitoring`](../.claude/skills/setup-monitoring/SKILL.md).
+  is a state, not an omission. Every sentence it can say:
+  [`greeting.md`](greeting.md) → *every sentence it can say*. Needs template 0.24.0.
 
 ## Keeping this guidance current
 

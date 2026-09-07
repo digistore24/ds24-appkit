@@ -13,6 +13,7 @@ import {
 } from "./checkout";
 import { DIGISTORE_REDIR_URL as DEFAULT_REDIR_URL } from "./config.mjs";
 import type { ProductDef } from "./products";
+import { DEFAULT_LOCALE } from "@/i18n/config";
 import { blankComments } from "@/scripts/lib/source-text.mjs";
 
 const sub: ProductDef = {
@@ -91,7 +92,11 @@ describe("offerFor", () => {
   it("keeps a language it has no product for buyable", () => {
     // Fallback, not refusal: a missing translation must not cost the sale.
     // The gap is reported by `node run.mjs ds24-sync`, where it can be fixed.
-    expect(offerFor(bilingual, "fr").productId).toBe("111111");
+    // The product it lands on is the DEFAULT_LOCALE's (English, or the first
+    // in LOCALES) — read off the fixture, never a code written out here.
+    const fallback = bilingual.productIdByLanguage![DEFAULT_LOCALE]!;
+    expect(fallback).toBeTruthy();
+    expect(offerFor(bilingual, "fr").productId).toBe(fallback);
   });
 });
 
