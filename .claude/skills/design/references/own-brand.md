@@ -76,7 +76,14 @@ usable comes back, ask for the hex.
   `#434343` is not something the command carries over"* — and say it as what
   it is: no dial, and no test that forbids it either. The hand path and what
   it costs are [`tokens.md`](tokens.md) → *The greys*; offer it in one
-  sentence with the count, and let them decide.
+  sentence with the count, and let them decide. 🚨 **And a value they have
+  NAMED is not an offer but an instruction**: "my text is `#434343`" goes in by
+  the hand path in the same step as the accent, or the hand-back says in its
+  first line that it is not in yet and why. Measured 2026-09-08: a customer
+  named two greys in the same sentence as her font and her accent, the font
+  and the accent went in, the greys were dropped without a word, and she had
+  to ask — the session then called it "my mistake" and did it in three
+  minutes. Silence about a named value is the failure, not the missing dial.
 - **One command run, one proposal, one confirmation.** No second round. Same
   budget as Branch B, and for the same reason: a design conversation that keeps
   going is this skill's failure mode.

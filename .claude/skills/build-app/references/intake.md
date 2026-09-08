@@ -99,6 +99,12 @@ in front of the user in plain words and **wait for a yes**:
 - what a buyer **does** there, in the order they would do it
 - what they **pay** and what they get for it
 - what is deliberately **not** in it yet
+- **the moment the app will count as "it delivered"** — one sentence with its
+  reason, worded per archetype in [`archetypes.md`](archetypes.md) → *The
+  activation event*. It is a LINE of this picture, not a paragraph beside it:
+  measured 2026-09-08, two runs of the same build — the one that treated it as
+  a fifth thing asked it with its reason, the other set it silently and the
+  customer never heard of it
 
 Half a page, no file paths, no table names. Then: *"Shall I build that? Say what
 is wrong and I'll change it — after this it becomes code, and changing it then

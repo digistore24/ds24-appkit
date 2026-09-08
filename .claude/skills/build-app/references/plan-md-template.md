@@ -45,6 +45,14 @@ check, not a promise you made._
 - **<the thing>** — <date>: <the reason>
 ```
 
+**The preamble's last sentence is load-bearing, and it is the one a
+translation drops.** *"Written down by your assistant … a note to check, not a
+promise you made"* is what lets a later session read the file back without
+turning it into the customer's own words (`docs/guidance.md` → *A recorded
+decision is read back as a note*). Measured 2026-09-08: a session translated
+the preamble into German, kept "the agreed picture, in plain words" and lost
+that sentence. Translate it whole, keep both halves.
+
 **The last section is why this file exists twice over.** `docs/app.md`'s
 *Decisions worth remembering* holds a declined **skill** — no custom identity,
 no companion. Declined **scope** had nowhere to go: a feature the user said no
