@@ -5,6 +5,17 @@
 _Read from `build-app`, step 1. The ✅ columns are the defaults that steps
 1b–1d put to the user as menus._
 
+**The archetype is a build decision, and the customer never has to learn the
+word.** Intake questions 1–3 decide it (who pays, what they walk away with, how
+it bills); say what it implies in ONE sentence in their terms, inside step 1f's
+end picture — *"your app unlocks the guide after a single purchase"* — where a
+yes or a correction is the whole confirmation. Ask only when the brief does not
+decide it, and then about what they sell and what the buyer walks away with,
+never with the five names below: put to an operator who does not read code,
+"which archetype" was one of four questions she answered with "I don't
+understand" (2026-09-08; `CLAUDE.md` → *Rules*, a question is asked in the
+words it will be answered in).
+
 | The app should…                                 | Archetype           | What to do | What this kind should show — ✅ = the default (step 1b) | What this kind should DO alongside its customer — ✅ = the default (step 1c) | What its customer should DO — ✅ = the default (step 1d) |
 |-------------------------------------------------|---------------------|----------------|---|---|---|
 | Unlock digital content/courses after purchase   | **Content-Access**  | **For a course, pick its shape in [`docs/courses.md`](../../../../docs/courses.md) FIRST** — self-study, week-by-week or accompanied workshop are three different data models, and the chooser there decides it (mind its tie-break). And with the shape, its authorship: a course only the developer himself maintains lives in code, not in tables ([`docs/content-authority.md`](../../../../docs/content-authority.md)). If the brief already names the shape in the vendor's words, CONFIRM it in one sentence rather than re-asking. **And if a knowledge corpus exists (`content/knowledge-sources/`), plan the course FROM it** — subjects, structure and lesson media are already there: courses.md → *Planning from a corpus* ([`docs/knowledge.md`](../../../../docs/knowledge.md)). Otherwise: one table per "product"; gate it with `hasPlan(memberId, productKey)`. **Lesson media that do not exist yet are production work — once the course skeleton stands, OFFER the skill `content-production`** ([`docs/content-production.md`](../../../../docs/content-production.md)): scripts, tools, rendering, delivery — a course whose units stay empty is the commonest way this archetype ships half-finished | ✅ a cover picture per lesson · ✅ a progress bar · the workbook or software as a **downloadable file** (`visibility: "entitled"`) | ✅ reads what the learner submits and answers it · a look back over the course so far | ✅ a self-check closing each block · a learning game on the hard part — skill `learning-activities` |
@@ -41,6 +52,25 @@ not customer-visible surface, and a fourth menu here would break the 1b–1d tri
 | Membership | did the first member thing — post, booking, whatever it is for | does it again, weekly |
 | Usage/Tokens | completed the first metered run (a spend on `token_ledger`) | spends again — a balance nobody spends is a refund waiting |
 
+**Say why before you ask, or the question has no answer.** An operator asked
+back *"what do I need that for?"* (2026-09-08), and the reason — two sentences
+— settled it at once: with a subscription the unhappy cancel and you see it;
+with a single purchase nothing tells you — a hundred buy, twenty build their
+first plan, eighty got nothing for their money, and no signal ever reaches you.
+The event is the one line that tells the two apart. So the wording is the
+reason, then the row above as a sentence in their terms, then a yes — and the
+table's words (`unit_completions`, `token_ledger`) are yours, never theirs:
+
+> "One more thing I want the app to notice. With a one-off purchase nobody
+> cancels, so nothing tells you whether somebody actually got what they paid
+> for. I'd count *finished the first lesson* as the moment your app delivered —
+> the app can then see who never got there. Does that fit, or is there an
+> earlier moment you would pick?"
+
+Per row the italic part is: *answered the first message* (Drip), *produced their
+first real result* (Gated-Tool), *the first post or booking* (Membership), *the
+first run they paid for* (Usage/Tokens).
+
 Three properties rule a bad answer out, and the full reasoning is
 [`docs/onboarding.md`](../../../../docs/onboarding.md) §1: **it is theirs, not
 yours** ("visited the dashboard" is your page, not their success), **it is
@@ -61,6 +91,11 @@ missing one — and finding that out here is the whole reason the question is
 asked before the data model rather than after the pages.
 
 ## The billing mode that follows from the archetype
+
+**Never put to the customer.** It follows from intake question 3 (`intake.md` —
+one purchase, a subscription, or by usage) and from the row above; the customer
+hears it, if at all, as one clause of the end picture — "paid once", "monthly".
+Asked as a question it was read as a price rise on her product (2026-09-08).
 
 The last four rows above are plans, the **Usage/Tokens** row is tokens, and an
 AI tool with a base subscription is both.

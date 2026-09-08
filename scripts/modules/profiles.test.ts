@@ -433,9 +433,10 @@ describe("🚨 no module's texts are deleted by another's", () => {
 // for a MODULE it is vacuous in the tree the template ships from. Its catalogue
 // is `mergeModuleMessages(de, MODULE_MESSAGES.de ?? {})`, and `MODULE_MESSAGES`
 // is generated from `config/modules.json`, which ships EMPTY — so a module's
-// keys are not in it. `scripts/modules/messages.test.ts` is no better placed: it
-// iterates the INSTALLED modules and says so in its own name ("checks the 0
-// installed module(s)").
+// keys are not in it. `scripts/modules/messages.test.ts` used to be no better
+// placed — it iterated the INSTALLED modules and said so in its own name
+// ("checks the 0 installed module(s)"); it walks the AVAILABLE ones now, and
+// this section stays because it asks a different question (key parity).
 //
 // Measured on story 8.6: had `coursesAdmin.digestCta` been written into `de.json`
 // only, no gate here would have gone red, and the button in an English

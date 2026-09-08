@@ -84,8 +84,10 @@ Read the schema first, then put 2–3 candidates to the user in their own terms,
 as a numbered menu with a default marked and a `0` row:
 
 ```
-Your app stores courses, lessons and completions. The moment I would bet a
-customer stays:
+Your app stores courses, lessons and completions. One thing I want it to
+notice: with a one-off purchase nobody cancels, so nothing tells you whether
+somebody actually got what they paid for. The moment I would bet a customer
+stays — and the app can then see who never got there:
 
   1  they finished their first lesson            ✅ my suggestion
   2  they finished the whole first module

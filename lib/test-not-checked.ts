@@ -15,7 +15,9 @@
 // `ux-check` still recognises the SHIPPED placeholder home, and the skill
 // `salespage` — step 2.4 of the path in `CLAUDE.md` — replaces that page. One
 // red test out of 7 700-odd, in an app whose only fault was doing the
-// recommended thing.
+// recommended thing. The fifth is `components/brand-mark.test.ts`: it proves
+// the template ships a letter tile, and `brand icons --apply` — what the skill
+// `design` tells every app with a logo to run — fills `config/brand.json` in.
 //
 // 🚨 **The precondition is always read INDEPENDENTLY of the mechanism under
 // test.** A test that asks its own subject whether it may skip can be talked

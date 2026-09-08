@@ -11,7 +11,13 @@ the two recipes.
 **The languages are `LOCALES` in `i18n/config.ts`, and nowhere else.** The app
 ships with `de`, `en`, `es` and `fr`; the texts live in one
 `messages/<code>.json` per language, plus one `modules/<id>/messages/<code>.json`
-per installed module.
+per module under `modules/` — **every module in the tree, installed or not**.
+The tests read the tree, not `config/modules.json` (which ships empty): a module
+added later must already speak every language the app speaks, or `module add`
+would be the moment a customer's second language went dark. That is why a
+fresh app with no module installed still owes the six catalogues — about 49 KB
+of text a customer's app may never render — before it may swap a language; the
+price is deliberate, and this is the reason.
 
 Read the list from `LOCALES` — never count the files, and never write a pair
 like `["de", "en"]` into a loop. A hand-written list is how a language quietly
@@ -102,7 +108,8 @@ the scripts under `scripts/`.
 ## Adding a language `<code>`
 
 1. `messages/<code>.json` — copy `de.json` and translate every string. The same
-   for `modules/<id>/messages/<code>.json` in every installed module.
+   for `modules/<id>/messages/<code>.json` in every module under `modules/`,
+   installed or not (see *The list* above for why).
 2. `<code>` in `LOCALES` and its name in `LOCALE_LABELS` (`i18n/config.ts`).
 3. The import and the entry in `i18n/static-messages.ts`.
 4. `title.<code>` in every `modules/<id>/module.json`.

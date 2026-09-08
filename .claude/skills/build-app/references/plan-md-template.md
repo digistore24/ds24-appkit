@@ -13,13 +13,16 @@ _The agreed picture, in plain words. A line here is something the customer will
 be able to DO — never a task, a file or a table. It moves to docs/app.md the
 moment it exists and its tests are green, so what is left in this file is
 always what is still ahead. docs/product-brief.md says what the product is;
-this says what is not there yet._
+this says what is not there yet. Written down by your assistant from the
+conversation, in your words where it could — read back to you, it is a note to
+check, not a promise you made._
 
 ## Settled before the first page
 
 - **Sells:** <what a customer buys — docs/product-brief.md carries it in full>
 - **For:** <who>
-- **Archetype:** <from step 1>
+- **Archetype:** <from step 1 — the label and what it means here: "Content-Access
+  — unlocks the course after purchase">
 - **Bills:** <one purchase | subscription | by usage>
 - **Look:** <"docs/design.md — <the direction chosen>", or "the shipped look,
   decided <date>">

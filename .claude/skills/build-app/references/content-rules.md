@@ -15,7 +15,11 @@ check in ONE function. What follows is what each of them means._
   no admin UI; only customer STATE gets tables. The fork is
   [`docs/content-authority.md`](../../../../docs/content-authority.md) — decide it
   before `db-generate`, and record the answer in `docs/app.md` (the coach
-  reads it back as the `Content authority:` line).
+  reads it back as the `Content authority:` line). **It is asked in the
+  customer's terms** — whether they want to change these things themselves, on
+  their phone, or tell you; the wording is at the top of that file. "Code or
+  tables" is your criterion, not their question, and "both" is one answer, not
+  a fork.
 
 ## Step 2 — how that content reaches PROD
 

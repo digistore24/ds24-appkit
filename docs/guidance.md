@@ -96,6 +96,37 @@ their way around one skill has then found their way around all of them:
   meeting for the first time. Use it where it is the right word, and put its
   plain meaning in the same sentence, once. A question nobody can parse gets
   answered at random, and that answer then travels on as if it were a decision.
+- **A question is asked in the words it will be answered in — the same rule as
+  the hand-back below, applied where the damage starts, because the questions
+  come first.** Three parts. It names what the customer will EXPERIENCE, not
+  the criterion you decide by. The reason travels with it — one sentence on why
+  the answer matters, inside the question. And a choice with no consequence the
+  customer can see or feel is not put to them: set it, say it in one sentence,
+  record it in `docs/app.md`. Measured on a customer's app on 2026-09-08: the
+  build opened with four questions taken from the skill's own vocabulary —
+  *content authority · data model · migration · an input form behind
+  `requireOwner()` · `billingMode "subscriptions"` · `kind: "one_time"` ·
+  `hasPlan()`* — and the operator, who does not read code, answered all four
+  with "I don't understand", and read the billing mode as her buyer having to
+  pay more than agreed. The decision behind the first of them, asked once more
+  in her terms, took one exchange: *"The taxi to Santa Monica costs 20 € —
+  next year 25. Do you want to change that number yourself, on your phone, or
+  tell me and I put it in?"* — after which she described the database path
+  correctly on her own. It was never a question of understanding; it was one
+  of language. Two of the four were not her questions at all — the archetype
+  and the billing mode change nothing her buyer sees — and one had its reason
+  in a doc she never opens. Where a skill prescribes a question, it prescribes
+  the plain form (`build-app` → `references/intake.md`, `menus-1b.md`); where
+  it does not, this rule is the wording.
+- **A recorded decision is read back as a note, not as a contract.**
+  `docs/plan.md` and `docs/app.md` are written by you, from the conversation —
+  in the customer's words where you had them, in yours where you did not.
+  Quoted back as *"we agreed that…"*, your note becomes their promise: a
+  customer heard a line of her own plan read to her and asked *"when would we
+  have agreed that?"* (2026-09-08), and trusted the file less from then on —
+  the file whose whole purpose is to be what a later session relies on. So the
+  shape is *"this is how I wrote down what you said on <date> — is it still
+  right?"*, and a correction changes the file, dated.
 - **The hand-back is written for the person who does not read code — and the
   files come last.** Every turn that ends, ends in somebody's hands, and the
   first paragraph is the one they read. It says what has CHANGED for them —

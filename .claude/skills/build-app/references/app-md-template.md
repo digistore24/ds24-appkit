@@ -10,7 +10,8 @@ when creating the file, and keep it, so every entry reads the same._
 
 _What was built on top of the template. The template's own rules are in
 CLAUDE.md; this file is only what came after. One entry per feature, written the
-moment the feature works._
+moment the feature works. Written down by your assistant, from the conversation
+— read back to you, a line here is a note to check, not a promise you made._
 
 ## The product
 

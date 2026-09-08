@@ -13,7 +13,7 @@ something next to it.
 | **a logo file** (svg, png, webp) | `node run.mjs brand icons --logo <path>` — it renders the five icon files, copies the mark to `public/brand/` and fills in `config/brand.json` | the mark in the header and on `/login`, and the app's icons |
 | **a CSS or SCSS file** | **read it first** and name the candidates back to them, then `node run.mjs brand colors --css <path>` | the accent, contrast-checked for both modes |
 | **a Tailwind config or a style guide** | the same — look for `theme.extend.colors`, `$brand`, a hex on a button rule | the same |
-| **their website's address** | `node run.mjs brand colors --url https://…` | the same — **colours only**. Nothing in `scripts/brand/` looks at type, so their font is something YOU ask about and match from the five pairings, never something the command reports |
+| **their website's address** | `node run.mjs brand colors --url https://…` | the same — **colours only**. Nothing in `scripts/brand/` looks at type, so their font is something YOU ask about and match — from the five pairings, or from any Fontsource package that ships the files (the Söhne paragraph below) — never something the command reports |
 | **just a hex code** | `node run.mjs brand colors --hex "#1F6F4A"` | the derivation and nothing else |
 | **a logo that vanishes on dark** | ask for a second file and pass it: `node run.mjs brand icons --logo <hell> --logo-dark <dunkel> --apply` | both modes covered |
 | **only a screenshot** | that is Branch B with a strong reference. Say so in one sentence and go to Step 1B | — |

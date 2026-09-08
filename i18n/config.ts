@@ -5,7 +5,9 @@
 //
 // To add a language <code>:
 //   1. `messages/<code>.json` — copy `de.json` and translate every string. The
-//      same for `modules/<id>/messages/<code>.json` in every installed module.
+//      same for `modules/<id>/messages/<code>.json` in EVERY module under
+//      `modules/`, installed or not — the tests read the tree, not
+//      `config/modules.json`.
 //   2. `<code>` in LOCALES and its name in LOCALE_LABELS, below.
 //   3. The import and the entry in `i18n/static-messages.ts`.
 //   4. `title.<code>` in every `modules/<id>/module.json`.

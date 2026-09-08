@@ -52,6 +52,17 @@ Three properties make an event usable, and each one rules something out:
 - **It is the last step of the checklist** (§2). If the checklist ends anywhere
   short of it, the checklist is decoration.
 
+**Why an app needs this line at all.** A subscription tells you when it failed:
+the unhappy cancel, and you see it. A one-off purchase tells you nothing — a
+hundred people buy, twenty build their first plan, eighty got nothing for their
+money, and no signal ever reaches you. The activation event is the one line
+that tells those two groups apart, which is why `build-app` asks for it before
+the data model rather than after the pages (step 1f — and step 2 owes it a
+table that can date it). That reason goes INTO the question when it is put to
+the customer: asked without it, an operator answered *"what do I need that
+for?"*, and with it, in two sentences, she answered the question
+(2026-09-08; the wording is `build-app` → `references/archetypes.md`).
+
 Write it into `docs/app.md` under *Decisions worth remembering*, as one line:
 
 ```

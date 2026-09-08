@@ -95,15 +95,15 @@ start?"), briefly give them the path (idea → build → payment → security �
 
 ## Step 1 — Choose an archetype
 
-Ask the user (or work out) what the app is at its core. There are five
-archetypes: **Content-Access** (unlock digital content/courses after purchase),
-**Drip/Automation** (send recurring messages after purchase), **Gated-Tool**
-(provide a tool/feature for buyers only), **Membership** (manage
-membership/subscription) and **Usage/Tokens** (bill by usage, e.g. AI usage).
+Work out what the app is at its core — from the brief, never by asking the
+customer to pick a category. Five archetypes: **Content-Access** (unlock digital
+content/courses after purchase), **Drip/Automation** (send recurring messages
+after purchase), **Gated-Tool** (provide a tool/feature for buyers only),
+**Membership** (manage membership/subscription) and **Usage/Tokens** (bill by usage, e.g. AI usage).
 
 **Read the full table in [`references/archetypes.md`](references/archetypes.md)
-before deciding, and put the choice to the user** — it holds what to build per
-archetype, the ✅ defaults steps 1b–1d propose, and the Gated-Tool warnings.
+before deciding** — what to build per archetype, the ✅ defaults steps 1b–1d
+propose, the Gated-Tool warnings, and why the archetype is **said** to the customer in one sentence of Step 1f's end picture, never **asked** by name.
 
 All archetypes use the same base: **auth (`auth.ts`)** for who is signed in, and
 the **entitlement API** (`lib/entitlements/manage.ts` — its signatures are in
@@ -112,9 +112,9 @@ The Digistore IPN feeds both — it records the payment and maintains the grant
 behind it. Reference: `docs/entitlements.md`.
 
 **The archetype answers one more question, so answer it now:** does this app
-sell **plans**, **tokens**, or **both**? Write it into
-`config/digistore-products.json` — one line, and you can set it before a single
-product exists:
+sell **plans**, **tokens**, or **both**? Intake question 3 asked it in plain
+words, so it is written, not asked — neither `billingMode` nor the JSON reaches
+the customer. One line in `config/digistore-products.json`, settable before a single product exists:
 
 ```json
 { "billingMode": "subscriptions" | "tokens" | "both", "products": { … } }
@@ -256,7 +256,7 @@ is gone when the session is.
 ## After the yes — the build runs in stages, and every stage ends in their hands
 
 **Steps 2–4b below are run once per `- [ ]` line of `docs/plan.md`, in the
-order the lines stand — never for the whole list in one turn.** Step 2 runs in
+order the lines stand — never for the whole list in one turn; the first stage's cut is not asked, it is the first unticked line.** Step 2 runs in
 full only in the first stage: 1b–1d decided the columns, and a second migration
 for something the first could have carried is the mistake this skill warns
 about twice above. A stage is done when the customer can OPEN it — tests green,
@@ -275,9 +275,9 @@ what to do when a session was cut in the middle of a stage:
   column only where its plan line needs one that 1b–1d could not foresee.
 - **Before the first content table, settle who authors the content** — decide it
   before `db-generate`, and record the answer in `docs/app.md`. The fork is
-  [`docs/content-authority.md`](../../../docs/content-authority.md), what each
-  answer means is
-  [`references/content-rules.md`](references/content-rules.md).
+  [`docs/content-authority.md`](../../../docs/content-authority.md), asked in the
+  customer's terms (its top has the wording), never as "code or tables"; what
+  each answer means is [`references/content-rules.md`](references/content-rules.md).
 - **And settle, in the same breath, how that content reaches PROD** — content in
   tables is written as content files plus an idempotent applier from the FIRST
   table on, **never only INSERTed into the local database**, and product media
