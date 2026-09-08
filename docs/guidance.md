@@ -171,6 +171,21 @@ their way around one skill has then found their way around all of them:
   closed on *"the translation agent keeps working in the background"*, and
   `messages/pt.json` existed only after the customer asked a second time
   (2026-09-08).
+- **A "no" says which of the four it is.** (a) a limit of the platform; (b) a
+  rule of this template — with the test that holds it; (c) a skill's curation
+  (five font pairings are a MENU, and a list is never a reason by itself);
+  (d) your own taste. Only (a) and (b) are "it cannot"; (c) and (d) are "let us
+  talk", said as such. A customer with a brand was told their
+  Fontsource-packaged script face was "not an option" on the strength of (c)
+  and (d) sold as (a), while the real condition — an npm package with the files
+  on disk — was met (2026-09-07). Name the kind, and for (b) name the test — a
+  (b) you cannot name a test for is a (c) or (d) in (b)'s clothes, and the
+  standing example is the greys: `scripts/design/dials.test.ts` holds that
+  there are four dials and no fifth, and NOTHING holds the neutral tokens'
+  values, so "the grey is a fixed boundary" is untrue; the hand path and its
+  cost are in the skill `design` → `references/tokens.md` → *The greys*. A
+  session said "(b) fixed boundary" for exactly that, named no test, and only
+  on the customer's second ask admitted no test locks it (2026-09-08).
 - **Look before you ask.** Almost everything a skill needs to know is on disk:
   `.env`, the files under `config/`, the tables in `db/`, the reports in
   `docs/reports/`. Ask only about what genuinely leaves no trace, and then in

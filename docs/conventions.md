@@ -83,7 +83,7 @@ obstacle to weaken or delete.
 
 ### And a SKIPPED test is not a passed one
 
-`⏭ <file>: NOT CHECKED — <reason>` on stderr has exactly three legitimate
+`⏭ <file>: NOT CHECKED — <reason>` on stderr has exactly five legitimate
 causes. Two are quickly said: `node run.mjs agent-setup --apply` trimmed a
 config tree, or the registry no longer holds the SHAPE a test needs, because the
 example products were deleted or parked with `"sell": false`.
@@ -95,6 +95,14 @@ files look plausible. A tool that is not installed on this machine cannot be
 asked, so the test skips itself and says so. That is the one skip a green run on
 a fresh machine produces regularly, and it disappears the moment the tool is
 there.
+
+The fourth and fifth are the app having outgrown a placeholder the template
+ships. **A page this app has REPLACED**: `scripts/ux/rules.test.ts` proves the
+shipped placeholder home is still recognised, and once the skill `salespage`
+(2.4 of *The path*) has left no placeholder to recognise, the test says so and
+skips. **A logo this app has SET**: `components/brand-mark.test.ts` proves the
+template ships a letter tile, and `brand icons --apply` — the command the skill
+`design` tells you to run — has filled `config/brand.json` in.
 
 Anything else on that line is a question nobody answered.
 

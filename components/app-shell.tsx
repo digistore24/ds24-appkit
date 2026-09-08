@@ -340,11 +340,17 @@ function NavLinks({
 function SidebarFooter() {
   const t = useTranslations("theme");
   return (
-    // The toggle deliberately sits on the RIGHT: in development Next.js shows
-    // its own button in the bottom left and would cover it. The language
-    // switcher sits up in the header for the same reason.
-    <div className="flex items-center justify-between gap-2 border-t p-3">
-      <span className="text-muted-foreground pl-10 text-xs">{t("label")}</span>
+    // 🚨 Nothing of ours goes in the bottom-left corner: in development Next.js
+    // draws its dev-tools button there, over whatever is underneath. That is why
+    // the toggle sits on the right, and why the language switcher sits up in the
+    // header — and the LABEL belongs to the same rule. It used to sit left with
+    // `pl-10` to duck under the button, which is a guess about a foreign widget's
+    // size and was measured wrong on 2026-09-08: at 1440 px the button occupies
+    // x 22–54 and the label's text began at 52, so it covered the "D" — and it
+    // covers more whenever the button widens to show an issue count. Both now
+    // sit right, and the corner is left to Next.js.
+    <div className="flex items-center justify-end gap-2 border-t p-3">
+      <span className="text-muted-foreground text-xs">{t("label")}</span>
       <ThemeToggle />
     </div>
   );
