@@ -71,6 +71,12 @@ usable comes back, ask for the hex.
   list being five and of a taste about pricing tables it never reaches; both
   reasons were the session's, neither was the template's. Say which "no" you
   mean.
+  ⚠️ **Their stylesheet's text and surface greys are read by nobody:** `brand
+  colors` takes the accent and nothing else. Say so in the proposal — *"your
+  `#434343` is not something the command carries over"* — and say it as what
+  it is: no dial, and no test that forbids it either. The hand path and what
+  it costs are [`tokens.md`](tokens.md) → *The greys*; offer it in one
+  sentence with the count, and let them decide.
 - **One command run, one proposal, one confirmation.** No second round. Same
   budget as Branch B, and for the same reason: a design conversation that keeps
   going is this skill's failure mode.

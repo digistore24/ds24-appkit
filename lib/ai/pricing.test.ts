@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CURRENCY_BY_LOCALE,
   DEFAULT_CURRENCY,
   costMicros,
   estimateMicros,
@@ -13,6 +14,7 @@ import {
   recommendedCurrency,
 } from "./pricing.mjs";
 import prices from "@/config/ai-prices.json";
+import { LOCALES } from "@/i18n/config";
 import { pricesUpdatedAt } from "./prices";
 import { allBindings } from "./tasks";
 
@@ -179,10 +181,24 @@ describe("recommendedCurrency", () => {
   });
 
   it("suggests USD for English and for a language it does not know", () => {
-    // English is deliberately NOT in the euro set: it is the language the rest
-    // of the world shares, so its likeliest operator is outside the euro area.
+    // English is deliberately USD: it is the language the rest of the world
+    // shares, so its likeliest operator is outside the euro area.
     expect(recommendedCurrency("en")).toBe("USD");
     expect(recommendedCurrency("xx")).toBe("USD");
+  });
+
+  // Step 8 of docs/locales.md → "Adding a language", and the one step nothing
+  // else holds. The table used to be a Set of the euro languages, where a
+  // language nobody had decided on looked exactly like one decided as USD — so
+  // an app that swapped Spanish for Portuguese along the documented steps
+  // recommended USD to a Portuguese operator, with every test green
+  // (2026-09-08). Both directions, so a removed language leaves no stale row.
+  it("carries a written decision for every language the app speaks, and no other", () => {
+    const decided = Object.keys(CURRENCY_BY_LOCALE).sort();
+    expect(decided).toEqual([...LOCALES].sort());
+    for (const locale of LOCALES) {
+      expect(["EUR", "USD"]).toContain(CURRENCY_BY_LOCALE[locale]);
+    }
   });
 });
 

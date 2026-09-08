@@ -127,6 +127,19 @@ their way around one skill has then found their way around all of them:
   off every run, in its Turns table). Where a stage ends on the question
   whether to go on, the files line goes before that question, and nothing else
   follows it.
+- **A turn ends with the result, never with an agent still working.** A
+  subagent sent into the background lives exactly as long as the turn in a
+  print session (`claude -p`, and every harness built on it — the field-test
+  runner among them): the process ends with the hand-back, and the work with
+  it. In an interactive session the customer reads *"I will be notified when
+  it is done"* as done, and waits for a message that may never come — they
+  cannot tell a running agent from an ended one, and should not have to. So:
+  wait for it inside the turn, and if the turn has to close first, the first
+  line of the hand-back says what is NOT there yet. A catalogue translation is
+  one job, done in the turn, never a background job. Measured: a session
+  closed on *"the translation agent keeps working in the background"*, and
+  `messages/pt.json` existed only after the customer asked a second time
+  (2026-09-08).
 - **Look before you ask.** Almost everything a skill needs to know is on disk:
   `.env`, the files under `config/`, the tables in `db/`, the reports in
   `docs/reports/`. Ask only about what genuinely leaves no trace, and then in

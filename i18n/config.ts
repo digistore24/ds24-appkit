@@ -15,7 +15,9 @@
 //   7. `<code>` in `productIds` of every product in
 //      `config/digistore-products.json`, then `node run.mjs ds24-sync` — one
 //      Digistore24 product per language.
-// `npm run test` holds steps 1 to 4; `node run.mjs legal-check` reads 5 and 6.
+//   8. The language's currency in `CURRENCY_BY_LOCALE`, `lib/ai/pricing.mjs`.
+// `npm run test` holds steps 1 to 4, 6 and 8; `node run.mjs legal-check` reads
+// 5 and 6. The full list, with removing: `docs/locales.md`.
 //
 // Deliberately WITHOUT a locale prefix in the URL: /plans stays /plans. The
 // locale lives in a cookie (the switcher) and is derived from the browser on

@@ -85,6 +85,32 @@ taste, and remember the heading face reaches `h1` alone, see below, so
 "unreadable in a table" is not a thing that can happen). A session once sold
 the second and third as the first, to a customer with a brand.
 
+### The greys
+
+The same customer's next sentence is *"and my brand's grey is `#434343`"*, and
+the honest answer has two halves that must not be fused. **There is no dial for
+the neutrals** — `scripts/design/dials.test.ts` holds the four and refuses a
+fifth, so that half is the template's rule with a test behind it. **Nothing
+holds the neutral tokens' VALUES** — `--background`, `--foreground`, `--card`,
+`--muted`, `--muted-foreground`, `--border`, `--input`, `--secondary`,
+`--accent` and their `-foreground` partners are plain CSS in `:root` and
+`.dark`, and `ux-check` measures whether they read, not whether they are the
+shipped ones. So *"the grey is a fixed boundary"* is a (c) in (b)'s clothes:
+a session said exactly that, named no test, and only on the customer's second
+ask admitted that no test locks it (2026-09-08). Say it the other way round:
+**no command derives it, and here is what doing it by hand costs.**
+
+The hand path, when they want it: every neutral token in **both** blocks, the
+dark set derived (their site has no dark mode — keep the shipped structure of
+which surface is how much lighter than which, move only the hue and the
+saturation); then `OG_FOREGROUND` and `PWA_THEME_COLOR_DARK` in
+`lib/pwa/manifest.ts`, because `lib/pwa/manifest.test.ts` pins both to the
+tokens and stays red until they match; then `node run.mjs ux-check`, whose 36
+pairs are the floor; then the values and the reason in `docs/design.md`. It
+is some twenty values against the accent's three, and it is theirs to keep —
+`node run.mjs update` carries text, never CSS. Say the count and the cost,
+then let them decide; a brand owner who hears a number decides in one turn.
+
 | Pairing | Carries | Elevation | The one package it adds | The file `next/font/local` points at |
 |---|---|---|---|---|
 | **Figtree** (shipped) | warm, geometric-humanist — the default | `flat` | `@fontsource-variable/figtree` — already a dependency | one variable file, `files/figtree-latin-wght-normal.woff2`, `weight: "300 900"`. Nothing to do |

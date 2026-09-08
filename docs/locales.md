@@ -110,9 +110,14 @@ the scripts under `scripts/`.
 6. `content/legal/<slug>.<code>.md` for every legal page in `content/legal/`.
 7. `<code>` in `productIds` of every product in `config/digistore-products.json`,
    then `node run.mjs ds24-sync` — one Digistore24 product per language.
+8. The currency an operator in that language is most likely billed in —
+   `CURRENCY_BY_LOCALE` in `lib/ai/pricing.mjs`, `EUR` or `USD`. A suggestion
+   `ai-check` prints, never a rule; but a language with no row there used to be
+   silently `USD`, which is how this step went unnamed for as long as the table
+   was a set of the euro languages.
 
-`npm run test` holds steps 1 to 4 and 6; `node run.mjs legal-check` reads 5 and 6.
-The same list is the header of `i18n/config.ts`.
+`npm run test` holds steps 1 to 4, 6 and 8; `node run.mjs legal-check` reads 5
+and 6. The same list is the header of `i18n/config.ts`.
 
 ## Removing a language `<code>`
 
@@ -125,10 +130,11 @@ The same list is the header of `i18n/config.ts`.
 7. Remove `<code>` from `productIds` in `config/digistore-products.json`. A product
    that already exists at Digistore24 is deactivated **there**, by hand —
    removing its id here does not unpublish it.
-8. If `config/notifications.json` names `<code>`, set its `locale` to a language
+8. Remove the row from `CURRENCY_BY_LOCALE` in `lib/ai/pricing.mjs`.
+9. If `config/notifications.json` names `<code>`, set its `locale` to a language
    the app still speaks.
 
-`npm run test` holds steps 1 to 4 and 6. A visitor whose cookie still names the
+`npm run test` holds steps 1 to 4, 6 and 8. A visitor whose cookie still names the
 removed language is treated as a first-time visitor and gets the browser's
 choice. If you removed English, `DEFAULT_LOCALE` is now the first language in
 `LOCALES` — order the list accordingly.
