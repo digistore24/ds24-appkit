@@ -68,18 +68,45 @@
  * delete the other's products. Ownership stays the note stamp, which carries
  * the syncId.
  *
- * ⚠️ **`data[tag]` does not exist in the API yet.** Measured on 2026-09-09:
- * `createProduct` and `updateProduct` both refuse it outright — `data` is
- * validated against a strict allowlist and an unknown key is an ERROR, not
- * something ignored:
+ * ── The field, and what is known about it ──────────────────────────────────
+ *
+ * On 2026-09-09 it did not exist: `createProduct` and `updateProduct` both
+ * refused it outright, because `data` is validated against a strict allowlist
+ * and an unknown key is an ERROR rather than something ignored —
  *
  *   "createProduct() - ungültiger Array-Schlüssel bei 1. Parameter 'data'
  *    (angegeben: tag - gültig: name,name_intern,description,…)"
  *
- * So a sync that sent it unconditionally would break every product creation for
- * every customer, today. `sync-products.mjs` sends it, catches exactly that,
- * and stops sending it for the rest of the run — see `withoutTag` there. When
- * the field ships, the first attempt succeeds and nothing retries.
+ * On 2026-09-10 it is **documented in Digistore24's own OpenAPI spec** for both
+ * calls (`/api/docs/paths/{createProduct,updateProduct}.yaml`):
+ *
+ *   tag: { type: string, maxLength: 127 }
+ *   "Comma-separated tags for internal filtering. Each entry is trimmed; the
+ *    characters < > & # " ' ; \ plus tabs and line breaks are stripped, empty
+ *    entries and duplicates removed. The length limit applies to the sanitized
+ *    value."
+ *
+ * **Measured against a live account on 2026-09-10**, not only read: the key of a
+ * real app, 59 products. `listProducts` returns `tag` and `typeof` it is a
+ * `string`; `createProduct` lists it among its 181 valid `data` keys and
+ * `updateProduct` among its 184 — read out of the parameter validator's own
+ * refusal, so nothing was written to get the answer, and the product used for
+ * the probe still carried `tag: ""` and its old `modified_at` afterwards.
+ *
+ * ⚠️ One account is not every account, so `sync-products.mjs` keeps its
+ * `withoutTag` fallback. What it now guards against is a rollback or an account
+ * the change has not reached — not an unshipped field. It costs one retry on
+ * the first product of a run; being wrong without it costs every product
+ * creation the customer makes.
+ *
+ * 🚨 **`maxLength: 127`, and it is OURS to respect.** The spec does not say
+ * whether an over-long value is refused or truncated, and both are bad for a
+ * vendor: a refusal turns the fallback's sentence into a false one, and a
+ * truncation cuts tags we did not write. So `tagWith()` refuses to produce a
+ * value over the limit and answers `null` instead — the vendor keeps their
+ * tags and this app goes unmarked. That is the right way round: the tag is
+ * explicitly NOT an ownership proof (see above), so losing ours costs nothing
+ * and losing theirs costs them.
  */
 export const PRODUCT_TAG = "ds24-appkit";
 
@@ -96,14 +123,22 @@ export const PRODUCT_TAG = "ds24-appkit";
  * Comparison is case-insensitive and ignores the spaces a human leaves after a
  * comma, because both come back from a field somebody edits by hand.
  */
-export function tagWith(existingTag, tag = PRODUCT_TAG) {
-  // 🚨 The field does not exist yet, so its shape on the way BACK is a guess —
-  // and the guess that costs something is "not a string means nothing is
-  // there", because that writes our tag over whatever was. A list arriving as
-  // an array is the likely other shape, so it is understood; anything else is
-  // treated as "somebody's data in a form I do not know" and left alone.
+export const PRODUCT_TAG_MAX = 127;
+
+/**
+ * The characters Digistore24 strips out of a tag before it measures the length.
+ * From the spec, verbatim: `< > & # " \' ; \` plus tabs and line breaks.
+ */
+const TAG_STRIPPED = /[<>&#";'\\\t\r\n]/g;
+
+export function tagWith(existingTag, tag = PRODUCT_TAG, maxLength = PRODUCT_TAG_MAX) {
+  // ⚠️ Both the spec and a live `listProducts` say `string` (2026-09-10), so the
+  // array branch below is belt-and-braces rather than the guess it started as.
+  // It stays because it costs nothing and because which way the doubt falls is
+  // the load-bearing part: "not a shape I know" must never mean "nothing is
+  // there", because that writes our tag over whatever the vendor had.
   if (existingTag === null || existingTag === undefined) {
-    return tag;
+    return tag.length <= maxLength ? tag : null;
   }
   let parts;
   if (typeof existingTag === "string") {
@@ -115,7 +150,14 @@ export function tagWith(existingTag, tag = PRODUCT_TAG) {
   }
   parts = parts.map((t) => t.trim()).filter(Boolean);
   if (parts.some((t) => t.toLowerCase() === tag.toLowerCase())) return null;
-  return [...parts, tag].join(",");
+
+  const value = [...parts, tag].join(",");
+  // 🚨 Measured the way Digistore24 measures it: the limit applies to the
+  // SANITIZED value, so the strip happens before the count. Sending 130
+  // characters that sanitize to 120 would otherwise be refused here for a
+  // reason the API does not have.
+  if (value.replace(TAG_STRIPPED, "").length > maxLength) return null;
+  return value;
 }
 
 /**

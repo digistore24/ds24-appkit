@@ -92,9 +92,15 @@ export function overlongKeys(keys, languages = ["de"], envs = SYNC_ENVS) {
 
 /**
  * The buyer-visible product name. Dev and staging products carry their
- * environment openly — the DS24 API has no tag field, so the name is where a
- * human tells the sets apart in the vendor backend (and in a test checkout).
- * Prod stays clean: that name is the one real buyers see.
+ * environment openly, because the name is the only marker that travels to the
+ * CHECKOUT PAGE — which is where somebody notices they are about to test
+ * against the wrong set. Prod stays clean: that name is the one real buyers see.
+ *
+ * ⚠️ This used to say "the DS24 API has no tag field, so the name is where a
+ * human tells the sets apart". There is one now (`data[tag]`, `_own.mjs`) and
+ * this app writes it — but it is a backend filter and is invisible at a
+ * checkout, so it does not do this job. The reason changed; the decision did
+ * not.
  */
 export function displayName(name, env) {
   if (env === "prod") return name;

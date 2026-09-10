@@ -25,10 +25,13 @@
 // products per plan, and this script creates one for every language declared
 // in `productIds`. The full reasoning is in lib/digistore/products.ts.
 //
-// ONE PRODUCT GROUP PER APPLICATION (all environments together): the DS24 API
-// has no tag field, so the group (a folder in the vendor backend) is what
-// keeps this app's products findable next to everything else the account
-// sells. Its id is persisted in the registry (`productGroupId`) like the
+// ONE PRODUCT GROUP PER APPLICATION (all environments together): the group is a
+// FOLDER in the vendor backend, and that is what keeps this app's products
+// findable next to everything else the account sells. ⚠️ This used to read "the
+// DS24 API has no tag field, so the group is what…". There is a tag field now
+// (`data[tag]`, `_own.mjs`), and this app writes one — but a tag is a filter
+// somebody has to type and a folder is a place they can open, so the group is
+// not made redundant by it. The reason was wrong; the decision was not. Its id is persisted in the registry (`productGroupId`) like the
 // product ids, and every create/update sends it — so a group deleted at DS24
 // is recreated and re-collects the products on the next sync by itself.
 //
@@ -132,13 +135,23 @@ if (!thankyouTarget) {
 }
 const appUrl = publicUrlFor(thankyouTarget);
 
-// Does this account's API know `data[tag]` yet?
+// Does THIS account's API know `data[tag]` yet?
 //
-// ⚠️ Measured on 2026-09-09: it does NOT, and `data` is validated against a
-// strict allowlist — an unknown key is a hard error, not something ignored
+// The field is documented — Digistore24's own OpenAPI spec carries it for
+// `createProduct` and `updateProduct` as of 2026-09-10 (`_own.mjs` quotes it,
+// including the `maxLength: 127` this app respects itself). On 2026-09-09 it
+// did not exist at all, and `data` is validated against a strict allowlist, so
+// an unknown key is a hard ERROR rather than something ignored
 // ("ungültiger Array-Schlüssel bei 1. Parameter 'data' (angegeben: tag …)").
-// A sync that sent it unconditionally would break every product creation for
-// every customer on the day this shipped.
+//
+// Exercised against a live account on 2026-09-10 (`_own.mjs` has the numbers):
+// both calls accept the key, and `listProducts` hands it back as a string.
+//
+// ⚠️ **The fallback stays anyway, and one account is the reason.** What it
+// guards is no longer an unshipped field but a rollback, or an account the
+// change has not reached. It costs one retry on the first product of a run; a
+// sync without it trades every product creation the customer makes for a
+// marker that decides nothing.
 //
 // So: send it, and if the call comes back refused, drop it and try the same
 // call again — ONCE, and then not for the rest of the run. That is the shape
@@ -158,9 +171,13 @@ async function withoutTag(data, call, retry) {
   } catch (err) {
     if (!tagsAccepted || !("data[tag]" in data)) throw err;
     tagsAccepted = false;
-    console.log(
-      `  · this Digistore24 account does not know data[tag] yet — continuing without it`,
-    );
+    // 🚨 Says what HAPPENED, not why. The sentence used to read "does not know
+    // data[tag] yet", which was the only possible cause while the field did not
+    // exist — and became a guess the day it shipped. A refusal now has more
+    // than one explanation (an account on an older release, a value this app
+    // failed to keep inside the documented limit), and the line must not pick
+    // one of them for the reader.
+    console.log(`  · Digistore24 refused data[tag] — continuing without it`);
     delete data["data[tag]"];
     try {
       return await retry();

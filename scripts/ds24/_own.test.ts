@@ -20,6 +20,7 @@ import {
   NOTE_MAX,
   tagWith,
   tagOf,
+  PRODUCT_TAG_MAX,
   PRODUCT_TAG,
 } from "./_own.mjs";
 
@@ -240,6 +241,36 @@ describe("the tag — the coarse marker", () => {
     expect(tagWith({ some: "object" })).toBeNull();
     expect(tagWith([1, 2])).toBeNull();
     expect(tagWith(42)).toBeNull();
+  });
+
+  it("🚨 refuses to exceed the documented 127 characters", () => {
+    // The spec says `maxLength: 127` and does not say what happens above it —
+    // refused, or truncated. Both are bad for the vendor: a refusal turns the
+    // sync's fallback sentence ("this account does not know data[tag] yet")
+    // into a false one, and a truncation cuts tags this app never wrote. So the
+    // answer is `null`: their tags stay whole and ours is simply absent. The
+    // tag is not an ownership proof, so that costs nothing.
+    const room = PRODUCT_TAG_MAX - PRODUCT_TAG.length - 1; // -1 for the comma
+    const fits = "x".repeat(room);
+    expect(tagWith(fits)).toBe(`${fits},${PRODUCT_TAG}`);
+    expect(tagWith(`${fits}x`)).toBeNull();
+  });
+
+  it("counts the SANITIZED length, the way Digistore24 does", () => {
+    // "The length limit applies to the sanitized value" — the stripped
+    // characters are gone before the count. A value that is too long only
+    // because of characters the API removes must still go through, or this
+    // refuses for a reason the API does not have.
+    const room = PRODUCT_TAG_MAX - PRODUCT_TAG.length - 1;
+    const withStripped = "x".repeat(room) + '<<<>>>&&&###';
+    expect(withStripped.length).toBeGreaterThan(room);
+    expect(tagWith(withStripped)).toBe(`${withStripped},${PRODUCT_TAG}`);
+  });
+
+  it("and an empty product still gets the tag, unless the tag itself is too long", () => {
+    expect(tagWith(null)).toBe(PRODUCT_TAG);
+    expect(tagWith(null, "y".repeat(PRODUCT_TAG_MAX))).toBe("y".repeat(PRODUCT_TAG_MAX));
+    expect(tagWith(null, "y".repeat(PRODUCT_TAG_MAX + 1))).toBeNull();
   });
 
   it("is NOT what ownership is decided by", () => {
