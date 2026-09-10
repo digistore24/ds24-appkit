@@ -95,7 +95,11 @@ vi.mock("@/db", () => ({
 }));
 
 const { confirmUpload, createUploadTicket, pruneAbandonedUploads } = await import("./manage");
-const { MediaError, UPLOAD_TICKET_SECONDS, stagingKey, storageKey } = await import("./rules");
+// `MediaError` is only ever named in a TYPE position below
+// (`InstanceType<typeof MediaError>`), so it comes in as a type. A value
+// binding would be an unused one, and a static `import type` is erased before
+// runtime — it cannot disturb the mock order the dynamic imports are for.
+const { UPLOAD_TICKET_SECONDS, stagingKey, storageKey } = await import("./rules");
 
 /** The real signatures, as `sniff.test.ts` builds them. */
 function bytes(...parts: (number | string)[]): Uint8Array {

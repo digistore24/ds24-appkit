@@ -23,23 +23,12 @@
 // DEV only: in STAGING/PROD the app runs on its own domain, where the problem
 // does not exist — and there the Auth.js defaults stay untouched (including
 // the `__Secure-`/`__Host-` prefixes, which must not be tampered with).
-import { appEnv } from "@/lib/env-guard";
+import { appEnv, isLocalUrl } from "@/lib/env-guard";
 
 export interface CookieEnv {
   APP_ENV?: string;
   APP_URL?: string;
   AUTH_SECRET?: string;
-}
-
-/** true if the URL points at this machine (same as lib/auth/dev-login.ts). */
-function isLocalUrl(appUrl?: string): boolean {
-  if (!appUrl) return true; // not set = local development
-  try {
-    const host = new URL(appUrl).hostname;
-    return host === "localhost" || host === "127.0.0.1" || host === "::1";
-  } catch {
-    return false;
-  }
 }
 
 /**

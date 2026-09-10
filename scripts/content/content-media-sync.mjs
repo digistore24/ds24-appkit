@@ -41,7 +41,7 @@ import {
   CONTENT_MEDIA_STAGED_DIR,
 } from "../../lib/content-media/rules.mjs";
 import { loadManifest } from "./_manifest.mjs";
-import { describeStore, machineEnv, resolveTargetEnv, storeForEnv } from "../lib/media-env.mjs";
+import { describeStore, resolveTargetEnv, storeForEnv } from "../lib/media-env.mjs";
 import { filesUnder, reportSync, syncItems } from "../lib/store-sync.mjs";
 import "../lib/env.mjs";
 

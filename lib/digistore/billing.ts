@@ -22,6 +22,7 @@
 // Like createBuyUrl: errors throw — NO silent mock fallback (a failed charge
 // must never count as a success).
 import { ds24Post } from "./client";
+import { ds24HttpsUrl } from "./safe-url";
 
 export interface BillOnDemandArgs {
   /** The customer's DS24 purchase_id being charged. */
@@ -144,6 +145,41 @@ export interface PurchaseInfo {
 function toPurchaseInfo(d: Record<string, unknown>): PurchaseInfo {
   const s = (k: string): string | undefined =>
     d[k] != null && d[k] !== "" ? String(d[k]) : undefined;
+
+  // Every URL-shaped field of a purchase, whitelisted to `https:` HERE — at
+  // the point where a foreign system's answer becomes one of our own values,
+  // not at the point where somebody renders it.
+  //
+  // 🚨 **Why here and not in the UI.** All five of these are management deep
+  // links that end up as an `href` a customer clicks
+  // (`app/dashboard/billing/ui.tsx`), and a `javascript:` in `renew_url` would
+  // run on that click. Today exactly one page renders them; the whitelist
+  // belongs at the reader because the SECOND page to render them will not
+  // remember to bring one, and nothing goes red when it does not. That is the
+  // tree's stated doctrine for hrefs — see the comment in
+  // `modules/community/components/post-body.tsx`, which says every `href` gets
+  // a scheme whitelist.
+  //
+  // ⚠️ **All five, not the three that were reported.** `receipt_url` and
+  // `support_url` reach the same kind of sink through the same answer; a
+  // whitelist that covers three of five fields is not a rule, it is a list
+  // somebody has to keep current, and the two left out are exactly the ones a
+  // later page will render.
+  //
+  // This is gated behind the SHA512 signature check / an API key over HTTPS,
+  // so exploiting it needs a compromise on Digistore24's side — it is a LOW
+  // finding, fixed because the cost is four lines and the alternative is
+  // trusting a third party's string all the way into an anchor tag.
+  //
+  // Dropped, not thrown: the UI renders each of these conditionally, so an
+  // `undefined` hides the button cleanly, whereas a throw would take out the
+  // whole billing page over a cosmetic link. The log line is what keeps that
+  // from being silent — a missing "cancel subscription" button otherwise looks
+  // exactly like Digistore24 not having sent one.
+  // The scheme whitelist lives in `./safe-url` because the IPN writes the same
+  // three columns through a different door — see that file's header.
+  const httpUrl = (k: string): string | undefined => ds24HttpsUrl(k, s(k));
+
   return {
     purchaseId: String(d.purchase_id ?? d.id ?? ""),
     productId: s("product_id"),
@@ -152,11 +188,11 @@ function toPurchaseInfo(d: Record<string, unknown>): PurchaseInfo {
     billingInterval: s("other_billing_intervals") ?? s("billing_interval"),
     amount: s("amount"),
     currency: s("currency"),
-    renewUrl: s("renew_url"),
-    rebillingStopUrl: s("rebilling_stop_url"),
-    invoiceUrl: s("invoice_url"),
-    receiptUrl: s("receipt_url"),
-    supportUrl: s("support_url"),
+    renewUrl: httpUrl("renew_url"),
+    rebillingStopUrl: httpUrl("rebilling_stop_url"),
+    invoiceUrl: httpUrl("invoice_url"),
+    receiptUrl: httpUrl("receipt_url"),
+    supportUrl: httpUrl("support_url"),
   };
 }
 

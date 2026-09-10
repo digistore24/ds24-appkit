@@ -62,6 +62,19 @@ export interface Offer {
   currency?: string;
   /** e.g. "1_month" | "12_month". Omit for a one-off payment. */
   billingInterval?: string;
+  /**
+   * The Digistore24 PAYMENT PLAN this offer is sold through, when one exists —
+   * `scripts/ds24/sync-products.mjs` wrote it from the same registry entry
+   * that filled the fields above. Absent means: price it here, inline.
+   *
+   * Which of the two happens is `sellsThroughStoredPlan()` below, and the
+   * fields above are NOT dead weight in the stored case: they are what the
+   * cache key hashes, what the page prints, and what the checkout falls back
+   * to the moment the stored plan turns out to be gone.
+   */
+  payplanId?: string;
+  /** Which way to pay this is (`lib/digistore/products.ts`). For the cache key. */
+  optionKey?: string;
   /** 0 = subscription (open-ended), 1 = one-off. Default: 0 when an interval is set, else 1. */
   numberOfInstallments?: number;
   /** Display title on the checkout page (sent as `placeholders[TITLE]`). */
@@ -94,6 +107,43 @@ function euros(cents: number): string {
   return (cents / 100).toFixed(2);
 }
 
+/**
+ * WHICH of the two ways this checkout is priced — and the answer is "the
+ * stored plan" whenever there is one and nothing needs a price the stored plan
+ * cannot express.
+ *
+ * ── Why the stored plan is the normal case ────────────────────────────────
+ * A Digistore24 product does not only sell through the links we build. It has
+ * an order form of its own, an affiliate can link straight to it, and the
+ * buyer can switch their billing interval from inside their own purchase
+ * (`switch_pay_interval_url`, which arrives on every IPN). None of those paths
+ * carries an inline price, so all of them charge whatever plans hang on the
+ * product. Selling through the same plans our page shows makes those paths
+ * agree with us by construction — instead of agreeing only where we remembered
+ * to send a price.
+ *
+ * ── Why an upgrade cannot ─────────────────────────────────────────────────
+ * `payment_plan[upgrade_order_id]` prices ONE purchase against another one the
+ * buyer already holds. That price exists for this buyer and this moment; it is
+ * not a plan on a product, and there is nothing to store it in. Same for a
+ * free trial (`test_interval`), if this app ever grows one. Those go inline,
+ * with the registry price — which is what every checkout here did before
+ * stored plans existed, so the path is not new, it is the old one, kept for
+ * the cases that need it.
+ *
+ * ── And the third case, which is the one that protects the customer ───────
+ * `checkoutTargetFor()` hands back NO plan when the stored one no longer
+ * matches what the registry says the option costs. So a price edited and not
+ * synced lands here too, inline, at the price the vendor actually wrote. The
+ * buyer is never charged a number nobody refreshed.
+ */
+export function sellsThroughStoredPlan(
+  offer: Offer,
+  ctx: BuyerContext = {},
+): boolean {
+  return Boolean(offer.payplanId) && !ctx.upgradeOrderId;
+}
+
 /** Builds the x-www-form-urlencoded body for createBuyUrl (pure, testable). */
 export function buildBuyUrlBody(
   offer: Offer,
@@ -104,16 +154,34 @@ export function buildBuyUrlBody(
   body.set("product_id", offer.productId);
   body.set("valid_until", offer.validUntil ?? "24h");
 
-  const price = euros(offer.priceCents);
-  body.set("payment_plan[first_amount]", price);
-  body.set("payment_plan[other_amounts]", price);
-  body.set("payment_plan[currency]", offer.currency ?? "EUR");
-  const installments =
-    offer.numberOfInstallments ?? (offer.billingInterval ? 0 : 1);
-  body.set("payment_plan[number_of_installments]", String(installments));
-  if (offer.billingInterval) {
-    body.set("payment_plan[first_billing_interval]", offer.billingInterval);
-    body.set("payment_plan[other_billing_intervals]", offer.billingInterval);
+  if (sellsThroughStoredPlan(offer, ctx)) {
+    const plan = String(offer.payplanId);
+    // `settings[plan]` is what SELECTS one of the product's stored plans on
+    // the order form, and `hide_plans` stops the buyer being offered the
+    // others — they already chose on our page.
+    body.set("settings[plan]", plan);
+    body.set("settings[hide_plans]", "Y");
+    // And `payment_plan[template]` is sent for one reason only: it is
+    // VALIDATED. createBuyUrl.php:427-430 refuses a plan that does not belong
+    // to this product (`payment_plan_not_found`), so a stale id fails loudly
+    // here instead of quietly selling the product's default plan at whatever
+    // price that is. Because no `first_amount` accompanies it, the resolved
+    // template values are then dropped again
+    // (createBuyUrl.php:438-451) — which is exactly what we want: the stored
+    // plan prices the sale, not a copy of it we sent along.
+    body.set("payment_plan[template]", plan);
+  } else {
+    const price = euros(offer.priceCents);
+    body.set("payment_plan[first_amount]", price);
+    body.set("payment_plan[other_amounts]", price);
+    body.set("payment_plan[currency]", offer.currency ?? "EUR");
+    const installments =
+      offer.numberOfInstallments ?? (offer.billingInterval ? 0 : 1);
+    body.set("payment_plan[number_of_installments]", String(installments));
+    if (offer.billingInterval) {
+      body.set("payment_plan[first_billing_interval]", offer.billingInterval);
+      body.set("payment_plan[other_billing_intervals]", offer.billingInterval);
+    }
   }
 
   if (ctx.upgradeOrderId) {
@@ -168,8 +236,47 @@ export function isUnknownAffiliateError(err: unknown, affiliate: string): boolea
 }
 
 /**
+ * Does this error say "that payment plan is not this product's"?
+ *
+ * 🚨 **It is a heuristic, and it has to be one.** The API source raises this as
+ * `payment_plan_not_found`, which reads like a machine-readable marker — but
+ * that is an internal message KEY, translated before it leaves the server.
+ * Measured against a live account on 2026-09-09, what actually comes back is
+ *
+ *   HTTP 404 … "Ungültige Bezahlplan-ID: 999999999 - Bezahlplan nicht
+ *   vorhanden oder nicht für das gewählte Produkt.", code 4
+ *
+ * — German prose, because the account is German. Matching the marker matched
+ * nothing, so the retry below never fired and a stale plan id would have taken
+ * every buy button of the offering off the page. Exactly the failure the retry
+ * exists for, defeated by the one thing a unit test cannot see.
+ *
+ * So: **the plan id we sent has to appear in the message.** Digistore24 echoes
+ * it in every language, and it is unique to this call. That is the same shape
+ * `isUnknownAffiliateError` uses one door down, for the same reason and with
+ * the same limits — and it is why this takes the id rather than reading it off
+ * the error.
+ *
+ * The literal marker is still accepted: an account whose language surfaces it
+ * costs nothing to allow.
+ */
+export function isStalePaymentPlanError(
+  err: unknown,
+  payplanId: string | undefined,
+): boolean {
+  if (!payplanId) return false;
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    message.includes(payplanId) ||
+    message.toLowerCase().includes("payment_plan_not_found")
+  );
+}
+
+/**
  * Calls createBuyUrl and returns the buy URL. Throws on error (no mock
- * fallback). If — and only if — the affiliate is unknown, it retries once
+ * fallback) — including when the answer contains a URL that is not `https:`,
+ * because the buyer is REDIRECTED to this value and never gets to look at it.
+ * If — and only if — the affiliate is unknown, it retries once
  * without the affiliate so a typo in a partner link does not block the purchase
  * entirely. If that retry fails too, the ORIGINAL error is thrown: it names the
  * actual cause, the retry only says that a link without an affiliate failed as
@@ -190,12 +297,30 @@ export async function createBuyUrl(
   const params = Object.fromEntries(
     buildBuyUrlBody(offer, ctx, thankyouUrl).entries(),
   );
+  let url: string;
   try {
     const data = await ds24Post("createBuyUrl", apiKey, params);
-    const url = (data.data as { url?: string } | undefined)?.url;
-    if (!url) throw new Error("Digistore24 returned no buy URL.");
-    return url;
+    const returned = (data.data as { url?: string } | undefined)?.url;
+    if (!returned) throw new Error("Digistore24 returned no buy URL.");
+    url = returned;
   } catch (err) {
+    // 🚨 A stored plan that Digistore24 no longer recognises would otherwise
+    // take out EVERY buy button of this offering at once — one deleted plan,
+    // and the whole page has no way to buy anything. So the sale goes through
+    // at the registry price, inline, and the mismatch is logged rather than
+    // shown to a customer. It is the vendor's problem to fix (`ds24-sync`),
+    // not the buyer's to run into.
+    if (isStalePaymentPlanError(err, offer.payplanId)) {
+      console.error(
+        `[digistore] payment plan ${offer.payplanId} is not known for product ${offer.productId} — selling "${offer.key}" at the registry price instead. Run 'node run.mjs ds24-sync'.`,
+      );
+      return await createBuyUrl(
+        apiKey,
+        { ...offer, payplanId: undefined },
+        ctx,
+        thankyouUrl,
+      );
+    }
     if (!ctx.affiliate || !isUnknownAffiliateError(err, ctx.affiliate)) throw err;
     try {
       return await createBuyUrl(
@@ -208,6 +333,41 @@ export async function createBuyUrl(
       throw err;
     }
   }
+
+  // 🚨 **The one check between a foreign system's answer and the buyer's
+  // browser.** Until here the only question asked of `data.data.url` was
+  // whether it EXISTS — a cast and a truthiness test. The value then travels
+  // untouched through `withTestpayParam()` (a no-op outside DEV) into
+  // `app/plans/actions.ts`, where it becomes `redirect(url)`: a `Location`
+  // header the buyer's browser follows with no click and no chance to read
+  // where it goes. Of the three sinks in this class it is the strongest — an
+  // `href` at least needs a click.
+  //
+  // A checkout is always `https:`. Anything else is not a checkout URL no
+  // matter who sent it, and the failure the refusal prevents is a buyer landing
+  // on a convincing fake payment form with the vendor's product name on it.
+  //
+  // ⚠️ **Deliberately outside the `try`**, not next to the existence check.
+  // Inside it, this error would fall into the catch above, and
+  // `isUnknownAffiliateError()` asks whether the affiliate's name occurs
+  // anywhere in the message — a short affiliate id and a URL echoed into the
+  // text is enough for a match, and the answer would be a silent retry against
+  // the same hostile response instead of a refusal. Out here it can only
+  // propagate. The retries themselves return through recursive calls, so each
+  // one has already passed this check at its own level.
+  //
+  // 🚨 **Throw, do not return a fallback.** `app/plans/actions.ts` catches and
+  // sends the buyer to `/plans?checkout=error`, and the comment there says why
+  // that is the right reaction: a failed checkout must never look like a
+  // successful one. This is the whole file's rule — errors throw, there is no
+  // silent mock fallback — applied to the content of the answer rather than to
+  // the transport.
+  if (!/^https:\/\//i.test(url)) {
+    throw new Error(
+      `Digistore24 returned a non-https buy URL: ${url.slice(0, 40)}`,
+    );
+  }
+  return url;
 }
 
 /**
@@ -233,6 +393,13 @@ export function offerHash(
     currency: offer.currency ?? "EUR",
     billingInterval: offer.billingInterval ?? null,
     installments: offer.numberOfInstallments ?? null,
+    // Two ways to pay for one offering are two different checkout URLs, and
+    // the plan id is what makes them different at Digistore24 — a shared hash
+    // would let the monthly and the yearly link serve each other out of the
+    // cache, which is the same failure the language axis already guards
+    // against one line down in `checkout.ts`.
+    payplanId: offer.payplanId ?? null,
+    optionKey: offer.optionKey ?? null,
     title: offer.title ?? null,
     description: offer.description ?? null,
     validUntil: offer.validUntil ?? "24h",

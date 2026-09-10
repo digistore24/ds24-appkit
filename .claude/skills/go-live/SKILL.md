@@ -101,13 +101,19 @@ one, and only **after the app is deployed and answers**: registering the IPN nee
      product per plan AND language right; a gap puts half your customers on an order
      form in the wrong language, and fixing it later means new products, new
      approvals and dead links you already handed out.
-3. Nothing to do about **prices** — they travel with the checkout call, so create no
-   payment plans in the Digistore24 interface. 🚨 **What IS there is Digistore24's
-   own default plan** (about 27 €, single payment), on every product, and the live
-   set is no exception. The app never charges it; the product's **order form**
-   does — and step 4 is what makes that form publicly findable. Say this to the
-   user now, in one sentence, or they will find it in their backoffice and read it
-   as a fault:
+3. **Prices are already there — as payment plans the sync wrote**, one per way to
+   pay, copied from `config/digistore-products.json`. *(Needs template 0.36.0.
+   An older app writes no plans, so every product still has only Digistore24's
+   own default and the paragraph below is the whole story rather than the
+   exception.)* Never edit them over there:
+   the next sync overwrites them. Say that to the user in one sentence now, or
+   they will edit the copy and conclude the app forgets prices.
+
+   🚨 **And LOOK at each live product's own order form before step 4.** A product
+   the sync could not write a plan for still has Digistore24's default (about
+   27 €, single payment). The app never charges it; the product's order form
+   does — and step 4 is what makes that form publicly findable. On a subscription
+   such an order grants access **for ever**:
    [`docs/digistore-integration.md`](../../../docs/digistore-integration.md) →
    *The plan on the product*.
 4. `node run.mjs ds24-approval --apply`, once the product description and the app are

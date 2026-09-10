@@ -3,9 +3,27 @@
 # Checkout links with `createBuyUrl`
 
 The app creates checkout URLs at runtime via the Digistore24 function
-`createBuyUrl` and sends a **complete custom payment plan** along with it —
-so price, currency and interval are decided by the app, not by the Digistore product.
-**One** base product in Digistore24 per offer is enough.
+`createBuyUrl`. **One** base product in Digistore24 per offer and language is
+enough, and each of those products carries **one payment plan per way to pay**,
+written by `ds24-sync` from `config/digistore-products.json`.
+
+An ordinary checkout **sells through that stored plan**: the call sends
+`settings[plan]` and no amounts. It sends a complete custom `payment_plan[...]`
+instead — price, currency and interval decided by the app — in the three cases a
+stored plan cannot express: an **upgrade or downgrade**, a **free trial**, and a
+stored plan that **no longer matches the registry**. Which of the two a given
+call takes is `sellsThroughStoredPlan()`, and the reasoning behind the split is
+in [`digistore-billing-modes.md`](digistore-billing-modes.md) → *Where the price
+lives*.
+
+🚨 **One error class is worth recognising before you meet it.** Digistore24
+refuses a `payment_plan[template]` that does not belong to the product it was
+called for, with `payment_plan_not_found` — and because the plan is a property
+of the OFFERING, a plan id that survived a deletion over there takes out **every
+buy button of that offering at once**, in every language. `createBuyUrl()`
+catches exactly that, retries once without the plan, and logs one line naming
+the plan and the product. The page stays alive; `node run.mjs logs` says what to
+fix, and the fix is `ds24-sync`.
 
 Implementation: `lib/digistore/buyUrl.ts`.
 
@@ -94,12 +112,15 @@ serve each other's checkout URL.
 
 - URLs are cached per `offer.key` in the table `buy_url_cache`,
   **TTL 20h** (safety margin below the 24h validity of the DS24 URL).
-- **`offer.key` includes the language** — `offerFor()` builds it as
-  `"<productKey>:<language>"`. There is one row per key, so a shared key would
-  let the German and the English checkout URL evict each other on every page
-  view and, in the window between, hand the German form to an English buyer
-  straight out of the cache. The `offerHash` does not save you here: it detects
-  that the offer changed, it does not give the two a row each.
+- **`offer.key` includes the WAY TO PAY and the language** — `offerFor()` builds
+  it as `"<productKey>:<option>:<language>"`, dropping the option part where the
+  offering has only one way to pay (so `basic:de` stays `basic:de` and no cached
+  row is orphaned by the change). There is one row per key, so a shared key
+  would let the German and the English checkout URL — or the monthly and the
+  yearly one — evict each other on every page view and, in the window between,
+  hand the German form to an English buyer straight out of the cache. The
+  `offerHash` does not save you here: it detects that the offer changed, it does
+  not give the two a row each.
 - **If the offer changes** (price, interval, title, thank-you URL …), the
   `offerHash` changes → a **new URL** is created automatically.
 - **User-specific URLs are never cached**: as soon as `buyer`, `affiliate`,

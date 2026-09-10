@@ -28,6 +28,9 @@ export const EMAIL_CHANGE_ERROR_CODES = [
   "userBlocked",
   "tooManyRequests",
   "mailNotConfigured",
+  // An operator signed in AS this member may not move the address. See
+  // lib/email-change/manage.ts.
+  "notWhileImpersonating",
 ] as const;
 
 export type EmailChangeErrorCode = (typeof EMAIL_CHANGE_ERROR_CODES)[number];

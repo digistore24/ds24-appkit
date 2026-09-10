@@ -111,12 +111,14 @@ The flags are [`references/one-off-setup.md`](references/one-off-setup.md).
 
 🚨 **Do this first, not afterwards.** `config/digistore-products.json` ships with
 example plans, and every entry in it becomes a real product in the user's
-Digistore24 account. **That cannot be undone from here**: deleting an entry
-later does not remove the product over there — it has to be deactivated in the
-Digistore24 backend, by hand.
+Digistore24 account — one per language, so two languages are two products per
+plan. Since `--prune` that is no longer permanent, but it is only clean while
+nothing has sold: `node run.mjs ds24-sync --prune` deletes a product this app
+created and no longer wants, and **deactivates instead of deleting anything that
+ever took money**, because its refunds and cancellations still have to arrive.
 
 Go through the list WITH the user and say what it is: *"the template comes with
-three example plans. Which of these do you actually sell?"* Then, per entry:
+two example plans. Which of these do you actually sell?"* Then, per entry:
 
 - **Sell it** → adjust name, price, interval or credits.
 - **Not sell it, but keep the shape** → `"sell": false`. The entry stays in the
@@ -124,8 +126,11 @@ three example plans. Which of these do you actually sell?"* Then, per entry:
   on `/plans`.
 - **Never need it** → delete the entry.
 
-One entry per plan, never a second price list in the code, and no prices on the
-Digistore24 product at all.
+One entry per OFFERING — monthly and yearly are two `paymentOptions` inside it,
+not two entries and not two Product Keys. *(Needs template 0.36.0; before that
+they were two entries, and every access gate had to name both.)* Never a second price list in the code,
+and never a price edited on the Digistore24 side: the registry authors it and
+the sync copies it onto the product's payment plans, one per way to pay.
 
 ## 3. Create products and the IPN — `node run.mjs ds24-sync`
 
@@ -166,15 +171,18 @@ Five more things to do while it runs, and only the first is a command:
   it truly cannot (app not running, `cloudflared` missing) and names which; fix that
   and run it again.
 - 🚨 **Tell them what they will see in their Digistore24 backoffice — before they
-  see it.** The products now exist there with a **payment plan nobody set**:
-  Digistore24 gives a product created without one its own default (about 27 €,
-  single payment — look, do not quote). Your prices are not there and are not
-  supposed to be; they travel with every checkout call. So: *"the price in your
-  backoffice is not yours and the app never charges it — but the product has an
-  order form of its own that does, and a purchase made there really does unlock
-  access."* A vendor who is not told this either panics or starts maintaining a
-  second price list. The whole story, including why such an order never expires on
-  a subscription plan:
+  see it.** Each product now carries **one payment plan per way to pay**, with
+  the prices from `config/digistore-products.json`. So: *"those plans are yours —
+  but they are a COPY. Change a price here in the app and run the sync; change it
+  over there and the next sync changes it back."* A vendor who is not told this
+  edits the wrong copy once and concludes the app forgets prices.
+
+  ⚠️ **What they must NOT see is a product with no plan of ours.** Digistore24
+  gives such a product its own default (about 27 €, single payment — look, do not
+  quote), its order form charges it, and on a subscription that order grants
+  access for ever. If the sync reported a plan it could not write — a way to pay
+  with no `priceCents` — that is the case, and it is worth checking by opening
+  the product's own order form. The whole story:
   [`docs/digistore-integration.md`](../../../docs/digistore-integration.md) →
   *The plan on the product*.
 

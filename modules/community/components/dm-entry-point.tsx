@@ -14,7 +14,7 @@
 //
 // Moving the check in here turns a heuristic into a fact. A mixed surface may
 // name this component; naming `StartConversationButton` itself is what
-// `lib/community/impersonation-guard.test.ts` refuses, and there is then
+// `modules/community/lib/impersonation-guard.test.ts` refuses, and there is then
 // nothing left to get subtly wrong at the call site.
 //
 // ── Why it renders nothing rather than something disabled ─────────────────

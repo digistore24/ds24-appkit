@@ -74,13 +74,17 @@ export const media = pgTable(
     // The plans that unlock this item, for `visibility: "entitled"` — Product
     // Keys from config/digistore-products.json, never a token package.
     //
-    // 🚨 **A LIST, and holding ONE of them is enough.** One offering is one
-    // Digistore24 product per billing interval, so a course sold monthly AND
-    // yearly is two keys before it has a second customer — and a single column
-    // could only ever name one of them. What that cost was invisible by
-    // construction: the yearly buyer reached the lesson page (its own gate
-    // passed) and every medium on it resolved to `null`, which a page renders
-    // as "there is none". A clean 200 over a product half-delivered.
+    // 🚨 **A LIST, and holding ONE of them is enough.** One file can be sold
+    // under several offerings — the workbook that comes with the course and
+    // with the bundle, the sheet both tiers include — and a single column could
+    // only ever name one of them. What that costs is invisible by
+    // construction: the buyer reaches the lesson page (its own gate passes) and
+    // every medium on it resolves to `null`, which a page renders as "there is
+    // none". A clean 200 over a product half-delivered.
+    //
+    // It is NOT about monthly and yearly. Those used to be two Product Keys and
+    // are now two `paymentOptions` of one (`config/digistore-products.json`), so
+    // both buyers hold the same key and one entry answers for both.
     //
     // The shape is not invented here: `community_groups.plan_keys` has been
     // `text[]` with `mayEnterGroup()` asking `.some()` since its first

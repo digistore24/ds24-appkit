@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: MIT
 
 import { cache } from "react";
-import { and, count, eq, gt, inArray, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { communityDiscussions, communityMessages, communityPosts, communityReadMarkers } from "../schema";
-import { hasPlan } from "@/lib/entitlements/manage";
 
 import { accessibleGroupIds } from "./_access";
 

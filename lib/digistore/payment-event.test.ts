@@ -197,7 +197,7 @@ describe("onPaymentEvent — which transition reaches the entitlement", () => {
   });
 
   it("🚨 keys the grant on the ORDER id — the payload carries no other", async (ctx) => {
-    const [plan] = keysOrSkip(ctx, PLAN_PICK);
+    const [_plan] = keysOrSkip(ctx, PLAN_PICK);
     // The regression this file exists to prevent, and it is worth stating on its
     // own rather than leaving it implicit in the case above.
     //
@@ -217,7 +217,7 @@ describe("onPaymentEvent — which transition reaches the entitlement", () => {
   });
 
   it("🚨 ignores a purchase_id even if one shows up — there is no fallback", async (ctx) => {
-    const [plan] = keysOrSkip(ctx, PLAN_PICK);
+    const [_plan] = keysOrSkip(ctx, PLAN_PICK);
     // `purchase_id || order_id` was the obvious repair and is the wrong one: a
     // field that appears on the payment and not on the refund keys the two
     // differently, and a refund that keys differently closes nothing. This pins
@@ -228,7 +228,7 @@ describe("onPaymentEvent — which transition reaches the entitlement", () => {
   });
 
   it("🚨 a refund with no `custom` looks the grant up under the SAME key", async (ctx) => {
-    const [plan] = keysOrSkip(ctx, PLAN_PICK);
+    const [_plan] = keysOrSkip(ctx, PLAN_PICK);
     // What the shared key BUYS, and the reason the fix belongs at one read
     // point. A refund typically arrives without `custom`, so the product does
     // not resolve and the handler falls back to the grant row itself — by the
@@ -240,7 +240,7 @@ describe("onPaymentEvent — which transition reaches the entitlement", () => {
   });
 
   it("a refund ENDS it, and says which reason", async (ctx) => {
-    const [plan] = keysOrSkip(ctx, PLAN_PICK);
+    const [_plan] = keysOrSkip(ctx, PLAN_PICK);
     await onPaymentEvent(payload("on_refund"));
 
     const [what] = transition();
@@ -248,7 +248,7 @@ describe("onPaymentEvent — which transition reaches the entitlement", () => {
   });
 
   it("a chargeback ENDS it under its own reason", async (ctx) => {
-    const [plan] = keysOrSkip(ctx, PLAN_PICK);
+    const [_plan] = keysOrSkip(ctx, PLAN_PICK);
     // Two reasons rather than one: the difference is what an operator reads off
     // the grant afterwards, and collapsing them here would be invisible.
     await onPaymentEvent(payload("on_chargeback"));
@@ -258,14 +258,14 @@ describe("onPaymentEvent — which transition reaches the entitlement", () => {
   });
 
   it("a missed payment SUSPENDS — reversibly, not an ending", async (ctx) => {
-    const [plan] = keysOrSkip(ctx, PLAN_PICK);
+    const [_plan] = keysOrSkip(ctx, PLAN_PICK);
     await onPaymentEvent(payload("on_payment_missed"));
 
     expect(transition()[0].kind).toBe("suspend");
   });
 
   it("🚨 a stopped rebilling does NOTHING — access runs to the end of the paid period", async (ctx) => {
-    const [plan] = keysOrSkip(ctx, PLAN_PICK);
+    const [_plan] = keysOrSkip(ctx, PLAN_PICK);
     // The AD-2 trap in one case. `on_rebill_cancelled` and `last_paid_day` both
     // mean "the subscription is going away", and `status` cannot tell them
     // apart — only the raw event name can. If this file ever passed a mapped
@@ -280,7 +280,7 @@ describe("onPaymentEvent — which transition reaches the entitlement", () => {
   });
 
   it("…and the last paid day ENDS it — the other half of the same pair", async (ctx) => {
-    const [plan] = keysOrSkip(ctx, PLAN_PICK);
+    const [_plan] = keysOrSkip(ctx, PLAN_PICK);
     await onPaymentEvent(payload("last_paid_day"));
 
     expect(transition()[0].kind).toBe("end");
@@ -348,7 +348,7 @@ describe("onPaymentEvent — whose grant it acts on", () => {
   });
 
   it("🚨 ends via the grant ROW when the product no longer resolves at all", async (ctx) => {
-    const [plan] = keysOrSkip(ctx, PLAN_PICK);
+    const [_plan] = keysOrSkip(ctx, PLAN_PICK);
     // `last_paid_day` is how a subscription normally expires. If the product
     // key has left the registry the payload resolves nothing, the ordinary gate
     // is skipped — and there is no redelivery and no reconciliation job, so the
@@ -371,7 +371,7 @@ describe("onPaymentEvent — whose grant it acts on", () => {
   });
 
   it("…but that fallback never SUSPENDS on a key the payload never named", async (ctx) => {
-    const [plan] = keysOrSkip(ctx, PLAN_PICK);
+    const [_plan] = keysOrSkip(ctx, PLAN_PICK);
     // The one direction deliberately dropped: taking access away on a guess.
     openPurchaseGrantByPurchase.mockResolvedValue({
       memberId: "member-orphan",
@@ -386,7 +386,7 @@ describe("onPaymentEvent — whose grant it acts on", () => {
   });
 
   it("…and never GRANTS through it either", async (ctx) => {
-    const [plan] = keysOrSkip(ctx, PLAN_PICK);
+    const [_plan] = keysOrSkip(ctx, PLAN_PICK);
     // The counter-proof for the two above: an unknown product must grant
     // nothing, or a renamed key becomes a way to hand out access.
     openPurchaseGrantByPurchase.mockResolvedValue({
@@ -424,7 +424,7 @@ describe("onPaymentEvent — a token package credits a balance, not a grant", ()
   }
 
   it("credits the identified member for the package that was bought", async (ctx) => {
-    const [token] = keysOrSkip(ctx, TOKEN_PICK);
+    const [_token] = keysOrSkip(ctx, TOKEN_PICK);
     await onPaymentEvent(tokenPayload("on_payment"));
 
     expect(creditTokens).toHaveBeenCalledTimes(1);
@@ -438,7 +438,7 @@ describe("onPaymentEvent — a token package credits a balance, not a grant", ()
   });
 
   it("🚨 grants nothing — a balance is not an entitlement", async (ctx) => {
-    const [token] = keysOrSkip(ctx, TOKEN_PICK);
+    const [_token] = keysOrSkip(ctx, TOKEN_PICK);
     // `hasPlan()` would answer false for such a row for ever, so a grant here
     // would be a plan the buyer can never lose and never really had.
     await onPaymentEvent(tokenPayload("on_payment"));
@@ -450,7 +450,7 @@ describe("onPaymentEvent — a token package credits a balance, not a grant", ()
   });
 
   it("credits nobody when the payment could not be attributed", async (ctx) => {
-    const [token] = keysOrSkip(ctx, TOKEN_PICK);
+    const [_token] = keysOrSkip(ctx, TOKEN_PICK);
     // The guard the assertions below the credit rely on. Without an attributed
     // member there is no balance to credit, and guessing one would put somebody
     // else's money on an account.
@@ -463,14 +463,14 @@ describe("onPaymentEvent — a token package credits a balance, not a grant", ()
   });
 
   it("credits nothing on an event that is not a payment", async (ctx) => {
-    const [token] = keysOrSkip(ctx, TOKEN_PICK);
+    const [_token] = keysOrSkip(ctx, TOKEN_PICK);
     await onPaymentEvent(tokenPayload("on_refund"));
 
     expect(creditTokens).not.toHaveBeenCalled();
   });
 
   it("🚨 stops an auto top-up when the purchase behind the mandate is reversed", async (ctx) => {
-    const [token] = keysOrSkip(ctx, TOKEN_PICK);
+    const [_token] = keysOrSkip(ctx, TOKEN_PICK);
     // The worst thing this feature can do is keep charging a card whose payment
     // was just given back, and it is scoped to the purchase that IS the mandate.
     await onPaymentEvent(tokenPayload("on_refund"));
@@ -483,7 +483,7 @@ describe("onPaymentEvent — a token package credits a balance, not a grant", ()
   });
 
   it("does not fail the event when disarming throws", async (ctx) => {
-    const [token] = keysOrSkip(ctx, TOKEN_PICK);
+    const [_token] = keysOrSkip(ctx, TOKEN_PICK);
     // The order write and the grant transition matter more, and Digistore24
     // redelivers the whole thing anyway.
     disarmAutoReload.mockRejectedValueOnce(new Error("token tables down"));
@@ -494,7 +494,7 @@ describe("onPaymentEvent — a token package credits a balance, not a grant", ()
 
 describe("onPaymentEvent — the order write outranks the rest", () => {
   it("writes the order before the entitlement is touched", async (ctx) => {
-    const [plan] = keysOrSkip(ctx, PLAN_PICK);
+    const [_plan] = keysOrSkip(ctx, PLAN_PICK);
     await onPaymentEvent(payload("on_payment"));
 
     const orderAt = statements().findIndex((s) => s.includes('insert into "orders"'));
@@ -504,7 +504,7 @@ describe("onPaymentEvent — the order write outranks the rest", () => {
   });
 
   it("🚨 records the money even when the entitlement layer throws", async (ctx) => {
-    const [plan] = keysOrSkip(ctx, PLAN_PICK);
+    const [_plan] = keysOrSkip(ctx, PLAN_PICK);
     // The header's rule that outranks the rest, and the reason step 5 is last.
     // If this inverted, a database blip in the grant tables would lose the
     // record that somebody paid.
@@ -518,7 +518,7 @@ describe("onPaymentEvent — the order write outranks the rest", () => {
   });
 
   it("keeps the attribution it already has, and fills one it lacked", async (ctx) => {
-    const [plan] = keysOrSkip(ctx, PLAN_PICK);
+    const [_plan] = keysOrSkip(ctx, PLAN_PICK);
     // Both halves live in the same `onConflictDoUpdate`, and both are about a
     // redelivery: `coalesce(orders.member_id, excluded.member_id)` fills an
     // attribution the first delivery could not make and never clears one it did.

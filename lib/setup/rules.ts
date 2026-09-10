@@ -150,13 +150,7 @@ export function parseEnvClaim(value: unknown): AppEnv | null {
  * including AD-92's owner promotion. So "unset" is a third state, and it is the
  * dangerous one.
  */
-export function serverEnv(raw: string | undefined): AppEnv | null {
-  if (typeof raw !== "string" || raw.trim() === "") return null;
-  const v = raw.trim().toLowerCase();
-  if (v === "development" || v === "dev" || v === "local") return "development";
-  if (v === "staging" || v === "test") return "staging";
-  return "production";
-}
+export { serverEnv } from "@/lib/env-guard";
 
 /** DEV is the only environment with relaxations, and only when it says so. */
 export function isDev(env: AppEnv): boolean {
@@ -208,12 +202,47 @@ export function bearerFrom(header: string | null): string | null {
 }
 
 /**
- * Who the failure meter counts against.
+ * The caller's address, as far as this app can tell — `null` when it cannot.
  *
- * Behind a proxy the socket address is the proxy's, so the forwarded address is
- * what identifies a caller. Both are spoofable by anybody who can set headers —
- * this is a meter, not an authentication, and what it protects is the key
- * table's patience rather than the key itself.
+ * ── 🚨 What was wrong here, and it was wrong three times ───────────────────
+ *
+ * This used to take the **leftmost** entry of `x-forwarded-for`, and the
+ * comment next to it said that was safe because "the app runs behind a proxy
+ * that OVERWRITES it (Railway, Render, Fly all do)". `docs/auth-setup.md`
+ * repeated the claim. **Nobody had measured it, and it is false.** Checked
+ * against the vendors' own words on 2026-09-10:
+ *
+ *   · **Fly.io** APPENDS, documented and measured: a request sent with
+ *     `X-Forwarded-For: 1.2.3.4` arrived as `1.2.3.4, <real client>, <fly ip>`.
+ *     The forged entry survives, on the left, where the old code read.
+ *   · **Render** APPENDS too (Cloudflare in front of their load balancer, and
+ *     Cloudflare documents appending).
+ *   · **DigitalOcean App Platform** does not put the client in this header at
+ *     all — theirs carries the ingress server's address.
+ *   · **Railway** cannot be settled: three of their own staff answers
+ *     contradict each other and their docs do not mention the header.
+ *
+ * So the leftmost entry is exactly the part a caller writes for themselves, and
+ * every meter keyed on it could be given a fresh bucket per request. That is
+ * finding M-5 of the 2026-08-18 scan, and it applied to all three copies of
+ * this function that existed then.
+ *
+ * ── The two dials, and why a HEADER is the better one ──────────────────────
+ *
+ * `TRUSTED_CLIENT_IP_HEADER` names a header the platform sets and a client
+ * cannot forge — `fly-client-ip`, `do-connecting-ip`, `true-client-ip`. Where a
+ * host offers one, that is the answer and no counting is needed. Set it and
+ * this function stops reading `x-forwarded-for` at all.
+ *
+ * `TRUSTED_PROXY_HOPS` is the fallback: how many entries at the RIGHT end of
+ * the chain were put there by infrastructure. The caller is the entry just left
+ * of those, and everything further left is theirs to invent. Default 1 (one
+ * trusted proxy). Per host in `docs/DEPLOY.md`.
+ *
+ * ⚠️ **It stays a meter, not an authentication.** Even read correctly this
+ * withholds and never grants — `lib/auth/password-login.ts` makes that argument
+ * and it still holds. What the fix buys is that the meter cannot be stepped
+ * around for free.
  *
  * ⚠️ **It lives here, in the PURE file, and not beside its first caller.** It
  * was in `lib/setup/dispatch.ts`, which imports `./guard` → `./manage` → the
@@ -222,11 +251,66 @@ export function bearerFrom(header: string | null): string | null {
  * that command exists to report, so a diagnostics route that drags a driver in
  * is the one design guaranteed to be silent at the moment it matters
  * (`app/api/diagnostics/no-db.test.ts` fails the build on it). Two functions
- * that agree today is the other way to get this wrong, so there is one, here.
+ * that agree today is the other way to get this wrong — and there were three,
+ * which is how they came to disagree. There is one, here, and
+ * `lib/setup/caller-key.test.ts` walks the tree to keep it that way.
+ *
+ * @param headers the request's headers, or nothing
+ * @param env read from, so this stays testable without touching process.env
+ */
+export function clientAddress(
+  headers: Headers | null | undefined,
+  env: Record<string, string | undefined> = process.env,
+): string | null {
+  if (!headers || typeof headers.get !== "function") return null;
+
+  // The platform's own header wins outright where there is one.
+  const trusted = env.TRUSTED_CLIENT_IP_HEADER?.trim().toLowerCase();
+  if (trusted) return headers.get(trusted)?.split(",")[0]?.trim() || null;
+
+  const chain = (headers.get("x-forwarded-for") ?? "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (chain.length > 0) {
+    // ⚠️ The EMPTY string is checked before `Number`, and that is not
+    // pedantry: `Number("")` is 0, not NaN, so a variable that exists and was
+    // left blank — the ordinary shape of a half-filled `.env` — would have
+    // meant "read the rightmost entry", which behind one proxy is the proxy
+    // itself and puts every caller into one shared bucket. Caught by
+    // `lib/setup/caller-key.test.ts` while it was being written.
+    const configured = env.TRUSTED_PROXY_HOPS?.trim();
+    const raw = configured ? Number(configured) : NaN;
+    // Missing, blank, negative or unparseable all fall back to 1.
+    const hops = Number.isFinite(raw) && raw >= 0 ? Math.floor(raw) : 1;
+    // Never off the left end: a chain shorter than the configured hops means
+    // fewer proxies appended than expected, and then the leftmost entry is the
+    // best available — no worse than the old behaviour, and only in a
+    // misconfiguration.
+    const index = Math.max(0, chain.length - 1 - hops);
+    return chain[index] ?? null;
+  }
+
+  return headers.get("x-real-ip")?.trim() || null;
+}
+
+/**
+ * Who the failure meter counts against.
+ *
+ * ⚠️ **`"unknown"` is a shared bucket, deliberately, and it is named here so
+ * nobody has to rediscover it.** Every caller this app cannot place — no
+ * forwarded header at all — counts against one key. On a laptop that is right:
+ * there is one caller. Behind a proxy that sets NO header it is a self-DoS
+ * waiting to happen, because the first caller to trip the limit locks out
+ * everybody. There is no better answer available here: a Route Handler's
+ * `Request` exposes no socket, so nothing distinguishes two headerless callers.
+ * The fix for that situation is `TRUSTED_CLIENT_IP_HEADER`, not a cleverer
+ * fallback — and an operator who sees one shared bucket has a misconfigured
+ * proxy, which is worth learning about.
  */
 export function callerKey(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  return forwarded?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
+  return clientAddress(request.headers) ?? "unknown";
 }
 
 // ── what a confirmation token is bound to ───────────────────────────────────

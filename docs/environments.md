@@ -168,8 +168,9 @@ node run.mjs ds24-sync                 # your machine: the DEV set (names carry 
 node run.mjs ds24-sync --env prod      # the LIVE set — needs APP_URL_PROD in the .env
                                        # (or run it on the deployed host, where APP_URL is the domain)
 node run.mjs ds24-sync --env staging   # optional, only if you run a staging host
-# No payment plans in the DS24 UI: price and interval travel with each checkout
-# call as a payment_plan. One price, one place — config/digistore-products.json.
+# The sync also writes the PAYMENT PLANS of each product, one per way to pay,
+# from config/digistore-products.json. Never edit them in the DS24 UI — the next
+# sync overwrites them. One price, one place, and that place is the registry.
 node run.mjs ds24-approval --apply     # approval for the PROD set (approval_status=pending);
                                        # reseller from language (DE→1, otherwise US→2)
 ```

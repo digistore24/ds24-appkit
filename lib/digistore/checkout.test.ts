@@ -9,10 +9,11 @@ import {
   optinThankyouUrl,
   checkoutBlockersFor,
   blockerFor,
+  offerRef,
   type CheckoutBlocker,
 } from "./checkout";
 import { DIGISTORE_REDIR_URL as DEFAULT_REDIR_URL } from "./config.mjs";
-import type { ProductDef } from "./products";
+import { DEFAULT_OPTION_KEY, type ProductDef } from "./products";
 import { DEFAULT_LOCALE } from "@/i18n/config";
 import { blankComments } from "@/scripts/lib/source-text.mjs";
 
@@ -250,5 +251,90 @@ describe("testpay wiring", () => {
     // ...and it must name the environment rule, not just the function: the
     // parameter takes free "payments", so appending it outside DEV is fraud.
     expect(buyUrlSrc).toMatch(/isTestpayActive/);
+  });
+});
+
+// ===========================================================================
+// Two ways to pay for ONE offering
+// ===========================================================================
+
+const silber: ProductDef = {
+  key: "silber",
+  name: "Silber",
+  kind: "subscription",
+  currency: "EUR",
+  paymentOptions: {
+    monthly: { priceCents: 1900, billingInterval: "1_month" },
+    yearly: { priceCents: 19000, billingInterval: "12_month" },
+  },
+  productIds: { prod: { de: "111111" } },
+  payplanIds: {
+    prod: {
+      de: {
+        monthly: { id: "991", priceCents: 1900, currency: "EUR", billingInterval: "1_month" },
+        yearly: { id: "992", priceCents: 19000, currency: "EUR", billingInterval: "12_month" },
+      },
+    },
+  },
+};
+
+describe("offerRef — how a way to pay is named to the outside", () => {
+  it("leaves a single-option offering its bare Product Key", () => {
+    // Every existing caller, every cached buy-URL row and every `?needs=`
+    // link keeps working: `starter`, never `starter:default`.
+    expect(offerRef("starter", DEFAULT_OPTION_KEY)).toBe("starter");
+  });
+
+  it("suffixes only where there is genuinely something to tell apart", () => {
+    expect(offerRef("silber", "yearly")).toBe("silber:yearly");
+  });
+});
+
+describe("offerFor with payment options", () => {
+  it("prices the option, not the offering", () => {
+    expect(offerFor(silber, "de", "prod", "yearly").priceCents).toBe(19000);
+    expect(offerFor(silber, "de", "prod", "monthly").priceCents).toBe(1900);
+  });
+
+  it("carries the stored plan so the checkout can sell through it", () => {
+    expect(offerFor(silber, "de", "prod", "yearly").payplanId).toBe("992");
+  });
+
+  it("gives the two ways to pay two different cache keys", () => {
+    // One row per key in buy_url_cache — a shared key would let the monthly
+    // and the yearly URL evict each other on every page view.
+    expect(offerFor(silber, "de", "prod", "monthly").key).toBe("silber:monthly:de");
+    expect(offerFor(silber, "de", "prod", "yearly").key).toBe("silber:yearly:de");
+  });
+
+  it("takes the FIRST declared way to pay when the caller names none", () => {
+    expect(offerFor(silber, "de", "prod").optionKey).toBe("monthly");
+  });
+
+  it("leaves a legacy entry's cache key exactly as it was", () => {
+    // The old registry shape must not regenerate every cached URL on deploy.
+    expect(offerFor(sub).key).toBe("basic_monthly:de");
+  });
+
+  it("says which of the two is missing rather than blaming the sync", () => {
+    expect(() => offerFor(silber, "de", "prod", "weekly")).toThrow(
+      /payment option "weekly"/,
+    );
+    expect(() => offerFor({ ...silber, productIds: {} }, "de", "prod")).toThrow(
+      /ds24-sync/,
+    );
+  });
+});
+
+describe("checkoutBlockersFor with payment options", () => {
+  it("answers per way to pay, with the offering's answer", async () => {
+    // Whether a product exists and whether there is an API key are questions
+    // about the OFFERING — never about one of its prices. Both ways to pay
+    // must still HAVE an entry, because blockerFor() treats a missing key as
+    // "error" and would put "checkout unavailable" on a working card.
+    const b = await checkoutBlockersFor([silber]);
+    expect(b.has("silber:monthly")).toBe(true);
+    expect(b.has("silber:yearly")).toBe(true);
+    expect(blockerFor(b, "silber:yearly")).toBe(blockerFor(b, "silber:monthly"));
   });
 });

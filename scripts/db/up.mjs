@@ -34,7 +34,7 @@ const DEFAULT_DB_PORT = 15432; // as in docker-compose.yml
  */
 const compose = (args) => capture("docker", ["compose", ...composeProjectFlag(), ...args]);
 
-function hintPortInUse(dbPort, free) {
+function hintPortInUse(_dbPort, free) {
   return (
     `\n  How to fix it: put a free port into .env — and carry that port over into\n` +
     `  DATABASE_URL as well (the two must match!). Right now ${free} is free:\n\n` +

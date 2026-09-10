@@ -230,11 +230,12 @@ belongs to exactly one; and the gate resolves the course before it resolves
 access.
 
 🚨 **`planKeys` being a list is still NOT what makes a second course.** It
-answers a different question — *which products unlock THIS course* — and it
-exists because one offering is one Digistore24 product per billing interval, so
-a single course sold monthly and yearly names two keys. Two courses are two
-folders, not two keys in one list; conflating them is how somebody ends up
-selling one course twice.
+answers a different question — *which products unlock THIS course* — and it is a
+list because one course may be sold under SEVERAL offerings: on its own and
+inside a bundle, or in both tiers of a ladder. It is **not** about monthly and
+yearly: those are two ways to pay for ONE Product Key (`paymentOptions` in the
+registry), and both buyers hold it. Two courses are two folders, not two keys in
+one list; conflating them is how somebody ends up selling one course twice.
 
 ⚠️ And `config/course.json` holds the SWITCH and nothing else. `shape` and
 `planKeys` there are unknown keys, which makes the module answer `brokenConfig`

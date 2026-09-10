@@ -1,11 +1,10 @@
 // Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA
 // SPDX-License-Identifier: MIT
 
-import { and, count, desc, eq, or } from "drizzle-orm";
+import { and, desc, eq, or } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { communityFollows, communityMemberBlocks, communityProfiles } from "../schema";
-import { record } from "@/lib/rate-limit";
 import { CommunityError, canFollow } from "./rules";
 
 import { participationProfile } from "./profiles";

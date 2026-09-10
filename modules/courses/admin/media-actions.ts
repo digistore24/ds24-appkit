@@ -49,7 +49,7 @@
 // LANGUAGE: here — and only here — the codes from `../rules.ts` and
 // `lib/media/rules.ts` become sentences (`CLAUDE.md` → Languages).
 import { revalidatePath } from "next/cache";
-import { notFound, unstable_rethrow } from "next/navigation";
+import { unstable_rethrow } from "next/navigation";
 import { getLocale, getTranslations } from "next-intl/server";
 
 import type { ActionState } from "@/hooks/use-action-toast";

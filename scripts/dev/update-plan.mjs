@@ -132,9 +132,94 @@ export function planUpdate({ local, remote, content = {}, codeVersion }) {
   return plan;
 }
 
-/** The paths an `--apply` would actually write. */
+/**
+ * The paths an `--apply` would actually write.
+ *
+ * ⚠️ This asks about the ACTION only, and it is shared with `export-core`, which
+ * copies `.ts` files into a companion repo. WHERE a guidance update may write is
+ * a second question with its own answer below — `guidanceWritable()`. Do not
+ * fold the two together: tightening this one would quietly stop the core export.
+ */
 export function writable(plan) {
   return plan.filter((entry) => entry.action === "new" || entry.action === "update");
+}
+
+// ── what an update is allowed to write ──────────────────────────────────────
+//
+// The manifest `node run.mjs update` reads names the paths it wants written,
+// and that manifest is not ours to trust: it comes over the network, and the
+// address it comes FROM lives in `.template-version` — a git-tracked file in
+// THIS app. Whoever lands a commit there (a contributor, a pull request, an
+// agent that read the wrong page) otherwise decides where the next `--apply`
+// writes. `.git/hooks/pre-commit` is code that runs at the next commit; `.env`
+// is every secret this app has.
+//
+// So the rule is an ALLOWLIST and never a list of exclusions: a new way of
+// naming somewhere dangerous has to fail closed. It is written out here rather
+// than derived from anything, because the only file that could answer "which
+// paths belong to the template?" is the manifest — the very file this list
+// exists to distrust.
+//
+// The set is the one the template's knowledge stamp records in
+// `.template-version`: CLAUDE.md, its twin AGENTS.md (the name Codex,
+// Antigravity and OpenCode look for), README.md, the docs, and the skills under
+// both skill roots. Counted on the shipped manifest when this went in: 151
+// entries, every one of them a `.md` file in one of those six places, none
+// anywhere else. Which is why the extension is part of the rule too.
+
+/** Directories an update may write inside. The trailing `/` is load-bearing. */
+export const GUIDANCE_ROOTS = ["docs/", ".claude/skills/", ".agents/skills/"];
+
+/** The three files at the top of the tree an update may replace. */
+export const GUIDANCE_FILES = ["AGENTS.md", "CLAUDE.md", "README.md"];
+
+/**
+ * May `node run.mjs update` write this path?
+ *
+ * Judged as TEXT, segment by segment, and deliberately not through
+ * `path.resolve()`: the answer must be the same on all three systems, and a
+ * resolve-and-compare answers it in the terms of whichever machine happens to
+ * be asking. A manifest is written with `/` separators on every platform, so
+ * anything else in it is not a path this check can reason about — `..\..\x`
+ * reads as one harmless filename here and leaves the tree on Windows.
+ */
+export function isGuidancePath(file) {
+  if (typeof file !== "string" || file === "") return false;
+  if (!file.endsWith(".md")) return false;
+  if (file.includes("\\") || file.includes("\0")) return false;
+
+  // An empty segment catches a leading `/` (absolute), a trailing one and `//`;
+  // `.` and `..` catch every way of walking out of the tree; a `:` catches
+  // `C:/x` and the drive-relative `C:x`, which both leave this directory on
+  // Windows and neither of which looks unusual here.
+  const segments = file.split("/");
+  if (segments.some((s) => s === "" || s === "." || s === ".." || s.includes(":"))) return false;
+
+  if (GUIDANCE_FILES.includes(file)) return true;
+  // `startsWith("docs/")` and not `startsWith("docs")` — the second would also
+  // accept `docs-evil/whatever.md`, a directory of somebody else's choosing
+  // sitting next to ours.
+  return GUIDANCE_ROOTS.some((root) => file.startsWith(root));
+}
+
+/**
+ * `writable()` with the allowlist applied — and it THROWS rather than filters.
+ *
+ * 🚨 Skipping the offending entry would be the wrong shape. A manifest that
+ * offers a path outside the guidance tree is not "mostly fine": it is one that
+ * nothing in it can be believed from, and applying the rest would leave this app
+ * with half an update and no way to see which half. `update.mjs` refuses the
+ * whole run, with a readable message, long before it gets here — this is the
+ * layer underneath, so a caller who forgets to ask cannot write anyway.
+ */
+export function guidanceWritable(plan) {
+  const entries = writable(plan);
+  for (const entry of entries) {
+    if (!isGuidancePath(entry.path)) {
+      throw new Error(`refusing to write "${entry.path}" — not a guidance path`);
+    }
+  }
+  return entries;
 }
 
 /**

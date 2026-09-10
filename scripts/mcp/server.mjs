@@ -38,7 +38,13 @@
 // corrupts the stream, which is the classic way one of these breaks.
 
 import { readFile } from "node:fs/promises";
+// `resolve` is aliased: this file already has a `resolve(name)` of its own,
+// which turns an environment NAME into a URL and a key. Two different
+// resolutions, and the shadowing one would be a syntax error rather than a
+// subtle bug — but the alias says which is which for a reader too.
+import { dirname, isAbsolute, relative, resolve as resolvePath, sep } from "node:path";
 import { createInterface } from "node:readline";
+import { fileURLToPath } from "node:url";
 import "../lib/env.mjs";
 // The one bound for a setup request, imported rather than restated.
 import { SETUP_TIMEOUT_MS } from "../setup/client.mjs";
@@ -52,6 +58,50 @@ const META_VERSION = "io.modelcontextprotocol/protocolVersion";
 const TOOLS_TTL_MS = 30_000;
 
 const log = (...parts) => process.stderr.write(`[setup-mcp] ${parts.join(" ")}\n`);
+
+// ── the one filesystem boundary this process has ────────────────────────────
+//
+// 🚨 **A path arriving here was written by a MODEL.** `media_upload` is the only
+// branch in this file that opens a local file, and until the security review of
+// 2026-08-18 (L-2) it opened whatever it was given: a prompt-injected coding
+// agent asking for `~/Documents/backup.zip` had the operator's whole home
+// directory read, posted, and stored under a delivery URL. The magic-byte check
+// in `agreedMime()` turns a `.env` or an SSH key away, which is why the finding
+// was LOW and not HIGH — but "the store would have refused it" is a property of
+// the far end, not of this door.
+//
+// So the door has its own rule: nothing outside the PROJECT is read. The root is
+// derived from this file's own location and never from `process.cwd()`, because
+// the cwd of an MCP server is whatever the client that spawned it happened to
+// have — Claude Code, Codex, Antigravity CLI and OpenCode do not agree about it,
+// and a boundary that moves with the caller is not a boundary.
+const ROOT = resolvePath(dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+/**
+ * The absolute path to read for `input.path`, or `null` when it leaves the tree.
+ *
+ * ⚠️ **`relative()` and not `startsWith()`**, and that is the portability half
+ * rather than a stylistic one. On Windows the separator is `\`, the drive
+ * letter's case is not significant (`C:\app` and `c:\app` are one directory)
+ * and a path on ANOTHER drive shares no prefix with the root at all. `relative()`
+ * is the function that already knows all three: it compares case-insensitively
+ * on win32, and where there is no common root it hands back an absolute path —
+ * which `isAbsolute()` below catches. A hand-rolled `full.startsWith(root + sep)`
+ * passes `c:\app\x` to nobody and lets `C:\app-evil\x` through on the day the
+ * trailing separator is forgotten.
+ *
+ * A RELATIVE `input.path` is resolved against the root rather than the cwd, for
+ * the same reason the root is not the cwd: `content/hero.png` has to mean the
+ * same file whichever client started this process.
+ */
+function fileWithinProject(path) {
+  const full = resolvePath(ROOT, path);
+  const rel = relative(ROOT, full);
+  // "" is the project directory itself, ".." and "../…" are above it, and an
+  // absolute answer means a different drive. None of the three is a file we read.
+  if (rel === "" || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) return null;
+  return full;
+}
 
 // ── environments ────────────────────────────────────────────────────────────
 //
@@ -272,8 +322,17 @@ async function callTool(name, args) {
   let file;
   if (name === "media_upload") {
     if (typeof input.path !== "string") return fail('"path" is required');
+    // The boundary, BEFORE the open. A refusal that named what it had already
+    // read would be a leak with an apology attached.
+    const full = fileWithinProject(input.path);
+    if (!full) {
+      return fail(
+        `refusing to read outside the project: ${input.path}. ` +
+          `media_upload reads files under ${ROOT} only — copy the file into the project first.`,
+      );
+    }
     try {
-      const bytes = await readFile(input.path);
+      const bytes = await readFile(full);
       file = { bytes, name: input.path.split(/[\\/]/).pop() || "upload" };
     } catch (error) {
       return fail(`could not read ${input.path}: ${error?.message ?? error}`);

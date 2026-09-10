@@ -9,6 +9,8 @@ import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import {
   confirmsApply,
+  guidanceWritable,
+  isGuidancePath,
   normalizeText,
   planUpdate,
   requiresFrom,
@@ -212,5 +214,100 @@ describe("writable", () => {
       codeVersion: "0.5.0",
     });
     expect(writable(plan).map((entry: { path: string }) => entry.path)).toEqual(["a.md", "d.md"]);
+  });
+});
+
+describe("isGuidancePath", () => {
+  // The allowlist decides where a REMOTE manifest may write on somebody's disk,
+  // so every case here is read from the permissive side: what must it refuse?
+  it("takes the six places the guidance really lives", () => {
+    // Read off the shipped manifest: 151 entries, all of them .md, all of them
+    // in one of these.
+    expect(isGuidancePath("CLAUDE.md")).toBe(true);
+    expect(isGuidancePath("AGENTS.md")).toBe(true);
+    expect(isGuidancePath("README.md")).toBe(true);
+    expect(isGuidancePath("docs/cron.md")).toBe(true);
+    expect(isGuidancePath(".claude/skills/build-app/SKILL.md")).toBe(true);
+    expect(isGuidancePath(".claude/skills/build-app/references/archetypes.md")).toBe(true);
+    expect(isGuidancePath(".agents/skills/build-app/SKILL.md")).toBe(true);
+  });
+
+  it("🚨 refuses a path that walks out of the app", () => {
+    // The needle: .git/hooks/pre-commit is code that runs at the next commit.
+    expect(isGuidancePath("../../.git/hooks/pre-commit")).toBe(false);
+    expect(isGuidancePath("../docs/cron.md")).toBe(false);
+    expect(isGuidancePath("docs/../../evil.md")).toBe(false);
+    expect(isGuidancePath("docs/./cron.md")).toBe(false);
+  });
+
+  it("🚨 refuses a Windows path, whichever machine is asking", () => {
+    // A manifest is written with "/" on all three systems, so a backslash is
+    // not a separator this check can reason about — and "..\\..\\x" reads as one
+    // harmless filename on Linux while leaving the tree on Windows. Same for a
+    // drive letter, absolute over there and unremarkable here.
+    expect(isGuidancePath("..\\..\\.git\\hooks\\pre-commit.md")).toBe(false);
+    expect(isGuidancePath("docs\\cron.md")).toBe(false);
+    expect(isGuidancePath("C:/docs/cron.md")).toBe(false);
+    expect(isGuidancePath("C:docs/cron.md")).toBe(false);
+  });
+
+  it("🚨 refuses an absolute path and an empty segment", () => {
+    expect(isGuidancePath("/etc/motd.md")).toBe(false);
+    expect(isGuidancePath("/docs/cron.md")).toBe(false);
+    expect(isGuidancePath("docs//cron.md")).toBe(false);
+    expect(isGuidancePath("docs/")).toBe(false);
+    expect(isGuidancePath("")).toBe(false);
+  });
+
+  it("🚨 refuses a directory that merely starts like ours", () => {
+    // The reason the roots carry a trailing slash: without it this is a yes.
+    expect(isGuidancePath("docs-evil/cron.md")).toBe(false);
+    expect(isGuidancePath(".claude/skills-evil/SKILL.md")).toBe(false);
+    expect(isGuidancePath(".claudex/skills/SKILL.md")).toBe(false);
+  });
+
+  it("🚨 refuses everything that is not text", () => {
+    // .env is inside the app and needs no traversal at all — which is why this
+    // has to be an allowlist rather than a list of dangerous places.
+    expect(isGuidancePath(".env")).toBe(false);
+    expect(isGuidancePath("docs/cron.md.sh")).toBe(false);
+    expect(isGuidancePath("lib/entitlements/manage.ts")).toBe(false);
+    expect(isGuidancePath("package.json")).toBe(false);
+    expect(isGuidancePath("scripts/dev/update.mjs")).toBe(false);
+    expect(isGuidancePath("docs/cron.md\u0000.sh")).toBe(false);
+  });
+
+  it("refuses anything that is not a string", () => {
+    expect(isGuidancePath(undefined)).toBe(false);
+    expect(isGuidancePath(null)).toBe(false);
+    expect(isGuidancePath(42)).toBe(false);
+  });
+});
+
+describe("guidanceWritable", () => {
+  const codeVersion = "0.5.0";
+
+  it("passes an ordinary plan through unchanged", () => {
+    const plan = planUpdate({
+      local: {},
+      remote: { "docs/cron.md": "9", "CLAUDE.md": "9" },
+      codeVersion,
+    });
+    expect(guidanceWritable(plan).map((entry: { path: string }) => entry.path)).toEqual([
+      "docs/cron.md",
+      "CLAUDE.md",
+    ]);
+  });
+
+  it("🚨 throws rather than dropping the entry", () => {
+    // Skipping would mean applying the rest of a manifest that has just been
+    // caught offering somewhere it may not write — half an update, from a
+    // source nothing in can be believed from, looking like an ordinary run.
+    const plan = planUpdate({
+      local: {},
+      remote: { "docs/cron.md": "9", "../../.git/hooks/pre-commit": "9" },
+      codeVersion,
+    });
+    expect(() => guidanceWritable(plan)).toThrow("../../.git/hooks/pre-commit");
   });
 });

@@ -205,6 +205,8 @@ describe("shapes and serialization", () => {
         createdAt: WHEN,
         rebillingStopUrl: "https://ds24.example/stop",
         renewUrl: null,
+        switchIntervalUrl: null,
+        paymentOption: null,
         invoices: [
           {
             id: "inv1",

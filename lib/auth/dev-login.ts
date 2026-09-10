@@ -28,7 +28,7 @@
 import Credentials from "next-auth/providers/credentials";
 import type { Provider } from "next-auth/providers";
 import { isEmailLoginEnabled } from "@/lib/email";
-import { appEnv } from "@/lib/env-guard";
+import { appEnv, isLocalUrl, serverEnv } from "@/lib/env-guard";
 
 export interface DevLoginEnv {
   NODE_ENV?: string;
@@ -38,16 +38,11 @@ export interface DevLoginEnv {
   emailConfigured: boolean;
 }
 
-/** true if the URL points at this machine. */
-export function isLocalUrl(appUrl?: string): boolean {
-  if (!appUrl) return true; // not set = local development
-  try {
-    const host = new URL(appUrl).hostname;
-    return host === "localhost" || host === "127.0.0.1" || host === "::1";
-  } catch {
-    return false; // unparseable → refuse, when in doubt
-  }
-}
+// `isLocalUrl` moved to lib/env-guard.ts — cookie-names.ts had a second copy of
+// it and could not import this file (it is loaded edge-side). Re-exported here
+// so the three callers that already say `from "@/lib/auth/dev-login"` keep
+// working, and so there is exactly one implementation to change.
+export { isLocalUrl };
 
 /**
  * The one place that decides whether the development login exists at all.
@@ -56,10 +51,17 @@ export function isLocalUrl(appUrl?: string): boolean {
  */
 export function isDevLoginAllowed(env: DevLoginEnv): boolean {
   if (env.DEV_LOGIN === "off") return false;
+  // 🚨 Unset is not DEV. `appEnv(undefined)` says "development" — right for a
+  // laptop, wrong for a host that lost its environment, and this is the bypass
+  // it would have opened.
+  if (!serverEnv(env.APP_ENV)) return false;
   // Allowlist: ONLY the DEV environment. appEnv() classifies anything unknown
   // as "production" — so a typo does not open the bypass.
   if (appEnv(env.APP_ENV) !== "development") return false;
-  if (env.NODE_ENV === "production") return false;
+  // Allowlist here too, and it used to be `=== "production"`. Anything that is
+  // not literally a development build — an unset NODE_ENV, "prod", "staging" —
+  // is now a refusal rather than a pass.
+  if (env.NODE_ENV !== "development") return false;
   if (env.emailConfigured) return false;
   if (!isLocalUrl(env.APP_URL)) return false;
   return true;

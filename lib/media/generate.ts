@@ -35,7 +35,7 @@
 // belongs where the price is known and a person is present — the Server Action
 // — in the order `check → work → charge` that `template/CLAUDE.md` sets out.
 // Doing it here would put a debit inside a library that a cron job might call.
-import { MAX_IMAGES_PER_CALL, runImageTask } from "@/lib/ai/run";
+import { runImageTask } from "@/lib/ai/run";
 import type { MediaVisibility } from "./rules";
 import { planKeysProblem } from "./config";
 import { createMedia } from "./manage";

@@ -75,7 +75,6 @@ import {
   cursorToken,
   liveCursorBeginning,
 } from "@/modules/community/lib/rules";
-import type { PostView } from "@/modules/community/pages/ui";
 
 import { LiveDiscussion } from "./live-discussion";
 import { Pager } from "./pager";

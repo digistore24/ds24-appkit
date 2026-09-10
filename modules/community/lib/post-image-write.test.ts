@@ -154,13 +154,20 @@ const acceptUpload = vi.fn(async (input: Record<string, unknown>) => {
   log.push(`acceptUpload:${String(input.alt)}`);
   return { id: `m-${String(input.alt)}` };
 });
-const deleteMedia = vi.fn(async (id: string) => {
+// ⚠️ **Both parameters, and the wrapper below hands both over.** It used to take
+// only the id — which meant the mock could not see whether the caller named the
+// owner, and the assertions below would have stayed green through the exact
+// regression L-4 (security review 2026-08-18) is about. A stand-in narrower than
+// the function it stands in for is a test that cannot fail on the interesting
+// argument.
+const deleteMedia = vi.fn(async (id: string, ownerId?: string) => {
   log.push(`deleteMedia:${id}`);
+  void ownerId;
 });
 vi.mock("@/lib/media/manage", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/media/manage")>()),
   acceptUpload: (input: Record<string, unknown>) => acceptUpload(input),
-  deleteMedia: (id: string) => deleteMedia(id),
+  deleteMedia: (id: string, ownerId?: string) => deleteMedia(id, ownerId),
 }));
 
 const { POST_IMAGE_SLOT, addPost } = await import("./manage");
@@ -393,8 +400,10 @@ describe("🚨 AC 5 — a picture that cannot be stored fails the whole post", (
     // half a contribution never reaches the room.
     expect(log).not.toContain("insert:community_posts");
     expect(log).not.toContain("transaction:begin");
-    // …and the first picture does not stay in the bucket as an orphan.
-    expect(deleteMedia).toHaveBeenCalledWith("m-eins");
+    // …and the first picture does not stay in the bucket as an orphan. The
+    // OWNER travels with it (L-4): the take-back names whose objects these are,
+    // so the delete carries its own rule instead of borrowing this path's.
+    expect(deleteMedia).toHaveBeenCalledWith("m-eins", VIEWER.memberId);
   });
 
   it("takes the pictures back when the TRANSACTION is what fails", async () => {
@@ -409,7 +418,7 @@ describe("🚨 AC 5 — a picture that cannot be stored fails the whole post", (
       addPost("d-1", VIEWER, { content: "x", images: [upload(1)], imageAlts: ["eins"] }),
     ).rejects.toThrow(/serialization failure/);
 
-    expect(deleteMedia).toHaveBeenCalledWith("m-eins");
+    expect(deleteMedia).toHaveBeenCalledWith("m-eins", VIEWER.memberId);
   });
 
   it("does not lose the post when the CLEANUP is what fails", async () => {

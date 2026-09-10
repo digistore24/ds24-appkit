@@ -29,6 +29,9 @@ export const CREDENTIAL_ERROR_CODES = [
   "noPasswordSet",
   "tooManyAttempts",
   "credentialUserNotFound",
+  // An operator signed in AS this member may not touch what outlives the
+  // impersonation. See lib/credentials/manage.ts.
+  "notWhileImpersonating",
 ] as const;
 
 export type CredentialErrorCode = (typeof CREDENTIAL_ERROR_CODES)[number];

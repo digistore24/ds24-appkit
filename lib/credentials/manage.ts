@@ -60,16 +60,59 @@ export async function signInState(userId: string): Promise<SignInState> {
   return { email: row.email, hasPassword: Boolean(row.passwordHash) };
 }
 
+/** Whether an operator is currently signed in AS the account being changed. */
+export interface ImpersonationOpts {
+  impersonating: boolean;
+}
+
+/**
+ * 🚨 An impersonation may not leave a credential behind.
+ *
+ * An impersonation is bounded (thirty minutes) and on the record — the row in
+ * `impersonation_events` IS the authorisation. A password and an email address
+ * are neither: both outlive the session, and afterwards a password the operator
+ * chose is indistinguishable from one the member chose. `setPassword()` asks
+ * for the current one only `if (row.passwordHash)`, and the shipped state is
+ * magic-link with NO password — so the first one could simply be set. The email
+ * change sends its confirmation to the NEW address, the one the operator typed;
+ * the old address is never told.
+ *
+ * The refusal sits HERE, at the domain seam, and not in the page that happens
+ * to call it — the same decision `lib/tokens/spend.ts` argues at length, and for
+ * the same reason: a guard in one caller is a guard the second caller forgets.
+ *
+ * ⚠️ Deliberately UNLIKE `spendTokens()`, this does not read the session itself.
+ * `setPassword(userId, …)` is handed its id by the action and is otherwise
+ * session-free; importing `auth()` down here would give the whole credentials
+ * layer a delivery-layer dependency it has never had. So the flag is passed in,
+ * and `lib/credentials/impersonation-guard.test.ts` reads the call sites to
+ * make sure it is passed in TRUTHFULLY.
+ *
+ * The intent this enforces was already written down, at the admin door
+ * (`app/dashboard/admin/users/actions.ts`): *"this action must never grow a
+ * 'set their password' sibling: a password the Operator chose is a password the
+ * Operator knows."* It was true of that file and not of this one.
+ */
+function refuseWhileImpersonating(opts: ImpersonationOpts): void {
+  if (opts.impersonating) throw new CredentialError("notWhileImpersonating");
+}
+
 /**
  * Sets or replaces the password on the caller's own account.
  *
  * `current` is required exactly when one is already set. Setting a FIRST
  * password rests on the session alone — there is no older secret to ask for.
+ *
+ * 🚨 `opts.impersonating` is not optional, and the refusal is the first thing
+ * that happens. See `refuseWhileImpersonating()` below.
  */
 export async function setPassword(
   userId: string,
   input: { password: string; confirmation: string; current?: string },
+  opts: ImpersonationOpts,
 ): Promise<{ email: string | null; created: boolean }> {
+  refuseWhileImpersonating(opts);
+
   const denial = checkNewPassword(input.password, input.confirmation);
   if (denial) throw new CredentialError(denial);
 
@@ -110,7 +153,16 @@ export async function setPassword(
 export async function removePassword(
   userId: string,
   input: { current: string },
+  opts: ImpersonationOpts,
 ): Promise<{ email: string | null }> {
+  // Blocked too, and the enumeration being COMPLETE is the reason. Removing a
+  // password takes access away rather than granting it, so on its own it is the
+  // weaker case — but "every credential-shaped operation refuses" is a rule a
+  // structural test can hold, and "all of them except one" is a rule the next
+  // person has to re-derive. The member can still sign in by magic link, so
+  // nothing here is what makes it safe; the completeness is.
+  refuseWhileImpersonating(opts);
+
   const [row] = await db
     .select({ passwordHash: users.passwordHash, email: users.email })
     .from(users)
@@ -221,21 +273,35 @@ export async function addressHasPassword(
  * id to read. It touches no database and returns no fact about the address —
  * only whether the counter has room.
  *
- * 🚨 **It lives here rather than in `sendVerificationRequest()`** (lib/email.ts),
- * which is the tempting place and the wrong one. That function is what
- * `signIn("email")` calls from EVERY caller — including the operator's
- * invitation on /dashboard/admin/users, which is `requireOwner()`-gated and has
- * no business being metered. Deciding here keeps the whole sign-in metric in one
- * file and makes that exemption a visible choice instead of an accident.
+ * 🚨 **The COMMIT happens where the mail is actually sent** —
+ * `sendVerificationRequest()` in `lib/email.ts`, which is what `signIn("email")`
+ * calls from every caller. This comment used to argue the opposite, that the
+ * meter belonged here because "both ways in pass through" the sign-in action.
+ * They do not: `POST /api/auth/signin/email` reaches the provider directly, and
+ * that was finding M-6 of the 2026-08-18 scan.
  *
- * Counted like the lookup above: on every hit rather than on failures, and
- * BEFORE the mail is handed to Auth.js. A brake that fires after the send has
- * already paid for what it refuses.
+ * The thing the old placement was protecting is real and survives as an
+ * EXEMPTION rather than a gap: the operator's invitation on
+ * `/dashboard/admin/users` is `requireOwner()`-gated and is marked as such
+ * (`lib/auth/link-context.ts`), so it is not counted against the person being
+ * invited.
+ *
+ * ⚠️ `commit` is why this function has two callers with different intentions.
+ * The sign-in dialog LOOKS (`commit: false`) so it can answer "too many links"
+ * in the user's own language; the provider COUNTS (`commit: true`) because that
+ * is where a mail really leaves. Counting in both would halve the limit for the
+ * ordinary path and refuse people who are inside it. Two peeks racing each other
+ * can each see room, which a meter tolerates — what it may not do is let an
+ * unmetered door exist.
+ *
+ * Counted on every hit rather than on failures, and BEFORE the mail is handed
+ * over. A brake that fires after the send has already paid for what it refuses.
  */
 export async function mayMailSignInLink(
   email: string,
   /** Where the request came from — see `originOf` in lib/auth/password-login.ts. */
   origin?: string | null,
+  opts: { commit?: boolean } = {},
 ): Promise<boolean> {
   const key = normaliseEmail(email);
 
@@ -244,8 +310,10 @@ export async function mayMailSignInLink(
     return false;
   }
 
-  record(LINK_SEND_BUCKET, key, LINK_SEND_LIMIT);
-  if (origin) record(LINK_SEND_ORIGIN_BUCKET, origin, LINK_SEND_ORIGIN_LIMIT);
+  if (opts.commit ?? true) {
+    record(LINK_SEND_BUCKET, key, LINK_SEND_LIMIT);
+    if (origin) record(LINK_SEND_ORIGIN_BUCKET, origin, LINK_SEND_ORIGIN_LIMIT);
+  }
 
   return true;
 }

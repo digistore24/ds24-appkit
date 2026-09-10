@@ -132,7 +132,54 @@ export async function spendTokens(args: {
   // First line, and the whole authorisation: signed out → /login, blocked →
   // /login. Nothing downstream re-derives who this is.
   const session = await requireActiveUser();
-  const memberId = session.user.id;
+  return spendTokensAs({
+    memberId: session.user.id,
+    impersonating: Boolean(session.user.impersonation),
+    amount: args.amount,
+    note: args.note,
+  });
+}
+
+/**
+ * The same spend, for a door that authenticated the payer ITSELF.
+ *
+ * 🚨 **Not the function to reach for.** `spendTokens()` above is, and its
+ * guarantee — no `memberId` parameter, so no caller can bill somebody else — is
+ * cited by a dozen files in this tree as the shape a session-scoped function
+ * takes. This one exists for the one place that shape cannot fit, and
+ * `lib/tokens/spend-callers.test.ts` walks the tree to keep the list at one.
+ *
+ * The place is `lib/ai/chat-endpoint.ts`. `runChatRequest()` is entered by TWO
+ * doors — `app/api/chat/route.ts` with a cookie, and
+ * `modules/api/routes/chat-messages.ts` with a bearer key — and both hand it the
+ * member they authenticated. Calling `spendTokens()` from there re-derived the
+ * payer from the COOKIE: on a request carrying a bearer key for one member and
+ * a session cookie for another, the work was done for the first and paid for by
+ * the second. Finding L-10 of the 2026-08-18 scan. It is unreachable today —
+ * all four registered chat tools are read-only and none calls `ctx.spend` — and
+ * it arms itself the day a charging tool is registered.
+ *
+ * ⚠️ **The caller must pass `impersonating` and must pass it truthfully.** The
+ * carve-out below is the only thing between a support session and a real charge
+ * on a customer's card; `spendTokens()` reads it from the session, and a door
+ * that authenticates for itself has to say so for itself.
+ *
+ * ⚠️ **Deviation from the fix as written**, deliberately. Finding L-10 proposed
+ * putting `memberId` on `spendTokens()` itself. That would have silently made
+ * the sentence "it takes no member id, ever" false in `CLAUDE.md`, in
+ * `.claude/skills/build-app/references/gating-examples.md` and in twelve source
+ * files that cite it as precedent — a security doctrine weakened everywhere to
+ * fix one seam. Splitting keeps the doctrine true and makes the exception
+ * nameable, countable and testable.
+ */
+export async function spendTokensAs(args: {
+  memberId: string;
+  /** Whether an operator is signed in AS this member — see the carve-out below. */
+  impersonating: boolean;
+  amount: number;
+  note?: string;
+}): Promise<number> {
+  const memberId = args.memberId;
 
   // ── The one carve-out to "an impersonated session IS the member" ──────────
   // An Operator signed in as a customer can do everything that customer can,
@@ -150,7 +197,7 @@ export async function spendTokens(args: {
   // knowing this feature exists. The spend itself still goes through, and a
   // shortfall still throws `insufficientBalance` — which is exactly what a real
   // member with an empty balance and no top-up armed would see.
-  const impersonating = Boolean(session.user.impersonation);
+  const impersonating = args.impersonating;
 
   if (!isSpendableAmount(args.amount)) {
     // Deliberately NOT a TokenError. A translatable code is a sentence shown to

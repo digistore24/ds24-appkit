@@ -138,7 +138,12 @@ export async function saveCommunityProfileAction(
           // orphaned object, and the orphan is swept at account deletion
           // anyway. It is logged so `node run.mjs errors` can find it.
           try {
-            await deleteMedia(replaced);
+            // The owner is named, so the delete carries its own rule rather
+            // than borrowing this call site's (L-4). `replaced` came out of
+            // `setProfileAvatar(memberId, …)` and is by construction this
+            // member's own row — passing it changes nothing today and is the
+            // sentence that keeps that true when this code is next moved.
+            await deleteMedia(replaced, memberId);
           } catch (error) {
             console.error("[community] could not remove the replaced avatar", replaced, error);
           }
@@ -163,7 +168,10 @@ export async function saveCommunityProfileAction(
       const removed = await setProfileAvatar(memberId, null);
       if (removed) {
         try {
-          await deleteMedia(removed);
+          // Same reasoning as the replacement path above: `removed` is the id
+          // `setProfileAvatar(memberId, null)` just read off this member's own
+          // profile row, and the delete is told so (L-4).
+          await deleteMedia(removed, memberId);
         } catch (error) {
           console.error("[community] could not remove the avatar", removed, error);
         }
@@ -171,7 +179,9 @@ export async function saveCommunityProfileAction(
     } else if (profile.avatarMediaId) {
       // No new picture, no removal — but the name may have changed, and the
       // stored `alt` is the OLD name until something rewrites it.
-      await refreshAvatarAlt(profile.avatarMediaId, profile.displayName);
+      // `memberId` for the same reason as the two deletes above (L-4): the id
+      // is this member's own by construction, and the statement now says so.
+      await refreshAvatarAlt(profile.avatarMediaId, profile.displayName, memberId);
     }
 
     revalidatePath(PAGE);

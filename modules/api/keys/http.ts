@@ -39,12 +39,13 @@ export function originAllowed(origin: string | null): boolean {
   }
 }
 
-/** The caller's origin for a failed-auth counter. Behind a proxy, the real one. */
-export function callerKey(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  // The left-most entry is the client; everything after it was added by a hop.
-  return forwarded?.split(",")[0]?.trim() || "unknown";
-}
+// The caller's origin for a failed-auth counter — re-exported, not written a
+// third time. This file had its own copy, with the same NAME as the one in
+// `lib/setup/rules.ts` and different behaviour (no `x-real-ip` fallback), and
+// both took the leftmost `x-forwarded-for` entry, which is the part a caller
+// writes for themselves. Finding M-5, 2026-08-18. A module may import from
+// `lib/`; never the other way round.
+export { callerKey } from "@/lib/setup/rules";
 
 /** The bearer value out of an `Authorization` header, or null. */
 export function bearerFrom(request: Request): string | null {

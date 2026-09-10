@@ -13,7 +13,15 @@
 // affiliate commissions, none of which a plain product link can express.
 // See docs/digistore-createbuyurl.md.
 import { getOrCreateBuyUrl, type BuyerContext, type Offer } from "./buyUrl";
-import { checkoutProductFor, type ProductDef, type SyncEnv } from "./products";
+import {
+  checkoutProductFor,
+  checkoutTargetFor,
+  paymentOptionsOf,
+  DEFAULT_OPTION_KEY,
+  type PaymentOption,
+  type ProductDef,
+  type SyncEnv,
+} from "./products";
 import { runtimeSyncEnv } from "./runtime-env";
 import { publicUrlFor } from "./public-url";
 import { ds24ApiKey, hasDigistoreApiKey } from "./settings";
@@ -63,24 +71,62 @@ export function offerFor(
   def: ProductDef,
   locale: string = DEFAULT_LOCALE,
   env: SyncEnv = runtimeSyncEnv(),
+  optionKey: string = defaultOptionKeyOf(def),
 ): Offer {
-  const resolved = checkoutProductFor(def, locale, env);
-  if (!resolved) {
+  const target = checkoutTargetFor(def, optionKey, locale, env);
+  if (!target) {
+    if (!checkoutProductFor(def, locale, env)) {
+      throw new Error(
+        `Product "${def.key}" has no productId yet. Run: node run.mjs ds24-sync`,
+      );
+    }
     throw new Error(
-      `Product "${def.key}" has no productId yet. Run: node run.mjs ds24-sync`,
+      `Product "${def.key}" has no payment option "${optionKey}".`,
     );
   }
+  const { option } = target;
   return {
-    key: `${def.key}:${resolved.language}`,
-    productId: resolved.productId,
-    priceCents: def.priceCents ?? 0,
-    currency: def.currency,
+    key: `${offerRef(def.key, option.key)}:${target.language}`,
+    productId: target.productId,
+    priceCents: option.priceCents ?? 0,
+    currency: option.currency,
     billingInterval:
-      def.kind === "subscription" ? def.billingInterval : undefined,
+      def.kind === "subscription" ? option.billingInterval : undefined,
+    payplanId: target.payplan?.id,
+    optionKey: option.key,
     title: def.name,
     description: def.description,
     forceRebilling: def.kind === "token",
   };
+}
+
+/**
+ * The way to pay a caller means when it names none: the FIRST one declared.
+ *
+ * For every registry written before payment options existed that is the only
+ * one there is, so nothing changes for them. For an offering that declares
+ * several it is the one the vendor wrote first, which is also the one the
+ * plans page renders first — a caller that wants a specific one says so.
+ */
+function defaultOptionKeyOf(def: ProductDef): string {
+  return paymentOptionsOf(def)[0]?.key ?? DEFAULT_OPTION_KEY;
+}
+
+/**
+ * How one way to pay is named to the outside — in the link map, in the buy-URL
+ * cache key, and in `?needs=`.
+ *
+ * A single-option offering keeps its bare Product Key, exactly as before
+ * payment options existed: `starter`, not `starter:default`. Only where there
+ * is genuinely more than one thing to tell apart does the suffix appear —
+ * the same rule `productTargets()` already uses for the language suffix in the
+ * sync's output, and it is what keeps every existing caller, cache row and
+ * `?needs=` link working unchanged.
+ */
+export function offerRef(productKey: string, optionKey: string): string {
+  return optionKey === DEFAULT_OPTION_KEY
+    ? productKey
+    : `${productKey}:${optionKey}`;
 }
 
 /**
@@ -131,9 +177,14 @@ export async function checkoutLinksFor(
   const connected = hasDigistoreApiKey();
 
   await Promise.all(
-    defs.map(async (def) => {
-      links.set(def.key, await resolveOne(def, connected, ctx, locale));
-    }),
+    defs.flatMap((def) =>
+      paymentOptionsOf(def).map(async (option) => {
+        links.set(
+          offerRef(def.key, option.key),
+          await resolveOne(def, connected, ctx, locale, option),
+        );
+      }),
+    ),
   );
   return links;
 }
@@ -163,10 +214,18 @@ export async function checkoutBlockersFor(
     // gets the German form and can still buy (checkoutProductFor). Saying
     // "checkout unavailable" there would refuse money over a missing
     // translation; `node run.mjs ds24-sync` is where that gap is reported.
-    if (!checkoutProductFor(def, DEFAULT_LOCALE, runtimeSyncEnv()))
-      blockers.set(def.key, "notSynced");
-    else if (!connected) blockers.set(def.key, "notConnected");
-    else blockers.set(def.key, null);
+    const blocker = !checkoutProductFor(def, DEFAULT_LOCALE, runtimeSyncEnv())
+      ? "notSynced"
+      : !connected
+        ? "notConnected"
+        : null;
+    // One entry per way to pay, because that is what the page renders and what
+    // `blockerFor` is asked about. The answer is the same for all of them:
+    // whether a product exists and whether there is an API key are questions
+    // about the OFFERING, never about one of its prices.
+    for (const option of paymentOptionsOf(def)) {
+      blockers.set(offerRef(def.key, option.key), blocker);
+    }
   }
   return blockers;
 }
@@ -201,9 +260,14 @@ export async function checkoutLinkFor(
   def: ProductDef,
   ctx: BuyerContext = {},
   locale: string = DEFAULT_LOCALE,
+  optionKey?: string,
 ): Promise<CheckoutLink> {
   const connected = hasDigistoreApiKey();
-  return resolveOne(def, connected, ctx, locale);
+  const option = optionKey
+    ? (paymentOptionsOf(def).find((o) => o.key === optionKey) ?? null)
+    : paymentOptionsOf(def)[0];
+  if (!option) return { url: null, blocker: "notSynced" };
+  return resolveOne(def, connected, ctx, locale, option);
 }
 
 async function resolveOne(
@@ -211,6 +275,7 @@ async function resolveOne(
   connected: boolean,
   ctx: BuyerContext,
   locale: string,
+  option: PaymentOption,
 ): Promise<CheckoutLink> {
   if (!checkoutProductFor(def, locale, runtimeSyncEnv()))
     return { url: null, blocker: "notSynced" };
@@ -219,7 +284,7 @@ async function resolveOne(
   try {
     const url = await getOrCreateBuyUrl({
       apiKey: ds24ApiKey(),
-      offer: offerFor(def, locale),
+      offer: offerFor(def, locale, runtimeSyncEnv(), option.key),
       ctx: { ...ctx, customTracking: ctx.customTracking ?? customTrackingFor(def) },
       thankyouUrl: optinThankyouUrl(),
     });
@@ -232,7 +297,10 @@ async function resolveOne(
     return { url: await withTestpayParam(url) };
   } catch (err) {
     // Visible in `node run.mjs logs` — the page itself must not show a stack trace.
-    console.error(`[checkout] createBuyUrl failed for "${def.key}":`, err);
+    console.error(
+      `[checkout] createBuyUrl failed for "${offerRef(def.key, option.key)}":`,
+      err,
+    );
     return { url: null, blocker: "error" };
   }
 }

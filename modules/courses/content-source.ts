@@ -28,8 +28,14 @@
 //     and "may they have this file" are two questions — but the sentence
 //     "never a second `hasPlan()` here" would otherwise read as more than it is.
 //  2. 🚨 **This source answers as a BUYER, whoever asks — and that is enforced
-//     here.** `asBuyer()` below is the one place `viewer.role` is dropped, and
-//     both consumers take its result: the gate and `mayAccess()` per media row.
+//     here.** The role is dropped twice, in the two places a role could still
+//     decide something: the gate passes `null` to `courseAccessFor()` in so
+//     many words, and every `mayAccess()` call takes `asBuyer(viewer)`.
+//     ⚠️ This paragraph used to claim both already went through `asBuyer()`.
+//     They did not — the function was written and never called, and the two
+//     media checks passed the caller's real role straight through until
+//     2026-09-10. The claim is now held by a test that reads the CALLS rather
+//     than by this sentence.
 //     It used to be an invariant of the CALLER — `lib/ai/tools.ts` →
 //     `viewerFor()` passes `role: null` — and this header stated it as a fact.
 //     One line in another layer is not an invariant. A second caller carrying a
@@ -362,7 +368,13 @@ const coursesContentSource: ContentSource = {
       // Per row, refusal by skipping — the same thing `./lib/media.ts` does
       // inside the page. 🚨 And no `mediaUrlFor()` anywhere near it: a signed
       // address expires and bypasses this very check.
-      if (!(await mayAccess(row, viewer))) continue;
+      //
+      // 🚨 `asBuyer(viewer)`, never `viewer`. `mayAccess()` short-circuits its
+      // `entitled` branch on `role === "owner"` — handed the caller's real
+      // role, this loop would put every paid file in the app into an operator's
+      // transcript. Header point 2 said this was already the case; it was not
+      // (found 2026-09-10, by `asBuyer()` showing up as an unused function).
+      if (!(await mayAccess(row, asBuyer(viewer)))) continue;
       media.push({
         path: row.storageKey,
         kind: row.kind,
@@ -492,8 +504,9 @@ const coursesContentSource: ContentSource = {
         if (terms.length > 0 && !terms.some((term) => haystack.includes(term))) continue;
 
         // 🚨 And only now the expensive one — per row, refusal by skipping, the
-        // same thing `get()` does.
-        if (!(await mayAccess(row, viewer))) continue;
+        // same thing `get()` does — and through `asBuyer()` for the same reason
+        // it does: the owner short-circuit in `mayAccess()`.
+        if (!(await mayAccess(row, asBuyer(viewer)))) continue;
 
         hits.push({
           sourceId: COURSES_SOURCE_ID,

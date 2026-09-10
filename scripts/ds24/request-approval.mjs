@@ -208,7 +208,6 @@ if (apply && !statusRead && !force) {
 }
 
 let synced = false;
-let applied = false;
 let attempted = false;
 let refused = 0;
 
@@ -286,7 +285,6 @@ try {
       product_id: String(productId),
       [`data[approval_status][${siteowner}]`]: status,
     });
-    applied = true;
     console.log(`✓ Approval "${status}" requested: "${label}" at ${where} [id=${siteowner}] (was ${currentNote})`);
   }
 } finally {

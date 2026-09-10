@@ -86,6 +86,37 @@ describe("the four refusal paths, and they are one refusal", () => {
   });
 });
 
+describe("a secret made of whitespace is not a secret (L-6)", () => {
+  // `!secret` reads " " as SET, so the surface believed it was configured with
+  // a one-space credential. Finding L-6 of the 2026-08-18 scan; the realistic
+  // way there is a copied empty value in a host's secret store.
+  it("🚨 answers the unset way, and does not even spend the caller's meter", () => {
+    // The assertion is on the METER because that is what distinguishes the two
+    // branches: the unset branch returns before `record()`, the compare branch
+    // counts a failure. Both answer 404, so counting is the only observable
+    // difference — and it is the one that says WHICH line answered.
+    const headers = { "x-forwarded-for": "203.0.113.44" };
+    process.env.DIAGNOSTICS_SECRET = "   ";
+    for (let i = 0; i < 25; i += 1) expect(guardDiagnostics(request(headers))).not.toBeNull();
+
+    // The operator now sets a real one. If the whitespace phase had been
+    // treated as "configured, wrong credential", this caller would be locked
+    // out of their own diagnostics for fifteen minutes.
+    process.env.DIAGNOSTICS_SECRET = SECRET;
+    expect(guardDiagnostics(request({ ...headers, authorization: `Bearer ${SECRET}` }))).toBeNull();
+  });
+
+  it("accepts the secret when the store padded it", () => {
+    // The other half of trimming the VALUE rather than only the emptiness
+    // test. A secret store that appends a newline used to make every correct
+    // token wrong by one invisible byte — the length guard refuses first, so
+    // the operator sees the same blank 404 a stranger sees and has nothing to
+    // go on.
+    process.env.DIAGNOSTICS_SECRET = `  ${SECRET}\n`;
+    expect(guardDiagnostics(request({ authorization: `Bearer ${SECRET}` }))).toBeNull();
+  });
+});
+
 describe("the failure meter", () => {
   it("keeps answering 404 once a caller is rate-limited — never a 429", async () => {
     // A 429 would say out loud that there is something here worth metering.

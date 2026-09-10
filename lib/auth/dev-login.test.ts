@@ -74,7 +74,15 @@ describe("isLocalUrl", () => {
   it("erkennt lokale Adressen", () => {
     expect(isLocalUrl("http://localhost:3000")).toBe(true);
     expect(isLocalUrl("http://127.0.0.1:3001")).toBe(true);
-    expect(isLocalUrl(undefined)).toBe(true); // nicht gesetzt = lokal
+  });
+
+  it("behandelt ein fehlendes APP_URL als NICHT lokal", () => {
+    // Umgedreht am 2026-09-10 (Befund H-3). Vorher galt "nicht gesetzt = lokal",
+    // und damit öffnete eine verlorene Umgebungsvariable auf einem Host den
+    // DEV-Login, den Testkauf und die Vorschau. Ungesetzt ist ein dritter
+    // Zustand, und er ist der gefährliche.
+    expect(isLocalUrl(undefined)).toBe(false);
+    expect(isLocalUrl("")).toBe(false);
   });
 
   it("erkennt fremde Adressen", () => {

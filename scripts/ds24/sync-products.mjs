@@ -32,13 +32,21 @@
 // product ids, and every create/update sends it — so a group deleted at DS24
 // is recreated and re-collects the products on the next sync by itself.
 //
-// IMPORTANT — why no price is set here:
-// The DS24 API explicitly rejects `data[amount]` ("is deprecated - create a
-// payment plan instead"), and there is NO API endpoint for creating payment
-// plans. This template therefore takes the other route: price and interval are
-// passed from the registry to createBuyUrl as `payment_plan[...]` at checkout
-// time (lib/digistore/buyUrl.ts). So you do NOT have to maintain any payment
-// plans in the DS24 UI — priceCents/billingInterval in the registry are enough.
+// ONE PRODUCT GROUP PER APPLICATION, and separately: ONE OWNERSHIP STAMP PER
+// PRODUCT. The group is a folder the vendor can see; the stamp is what this
+// script reads before it deletes anything. It lives in `data[note]`, the
+// product's internal note, and `scripts/ds24/_own.mjs` is the whole of it.
+// (This file used to say the API has no tag field. It has one — `note` is in
+// createProduct AND updateProduct — and the sentence was load-bearing for the
+// wrong conclusion: that nothing here could ever be cleaned up again.)
+//
+// IMPORTANT — where the price lives:
+// The DS24 API rejects `data[amount]` ("is deprecated - create a payment plan
+// instead"), so no price is ever set on the PRODUCT. It is set on the
+// product's PAYMENT PLANS, one per way to pay, written from the same registry
+// entry as everything else here — see `_plans.mjs`, which also says why the
+// plans have to exist even though our own checkout could price itself.
+// The registry stays the one place a price is authored.
 //
 // This script manages the product master data: name, internal name,
 // description, product image, thank-you URL, quantities — and the productId.
@@ -63,20 +71,17 @@
 // `node run.mjs ds24-sync --dry-run`.
 import { readFileSync } from "node:fs";
 import { ds24Call, requireApiKey, parseArgs } from "./_client.mjs";
+import { readProducts, writeProducts, extractProducts, idOf, contradictingProducts, sellFieldProblems, parkedTargets, adoptLegacyAsProd, appLanguages, languagesOf, productTargets, paymentOptionsOf, setProductId, setPayplan, ensureSyncId } from "./_products.mjs";
 import {
-  readProducts,
-  writeProducts,
-  extractProducts,
-  idOf,
-  contradictingProducts,
-  sellFieldProblems,
-  parkedTargets,
-  adoptLegacyAsProd,
-  appLanguages,
-  languagesOf,
-  productTargets,
-  setProductId,
-} from "./_products.mjs";
+  stampFor,
+  noteOf,
+  noteWith,
+  tagOf,
+  tagWith,
+  canClassify,
+  orphanProducts,
+} from "./_own.mjs";
+import { planRows, applyPlanRows } from "./_plans.mjs";
 import {
   resolveSyncEnv,
   internalName,
@@ -127,8 +132,53 @@ if (!thankyouTarget) {
 }
 const appUrl = publicUrlFor(thankyouTarget);
 
-// data[...] for create/update from a registry definition (without a price).
-function productData(key, def, language) {
+// Does this account's API know `data[tag]` yet?
+//
+// ⚠️ Measured on 2026-09-09: it does NOT, and `data` is validated against a
+// strict allowlist — an unknown key is a hard error, not something ignored
+// ("ungültiger Array-Schlüssel bei 1. Parameter 'data' (angegeben: tag …)").
+// A sync that sent it unconditionally would break every product creation for
+// every customer on the day this shipped.
+//
+// So: send it, and if the call comes back refused, drop it and try the same
+// call again — ONCE, and then not for the rest of the run. That is the shape
+// `createBuyUrl` already uses twice (the unknown affiliate, the stale payment
+// plan), including its safeguard: the retry is the call we would have made
+// anyway, so if the real problem was something else the retry fails too and
+// the ORIGINAL error is what surfaces. No message matching, in any language.
+let tagsAccepted = true;
+
+/**
+ * Runs `call()`; on a failure while the tag was in the payload, says so once,
+ * marks the field unsupported for this run and runs `retry()`.
+ */
+async function withoutTag(data, call, retry) {
+  try {
+    return await call();
+  } catch (err) {
+    if (!tagsAccepted || !("data[tag]" in data)) throw err;
+    tagsAccepted = false;
+    console.log(
+      `  · this Digistore24 account does not know data[tag] yet — continuing without it`,
+    );
+    delete data["data[tag]"];
+    try {
+      return await retry();
+    } catch {
+      throw err;
+    }
+  }
+}
+
+// data[...] for create/update from a registry definition (without a price —
+// that is on the payment plans, see _plans.mjs).
+//
+// `existing` is the product as listProducts handed it back, or null on a
+// create. It is here for one field: the note. We only ever REPLACE our own
+// stamp line inside it and keep everything else the vendor wrote — and where
+// listProducts does not return the note at all, we write none, because
+// writing one would mean overwriting text we never read.
+function productData(key, def, language, existing = null) {
   const data = {
     // Buyers see the environment: dev/staging names carry a suffix, prod
     // stays clean (_env.mjs → displayName).
@@ -147,6 +197,27 @@ function productData(key, def, language) {
     // German app came to show English forms (and the reverse).
     "data[language]": language,
   };
+  // The ownership stamp. On a create there is nothing to preserve; on an
+  // update we only touch our own line, and only when the note came back with
+  // the product at all (see the note above `productData`).
+  // 🚨 `noteWith` answers `null` for "the vendor wrote something here" — the
+  // field keeps 47 characters, so there is no merging it, and a sync that ate
+  // somebody's note to plant a marker would be trading their data for our
+  // convenience. Not writing means that product stays unstamped and therefore
+  // un-prunable, which is the direction every doubt in `_own.mjs` falls.
+  const note = noteWith(
+    existing ? noteOf(existing) : null,
+    stampFor({ syncId, env }),
+  );
+  if (note !== null) data["data[note]"] = note;
+  // The coarse marker, appended to whatever tags the product already has —
+  // `tagWith` answers null when ours is in there already, and never drops one
+  // the vendor put there (`_own.mjs`). `tagsAccepted` is what keeps a run from
+  // sending it once per product while the field does not exist yet.
+  if (tagsAccepted) {
+    const tag = tagWith(existing ? tagOf(existing) : null);
+    if (tag !== null) data["data[tag]"] = tag;
+  }
   if (appUrl) data["data[thankyou_url]"] = appUrl;
   // The app's own product group — sent on create AND update, so a product
   // that predates the group (or a group recreated after deletion) is pulled
@@ -170,10 +241,25 @@ const speaks = appLanguages();
 // Warns about registry entries that would only show up later, at checkout.
 function checkDefinition(key, def) {
   const warn = [];
-  if (def.priceCents == null)
-    warn.push("no priceCents — the checkout cannot set a price");
-  if (def.kind === "subscription" && !def.billingInterval)
-    warn.push("kind=subscription without billingInterval (e.g. 1_month)");
+  // Per WAY TO PAY, not per offering: with `paymentOptions` the price and the
+  // interval live on the option, and reading them off the entry warned every
+  // correctly written registry that it had no price. Measured against a real
+  // account, which is the only place it showed.
+  //
+  // `paymentOptionsOf` normalises both registry shapes, so an entry that
+  // declares no options is checked exactly as before — one option carrying the
+  // entry's own fields, and the message keeps its old wording.
+  const options = paymentOptionsOf(def);
+  const single = options.length === 1;
+  for (const option of options) {
+    const where = single ? "" : ` (${option.key})`;
+    if (option.priceCents == null)
+      warn.push(`no priceCents${where} — the checkout cannot set a price`);
+    if (def.kind === "subscription" && !option.billingInterval)
+      warn.push(
+        `kind=subscription without billingInterval${where} (e.g. 1_month)`,
+      );
+  }
   if (def.kind === "token" && !def.credits)
     warn.push("kind=token without credits — no balance would be credited");
   if (def.imageUrl && !/^https:\/\//.test(def.imageUrl))
@@ -252,7 +338,7 @@ if (contradicting.length > 0) {
     `"billingMode": "${config.billingMode}" in config/digistore-products.json does not match these products:\n` +
       contradicting.map((key) => `  - ${key}`).join("\n") +
       `\n\nEither set "billingMode" to "both", or delete those products from the config.` +
-      `\n(If one of them already exists at Digistore24, deactivate it THERE — removing it here does not unpublish it.)`,
+      `\n(If one of them already exists at Digistore24, take the entry OUT of the registry and run --prune — parking it here does not unpublish it.)`,
   );
   process.exit(2);
 }
@@ -278,7 +364,12 @@ const apiKey = requireApiKey();
 const targets = productTargets(config.products, env).filter(
   ({ key }) => !onlyKey || key === onlyKey,
 );
-if (targets.length === 0) {
+// 🚨 `--prune` is the ONE thing that still has work to do with an empty list.
+// Measured against a live account: taking the last entry out of the registry
+// left its product in the vendor's account with no way to remove it, because
+// this refusal fires before anything looks at Digistore24 at all. "Nothing to
+// sync" and "nothing to clean up" are different questions.
+if (targets.length === 0 && !args.prune) {
   // Three different states, three different sentences. "No product X" for a
   // key that IS in the file but parked used to send the vendor looking for a
   // typo in a line that is spelled perfectly.
@@ -325,6 +416,17 @@ if (parked.length > 0) {
 }
 
 // Load the product list once (for matching by name).
+// This app's own identity inside the account — created on first run, then
+// committed and never regenerated. Everything `--prune` is allowed to touch is
+// identified by it (`_own.mjs`).
+const [syncId, syncIdIsNew] = ensureSyncId(config);
+if (syncIdIsNew) {
+  changed = true;
+  console.log(
+    `→ this app's Digistore24 sync id is ${syncId} (written to config/digistore-products.json).`,
+  );
+}
+
 const list = extractProducts(
   await ds24Call("listProducts", apiKey).catch((e) => {
     console.error("Could not load the product list:", e.message);
@@ -338,10 +440,57 @@ const list = extractProducts(
 const rows = classifyTargets(targets, list, env);
 const creations = rows.filter((r) => r.action === "create");
 
-// 🚨 THE GATE. Creating a Digistore24 product cannot be undone from here, and
-// the registry ships with example plans — so the first sync of a fresh app
-// would otherwise put every one of them into the vendor's account before
-// anybody looked at the list.
+// Products in this account that carry OUR stamp for THIS environment and that
+// the registry no longer asks for. `keepIds` deliberately includes the parked
+// entries: `"sell": false` takes an offering off the page, never out of the
+// account, and a parked product's id still has to reach the IPN connection so
+// its buyers' refunds keep arriving.
+const byId = new Map(
+  list.map((p) => [String(idOf(p) ?? ""), p]).filter(([id]) => id),
+);
+const keepIds = new Set(
+  [
+    ...rows.map((r) => r.existingId),
+    ...parkedTargets(config.products, env).map((r) => r.productId),
+  ].filter(Boolean).map(String),
+);
+const classifiable = canClassify(list);
+const orphans = classifiable
+  ? orphanProducts(list, { syncId, env, keepIds })
+  : [];
+
+if (!classifiable && args.prune) {
+  // 🚨 Zero orphans out of a comparison that could not run is not "nothing to
+  // clean up" — it is no answer at all, and acting on it would be acting on
+  // silence. Proving the walk ran is not proving the comparison did.
+  console.error(
+    `\n--prune cannot run: Digistore24 did not return the products' notes, so\n` +
+      `ownership cannot be established. Nothing was deleted and nothing was\n` +
+      `deactivated. This is not a finding about your account.\n`,
+  );
+  process.exit(2);
+}
+
+if (orphans.length > 0 && !args.prune) {
+  console.log(
+    `\n${orphans.length} product(s) belong to this app and are no longer in the registry:\n` +
+      orphans
+        .map((o) => `  ${o.productId}  ${o.nameIntern || o.name}`)
+        .join("\n") +
+      `\n\n  They are still buyable at Digistore24 through any link that exists.\n` +
+      `  To remove them: node run.mjs ds24-sync --env ${env} --prune\n`,
+  );
+}
+
+// 🚨 THE GATE. Creating a Digistore24 product is not free to undo, and the
+// registry ships with example plans — so the first sync of a fresh app would
+// otherwise put every one of them into the vendor's account before anybody
+// looked at the list.
+//
+// `--prune` softened this: a product this app created CAN be removed again.
+// But only cleanly while it has never sold — one with sales is deactivated
+// instead, because its buyers' refunds and cancellations still arrive as IPNs
+// naming its id. So the gate stays, with the honest reason.
 //
 // It hangs on `apply`, so `--dry-run` is untouched: that run prints exactly
 // the "would create" lines this refusal sends the reader to. And it only
@@ -370,9 +519,10 @@ if (apply && creations.length > 0 && !args["create-new"]) {
         )
         .join("\n") +
       `\n\n  (${updates} product(s) already exist and would only be updated.)\n\n` +
-      `Creating them cannot be undone from here: deleting an entry from\n` +
-      `config/digistore-products.json afterwards does NOT remove the product at\n` +
-      `Digistore24 — it has to be deactivated over there, by hand.\n\n` +
+      `Creating them cannot be undone from here for free: taking an entry out of\n` +
+      `config/digistore-products.json afterwards makes the product an orphan that\n` +
+      `--prune can delete — but only while it never sold. One that took money is\n` +
+      `deactivated instead, and stays in the account.\n\n` +
       `Two ways on:\n\n` +
       `  1. This IS what you sell — run it again with:\n` +
       `         ${rerun}\n\n` +
@@ -463,19 +613,53 @@ for (const target of rows) {
     seenKeys.add(key);
   }
 
-  const data = productData(key, def, language);
+  const data = productData(
+    key,
+    def,
+    language,
+    existingId ? (byId.get(String(existingId)) ?? null) : null,
+  );
+
+  // The ways to pay of this product, applied right after the product itself.
+  // Together, not in a second pass: a product that exists without its plans
+  // has Digistore24s ~27 EUR default plan and an order form that charges it,
+  // and the window in which that is true should be one API call wide.
+  const syncPlans = async (productIdForPlans) => {
+    const rowsForPlans = planRows(target.options, target.payplans);
+    if (rowsForPlans.length === 0) return;
+    if (!apply) {
+      for (const r of rowsForPlans) {
+        console.log(`   DRY-RUN — would ${r.action} payment plan "${r.option.key}"`);
+      }
+      return;
+    }
+    const summary = await applyPlanRows(rowsForPlans, productIdForPlans, {
+      call: (fn, params) => ds24Call(fn, apiKey, params),
+      record: (option, id) => {
+        setPayplan(config, key, language, option, id, env);
+        changed = true;
+      },
+      log: (line) => console.log(line),
+    });
+    if (summary.skipped > 0) warnings += summary.skipped;
+  };
 
   if (existingId) {
     if (!apply) {
       console.log(`DRY-RUN — would update: "${label}" (product_id=${existingId}, language=${language})`);
     } else {
-      await ds24Call("updateProduct", apiKey, { product_id: String(existingId), ...data });
+      await withoutTag(
+        data,
+        () => ds24Call("updateProduct", apiKey, { product_id: String(existingId), ...data }),
+        () => ds24Call("updateProduct", apiKey, { product_id: String(existingId), ...data }),
+      );
       console.log(`✓ updated: "${label}" (product_id=${existingId}, language=${language})`);
     }
     if (target.productId !== String(existingId)) {
       setProductId(config, key, language, existingId, env);
       changed = true;
     }
+    await syncPlans(existingId);
     continue;
   }
 
@@ -483,9 +667,14 @@ for (const target of rows) {
     console.log(
       `DRY-RUN — would create: "${label}" ("${displayName(def.name, env)}", language=${language})`,
     );
+    await syncPlans(null);
     continue;
   }
-  const created = await ds24Call("createProduct", apiKey, data);
+  const created = await withoutTag(
+    data,
+    () => ds24Call("createProduct", apiKey, data),
+    () => ds24Call("createProduct", apiKey, data),
+  );
   const newId = idOf(created);
   if (!newId) {
     console.error(`✗ createProduct returned no product_id for "${label}".`);
@@ -494,6 +683,76 @@ for (const target of rows) {
   setProductId(config, key, language, newId, env);
   changed = true;
   console.log(`✓ created: "${label}" (product_id=${newId}, language=${language})`);
+  await syncPlans(newId);
+}
+
+// --- --prune: the products that are ours and are no longer wanted ----------
+//
+// Only ever reached with the flag, and only for rows `_own.mjs` graded
+// "certain". Two steps, in this order and not the other:
+//
+//   1. Ask whether the product has SALES. One that does is never deleted, no
+//      matter what the API would allow — its buyers still have refunds,
+//      chargebacks and cancellations coming, and every one of those arrives as
+//      an IPN naming this product id.
+//   2. Delete what has none; deactivate what has some, or what the delete
+//      refused. `deleteProduct` is documented as permanent and it can fail for
+//      reasons this script cannot enumerate — so the fallback is not an
+//      afterthought, it is the expected path for anything that ever sold.
+if (apply && args.prune && orphans.length > 0) {
+  console.log(`\nRemoving ${orphans.length} product(s) that belong to this app:`);
+  for (const orphan of orphans) {
+    let sold = null;
+    try {
+      const purchases = await ds24Call("listPurchases", apiKey, {
+        product_id: orphan.productId,
+      });
+      const rowsOfPurchases = Array.isArray(purchases)
+        ? purchases
+        : (purchases?.purchases ?? []);
+      sold = rowsOfPurchases.length > 0;
+    } catch (e) {
+      // Could not ask — then we do not know, and "do not know" is treated as
+      // "has sales". The cheap mistake is an inactive product too many.
+      console.log(`  · ${orphan.productId}: could not check for sales (${e.message})`);
+      sold = true;
+    }
+
+    if (sold === false) {
+      try {
+        await ds24Call("deleteProduct", apiKey, { product_id: orphan.productId });
+        console.log(`  ✓ deleted ${orphan.productId} ("${orphan.nameIntern || orphan.name}")`);
+        continue;
+      } catch (e) {
+        console.log(`  · delete refused for ${orphan.productId} (${e.message}) — deactivating instead`);
+      }
+    }
+
+    try {
+      await ds24Call("updateProduct", apiKey, {
+        product_id: orphan.productId,
+        "data[is_active]": "N",
+      });
+      console.log(
+        `  ✓ deactivated ${orphan.productId} ("${orphan.nameIntern || orphan.name}")` +
+          (sold ? " — it has sales, so it was never a candidate for deletion" : ""),
+      );
+      if (sold) {
+        console.log(
+          `      Keep its entry in config/digistore-products.json as "sell": false —\n` +
+            `      without it the id leaves the IPN connection and this product's\n` +
+            `      refunds and cancellations stop arriving.`,
+        );
+      }
+    } catch (e) {
+      console.error(`  ✗ ${orphan.productId}: neither deleted nor deactivated — ${e.message}`);
+      warnings += 1;
+    }
+  }
+} else if (!apply && args.prune && orphans.length > 0) {
+  for (const orphan of orphans) {
+    console.log(`DRY-RUN — would delete or deactivate ${orphan.productId} ("${orphan.nameIntern || orphan.name}")`);
+  }
 }
 
 if (apply && changed) {
@@ -512,6 +771,9 @@ if (warnings > 0) {
 }
 
 console.log(
-  "\nPrices come from the registry (priceCents/billingInterval) and are passed as\n" +
-    "payment_plan at checkout. NO payment plans are needed in DS24.",
+  "\nPrices are authored in the registry and written onto each product's PAYMENT\n" +
+    "PLANS, one per way to pay — so the product's own order form, an affiliate\n" +
+    "link and the buyer's own interval switch all charge what /plans shows.\n" +
+    "Do not edit those plans in the Digistore24 interface: the next sync\n" +
+    "overwrites them from config/digistore-products.json.",
 );

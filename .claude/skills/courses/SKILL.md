@@ -77,12 +77,17 @@ Put those keys in the COURSE's own file — `content/course/<course-slug>/course
 → `planKeys`, a **list**. (Not `config/course.json`: that one holds the switch and
 nothing else. See step 2.)
 
-🚨 **It is a list because one offering is one Digistore24 product per billing
-interval.** A course a vendor sells "monthly or yearly" is TWO registry entries,
-and holding either one opens the course — so both keys go in. Naming only one
-leaves the other half of your buyers on a page that renders with nothing on it:
-their own gate passes, and every medium resolves to `null`, which the page shows
-as "there is none". A clean 200 over a course they paid for.
+🚨 **It is a list because one course may be sold under SEVERAL offerings** — on
+its own and inside a bundle, or in both tiers of a ladder. Every key that opens
+it goes in, and holding any one of them is enough. Naming only one leaves the
+other buyers on a page that renders with nothing on it: their own gate passes,
+and every medium resolves to `null`, which the page shows as "there is none".
+A clean 200 over a course they paid for.
+
+**"Monthly or yearly" is not two entries.** Those are two `paymentOptions` of
+one offering, so both buyers hold the same Product Key and the list names it
+once. *(Needs template 0.36.0. On an older app they ARE two entries, and then
+both keys go in the list.)*
 
 The same list gates the lesson media (`planKeys` on the manifest entry), so buying
 the course is buying its files, whichever product you bought it under.

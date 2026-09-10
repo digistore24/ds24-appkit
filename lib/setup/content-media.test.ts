@@ -306,6 +306,64 @@ describe("content_media_confirm — the row, and what it does NOT claim", () => 
   });
 });
 
+describe("🚨 the plan-mode removal is a NAMED exception, and the name is written down", () => {
+  // ── The finding, and what this block is for ────────────────────────────────
+  // Security review 2026-08-18, L-8: `discard()` runs above the
+  // `mode === "plan"` return, so a `plan` of this tool removes an object — a
+  // destructive effect at the act the two-act protocol otherwise describes as
+  // consequence-free, reachable with a valid key and no confirmation token.
+  //
+  // The review offered two resolutions: flag the tool `destructive`, or carry
+  // the deviation as a named exception. It is the second, and the reasoning is
+  // on the tool declaration in `tools.ts`. The short of it: `destructive` is
+  // read in exactly one place (`guard.ts`) and refuses a tool by ENVIRONMENT —
+  // `isDev(env) || allowDestructive.includes(name)` — so in DEV the plan-mode
+  // removal would carry on unchanged, and outside DEV the whole staged upload
+  // leg would be refused until an operator edited `config/setup.json`, which
+  // then restores today's behaviour exactly. The flag would never once alter the
+  // act the finding names.
+  //
+  // What was actually wrong was that the deviation was documented only in a code
+  // comment, while `docs/setup-mcp.md` — the page an operator reads — carried
+  // "a plan writes nothing" and no exception. These two tests are what stop that
+  // from coming back: one holds the decision in the code, the other holds the
+  // sentence in the doc. Delete either and the build goes red.
+  const doc = readFileSync(join(process.cwd(), "docs", "setup-mcp.md"), "utf8");
+
+  it("keeps the tool undeclared as destructive, deliberately", () => {
+    // Stated here as well as in `registry.test.ts` because here it is half of a
+    // PAIR: the code says "not destructive" and the doc has to say why. On its
+    // own, either one is an unexplained assertion.
+    expect(confirm.destructive).toBeUndefined();
+    expect(mint.destructive).toBeUndefined();
+  });
+
+  it("names the tool and the effect in docs/setup-mcp.md", () => {
+    // Not a keyword sweep over the whole file: the exception has to be in the
+    // paragraph that makes the promise, or a reader who stops at the promise
+    // never learns about it. So the section is located first and read on its own.
+    const at = doc.indexOf("One named exception");
+    expect(at, "docs/setup-mcp.md no longer names the exception at all").toBeGreaterThan(-1);
+    const section = doc.slice(at, doc.indexOf("\n\n**", at + 1));
+
+    expect(section).toContain("content_media_confirm");
+    // The three things an operator has to be told: that it is a plan, that
+    // something is removed, and how far the removal can reach.
+    expect(section).toMatch(/\bplan\b/);
+    expect(section).toMatch(/remove/i);
+    expect(section).toMatch(/deterministic|manifest/i);
+  });
+
+  it("puts the exception where the promise is, not in a footnote", () => {
+    // The promise and its exception must be the same piece of prose. Measured as
+    // distance rather than by eye: a reader who has read one has read the other.
+    const promise = doc.indexOf("A plan writes nothing");
+    const exception = doc.indexOf("One named exception");
+    expect(promise).toBeGreaterThan(-1);
+    expect(Math.abs(exception - promise)).toBeLessThan(2500);
+  });
+});
+
 describe("🚨 no byte of a lesson video comes near the model", () => {
   it("needs no branch in the MCP server, unlike media_upload", () => {
     // AD-85's stronger form. `media_upload` takes a PATH ON THE OPERATOR'S

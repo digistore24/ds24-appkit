@@ -64,14 +64,17 @@ describe("isPlansPreviewAllowed", () => {
     );
   });
 
-  it("accepts the local aliases and an unset APP_URL", () => {
-    for (const url of [
-      "http://localhost:3000",
-      "http://127.0.0.1:3000",
-      undefined,
-    ]) {
+  it("accepts the local aliases", () => {
+    for (const url of ["http://localhost:3000", "http://127.0.0.1:3000"]) {
       expect(isPlansPreviewAllowed({ ...allowed, APP_URL: url })).toBe(true);
     }
+  });
+
+  it("refuses an UNSET APP_URL — it is not a local one", () => {
+    // Changed 2026-09-10 (finding H-3): a host that lost its environment used
+    // to read as a laptop. The preview is off until APP_URL says where the app
+    // is; .env.example ships it.
+    expect(isPlansPreviewAllowed({ ...allowed, APP_URL: undefined })).toBe(false);
   });
 
   it("can be switched off hard on one machine", () => {
@@ -193,7 +196,10 @@ describe("app/plans/page.tsx is wired to this module", () => {
   it("resolves a previewed card without a blocker and without a URL", () => {
     expect(source).toContain("mode.ignoreBlockers");
     const guard = source.indexOf("mode.ignoreBlockers) return");
-    const links = source.indexOf("links?.get(def.key)");
+    // The lookup is keyed per WAY TO PAY now (`offerRef`), so the needle moved
+    // from `def.key` to `ref` — the contract it pins did not: the preview is
+    // answered before anything hands out a URL.
+    const links = source.indexOf("links?.get(ref)");
     expect(guard).toBeGreaterThan(-1);
     // The preview must be answered BEFORE the branch that hands out a URL.
     expect(guard).toBeLessThan(links);

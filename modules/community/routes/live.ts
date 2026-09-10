@@ -45,12 +45,7 @@
 import { currentActiveUser } from "@/lib/authz";
 import { isCommunityEnabled } from "@/modules/community/lib/config";
 import { dmActorFrom } from "@/modules/community/lib/dm-actor";
-import {
-  liveAnswerFor,
-  type LiveScope,
-  type LiveScopeAnswer,
-  type PostRow,
-} from "@/modules/community/lib/manage";
+import { liveAnswerFor, type LiveScope, type LiveScopeAnswer } from "@/modules/community/lib/manage";
 import { wirePost } from "../lib/wire";
 
 // Sessions, the database and the entitlements seam — none of it runs on the

@@ -1,12 +1,11 @@
 // Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA
 // SPDX-License-Identifier: MIT
 
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { media, users } from "@/db/schema";
 import { communityProfiles } from "../schema";
-import { hasPlan } from "@/lib/entitlements/manage";
-import { acceptUpload, findMedia, mayAccess, type Viewer } from "@/lib/media/manage";
+import { findMedia, mayAccess, type Viewer } from "@/lib/media/manage";
 import { mediaUrlFor } from "@/lib/media/url";
 import { CommunityError, checkCommunityAbout, checkCommunityDisplayName } from "./rules";
 
@@ -138,15 +137,36 @@ export async function setProfileAvatar(
  * them in both subject-access exports, and shown by any renderer that uses
  * `row.alt`. A comment in the upload action used to claim the alt "follows a
  * rename"; it did not, and this is that claim made true.
+ *
+ * 🚨 **`ownerId` is optional in the signature and given at the call site.**
+ * The security review of 2026-08-18 (L-4) put this function beside
+ * `deleteMedia()` for the same reason: it addresses a `media` row by id alone,
+ * so a caller that ever passed a foreign `avatarMediaId` would rewrite somebody
+ * else's alternative text — a small write, but one this function has no way to
+ * refuse. It is safe today only because its one caller reads the id off the
+ * member's OWN profile row, which is a fact about the caller and not about this
+ * function; the next call site is reminded by nothing.
+ *
+ * With the owner named, the clause is part of the statement: a row that is not
+ * theirs matches nothing and the update is a no-op. Deliberately silent rather
+ * than a throw, unlike `deleteMedia()` — this runs as the TAIL of a rename that
+ * has already been saved, and turning a stale-picture edge case into a thrown
+ * error would report a successful rename as a failure. Nothing is lost when it
+ * matches nothing: the alt stays as it was.
  */
 export async function refreshAvatarAlt(
   avatarMediaId: string,
   displayName: string,
+  ownerId?: string,
 ): Promise<void> {
   await db
     .update(media)
     .set({ alt: displayName })
-    .where(eq(media.id, avatarMediaId));
+    .where(
+      ownerId
+        ? and(eq(media.id, avatarMediaId), eq(media.ownerId, ownerId))
+        : eq(media.id, avatarMediaId),
+    );
 }
 
 /**

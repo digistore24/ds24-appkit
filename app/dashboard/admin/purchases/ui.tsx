@@ -61,7 +61,7 @@ import {
   type PurchaseFilter,
   type RawSearchParams,
 } from "@/lib/digistore/purchase-filter";
-import { attachOrderAction, type ActionState } from "./actions";
+import { attachOrderAction } from "./actions";
 import { EMPTY_ACTION_STATE } from "@/lib/action-state";
 
 

@@ -9,7 +9,6 @@
 // that owns rows about a person owns the checks on them too, and a check left
 // behind in the core is one nobody looks at when the module changes.
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { blankComments } from "@/scripts/lib/source-text.mjs";

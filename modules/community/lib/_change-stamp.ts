@@ -1,8 +1,7 @@
 // Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA
 // SPDX-License-Identifier: MIT
 
-import { and, sql } from "drizzle-orm";
-import { db } from "@/db";
+import { sql } from "drizzle-orm";
 import { communityPosts } from "../schema";
 
 /**

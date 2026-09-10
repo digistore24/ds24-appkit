@@ -8,6 +8,8 @@ import {
   sellableProducts,
   formatPrice,
   intervalKey,
+  paymentOptionsOf,
+  type PaymentOption,
   type ProductDef,
 } from "@/lib/digistore/products";
 import { planSections, SECTION_TEXT } from "@/lib/digistore/plan-sections";
@@ -15,6 +17,7 @@ import {
   checkoutLinksFor,
   checkoutBlockersFor,
   blockerFor,
+  offerRef,
   type CheckoutBlocker,
 } from "@/lib/digistore/checkout";
 import {
@@ -66,23 +69,71 @@ const SETUP_HINTS: Record<CheckoutBlocker, string | undefined> = {
 // where a test holds every key against both language files — a missing key
 // would render as the raw key with nothing in the log.
 
+/**
+ * What a buy button says when an offering has more than one way to pay.
+ *
+ * The price IS the label there: two buttons both reading "Buy now" would ask
+ * the visitor to guess which one charges what. Composed from the same two
+ * pieces the headline uses, so no message key exists that only this reads —
+ * "19,00 € pro Monat", "190.00 € per year".
+ */
+function buyLabel(
+  option: PaymentOption,
+  locale: string,
+  t: (key: string) => string,
+): string {
+  const price = formatPrice(option, locale);
+  const key = option.billingInterval === "12_month" ? "perYear" : option.billingInterval === "1_month" ? "perMonth" : "oneTime";
+  return price ? `${price} ${t(key)}` : t("buy");
+}
+
 async function PlanCard({
   def,
-  blocker,
-  url,
+  buys,
   asForm,
 }: {
   def: ProductDef;
-  blocker: CheckoutBlocker | null;
-  url: string | null;
+  /** One entry per WAY TO PAY — monthly, yearly. Usually exactly one. */
+  buys: Array<{
+    option: PaymentOption;
+    blocker: CheckoutBlocker | null;
+    url: string | null;
+  }>;
   /** Click-time form instead of the shared link — signed in, or previewing. */
   asForm: boolean;
 }) {
   const t = await getTranslations("plans");
   const locale = await getLocale();
 
-  const price = formatPrice(def, locale);
-  const interval = intervalKey(def);
+  // 🚨 ONE CARD PER OFFERING, one button per way to pay — not one card per
+  // price. Monthly and yearly are the same product, the same Product Key and
+  // the same entitlement; two cards would say they are two things to buy, and
+  // that is exactly the misreading the old registry taught (and that made
+  // every access gate have to name both).
+  //
+  // No client-side toggle, deliberately. The buy control has to work in a
+  // plain POST — the same reason the auto-top-up consent below is a native
+  // checkbox — and a switcher that needs JavaScript would decide the price of
+  // a purchase.
+  const several = buys.length > 1;
+  // ⚠️ The headline names the CHEAPEST way to pay, prefixed "from" — never the
+  // recommended one. A card whose big number was the yearly price while its
+  // first button said the monthly one asks the reader to reconcile two prices
+  // for the same thing; `highlight` decides which BUTTON leads, and nothing
+  // else. Where there is only one way to pay, the prefix is absent and this
+  // reads exactly as it always did.
+  const lead = several
+    ? buys.reduce((a, b) =>
+        (b.option.priceCents ?? Infinity) < (a.option.priceCents ?? Infinity)
+          ? b
+          : a,
+      ).option
+    : buys[0]?.option;
+  const price = lead ? formatPrice(lead, locale) : null;
+  const interval = lead ? intervalKey(def, lead) : null;
+  // Whether a product exists and whether there is an API key are questions
+  // about the OFFERING, so every way to pay carries the same answer.
+  const blocker = buys[0]?.blocker ?? null;
 
   return (
     <Card className={cn("flex flex-col", def.highlight && "border-primary")}>
@@ -99,11 +150,14 @@ async function PlanCard({
         </div>
 
         <p className="flex items-baseline gap-2">
+          {several && price && (
+            <span className="text-muted-foreground text-sm">{t("from")}</span>
+          )}
           <span className="text-3xl font-semibold">
             {price ?? t("onRequest")}
           </span>
           <span className="text-muted-foreground text-sm">
-            {interval ? t(interval) : def.billingInterval}
+            {interval ? t(interval) : (lead?.billingInterval ?? "")}
           </span>
         </p>
 
@@ -132,12 +186,24 @@ async function PlanCard({
               </>
             )}
           </p>
-        ) : asForm ? (
+        ) : (
+          <div className="mt-auto flex flex-col gap-3">
+            {buys.map(({ option, url }) =>
+              asForm ? (
           // Signed in: the checkout is built on click, not on render, so it
-          // can carry the identity that names this Member. `mt-auto`
-          // sits on the form — it is what keeps the card footers aligned.
-          <form action={startCheckoutAction} className="mt-auto flex flex-col gap-3">
+          // can carry the identity that names this Member.
+          <form
+            key={option.key}
+            action={startCheckoutAction}
+            className="flex flex-col gap-3"
+          >
             <input type="hidden" name="planKey" value={def.key} />
+            {/* WHICH way to pay. A field of its own rather than a suffix on
+                planKey, so everything that reads a Product Key out of a form
+                keeps reading a Product Key. The server refuses a value the
+                offering does not have — this is an HTTP endpoint, and a
+                tampered option must not resolve to a cheaper price. */}
+            <input type="hidden" name="optionKey" value={option.key} />
             {/* Only for packages, and only for a signed-in buyer. A
                 subscription has no balance to keep topped up, and the
                 signed-OUT path serves a SHARED cached link (AD-6/AD-7) which
@@ -186,16 +252,31 @@ async function PlanCard({
                 </div>
               </div>
             )}
-            <Button type="submit" size="lg" className="w-full">
-              {t("buy")}
+            <Button
+              type="submit"
+              size="lg"
+              variant={several && !option.highlight ? "outline" : "default"}
+              className="w-full"
+            >
+              {several ? buyLabel(option, locale, t) : t("buy")}
             </Button>
           </form>
-        ) : (
+              ) : (
           // Signed out: nobody to name, so the shared cached link is used —
           // that is what keeps the public page free of Digistore24 calls.
-          <Button asChild size="lg" className="mt-auto">
-            <a href={url ?? "#"}>{t("buy")}</a>
+          <Button
+            key={option.key}
+            asChild
+            size="lg"
+            variant={several && !option.highlight ? "outline" : "default"}
+          >
+            <a href={url ?? "#"}>
+              {several ? buyLabel(option, locale, t) : t("buy")}
+            </a>
           </Button>
+              ),
+            )}
+          </div>
         )}
       </CardContent>
     </Card>
@@ -272,14 +353,19 @@ export default async function PlansPage({
     ? await checkoutLinksFor(defs, {}, locale)
     : null;
 
-  const cardFor = (def: ProductDef): { blocker: CheckoutBlocker | null; url: string | null } => {
-    // The preview shows the form and NEVER a URL — an invented address is the
-    // dead link this page exists to refuse.
-    if (mode.ignoreBlockers) return { blocker: null, url: null };
-    if (blockers) return { blocker: blockerFor(blockers, def.key), url: null };
-    const link = links?.get(def.key) ?? { url: null, blocker: "error" as const };
-    return { blocker: link.blocker ?? null, url: link.url };
-  };
+  // One row per WAY TO PAY. `offerRef` keeps a single-option offering on its
+  // bare Product Key, so nothing about the common case changed.
+  const buysFor = (def: ProductDef) =>
+    paymentOptionsOf(def).map((option) => {
+      const ref = offerRef(def.key, option.key);
+      // The preview shows the form and NEVER a URL — an invented address is
+      // the dead link this page exists to refuse.
+      if (mode.ignoreBlockers) return { option, blocker: null, url: null };
+      if (blockers)
+        return { option, blocker: blockerFor(blockers, ref), url: null };
+      const link = links?.get(ref) ?? { url: null, blocker: "error" as const };
+      return { option, blocker: link.blocker ?? null, url: link.url };
+    });
 
   return (
     <>
@@ -356,7 +442,7 @@ export default async function PlansPage({
                 <PlanCard
                   key={def.key}
                   def={def}
-                  {...cardFor(def)}
+                  buys={buysFor(def)}
                   asForm={mode.asForm}
                 />
               ))}

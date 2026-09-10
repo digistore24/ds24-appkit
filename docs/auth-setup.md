@@ -53,9 +53,13 @@ Two consequences worth knowing before you go looking for them:
   quarter hour per origin** — the second catches one password sprayed across
   many accounts from one source, which the per-address counter cannot see
   because it only ever gets one hit per address. The origin comes from
-  `x-forwarded-for`, so it is only meaningful behind a proxy that overwrites
-  that header, which every hoster this template targets does; without one the
-  limit simply does not engage. Then: requests to
+  `x-forwarded-for`, read from the RIGHT — see *Who the caller is* in
+  [`DEPLOY.md`](DEPLOY.md), and set `TRUSTED_CLIENT_IP_HEADER` or
+  `TRUSTED_PROXY_HOPS` for your host.
+  🚨 This paragraph used to say the header was safe because "every hoster this
+  template targets" overwrites it. **That was never measured and it is false** —
+  no target host overwrites it. Corrected 2026-09-10; without the right setting
+  the limit is forgeable and simply does not engage. Then: requests to
   change an address, three per hour — counted per account *and* per target
   address, so the same mailbox cannot be hit again from the next account; and
   address *lookups*, twenty per hour per account, which meters the "that address

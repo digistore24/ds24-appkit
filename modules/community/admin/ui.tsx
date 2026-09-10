@@ -103,7 +103,6 @@ import {
   reorderGroupsAction,
   setGroupArchivedAction,
   updateGroupAction,
-  type ActionState,
 } from "./actions";
 import { EMPTY_ACTION_STATE } from "@/lib/action-state";
 
@@ -427,7 +426,6 @@ function ModeratorsDialog({
 }) {
   const t = useTranslations("communityAdmin");
   const tCommunity = useTranslations("community");
-  const tCommon = useTranslations("common");
   const [assignState, assign, assigning] = useActionState(
     assignModeratorAction,
     EMPTY_ACTION_STATE,

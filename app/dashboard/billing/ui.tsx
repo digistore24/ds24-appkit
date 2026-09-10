@@ -8,7 +8,7 @@
 // cancel the subscription. All three actions are just deep links to DS24's own
 // pages — the data was captured from the IPN (lib/digistore/member-billing.ts).
 import { useTranslations, useFormatter } from "next-intl";
-import { CreditCard, Download, Receipt, XCircle } from "lucide-react";
+import { CreditCard, Download, Receipt, RefreshCw, XCircle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -127,13 +127,28 @@ export function BillingList({ orders }: { orders: Row[] }) {
             </div>
 
             {/* Manage — DS24-hosted */}
-            {(order.renewUrl || order.rebillingStopUrl) && (
+            {(order.renewUrl ||
+              order.rebillingStopUrl ||
+              order.switchIntervalUrl) && (
               <div className="flex flex-wrap gap-2 border-t pt-4">
                 {order.renewUrl && (
                   <Button variant="outline" size="sm" asChild>
                     <a href={order.renewUrl} {...EXTERNAL}>
                       <CreditCard />
                       {t("updatePayment")}
+                    </a>
+                  </Button>
+                )}
+                {/* Digistore24's own interval switch. It exists only because
+                    the product carries one payment plan per way to pay, and it
+                    is why this app builds no upgrade flow of its own: the
+                    member changes it over there and the change comes back as
+                    an ordinary rebill, on the same Product Key. */}
+                {order.switchIntervalUrl && (
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={order.switchIntervalUrl} {...EXTERNAL}>
+                      <RefreshCw />
+                      {t("switchInterval")}
                     </a>
                   </Button>
                 )}

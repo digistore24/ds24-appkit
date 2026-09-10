@@ -56,6 +56,7 @@ import {
 import { defaultReloadThreshold } from "@/lib/tokens/rules";
 import { normalizeEmail } from "@/lib/users/rules";
 import { invoiceRowFromIpn } from "./member-billing";
+import { ds24HttpsUrlOrNull } from "./safe-url";
 
 export async function onPaymentEvent(body: IpnParams): Promise<void> {
   // Every field read here is one Digistore24 really sends —
@@ -163,8 +164,10 @@ export async function onPaymentEvent(body: IpnParams): Promise<void> {
         currency: body["currency"] || null,
         isGdprCountry: gdpr === "Y" ? true : gdpr === "N" ? false : null,
         // DS24-hosted management links, shown to the member on /dashboard/billing.
-        rebillingStopUrl: body["rebilling_stop_url"] || null,
-        renewUrl: body["renew_url"] || null,
+        // The scheme whitelist — these two reach an `href` on the billing page.
+        // See ./safe-url for why the check is here and not only on the API path.
+        rebillingStopUrl: ds24HttpsUrlOrNull("rebilling_stop_url", body["rebilling_stop_url"]),
+        renewUrl: ds24HttpsUrlOrNull("renew_url", body["renew_url"]),
       })
       .onConflictDoUpdate({
         target: orders.ds24OrderId,
@@ -390,6 +393,10 @@ export async function onPaymentEvent(body: IpnParams): Promise<void> {
       memberId,
       body,
       nextPayment,
+      // Which way to pay — from the pair WE wrote at checkout, because the
+      // payload does not carry the answer (see the column's comment in
+      // db/schema-tokens.ts). Display only.
+      parsed?.kind === "identity" ? parsed.optionKey : undefined,
     );
   } else if (nextPayment.kind === "clear" && purchaseId) {
     // The exception, and it is the case §D3 is about. `on_refund` and
@@ -578,6 +585,26 @@ async function findMembersByEmail(rawEmail: string | null): Promise<string[]> {
  * synced. The order still keeps its `ds24ProductId`, so it stays recoverable
  * by hand (Story 1.7) once `node run.mjs ds24-sync` has run. NEVER invent a key: for
  * an entitlement a guessed key means granting the wrong plan.
+ *
+ * ── 🚨 The named key is CHECKED against the charged one ────────────────────
+ *
+ * Source 1 decides what is granted and how many tokens are credited. Until
+ * 2026-09-10 it simply won, and `product_id` — Digistore24's own statement of
+ * what it charged — was never held against it. `body["amount"]` is read twice
+ * in this file and both times only logged, so the price was not a second
+ * opinion either.
+ *
+ * Whether that was reachable is a fact about somebody else's system and cannot
+ * be settled from here: `lib/digistore/buyUrl.ts` sets `tracking[custom]`
+ * server-side in the `createBuyUrl` call and the URL comes back from
+ * Digistore24, which is the defence. Whether a `custom` appended to that
+ * checkout link overrides the merchant's value is Digistore24's behaviour.
+ * The API source in the factory shows `tracking[custom]` being carried as
+ * `merchant_custom`, which is consistent with "the merchant's value" and does
+ * not prove the override is impossible. So this comparison is depth, not a
+ * patch — and it is the only layer between that open question and granting the
+ * expensive plan for the cheap one's money. See docs/digistore-integration.md
+ * for the question and its date.
  */
 function resolveProduct(
   body: IpnParams,
@@ -589,13 +616,37 @@ function resolveProduct(
       : parsed?.kind === "legacyToken"
         ? parsed.productKey
         : undefined;
+
+  const charged = productByDs24Id(body["product_id"]);
+
   if (named) {
     const def = safeProduct(named);
-    if (def) return { key: def.key, kind: def.kind };
+    // The named key stands only when it IS the product Digistore24 charged.
+    // No `charged` at all → believe the name: that is the not-yet-synced
+    // product and the product sold outside this registry, both described above.
+    if (def && (!charged || charged.key === def.key)) {
+      return { key: def.key, kind: def.kind };
+    }
+    if (def && charged) {
+      // ⚠️ `console.error` WITH an Error object, and not `console.warn`.
+      // `lib/diagnostics/parse.mjs` keys on the error shape — a bare warn is
+      // invisible to `node run.mjs errors`, which is how the original IPN
+      // defect stayed unseen for a year.
+      console.error(
+        `[ipn] custom names "${def.key}" but Digistore24 charged product_id ` +
+          `${body["product_id"]} ("${charged.key}") — using the charged one`,
+        new Error("product key mismatch between custom and product_id"),
+      );
+      return { key: charged.key, kind: charged.kind };
+    }
   }
 
-  const byId = productByDs24Id(body["product_id"]);
-  return byId ? { key: byId.key, kind: byId.kind } : null;
+  // 🚨 Not an else. This is step 2 and it stays reachable on its own: an
+  // ANONYMOUS purchase carries no `custom`, and without this line its
+  // `orders.productKey` is NULL forever and the order can never become a
+  // grant. Whoever "simplifies" this by reversing the order above fixes one
+  // finding and breaks anonymous purchases.
+  return charged ? { key: charged.key, kind: charged.kind } : null;
 }
 
 /**
@@ -644,15 +695,20 @@ async function upsertSubscription(
   memberId: string | null,
   body: IpnParams,
   nextPayment: NextPaymentUpdate,
+  optionKey: string | undefined,
 ): Promise<void> {
   const now = new Date();
   const billingInterval =
     body["other_billing_intervals"] || null;
   const managementUrls = {
-    renewUrl: body["renew_url"] || null,
-    rebillingStopUrl: body["rebilling_stop_url"] || null,
-    invoiceUrl: body["invoice_url"] || body["receipt_url"] || null,
+    renewUrl: ds24HttpsUrlOrNull("renew_url", body["renew_url"]),
+    rebillingStopUrl: ds24HttpsUrlOrNull("rebilling_stop_url", body["rebilling_stop_url"]),
+    invoiceUrl: ds24HttpsUrlOrNull("invoice_url", body["invoice_url"] || body["receipt_url"]),
     supportUrl: body["support_url"] || null,
+    // Digistore24's own interval switch for this purchase. It arrives on the
+    // payment and not on later events, so it is fill-only below like the rest
+    // of them.
+    switchIntervalUrl: body["switch_pay_interval_url"] || null,
   };
   await db
     .insert(subscriptions)
@@ -664,6 +720,7 @@ async function upsertSubscription(
       buyerEmail,
       status,
       billingInterval,
+      paymentOption: optionKey ?? null,
       amount: body["amount"] || null,
       currency: body["currency"] || null,
       // On INSERT `keep` and `clear` mean the same thing: there is nothing to
@@ -676,6 +733,10 @@ async function upsertSubscription(
       set: {
         status,
         billingInterval,
+        // Fill only: a rebill a year on carries no `custom` of its own on
+        // every payload shape, and overwriting a known way to pay with
+        // nothing would lose the answer for good.
+        ...(optionKey ? { paymentOption: optionKey } : {}),
         // §D3, and the ONE field of this mirror that is deliberately NOT
         // fill-only. `clear` writes NULL over a date that is already there —
         // after a cancellation the stored day names a charge that will never be
@@ -702,6 +763,9 @@ async function upsertSubscription(
           : {}),
         ...(managementUrls.supportUrl
           ? { supportUrl: managementUrls.supportUrl }
+          : {}),
+        ...(managementUrls.switchIntervalUrl
+          ? { switchIntervalUrl: managementUrls.switchIntervalUrl }
           : {}),
         updatedAt: now,
       },

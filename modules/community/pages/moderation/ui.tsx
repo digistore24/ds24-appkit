@@ -31,7 +31,6 @@ import {
 } from "@/components/ui/dialog";
 import { MAX_MODERATION_REASON_LENGTH } from "@/modules/community/lib/rules";
 
-import type { ActionState } from "../actions";
 import { removePostAction, setLockedAction } from "./actions";
 import { EMPTY_ACTION_STATE } from "@/lib/action-state";
 

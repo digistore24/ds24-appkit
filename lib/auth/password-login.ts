@@ -20,32 +20,32 @@
 import Credentials from "next-auth/providers/credentials";
 import type { Provider } from "next-auth/providers";
 
+import { clientAddress } from "@/lib/setup/rules";
+
 /**
  * Where an attempt came from, for the origin-keyed rate limit.
  *
- * `x-forwarded-for` is a header, so it is whatever the sender wrote — trusting
- * it blindly would let an attacker mint a fresh identity per request and defeat
- * the very limit it feeds. It is used anyway, and here is why that is sound:
- * the app runs behind a proxy that OVERWRITES it (Railway, Render, Fly all do),
- * so the value that arrives is the proxy's, not the client's. Only the FIRST
- * entry is taken — the leftmost is the original client, and anything appended
- * after it is noise a client could have supplied.
+ * 🚨 **The reading itself is NOT here any more.** It used to be, and it said the
+ * app "runs behind a proxy that OVERWRITES it (Railway, Render, Fly all do)" —
+ * which was never measured and is false for all three. Checked against the
+ * vendors' own words on 2026-09-10; the evidence and the two dials that replace
+ * the claim are written out at `clientAddress()` in `lib/setup/rules.ts`, and
+ * `docs/DEPLOY.md` carries the per-host table. There were three copies of this
+ * reading in the tree, two of them called `callerKey`, and they did not agree
+ * with each other — which is how they came to disagree with reality too.
  *
- * The failure mode if an operator does put this app on the open internet
- * without a proxy: the limit becomes forgeable and stops helping. It never
- * becomes a way IN — no decision here grants anything, it only withholds.
+ * What stays true and is the reason this is a MEDIUM and not worse: no decision
+ * downstream grants anything. It only withholds. A forgeable key makes the
+ * brake useless; it never makes it a way in.
  *
- * Exported so the sign-in dialog's step-1 lookup (app/login/actions.ts) reads
- * the header through THIS function rather than through a second, subtly
- * different one. It takes `unknown` because its two callers hand it different
- * things — an Auth.js request here, a `Headers` object there.
+ * This wrapper survives because its two callers hand it different things — an
+ * Auth.js request here, a `Headers` object in `app/login/actions.ts` — and
+ * because both want `null` rather than the `"unknown"` bucket `callerKey()`
+ * falls back to.
  */
 export function originOf(request: unknown): string | null {
   const headers = (request as { headers?: Headers } | undefined)?.headers;
-  if (!headers || typeof headers.get !== "function") return null;
-  const forwarded = headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0]!.trim() || null;
-  return headers.get("x-real-ip")?.trim() || null;
+  return clientAddress(headers);
 }
 
 export function buildPasswordProvider(): Provider {

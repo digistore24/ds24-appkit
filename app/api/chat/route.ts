@@ -31,5 +31,11 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ type: "error", code: "chatUnavailable" }, { status: 401 });
   }
 
-  return runChatRequest({ memberId, request, locale: await getUserLocale() });
+  return runChatRequest({
+    memberId,
+    request,
+    locale: await getUserLocale(),
+    // The session knows; nothing downstream re-derives it. See runChatRequest.
+    impersonating: Boolean(current.session.user.impersonation),
+  });
 }

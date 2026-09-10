@@ -118,11 +118,81 @@ export function isRealEnvironment(value?: string): boolean {
 }
 
 /**
+ * The server's own environment, refusing the empty case (AD-76).
+ *
+ * `appEnv("")` returns `"development"`, which is right everywhere else —
+ * somebody who never wrote the variable is somebody on a laptop. For a decision
+ * about SECURITY it is not: a deployed host whose `APP_ENV` never made it into
+ * the secrets would be handed every relaxation DEV gets. So "unset" is a third
+ * state, and it is the dangerous one.
+ *
+ * 🚨 It lives HERE, next to `appEnv()`, and `lib/setup/rules.ts` re-exports it.
+ * It was born there (AD-76) and `checkEnvironment()` below needs it too — but
+ * `instrumentation.ts` imports this file into the EDGE runtime, and
+ * `lib/setup/rules.ts` pulls `node:crypto` in with it. Two functions that agree
+ * today is the other way to get this wrong, so there is one, and it is in the
+ * file that carries no imports worth dragging.
+ */
+export function serverEnv(raw: string | undefined): AppEnv | null {
+  if (typeof raw !== "string" || raw.trim() === "") return null;
+  return appEnv(raw);
+}
+
+/**
+ * true if the URL points at this machine.
+ *
+ * 🚨 An ABSENT `APP_URL` is not local. It used to be — `if (!appUrl) return
+ * true`, in two copies of this function — and it made a missing variable open
+ * the development login, the test purchase and the preview on a host that had
+ * simply lost its environment. Same reasoning as `serverEnv()` right above:
+ * unset is a third state and it is the dangerous one, so the answer for it is
+ * the strict one. Whoever runs locally without `APP_URL` in `.env` now loses
+ * dev-login, testpay and preview until they set it — `.env.example` ships it.
+ *
+ * It lives here rather than in `lib/auth/dev-login.ts` because
+ * `lib/auth/cookie-names.ts` had grown a private copy with the comment "(same
+ * as lib/auth/dev-login.ts)", and a copy that says it agrees is a copy nobody
+ * updates. cookie-names is loaded by the edge-side auth config, so it cannot
+ * import dev-login (which pulls `lib/email` in) — this file it already imports.
+ */
+export function isLocalUrl(appUrl?: string): boolean {
+  if (!appUrl) return false;
+  try {
+    // ⚠️ `URL.hostname` hands an IPv6 literal back WITH its brackets — "[::1]",
+    // not "::1". Both copies of this function compared against "::1" and
+    // therefore never matched: `http://[::1]:3000` has been reading as a
+    // foreign host since the line was written. Noticed while making the two
+    // copies one, which is when that gets noticed. Recognising it is a
+    // widening, and a deliberate one: `::1` is this machine by definition, and
+    // the code already said it meant to accept it.
+    const host = new URL(appUrl).hostname.replace(/^\[|\]$/g, "");
+    return host === "localhost" || host === "127.0.0.1" || host === "::1";
+  } catch {
+    return false; // unparseable → refuse, when in doubt
+  }
+}
+
+/**
  * Checks the environment and returns the list of violations (empty = fine).
  * A pure function, so it can be tested on its own in lib/env-guard.test.ts.
  */
 export function checkEnvironment(env: EnvCheckInput): string[] {
   const problems: string[] = [];
+
+  // 🚨 FIRST, and before anything is normalised: unset is not "development",
+  // it is a host that has lost its environment — and then every rule below
+  // falls away with it, including the APP_URL rule. Measured 2026-08-18: with
+  // APP_ENV and APP_URL commented out, `node run.mjs start` came up without a
+  // word and `/api/auth/providers` still offered dev-login.
+  if (!serverEnv(env.APP_ENV)) {
+    return [
+      "APP_ENV is not set. It decides which environment's rules apply; unset, " +
+        "it resolves to 'development' and every rule below is skipped — " +
+        "including the APP_URL rule. Set APP_ENV=development locally (it is in " +
+        ".env.example) or staging/production on a host.",
+    ];
+  }
+
   const environment = appEnv(env.APP_ENV);
 
   if (environment === "development") return problems;

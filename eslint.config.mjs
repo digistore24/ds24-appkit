@@ -43,6 +43,31 @@ const eslintConfig = [
       // freshly deployed app. As a warning it stays visible — whoever writes a
       // NEW effect that sets state should take it seriously.
       "react-hooks/set-state-in-effect": "warn",
+
+      // 🚨 A leading underscore means "deliberately unused", and this tree has
+      // said so for a long time — `_prev` and `_formData` on every Server
+      // Action that ignores its previous state, `_gone` and `_dropped` where a
+      // destructuring documents what was thrown away, `_id`/`_name` on an
+      // `it.each` label. Without this line the linter reported all of them, and
+      // eighteen warnings about a convention being followed CORRECTLY is how
+      // the other hundred stopped being read.
+      //
+      // The four patterns are the four places a binding can be unused, and all
+      // four are listed on purpose: leaving one out means the convention holds
+      // in three places and silently fails in the fourth. `args: "all"` rather
+      // than the default "after-used" for the same reason — a leading
+      // parameter that exists only for its position is exactly the case the
+      // underscore is for, and the default would let it through unnamed.
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          args: "all",
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+          destructuredArrayIgnorePattern: "^_",
+        },
+      ],
     },
   },
 ];

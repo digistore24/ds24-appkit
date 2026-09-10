@@ -56,7 +56,7 @@ import { streamTaskWithTools, type ServerTool } from "@/lib/ai/tool-loop";
 import { retriever } from "@/lib/ai/retriever";
 import { runTool } from "@/lib/ai/run-tool";
 import { TOOLS } from "@/lib/ai/tools";
-import { spendTokens } from "@/lib/tokens/spend";
+import { spendTokensAs } from "@/lib/tokens/spend";
 import {
   CHAT_RATE_BUCKET,
   chatLimit,
@@ -89,7 +89,11 @@ const CHAT_TOOL_DEFINITIONS = TOOLS.filter((tool) =>
   inputSchema: tool.inputSchema,
 }));
 
-function chatToolsFor(memberId: string, links: LinkLedger): ServerTool[] {
+function chatToolsFor(
+  memberId: string,
+  impersonating: boolean,
+  links: LinkLedger,
+): ServerTool[] {
   return CHAT_TOOL_DEFINITIONS.map((definition) => ({
     definition,
     execute: async (input) => {
@@ -99,9 +103,16 @@ function chatToolsFor(memberId: string, links: LinkLedger): ServerTool[] {
         // Action's would be. Today's four content tools are all read-only;
         // the scope matters the day somebody registers a charging tool here.
         scope: "write",
-        // `spendTokens` authenticates the session — so a charging tool bills
-        // the member in person, with a Server Action's guarantee.
-        spend: (amount, note) => spendTokens({ amount, note }),
+        // 🚨 The payer is the member THIS DOOR authenticated, never the
+        // cookie. `runChatRequest()` is entered from two of them — the web
+        // route with a session and the API module's with a bearer key — and
+        // `spendTokens()` re-derives the payer from the session, so a request
+        // carrying a bearer key for one member and a cookie for another did
+        // the work for the first and charged the second. Finding L-10,
+        // 2026-08-18; unreachable while every registered tool is read-only,
+        // armed the day one of them charges.
+        spend: (amount, note) =>
+          spendTokensAs({ memberId, impersonating, amount, note }),
         // THIS request's link ledger — the set of pages this one answer may
         // point at. Bound here for the same reason `spend` is: it belongs to
         // one request, and a tool must have no way to reach another's.
@@ -134,8 +145,19 @@ export async function runChatRequest(args: {
   request: Request;
   /** The reader's language, for the answer. The web door reads the cookie. */
   locale: Locale;
+  /**
+   * 🚨 Whether an operator is signed in AS this member — **from the door**.
+   *
+   * There are two doors and only they can answer: the web route reads it off
+   * the session, the API module's bearer-key route has no session and it is
+   * always false there. It travels this far because the only thing it guards is
+   * the auto top-up carve-out at the spend (`lib/tokens/spend.ts`), and a
+   * function that re-derived it from the cookie would be re-deriving the payer
+   * too — which was finding L-10.
+   */
+  impersonating: boolean;
 }): Promise<Response> {
-  const { memberId, request, locale } = args;
+  const { memberId, request, locale, impersonating } = args;
 
   // 1. Is the feature on at all? Cheap, and it is the answer for an app that
   //    ships with the chat switched off.
@@ -271,7 +293,7 @@ export async function runChatRequest(args: {
         for await (const event of streamTaskWithTools(
           "chat",
           { system, messages: history, memberId },
-          chatToolsFor(memberId, links),
+          chatToolsFor(memberId, impersonating, links),
         )) {
           // Drain FIRST, before anything else in this iteration is sent. A
           // marker is offered inside a tool's `execute()`, which has already

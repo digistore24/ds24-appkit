@@ -26,7 +26,7 @@
 // second, looser notion of "new" would eventually contradict the first.
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { normalizeText, planUpdate, writable } from "./update-plan.mjs";
+import { guidanceWritable, normalizeText, planUpdate } from "./update-plan.mjs";
 
 const CACHE = ".dev/update-check.json";
 const DAY = 24 * 60 * 60 * 1000;
@@ -136,7 +136,14 @@ export async function updateAvailable(now = Date.now()) {
     const result = {
       checkedAt: now,
       version: remote.version ?? "?",
-      available: writable(planUpdate({ local, remote: remote.files ?? {}, codeVersion })).length,
+      // guidanceWritable, the same rule `update` writes by: a manifest offering
+      // a path outside the guidance tree is one `update` refuses whole, so
+      // counting its files here would advertise an update that cannot happen.
+      // It throws, the catch below turns that into `null`, and the greeting says
+      // nothing — which is this function's answer to everything it cannot
+      // decide, and the right one in front of every session.
+      available: guidanceWritable(planUpdate({ local, remote: remote.files ?? {}, codeVersion }))
+        .length,
     };
     remember(result);
     return result.available > 0 ? result : null;

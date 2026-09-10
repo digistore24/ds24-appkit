@@ -73,8 +73,11 @@ export default async function OpengraphImage() {
         }}
       >
         {mark ? (
-          // eslint-disable-next-line @next/next/no-img-element -- satori renders
-          // to a PNG; there is no Next image pipeline inside an ImageResponse.
+          // satori renders to a PNG; there is no Next image pipeline inside an
+          // ImageResponse. (The rule does not fire here at all — an
+          // `ImageResponse` is not a page — so there is no directive: an unused
+          // one is itself a warning, and a suppression nobody needs is a
+          // suppression nobody can tell from one that stopped working.)
           <img src={mark} width={112} height={112} alt="" style={{ borderRadius: 24 }} />
         ) : (
           <div />

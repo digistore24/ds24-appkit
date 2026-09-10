@@ -34,11 +34,81 @@ useDefault = true
 # change: with default rules the key is reported in lib/digistore/config.mjs
 # (`generic-api-key`), with this file it is not — so the exemption still does
 # something, which is the half worth checking.
+# ⚠️ `condition = "AND"` since 2026-09-10. Before that gitleaks ORed the value
+# and the paths, which made those three files a BLANKET exemption — a real key
+# pasted into `config.mjs` would have been invisible. That is exactly the
+# mistake `scripts/security/patterns.mjs` describes at its own counterpart.
+# Needle probe 2026-09-10: the developer key stays silent, a `ghp_` token on the
+# next line of the same file is reported.
 [[allowlists]]
 description = "Eingebauter DS24-Developer-Key (Client-ID-Rolle, keine Rechte)"
+condition = "AND"
 regexes = ["1706550-aASzoSnqcChueKmMDBvcwqUWvOqnfhXTncfkTN6X"]
 paths = [
   '''lib/digistore/config\.mjs''',
   '''scripts/ds24/connect-api-key\.mjs''',
   '''scripts/security/patterns\.mjs''',
+]
+
+# ── The knowledge stamp ───────────────────────────────────────────────────
+#
+# `.template-version` is what `scripts/knowledge-stamp.mjs` writes: an object of
+# `"<path>": "<sha256>"` and nothing else. gitleaks' `generic-api-key` rule sees
+# a credential in every one of those hashes — measured 2026-09-10, that was
+# **49 of the 64** HIGH findings the history rung reported on a freshly stamped
+# tree. A gate that reports like that does not get read, it gets clicked away.
+#
+# 🚨 `condition = "AND"`, and that is a measurement rather than a preference.
+# Without the line gitleaks ORs `paths` and `regexes` — the file would be
+# exempt WHOLESALE and a real secret inside it invisible. **`matchCondition` is
+# the wrong spelling**: gitleaks 8.30.1 accepts it without a word, ignores it,
+# and leaves you with the blanket exemption you were trying to avoid. Needle
+# probe 2026-09-10 in a throwaway repository, with a real `ghp_` token sitting
+# in `.template-version`:
+#   `matchCondition = "AND"` → token NOT reported (blanket exemption)
+#   `condition = "AND"`      → token reported, the hashes silent. ✅
+[[allowlists]]
+description = "Knowledge stamp — SHA-256 hashes, only inside .template-version"
+condition = "AND"
+paths = ['''(^|/)\.template-version$''']
+regexes = ['''^[0-9a-f]{64}$''']
+
+# ── The eleven other values `generic-api-key` matches ─────────────────────
+#
+# Measured 2026-09-10 over this tree's whole history: after the stamp exemption
+# above, exactly eleven distinct values were left, and **none of them is a
+# secret**. Three are identifiers or prose the rule should never have matched;
+# eight are test fixtures whose invented-ness is visible on the face of them.
+#
+# ⚠️ The list binds VALUES, not paths, and that is deliberate.
+# `cookie-namen.test.ts` no longer exists — a path entry would have gone on
+# reporting the finding out of the history while exempting the file's real code.
+# The value is what was judged here.
+#
+# Re-measure when the list looks stale:
+#   gitleaks git . --config .gitleaks.toml --report-format json \
+#     --report-path /tmp/g.json && jq -r '.[].Secret' /tmp/g.json | sort -u
+[[allowlists]]
+description = "Identifiers, prose and test fixtures — eleven measured false positives"
+regexes = [
+  # Identifiers and prose: a column name from the first migration, a field name
+  # in a skill's documentation, two words out of a skill description.
+  '''^ds24_purchase_id$''',
+  '''^ds24PurchaseId$''',
+  '''^IPN/signature$''',
+  # The redacted placeholder in the IPN test vectors (lib/digistore/ipn-vectors.json).
+  # That file is byte-identical to the Skill Pack's copy and must not change, so
+  # the value is exempted here rather than rewritten there.
+  '''^ABCDEFGHI1234$''',
+  # The two examples `redactLine()` proves itself against. A redaction test with
+  # no credential-shaped input tests nothing.
+  '''^ds24api_AbC-123_xyz$''',
+  '''^sk-proj-AbCdEfGh12345678$''',
+  # Test fixtures. Every value either counts up in plain sight or says in its
+  # own name what it is.
+  '''^0123456789abcdef0123456789abcdef$''',
+  '''^diagnostics-secret-0123456789abcdef$''',
+  '''^prod-secret-0123456789abcdef$''',
+  '''^abcdef123456$''',
+  '''^d8e5ee724d6e168d53bbdd045cbadac6$''',
 ]

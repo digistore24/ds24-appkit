@@ -300,6 +300,10 @@ const NOT_FOREIGN_CONFIG = new Set([
   "README.md",
   "auth.config.test.ts",
   "auth.config.ts",
+  // The test BESIDE next.config.ts, added with the security headers on
+  // 2026-09-10. It is ours; `next.config.ts` itself is in the inventory below
+  // as foreign config that this tree loads.
+  "next.config.test.ts",
   "auth.ts",
   "instrumentation.ts",
   "proxy.test.ts",

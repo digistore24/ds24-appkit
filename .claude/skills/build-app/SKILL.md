@@ -450,7 +450,7 @@ slots are Step 1f's answer, written down rather than left in the transcript.
 
 Three rules about it:
 
-- **Access is quoted, not described.** `hasPlan(memberId, "basic_monthly")`, not
+- **Access is quoted, not described.** `hasPlan(memberId, "basic")`, not
   "only for paying customers". The next session has to be able to read the gate
   off the line without opening the page.
 - **A decision AGAINST is a decision.** "No pictures in the messages" belongs

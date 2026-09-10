@@ -17,7 +17,7 @@
 import { guardApi } from "@/modules/api/api/guard";
 import { apiError, apiJson } from "@/modules/api/api/rules";
 
-import { blockById, completedSlugsFor, submissionFor, unitBySlug } from "../lib/manage";
+import { completedSlugsFor, submissionFor } from "../lib/manage";
 import { isUnlocked } from "../rules";
 
 import { unitViewer } from "./viewer";

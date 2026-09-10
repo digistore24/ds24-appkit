@@ -2,13 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 import { cache } from "react";
-import { and, count, isNull, or } from "drizzle-orm";
+import { isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { media } from "@/db/schema";
 import { communityGroups } from "../schema";
 import { hasPlan } from "@/lib/entitlements/manage";
 import { planProblem } from "@/lib/media/config";
-import { mayAccess } from "@/lib/media/manage";
 import { mayEnterGroup, planKeysToResolve } from "./rules";
 
 export async function grantedKeysFor(

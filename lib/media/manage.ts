@@ -921,10 +921,33 @@ export async function mayAccess(row: MediaRow, viewer: Viewer): Promise<boolean>
  * this app can ever name it again. Variants first, then the original, then the
  * row — the same one-direction ordering the top of this file sets out, extended
  * by one step rather than reasoned about afresh.
+ *
+ * ── `ownerId`, and why it is OPTIONAL ──────────────────────────────────────
+ * 🚨 **Pass it wherever the caller knows whose item this is meant to be.** The
+ * security review of 2026-08-18 (L-4) read every call site and found all of them
+ * safe: each one hands over an id it had just read off the caller's OWN profile
+ * row or had just written itself, so no foreign id can reach here today. That is
+ * the finding, not a reprieve — the safety was a property of the three CALL
+ * SITES and of nothing in this function, and the fourth call site is not
+ * reminded by anything. An id-addressed delete that is correct by convention is
+ * one refactor away from being an IDOR.
+ *
+ * With `ownerId` given, the ownership is checked HERE and the function carries
+ * the rule itself. It stays optional rather than required because two legitimate
+ * callers have no member to name: the account sweep (`deleteOwnedMedia()`, which
+ * has already selected by owner) and the operator's own setup surface. Making it
+ * required would have forced those two to invent a value, and an invented owner
+ * check is worse than a missing one.
+ *
+ * The refusal is a THROW and not a silent return: a caller that asked to delete
+ * somebody else's row asked for something that must not quietly look like it
+ * worked. `notAllowedForRole` is the vocabulary this module already uses for
+ * "you may not touch this one" (`lib/media/rules.ts`).
  */
-export async function deleteMedia(id: string): Promise<void> {
+export async function deleteMedia(id: string, ownerId?: string): Promise<void> {
   const row = await findMedia(id);
   if (!row) return;
+  if (ownerId && row.ownerId !== ownerId) throw new MediaError("notAllowedForRole");
   await removeMediaObjects(row);
   await db.delete(media).where(eq(media.id, id));
 }

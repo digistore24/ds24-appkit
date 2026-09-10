@@ -99,6 +99,15 @@ describe("the refusal says what happened and how to go on", () => {
     expect(source).toContain("cannot be undone from here");
   });
 
+  it("says WHY --prune does not make it undoable", () => {
+    // Since --prune the refusal is easy to read as "removable later", and it
+    // is — but only while the product never sold. One that took money is
+    // deactivated and stays, because its buyers' refunds still arrive as IPNs
+    // naming its id. A refusal that dropped that half would be a refusal
+    // people talk themselves past.
+    expect(source).toContain("only while it never sold");
+  });
+
   it("names both legitimate ways forward", () => {
     // A refusal that only says "no" gets worked around. One way is to accept
     // the list, the other is to park what is not wanted — and the second only
@@ -119,5 +128,95 @@ describe("the refusal says what happened and how to go on", () => {
 
   it("says that nothing was changed", () => {
     expect(source).toContain("Nothing was created. Nothing was changed.");
+  });
+});
+
+describe("the warnings read the same shape the writes do", () => {
+  it("checks price and interval PER WAY TO PAY, not per offering", () => {
+    // The bug this pins was invisible to every unit test in the tree, because
+    // each of them hands `checkDefinition` its own fixture. It showed on the
+    // first dry run against a real account: an entry using `paymentOptions`
+    // has no `priceCents` and no `billingInterval` of its own, so a correctly
+    // written registry was told, twice, that it had no price. A warning that
+    // fires on correct input is worse than none — it teaches the reader to
+    // stop reading them.
+    const check = at("function checkDefinition");
+    const price = source.indexOf("no priceCents", check);
+    expect(source.slice(check, price)).toContain("paymentOptionsOf(def)");
+    // And not by reading the entry's own fields beside it.
+    expect(source.slice(check, price)).not.toContain("def.priceCents");
+  });
+});
+
+describe("data[tag] cannot break a sync while the field does not exist", () => {
+  it("both writes go through the fallback, not straight to ds24Call", () => {
+    // Measured on 2026-09-09: `data` is validated against a strict allowlist
+    // and `tag` is not on it — `createProduct` and `updateProduct` both REFUSE
+    // it outright rather than ignoring it. Sending it unconditionally would
+    // break every product creation for every customer on day one.
+    const create = at('ds24Call("createProduct"');
+    const update = at('ds24Call("updateProduct", apiKey, { product_id: String(existingId)');
+    expect(source.lastIndexOf("withoutTag(", create)).toBeGreaterThan(-1);
+    expect(source.lastIndexOf("withoutTag(", update)).toBeGreaterThan(-1);
+  });
+
+  it("gives up on the field for the whole run, not once per product", () => {
+    expect(source).toContain("tagsAccepted = false");
+  });
+
+  it("throws the ORIGINAL error when the retry fails too", () => {
+    // The retry is the call we would have made anyway, so a failure that was
+    // never about the tag must surface as itself — the same safeguard the
+    // affiliate retry in buyUrl.ts carries.
+    const fn = at("async function withoutTag");
+    const end = source.indexOf("\n}", fn);
+    expect(source.slice(fn, end)).toContain("throw err;");
+  });
+});
+
+describe("--prune is as careful as the gate", () => {
+  it("acts only on rows _own.mjs graded ours, never on a name that merely matches", () => {
+    // The whole safety of a delete is in this call. Ownership is the stamp in
+    // data[note] — not the internal name, which two apps built from this same
+    // template would collide on.
+    expect(source).toContain("orphanProducts(list");
+    expect(source).toContain("syncId");
+  });
+
+  it("refuses to prune when the notes did not come back at all", () => {
+    // Zero orphans out of a comparison that could not run is silence, not an
+    // answer — and acting on silence here deletes nothing today and anything
+    // tomorrow. Proving the walk ran is not proving the comparison did.
+    const guard = at("!classifiable && args.prune");
+    const exit = source.indexOf("process.exit(2)", guard);
+    expect(exit).toBeGreaterThan(guard);
+    expect(exit).toBeLessThan(at('ds24Call("deleteProduct"'));
+  });
+
+  it("asks about sales BEFORE it deletes, and deactivates instead when there are any", () => {
+    const purchases = at('ds24Call("listPurchases"');
+    expect(purchases).toBeLessThan(at('ds24Call("deleteProduct"'));
+    expect(source).toContain('"data[is_active]": "N"');
+  });
+
+  it("keeps a PARKED product out of the orphan list", () => {
+    // "sell": false takes an offering off the page, never out of the account —
+    // and its id still has to reach the IPN connection so its buyers' refunds
+    // keep arriving.
+    const keep = at("const keepIds");
+    expect(source.indexOf("parkedTargets", keep)).toBeGreaterThan(keep);
+  });
+
+  it("still runs with an EMPTY registry — the last product must be removable", () => {
+    // Measured against a live account: the "nothing to sync" refusal fires
+    // before anything looks at Digistore24, so taking the last entry out left
+    // its product in the vendor's account with no way to remove it. "Nothing
+    // to sync" and "nothing to clean up" are different questions.
+    expect(source).toContain("targets.length === 0 && !args.prune");
+  });
+
+  it("does nothing at all without the flag", () => {
+    expect(source).toContain("orphans.length > 0 && !args.prune");
+    expect(source).toContain("apply && args.prune && orphans.length > 0");
   });
 });

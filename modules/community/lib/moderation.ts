@@ -1,13 +1,11 @@
 // Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA
 // SPDX-License-Identifier: MIT
 
-import { cache } from "react";
-import { and, count, desc, eq, isNotNull, isNull, or } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { communityDiscussions, communityGroupModerators, communityModerationAudit, communityPosts } from "../schema";
 import { isOwner } from "@/lib/roles";
-import { record } from "@/lib/rate-limit";
 import { CommunityError, lockProblem, mayModerate, removalProblem } from "./rules";
 
 import { pageOffset } from "./_paging";

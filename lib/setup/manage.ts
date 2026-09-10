@@ -23,14 +23,7 @@ import { and, desc, eq, gt, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { setupAudit, setupConfirmations, setupKeys, users } from "@/db/schema";
 import type { AppEnv } from "@/lib/env-guard";
-import {
-  CONFIRMATION_TTL_MS,
-  SETUP_KEY_BYTES,
-  SETUP_KEY_PREFIX,
-  canonicalCallHash,
-  hashSecret,
-  looksLikeSetupKey,
-} from "./rules";
+import { CONFIRMATION_TTL_MS, canonicalCallHash, hashSecret, looksLikeSetupKey } from "./rules";
 import type { SetupErrorCode } from "./rules";
 
 /** How much of a key is shown in a list so a row can be told apart. */

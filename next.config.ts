@@ -42,6 +42,47 @@ const securityHeaders = [
     key: "Strict-Transport-Security",
     value: "max-age=31536000; includeSubDomains",
   },
+  // The four device capabilities this app never asks for, denied for the whole
+  // document tree — so nothing EMBEDDED in a page can ask for them either. The
+  // app has no camera, microphone or location feature, and it takes money
+  // through a Digistore24 checkout on Digistore24's own origin rather than
+  // through the browser Payment Request API. An empty allow-list is therefore
+  // a statement of what the app does, not a restriction on it.
+  //
+  // Measured against the running app on 2026-08-18 (finding M-8): absent. The
+  // cost of adding it is zero today and the value is on the day somebody pastes
+  // a third-party widget into a page — it cannot prompt a buyer for their
+  // camera on this app's origin and get the app blamed for it.
+  {
+    key: "Permissions-Policy",
+    value: "camera=(), microphone=(), geolocation=(), payment=()",
+  },
+  // Cuts the `window.opener` link. Anything this app opens in a new tab — a
+  // Digistore24 checkout, an invoice URL, a link inside a course lesson — gets
+  // a fresh browsing context instead of a handle back to the page that opened
+  // it, so it cannot navigate the app's own tab somewhere else while the buyer
+  // is looking at the other one. Also measured absent on 2026-08-18.
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  // 🚨 The frame-ancestors directive, and NOTHING else — this is not the
+  // Content-Security-Policy the paragraph above declines to ship, and it is not
+  // a first step towards pasting one in. `frame-ancestors` is the one directive
+  // that needs no nonce, governs no script and no style, and cannot be made
+  // into a facade: it says who may frame this app, and the answer is nobody.
+  //
+  // It stands BESIDE `X-Frame-Options: DENY` rather than replacing it, because
+  // the two are read by different browsers — `X-Frame-Options` is what older
+  // ones understand, `frame-ancestors` is what the current ones consult and
+  // what they prefer when both arrive. `scripts/security/rungs/live.mjs`
+  // accepts either as protection and rates a present-but-weak policy, so this
+  // value is chosen to be the strictest one that check can see.
+  //
+  // ⚠️ `/brand/*` receives its own, much stricter `Content-Security-Policy`
+  // below, and both arrive on that response. Two CSP headers on one response
+  // are ANDed by the browser, never replaced — so the brand policy is tightened
+  // by this one, not loosened. `next.config.test.ts` pins that both rules are
+  // still there and in that order, because "additive" is a property of Next's
+  // `headers()` that a refactor could quietly lose.
+  { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
 ];
 
 // The operator's own logo, under `public/brand/` — the ONE place this app
@@ -198,6 +239,15 @@ const nextConfig: NextConfig = {
   // of resolving to "no modules" — the argument is in `lib/modules/installed.ts`
   // and it is about an app quietly forgetting tables it still holds.
   pageExtensions: modulePageExtensions(installedModules()),
+
+  // ── No `X-Powered-By: Next.js` on any response ───────────────────────────
+  // Next sends that header by default, and it was arriving on the running app
+  // — measured 2026-08-18, finding L-5. It grants nobody anything on its own;
+  // what it does is hand a scanner the framework for free, which is the first
+  // half of matching this deployment against a framework advisory. The app
+  // loses nothing by not announcing it: nothing in this tree reads the header,
+  // and `node run.mjs smoke` asks the app what it IS rather than what it says.
+  poweredByHeader: false,
 
   // ── Server actions may carry a file, so the body cap has to allow one ─────
   // Next's default is 1 MB, which is below `config/media.json` → `kinds.image

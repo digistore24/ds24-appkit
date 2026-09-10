@@ -54,21 +54,7 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
-import {
-  LayoutDashboard,
-  CircleUser,
-  CreditCard,
-  FileText,
-  MessageCircle,
-  ShieldCheck,
-  Users,
-  Receipt,
-  Coins,
-  LogIn,
-  LogOut,
-  Menu,
-  MessagesSquare,
-} from "lucide-react";
+import { LayoutDashboard, CircleUser, CreditCard, FileText, MessageCircle, ShieldCheck, Users, Receipt, Coins, LogIn, LogOut, Menu } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { initialsFrom } from "@/lib/initials";

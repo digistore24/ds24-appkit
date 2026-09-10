@@ -379,11 +379,11 @@ await createMedia({
   bytes,
   filename: "Workbook.pdf",
   visibility: "entitled",
-  // 🚨 A LIST, and holding ONE of them buys the file. One offering is one
-  // Digistore24 product per billing interval, so anything sold monthly AND
-  // yearly names both keys — a single one would leave the yearly buyer with a
-  // page that renders and a file that is not there.
-  planKeys: ["basic_monthly", "basic_yearly"],   // keys from config/digistore-products.json
+  // 🚨 A LIST, and holding ONE of them buys the file — because one file may be
+  // sold under SEVERAL offerings: the workbook that comes with the course and
+  // with the bundle. NOT because of monthly and yearly: those are two ways to
+  // pay for ONE Product Key, and both buyers hold it.
+  planKeys: ["basic", "bundle"],   // keys from config/digistore-products.json
   alt: null,
   source: "upload",
 });

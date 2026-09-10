@@ -261,7 +261,7 @@ describe("a tool that refuses answers 200, and that is not a success", () => {
 describe("plan → apply", () => {
   it("passes the confirmation the plan issued", async () => {
     const seen: unknown[] = [];
-    const fetchTwice = async (url: string, init: RequestInit) => {
+    const fetchTwice = async (_url: string, init: RequestInit) => {
       const body = JSON.parse(String(init.body));
       seen.push(body);
       return {
@@ -292,7 +292,7 @@ describe("plan → apply", () => {
 
   it("sends no confirmation field where the plan issued none (DEV)", async () => {
     const seen: Record<string, unknown>[] = [];
-    const fetchTwice = async (url: string, init: RequestInit) => {
+    const fetchTwice = async (_url: string, init: RequestInit) => {
       const body = JSON.parse(String(init.body));
       seen.push(body);
       return { ok: true, status: 200, text: async () => JSON.stringify({ mode: body.mode, data: {} }) };
@@ -305,7 +305,7 @@ describe("plan → apply", () => {
 
   it("stops at the plan when the TOOL refused — the apply is never sent", async () => {
     const seen: Record<string, unknown>[] = [];
-    const fetchOnce = async (url: string, init: RequestInit) => {
+    const fetchOnce = async (_url: string, init: RequestInit) => {
       seen.push(JSON.parse(String(init.body)));
       return {
         ok: true,

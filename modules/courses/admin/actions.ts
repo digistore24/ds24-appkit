@@ -26,7 +26,7 @@
 // this surface reads the content tree at all; that reader is `./content-claims`,
 // shared with `./media-actions.ts` and carrying the reasoning for both.
 import { revalidatePath } from "next/cache";
-import { notFound, unstable_rethrow } from "next/navigation";
+import { unstable_rethrow } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 import type { ActionState } from "@/hooks/use-action-toast";

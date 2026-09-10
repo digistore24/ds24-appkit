@@ -37,7 +37,7 @@ rather than deciding by itself.
 
 | | |
 |---|---|
-| **Updated** | `CLAUDE.md` and `AGENTS.md`, `README.md`, `docs/*.md`, `.claude/skills/**` |
+| **Updated** | `CLAUDE.md` and `AGENTS.md`, `README.md`, `docs/*.md`, `.claude/skills/**`, `.agents/skills/**` |
 | **Never touched** | everything under `app/`, `lib/`, `db/`, `components/`, `config/`, `messages/`, `scripts/` — all of your code, and every setting |
 | **Never touched** | `docs/app.md`, `docs/product-brief.md`, `docs/reports/` — your own writing |
 | **Never touched** | any of the files above **that you edited yourself** (see below) |
@@ -85,6 +85,17 @@ Two more refusals, both deliberate:
   then fail to find a line of it.
 - **Nothing is ever deleted.** A skill the template withdrew is reported and
   stays. It may be the one you built your week on.
+- 🚨 **The manifest says what is new, never where it goes.** The paths `update`
+  is willing to write are the closed list in the table above — `.md` files, in
+  those places and nowhere else — and the address it reads them from is pinned
+  to the template repo. A manifest offering anything else is refused **whole**:
+  not the offending entry skipped and the rest applied, but nothing written at
+  all, with the path printed. That is deliberate. `.template-version` is a
+  normal file in your git history, so a commit in it — yours, a contributor's,
+  an agent's that read the wrong page — could otherwise point this command at
+  another server and have it write over `.env` or into `.git/hooks/`. One entry
+  outside the list means the file cannot be believed at all, and half an update
+  from a source like that is worse than none.
 
 Everything `--apply` writes is a normal file change in git:
 

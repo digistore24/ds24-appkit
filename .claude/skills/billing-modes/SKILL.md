@@ -73,9 +73,10 @@ node run.mjs ds24-sync
 ```
 
 🚨 **The first run refuses, on purpose.** It prints every product that would be
-NEW at Digistore24, says that creating them cannot be undone from here, and
-stops — nothing is created (and nothing is updated: the refusal ends the whole
-run), and the IPN is not registered yet. Read the list out to the user; park
+NEW at Digistore24, says what creating them costs, and stops — nothing is
+created (and nothing is updated: the refusal ends the whole run), and the IPN is
+not registered yet. (`--prune` can remove one again later, cleanly only while it
+never sold.) Read the list out to the user; park
 what they do not sell with `"sell": false`, and confirm what remains with
 `node run.mjs ds24-sync --create-new` — parking alone only gets through when
 nothing NEW is left on the list, so a run that still creates anything needs the
@@ -89,8 +90,11 @@ dev set) and registers that environment's IPN. Use
 the `make` target, **not** `node scripts/ds24/sync-products.mjs` directly — the
 script alone skips the IPN hookup, and purchases then never unlock anything.
 
-**No payment plans in the DS24 interface.** Price, currency and interval come
-from the registry and travel with the checkout call as `payment_plan[...]`.
+**The registry authors the price; the sync copies it onto the product's payment
+plans, one per way to pay.** Never edit those plans in the DS24 interface — the
+next sync overwrites them. An ordinary checkout then sells through the stored
+plan; only an upgrade, a free trial, or a plan that no longer matches the
+registry is priced inline (`docs/digistore-billing-modes.md`).
 Each environment sells its own product set (see `docs/environments.md`).
 
 Checkout for a signed-in Member runs through **`checkoutLinkFor`** from a
@@ -133,19 +137,30 @@ three feedback mechanisms is in `CLAUDE.md`, under **UI**.
 
 ## Step 3 — Fixed subscription (if chosen)
 
-Plan as a product with `kind: "subscription"` + `billingInterval` (`"1_month"` /
-`"12_month"`) and `priceCents`. Both travel with the checkout call, so nothing
-is maintained inside DS24. The IPN maintains status and management links in the
-table **`subscriptions`**.
+*(Needs template 0.36.0 for `paymentOptions`. On an older app a plan is one
+entry with one `priceCents` and one `billingInterval`, so monthly and yearly are
+two entries and two Product Keys — and every gate has to name both.)*
+
+One entry with `kind: "subscription"`, and its **ways to pay** under
+`paymentOptions` — each with `priceCents` and `billingInterval` (`"1_month"` /
+`"12_month"`). 🚨 Monthly and yearly are two of those, **not two entries**: both
+buyers hold the same Product Key, so `hasPlan()` asks one question. `ds24-sync`
+writes one Digistore24 payment plan per way to pay; never edit them over there.
+The IPN maintains status and management links in the table **`subscriptions`**.
 
 Build the **subscription self-service** into the customer dashboard:
-- Show the billing state: `subscriptions.status` + `billingInterval`. <!-- not-an-access-check: displayed to the customer -->
+- Show the billing state: `subscriptions.status` + `billingInterval` + `paymentOption`. <!-- not-an-access-check: displayed to the customer -->
   Information for the customer, **never** the access check — that one is
   `hasPlan(memberId, productKey)`, see `docs/entitlements.md`.
 - **Cancel** → `stopRebilling(apiKey, ds24PurchaseId)` (after confirmation by
   the signed-in customer). Access stays until the end of the period — the
   entitlement ends on `last_paid_day`, not on the cancellation.
 - **Change payment details** → link to the DS24 `renewUrl` (no API of your own).
+- **Change the billing interval** → link to `subscriptions.switchIntervalUrl`,
+  which Digistore24 sends on the IPN. *(Needs template 0.36.0 — the column and
+  the payment plans it depends on both arrived there.)* It leads somewhere only because the
+  product carries several payment plans, and it saves building an upgrade flow
+  for the commonest change a subscriber makes.
 - **Invoices** → `invoiceUrl` per payment; history via `listPurchases`.
 
 ## Step 4 — Prepaid tokens (if chosen)

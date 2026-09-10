@@ -24,7 +24,7 @@ if (!session?.user?.id) redirect("/login");
 // balance, not an entitlement, and always answers false here.
 // The key travels along: /plans then says which plan this page was waiting
 // for (app/plans/needs.ts) — a bare /plans reads as the price list.
-if (!(await hasPlan(session.user.id, "basic_monthly"))) redirect("/plans?needs=basic_monthly");
+if (!(await hasPlan(session.user.id, "basic"))) redirect("/plans?needs=basic");
 ```
 
 ## Usage-metered content charges tokens

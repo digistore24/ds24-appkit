@@ -296,7 +296,7 @@ are not what they look like: **[`docs/troubleshooting.md`](docs/troubleshooting.
 
 **CLAUDE.md describes the template, which every app gets; `docs/app.md` describes THIS
 app, which nobody else has.** Two rules keep it worth reading: **quote the access
-gate, do not describe it** (`hasPlan(memberId, "basic_monthly")`, never "only for
+gate, do not describe it** (`hasPlan(memberId, "basic")`, never "only for
 paying customers"), and **write down what was decided *against*, and why** — the
 rejected alternative cannot be read out of the code. The file's shape, and dates
 and raw SQL as the sharpest trap on the way:
@@ -344,7 +344,7 @@ their signatures, and every other `lib/` file's the guidance names, are in
 import { hasPlan, entitlementsFor, planStartedAt } from "@/lib/entitlements/manage";
 
 // One feature, one plan. A token package is a BALANCE, never an entitlement.
-if (await hasPlan(memberId, "basic_monthly")) { /* show it */ }
+if (await hasPlan(memberId, "basic")) { /* show it */ }
 const owned = await entitlementsFor(memberId); // [{ productKey, source, accessUntil }]
 // SINCE WHEN — what a week-by-week course unlocks against.
 const startedAt = await planStartedAt(memberId, "course_complete"); // Date | null
@@ -547,9 +547,11 @@ Six refusals, each of which fails **silently** when it is skipped:
 - **`MEDIA_DRIVER=local` stops the app from starting in STAGING and PROD**
   (`lib/env-guard.ts`).
 - **Selling a file is a visibility and a LIST of Product Keys**: `visibility:
-  "entitled"` plus `planKeys`, and holding **one** of them is enough — so
-  anything sold monthly and yearly names both. Every key is validated when
-  written (`hasPlan()` **throws** on an unknown one); **an empty list refuses.**
+  "entitled"` plus `planKeys`, and holding **one** of them is enough — a list
+  because a file may belong to several offerings, NOT because of monthly and
+  yearly: those are two ways to pay for ONE key (**Plans & Digistore products**
+  below). Every key is validated when written (`hasPlan()` **throws** on an
+  unknown one); **an empty list refuses.**
 
 ## Content that must exist in PROD
 
@@ -600,23 +602,24 @@ reference is **[`docs/salespage.md`](docs/salespage.md)**.
 
 **One fork comes before every other billing question: whose Digistore24 account
 gets paid.** The default — the operator is the only vendor — is what everything
-else assumes; the **platform** shape (the app's own users connect *their*
-accounts) is NOT built, is not a setting, and is not to be built "just in case".
-Both: **[`docs/digistore-integration.md`](docs/digistore-integration.md)**.
+else assumes; the **platform** shape (the app's users connect *their* accounts)
+is NOT built, is not a setting, and is not to be built "just in case". Both:
+**[`docs/digistore-integration.md`](docs/digistore-integration.md)**.
 
 `config/digistore-products.json` is the **single source** — it feeds the plans
-page *and* the sync script. **One price, one place: never a second price list in
-the code**, and prices do not belong on the DS24 product at all. One offering is
-one product **per language**, one product SET **per environment** —
-[`docs/environments.md`](docs/environments.md).
+page *and* the sync script. **One price, one place: the registry AUTHORS it** and
+`ds24-sync` copies it onto the product's payment plans, so no second price list
+survives, in the code or in the DS24 interface. One offering is one product **per
+language**, one **plan per way to pay**, one product SET **per environment**.
 
-🚨 **The DS24 product keeps a default plan nobody set (~27 €), its own order form
-charges it, and such an order still lands and GRANTS** — on a subscription for
-ever: **[`docs/digistore-integration.md`](docs/digistore-integration.md)**.
+🚨 **Monthly and yearly are two `paymentOptions` of ONE offering** (needs
+template 0.36.0) — not two products, not two Product Keys; both hold one key.
+And 🚨 **a product with no plan of ours has Digistore24's own (~27 €), whose
+order form charges it and whose orders GRANT** — on a subscription for ever.
 
 What this app sells is `billingMode` in that same file (`"subscriptions" |
 "tokens" | "both"`, read through `lib/billing-mode.ts`, never by re-reading the
-JSON). Two rules make it safe to flip on a live app; the rest is
+JSON). Two rules make it safe to flip live; the rest is
 **[`docs/digistore-billing-modes.md`](docs/digistore-billing-modes.md)**:
 
 - 🚨 **It is COSMETIC. It never decides access.** `hasPlan()`,
@@ -624,11 +627,10 @@ JSON). Two rules make it safe to flip on a live app; the rest is
 - **A mode may hide an empty thing, never a non-empty one.** Every call site is
   written `!sellsTokens() && balance === 0`, never `!sellsTokens()` alone.
 
-🚨 **Creating a DS24 product cannot be undone from here.** So `ds24-sync` lists
-what would be NEW and refuses: `--create-new` is the yes, `"sell": false` parks
-the entry as a template **without touching ACCESS**. To LOOK at the buy forms
-first, open `/plans?preview=checkout` (DEV + localhost); **never dummy ids in the
-registry.**
+🚨 **`ds24-sync` creates nothing until you have seen the list** — `--create-new`
+is the yes. `"sell": false` parks an entry **without touching ACCESS**; `--prune`
+removes what this app made and no longer wants, deactivating whatever ever sold.
+Buy forms first: `/plans?preview=checkout` (DEV + localhost); **never dummy ids.**
 
 **Leave `APP_URL` alone** — a non-local value switches off the development login
 (`lib/auth/dev-login.ts`) and locks you out of your own app; a locally-run
@@ -675,14 +677,17 @@ node run.mjs update           # what would change — writes nothing
 node run.mjs update --apply   # write it
 ```
 
-Four properties, and knowing them is enough to use it correctly: **text only**
-(`CLAUDE.md`, `README.md`, `docs/*.md`, `.claude/skills/**` — never `app/`,
-`lib/`, `db/`, `config/`, `messages/`, `scripts/`, because a doc cannot collide
-with a page somebody built and a `lib/` file can); **a file that was edited here
-is left alone** and reported as `keep`, so house rules written into this file
-survive — 🚨 do not "fix" that by overwriting them anyway; **a skill declaring
-`requires:` above this app's version is refused**, because knowledge without its
-code is worse than none; and **nothing is ever deleted**.
+Five properties, and knowing them is enough to use it correctly: **text only**,
+and as an ALLOWLIST — `.md` under `docs/`, `.claude/skills/`, `.agents/skills/`
+plus `AGENTS.md`, `CLAUDE.md`, `README.md`, and nothing else, because a doc
+cannot collide with a page somebody built and a `lib/` file can; 🚨 **a manifest
+naming anything outside it aborts the whole run before a byte is written** — the
+remote list decides what gets written, so one refused path is not skipped, it
+stops everything; **a file that was edited here is left alone** and reported as
+`keep`, so house rules written into this file survive — 🚨 do not "fix" that by
+overwriting them anyway; **a skill declaring `requires:` above this app's version
+is refused**, because knowledge without its code is worse than none; and
+**nothing is ever deleted**.
 
 **Do not run `--apply` on your own initiative.** Show the user what would change,
 say in a sentence what it is about, let them decide. The whole reasoning,

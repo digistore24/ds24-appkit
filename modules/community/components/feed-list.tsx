@@ -25,7 +25,7 @@
 // No counts, anywhere (FR-222). No "3 new posts" badge — that is an aggregate
 // over the follow graph wearing a friendly hat.
 import * as React from "react";
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
@@ -44,19 +44,12 @@ import {
   type FeedItemView,
 } from "@/modules/community/pages/feed/actions";
 
-/** One scope's answer, as the endpoint sends it. */
-type ScopeAnswer =
-  | { state: "unavailable" }
-  | { state: "ok"; cursor: string | null; posts: unknown[] };
-
 export function FeedList({
-  memberId,
   initialItems,
   initialNextCursor,
   schedule,
   initialLiveCursor,
 }: {
-  memberId: string;
   initialItems: FeedItemView[];
   initialNextCursor: string | null;
   schedule: PollSchedule;

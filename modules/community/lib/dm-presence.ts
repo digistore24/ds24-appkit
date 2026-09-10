@@ -5,7 +5,7 @@
 // that are not DM surfaces but carry one thing that is.**
 //
 // ── The third kind of surface, and why the taxonomy needed it ─────────────
-// `lib/community/impersonation-guard.test.ts` enumerates two kinds: a DM
+// `modules/community/lib/impersonation-guard.test.ts` enumerates two kinds: a DM
 // surface, which must obtain its actor from `dm-actor.ts`, and a room surface,
 // which must not name the carve-out at all — because under an impersonation
 // the rooms go on acting AS THE MEMBER, and a group page that consulted the

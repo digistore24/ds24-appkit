@@ -4,7 +4,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { Rss, Users } from "lucide-react";
+import { Users } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -81,7 +81,6 @@ export default async function FeedPage() {
         // reload, which is the state every new follower is in. The list owns
         // the empty state now, for the same reason `PostList` does.
         <FeedList
-          memberId={viewer.memberId}
           /* Field by field, not a spread — see `loadMoreFeedAction()`: the
              author's media id must not travel to the browser beside the
              address that was minted from it. */

@@ -42,6 +42,11 @@ following rules. They are the "golden path" — do not rip them out.
 - The buyer email is **not verified by Digistore24** — anyone can type anyone's
   address into a checkout. It is a fallback that must stay safe when the claim
   is a lie. The identity in `tracking[custom]` is the authenticated path.
+- ⚠️ **That holds for WHO, not for WHAT.** The product key in `custom` is checked
+  against the `product_id` Digistore24 says it charged, and the charged one wins
+  — never grant on the named key alone
+  ([`docs/digistore-integration.md`](../../../docs/digistore-integration.md) →
+  *Who decides which product was bought*).
 - Attribution only ever **grants**, never revokes. Never clear
   `orders.memberId`; fill it only when it is null.
 - Never weaken `parseCustom` to accept a member id without its checkout token.

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { cache } from "react";
-import { and, count, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, count, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { grants, users } from "@/db/schema";
 import {
@@ -305,13 +305,6 @@ export interface ReporterFacts {
   reportsIgnored: boolean;
 }
 
-const NO_FACTS: ReporterFacts = {
-  memberDays: 0,
-  paidGrants: 0,
-  reportsMade: 0,
-  reportsAgainst: 0,
-  reportsIgnored: false,
-};
 
 /**
  * The weighting facts for a whole SET of reporters — **four questions, one

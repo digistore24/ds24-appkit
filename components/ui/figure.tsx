@@ -141,17 +141,24 @@ export function Figure(props: FigureProps) {
 
   const image =
     isRemote && srcSet ? (
-      // eslint-disable-next-line @next/next/no-img-element -- The rule exists to
-      // stop somebody bypassing Next's optimiser by accident. Here there is no
-      // optimiser to bypass: `next.config.ts` declares no `images.remotePatterns`,
-      // so this address is `unoptimized` either way and `next/image` would emit
-      // one `<img>` with no `srcset`. The candidates come from
-      // `lib/media/url.ts` → `mediaImageFor()`, derived at upload by
-      // `lib/media/variants.ts` — which is the sizing the rule is really about,
-      // done at a moment when the bytes are in hand rather than per request. Its
-      // `loader` prop cannot carry them: a loader is a function, these addresses
-      // are signed on the server, and a function does not cross into a client
-      // component.
+      // ⚠️ The reason first and the directive LAST, touching the element. It
+      // used to lead, with these ten lines of reasoning under it — and
+      // `eslint-disable-next-line` means the next LINE, which was another
+      // comment. So the directive suppressed nothing and the `<img>` below was
+      // never covered by it. Measured 2026-09-10: the directive was reported
+      // unused AND the element was reported unguarded, in the same run.
+      //
+      // The rule exists to stop somebody bypassing Next's optimiser by
+      // accident. Here there is no optimiser to bypass: `next.config.ts`
+      // declares no `images.remotePatterns`, so this address is `unoptimized`
+      // either way and `next/image` would emit one `<img>` with no `srcset`.
+      // The candidates come from `lib/media/url.ts` → `mediaImageFor()`,
+      // derived at upload by `lib/media/variants.ts` — which is the sizing the
+      // rule is really about, done at a moment when the bytes are in hand
+      // rather than per request. Its `loader` prop cannot carry them: a loader
+      // is a function, these addresses are signed on the server, and a function
+      // does not cross into a client component.
+      // eslint-disable-next-line @next/next/no-img-element
       <img
         src={src}
         srcSet={srcSet}

@@ -97,8 +97,8 @@ export function courseProblems(course: Course): string[] {
   if (course.planKeys.length === 0) {
     problems.push(
       '"planKeys" is empty — the course has to be sold as something. It is a LIST because ' +
-        "one offering is one Digistore24 product per billing interval: a course sold monthly " +
-        "and yearly names both keys, and holding either one opens it",
+        "one course may be sold under several offerings — on its own and inside a bundle — " +
+        "and holding any one of them opens it",
     );
   }
   const seen = new Set<string>();

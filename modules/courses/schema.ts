@@ -123,9 +123,10 @@ export const coursesCourses = pgTable(
     shape: text("shape").notNull(),
     // 🚨 The Product Keys that unlock THIS course, and holding ONE is enough.
     // Same shape and same name as `media.plan_keys` and
-    // `community_groups.plan_keys`, for the same reason: one offering is one
-    // Digistore24 product per billing interval, so a course sold monthly and
-    // yearly names both. An empty list is a course nobody can open, which
+    // `community_groups.plan_keys`, for the same reason: one course may be sold
+    // under several offerings — on its own and inside a bundle, or in both
+    // tiers of a ladder. (Monthly and yearly are not such a case: they are two
+    // ways to pay for one key.) An empty list is a course nobody can open, which
     // `courses-check` and the admin surface report — never a course that is
     // free.
     planKeys: text("plan_keys").array().notNull().default([]),

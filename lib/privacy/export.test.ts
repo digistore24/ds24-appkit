@@ -325,17 +325,17 @@ describe("both exports carry the conversation a turn belongs to", () => {
   // Matched as COLUMN REFERENCES, following this file's own precedent: the
   // prose above each query names the thing, and a guard that grepped for the
   // bare word would fail on its own documentation.
-  const module = readFileSync(join(ROOT, "lib", "privacy", "export.ts"), "utf8");
+  const library = readFileSync(join(ROOT, "lib", "privacy", "export.ts"), "utf8");
   const command = readFileSync(join(ROOT, "scripts", "privacy", "export-data.mjs"), "utf8");
 
   it("read both files", () => {
     // Non-vacuity: without this, a wrong path makes both assertions below pass.
-    expect(module.length).toBeGreaterThan(1000);
+    expect(library.length).toBeGreaterThan(1000);
     expect(command.length).toBeGreaterThan(1000);
   });
 
   it("the member's own download names conversationId in its chat select", () => {
-    expect(module).toMatch(/conversationId:\s*chatMessages\.conversationId/);
+    expect(library).toMatch(/conversationId:\s*chatMessages\.conversationId/);
   });
 
   it("the operator's command names conversation_id in its chat query", () => {
@@ -349,7 +349,7 @@ describe("both exports carry the conversation a turn belongs to", () => {
   // the row while neither export selected it. The parity test above compares
   // SECTIONS, so only a per-column assertion catches this class.
   it("both exports name links in their chat select", () => {
-    expect(module).toMatch(/links:\s*chatMessages\.links/);
+    expect(library).toMatch(/links:\s*chatMessages\.links/);
     expect(command).toMatch(/select[^;]*\blinks\b[^;]*from chat_messages/);
   });
 });

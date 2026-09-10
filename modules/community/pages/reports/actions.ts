@@ -14,7 +14,7 @@
 // half arriving. An impersonated session finds no DM surface at all, and that
 // includes this one: an operator inside a member's account must not be able to
 // report out of a correspondence they cannot even see.
-// `lib/community/impersonation-guard.test.ts` counts this file among the DM
+// `modules/community/lib/impersonation-guard.test.ts` counts this file among the DM
 // surfaces, so a future refactor that routed the message leg around the seam
 // fails the build.
 //

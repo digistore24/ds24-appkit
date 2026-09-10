@@ -238,14 +238,14 @@ async function main() {
         warn(`applier ${label} — would run`);
         continue;
       }
-      let module;
+      let loaded;
       try {
-        module = await import(pathToFileURL(file).href);
+        loaded = await import(pathToFileURL(file).href);
       } catch (error) {
         bad(`applier ${label} — cannot be loaded: ${error.message}`);
         continue;
       }
-      if (typeof module.apply !== "function") {
+      if (typeof loaded.apply !== "function") {
         bad(`applier ${label} — exports no apply(sql, helpers) function (docs/content.md has the convention)`);
         continue;
       }
@@ -263,7 +263,7 @@ async function main() {
             }
             return found[0].id;
           };
-          return module.apply(tx, { mediaIdFor });
+          return loaded.apply(tx, { mediaIdFor });
         });
         ok(`applier ${label} — ${Number.isFinite(count) ? `${count} row(s) asserted` : "ran"}`);
       } catch (error) {

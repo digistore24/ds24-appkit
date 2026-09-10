@@ -121,6 +121,15 @@ sign in to):
 | `AUTH_TRUST_HOST` | `true` — all four run the app behind a proxy |
 | `APP_URL` | the live domain, `https://…`, no trailing slash. **This is where the sign-in link points** — `AUTH_TRUST_HOST` only says which `Host` values are accepted, and behind a router that is `localhost:8080`. `AUTH_URL` is derived from this and must not be set to anything else (`docs/auth-setup.md`) |
 | `APP_ENV` | `production` (or `staging`) |
+
+**Strongly recommended — the brakes are only as good as this** (see *Who the
+caller is* below):
+
+| Variable | Value |
+|---|---|
+| `TRUSTED_CLIENT_IP_HEADER` | the header your host sets and a client cannot forge — `fly-client-ip`, `do-connecting-ip`, `true-client-ip`. Set this where it exists and nothing else is needed |
+| `TRUSTED_PROXY_HOPS` | the fallback when there is no such header: how many entries at the RIGHT end of `x-forwarded-for` your infrastructure added. Default `1` |
+
 | **mail — one of the two** | `POSTMARK_SERVER_TOKEN` + `POSTMARK_SENDER`, **or** `SMTP_HOST` + `SMTP_USER` + `SMTP_PASSWORD` (+ `SMTP_FROM`) |
 | `EMAIL_FROM` | the sender address (fallback when no `SMTP_FROM`/`POSTMARK_SENDER`) — **must live on the app's own domain** (boot-enforced; `docs/auth-setup.md` → the sender rule; deliberate exception: `EMAIL_FROM_FOREIGN_DOMAIN`) |
 | `MEDIA_DRIVER` | `s3` — see below. Anything else and the app refuses to start |
@@ -192,6 +201,50 @@ as `…_PROD` reference copies), and copied from there to the host under the
 > **`NEXT_PUBLIC_…` is baked in at build time, not read at run time.** Setting it
 > after the build changes nothing and looks like the host ignoring your variable.
 > Set it before the build, then redeploy.
+
+## Who the caller is — and why the header lied to us
+
+Every brake in this app (failed sign-ins per origin, address lookups, the setup
+door's failure meter, the IPN's pre-auth log) counts against the caller's
+address, and the only thing that can tell the app who that is behind a proxy is
+a header. `lib/setup/rules.ts` → `clientAddress()` is the one place that reads
+one.
+
+🚨 **The tree used to say "the app runs behind a proxy that OVERWRITES
+`x-forwarded-for` (Railway, Render, Fly all do)" and read the LEFTMOST entry on
+that basis. Nobody had measured it, and it is false.** Checked against the
+vendors' own words on 2026-09-10 (finding M-5): the leftmost entry is exactly
+the part a caller writes for themselves, so the meters could be handed a fresh
+bucket per request. The reading now counts from the RIGHT, and two variables say
+how far.
+
+| Host | What arrives | Set this |
+|---|---|---|
+| **Fly.io** | **appends** — documented, and measured: a request sent with `X-Forwarded-For: 1.2.3.4` arrived as `1.2.3.4, <real client>, <fly ip>`. Fly also sets its own header, which a client cannot forge because the service port is not reachable directly | `TRUSTED_CLIENT_IP_HEADER=fly-client-ip` |
+| **DigitalOcean App Platform** | the client is **not in `x-forwarded-for` at all** — that header carries the DO ingress server. DO documents its own header instead | `TRUSTED_CLIENT_IP_HEADER=do-connecting-ip` |
+| **Render** | **appends**, with Cloudflare in front of Render's load balancer (Cloudflare documents appending). A real chain looked like `<client>, <cloudflare>, <render lb>`. Cloudflare's own header carries the client and cannot be forged through their edge | `TRUSTED_CLIENT_IP_HEADER=true-client-ip` — or, without it, `TRUSTED_PROXY_HOPS=2`. ⚠️ Render's own documented snippet (`trust proxy 1` plus `split(',')[0]`) is wrong in both halves |
+| **Railway** | ⚠️ **unresolved.** Three Railway staff answers contradict each other — one says the edge appends and the rightmost value is the trustworthy one, another says they strip and the leftmost is, a third says both in one sentence. Their documentation does not mention the header, and `x-real-ip` is reported by Railway themselves as carrying the CDN edge address in some setups | **Measure it yourself, once, after the first deploy** (below). Until you have, `TRUSTED_PROXY_HOPS=1` is the default and the brakes are approximate |
+
+**How to measure it yourself — five minutes, and it beats any table.** Against
+your own deployed app:
+
+```bash
+curl -sS -H "X-Forwarded-For: 1.2.3.4" https://your-app.example/api/diagnostics/health \
+  -H "Authorization: Bearer $DIAGNOSTICS_SECRET" -D - -o /dev/null
+```
+
+then look at what the app received. If `1.2.3.4` is still in the chain, the host
+**appends** and everything to the left of the infrastructure's own entries is
+forged. Count the entries your host added on the right — that number is
+`TRUSTED_PROXY_HOPS`. If the host offers a header of its own, prefer it and set
+`TRUSTED_CLIENT_IP_HEADER` instead: no counting, and nothing to get wrong when
+the host adds a hop.
+
+⚠️ **What this is and is not.** These meters withhold; they never grant. A
+forgeable key makes a brake useless, it does not make it a way in — which is why
+this was a MEDIUM and not worse. And with no forwarded header at all, every
+caller shares one bucket named `unknown`: right on a laptop, a self-DoS behind a
+proxy that sets nothing, and the reason to set one of the two variables.
 
 ## Migrations — the step to get right once
 

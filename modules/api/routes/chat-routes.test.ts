@@ -4,7 +4,7 @@
 // The chat surface's contracts: guard first, asking costs write scope, the
 // pipeline is the SHARED one (not a copy), and clearing stays scoped to the
 // assistant's conversation.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 
 vi.mock("@/modules/api/api/guard", () => ({ guardApi: vi.fn() }));
 vi.mock("@/lib/ai/chat-endpoint", () => ({ runChatRequest: vi.fn() }));
@@ -65,6 +65,10 @@ it("POST hands the key's member to the SHARED pipeline with a negotiated locale"
     memberId: "member-1",
     request: expect.anything(),
     locale: "de",
+    // A bearer key is not a session: nobody is impersonating anybody on this
+    // door, and it says so rather than leaving the flag to a default — the flag
+    // guards a charge on a customer's card (lib/tokens/spend.ts).
+    impersonating: false,
   });
 });
 

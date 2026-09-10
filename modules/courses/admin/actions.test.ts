@@ -106,7 +106,6 @@ vi.mock("next-intl/server", () => ({
 import { requireOwner } from "@/lib/authz";
 
 import { isCourseEnabled } from "../lib/config";
-import { courseByIdForOperator, courseBySlugForOperator } from "../lib/courses";
 import { contentFileIndex } from "../lib/content-files";
 import {
   blockById,

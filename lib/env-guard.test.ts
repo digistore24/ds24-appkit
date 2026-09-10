@@ -2,7 +2,13 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect } from "vitest";
-import { appEnv, isRealEnvironment, checkEnvironment } from "./env-guard";
+import {
+  appEnv,
+  isLocalUrl,
+  isRealEnvironment,
+  checkEnvironment,
+  serverEnv,
+} from "./env-guard";
 
 describe("appEnv", () => {
   it("recognizes development (including empty/unknown-local)", () => {
@@ -44,6 +50,32 @@ describe("checkEnvironment", () => {
     MEDIA_DRIVER: "s3",
     mediaBucketConfigured: true,
   };
+
+  // 🚨 The finding this block exists for (H-3, 2026-08-18): an APP_ENV that
+  // never arrived read as "development", and `checkEnvironment` then returned
+  // [] — so the AUTH_SECRET rule, the APP_URL rule, the mail rule and the media
+  // rule were all skipped by the absence of ONE variable. Measured against the
+  // running app: it came up without a word.
+  it("refuses an UNSET APP_ENV instead of reading it as development", () => {
+    const p = checkEnvironment({ emailConfigured: false });
+    expect(p).toHaveLength(1);
+    expect(p[0]).toMatch(/APP_ENV is not set/);
+  });
+
+  it("refuses an EMPTY or whitespace APP_ENV the same way", () => {
+    for (const value of ["", "   "]) {
+      const p = checkEnvironment({ APP_ENV: value, emailConfigured: false });
+      expect(p).toHaveLength(1);
+      expect(p[0]).toMatch(/APP_ENV is not set/);
+    }
+  });
+
+  it("does not swallow the OTHER rules when APP_ENV is missing", () => {
+    // The shape of the old failure: with no APP_ENV, a PROD-shaped environment
+    // that is missing its secret reported nothing at all.
+    const p = checkEnvironment({ ...complete, APP_ENV: undefined, AUTH_SECRET: undefined });
+    expect(p.length).toBeGreaterThan(0);
+  });
 
   it("lets DEV through without mail delivery", () => {
     expect(
@@ -396,4 +428,39 @@ describe("media storage in a real environment", () => {
       expect(problems[0]).toContain("not a driver");
     });
   }
+});
+
+describe("serverEnv — unset is a third state", () => {
+  it("answers null for what was never written", () => {
+    expect(serverEnv(undefined)).toBeNull();
+    expect(serverEnv("")).toBeNull();
+    expect(serverEnv("   ")).toBeNull();
+  });
+
+  it("agrees with appEnv() on everything that WAS written", () => {
+    // The two used to be separate implementations in separate files. They are
+    // one function now, and this holds them to the same answers.
+    for (const value of ["development", "dev", "local", "staging", "test", "production", "banana"]) {
+      expect(serverEnv(value)).toBe(appEnv(value));
+    }
+  });
+});
+
+describe("isLocalUrl — one implementation, and unset is not local", () => {
+  it("recognises this machine", () => {
+    expect(isLocalUrl("http://localhost:3000")).toBe(true);
+    expect(isLocalUrl("http://127.0.0.1:3001")).toBe(true);
+    expect(isLocalUrl("http://[::1]:3000")).toBe(true);
+  });
+
+  it("refuses an unset, empty or unparseable value", () => {
+    expect(isLocalUrl(undefined)).toBe(false);
+    expect(isLocalUrl("")).toBe(false);
+    expect(isLocalUrl("kaputt")).toBe(false);
+  });
+
+  it("refuses a foreign host", () => {
+    expect(isLocalUrl("https://my-app.example")).toBe(false);
+    expect(isLocalUrl("http://app.internal:3000")).toBe(false);
+  });
 });

@@ -132,11 +132,13 @@ All registry fields, never props (a gate the browser sends is no gate):
   Never invent a fake key to avoid it.
 
   🚨 **ONE key, and the course it sits in may be sold under SEVERAL.**
-  `config/course.json` → `planKeys` is a list, because one offering is one
-  Digistore24 product per billing interval; this field is not. So an activity
-  inside a course sold monthly and yearly that names one of the two refuses the
+  `config/course.json` → `planKeys` is a list, because one course can be sold
+  under several offerings — on its own and in a bundle; this field is not. So an
+  activity inside a course sold both ways that names one of them refuses the
   other half of its buyers — the element simply is not there for them, behind a
-  page that renders. Until this registry takes a list, the honest answers are
+  page that renders. (Monthly and yearly are NOT such a case any more: they are
+  two ways to pay for one key.) Until this registry takes a list, the honest
+  answers are
   `null` (every signed-in member, and the course's own gate has already decided
   who reaches the page) or a key EVERY buyer of that course holds. Do not pick
   one of the two intervals and hope.

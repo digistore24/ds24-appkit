@@ -47,6 +47,34 @@ describe("parseInline", () => {
     }
   });
 
+  it("refuses a protocol-relative href — slash AND backslash", () => {
+    // 🚨 The payloads that motivated the second character of `SAFE_HREF`.
+    // Measured 2026-08-18: with the old bare `/` alternative all three were
+    // links, and because `legal-body.tsx` decides externality with
+    // `/^https?:\/\//i` they rendered in the SAME TAB, without `target` and
+    // without `rel` — visually identical to a link to `/datenschutz`, on the
+    // one page a reader opens to check who they are dealing with.
+    //
+    // ⚠️ The backslash cases are not padding. Browsers fold `\` to `/` in the
+    // authority position, so `/\evil.example` reaches evil.example just as
+    // `//evil.example` does; a rule that catches only the slash is half a rule.
+    for (const href of ["//evil.example/x", "/\\evil.example", "/\\/evil.example"]) {
+      expect(parseInline(`[Klick mich](${href})`), href).toEqual([
+        { kind: "text", text: "Klick mich" },
+      ]);
+    }
+  });
+
+  it("still lets an ordinary app-relative path through", () => {
+    // The other half of the same rule: tightening the second character must
+    // not cost the case the legal pages actually use — an Impressum linking to
+    // the privacy policy. Without this the fix could be "made safe" by
+    // refusing `/` outright and nobody would notice for a while.
+    expect(parseInline("[Datenschutz](/datenschutz)")).toEqual([
+      { kind: "link", text: "Datenschutz", href: "/datenschutz" },
+    ]);
+  });
+
   it("stops an href at the first closing paren", () => {
     // A known and accepted limit of the grammar. It matters twice: a hostile
     // `javascript:alert(1)` is truncated to `javascript:alert(1` and refused

@@ -145,9 +145,8 @@ export function validateManifest(data, { productKeys }) {
     }
 
     // A LIST, and holding ONE of them buys the file — the same shape
-    // `media.plan_keys` and `community_groups.plan_keys` carry. One offering is
-    // one Digistore24 product per billing interval, so a file sold monthly and
-    // yearly names two keys and a single string could never have said so.
+    // `media.plan_keys` and `community_groups.plan_keys` carry. A file may be
+    // sold under several offerings, and a single string could never say so.
     const declared = entry.planKeys ?? null;
     let planKeys = [];
     if (visibility === "entitled") {
@@ -237,7 +236,7 @@ export function validateManifest(data, { productKeys }) {
  *   ships no media, and the callers' no-op branch. A file that exists but
  *   cannot be parsed is a problem, never a silent no-op.
  */
-export function loadManifest(root, e = process.env) {
+export function loadManifest(root, _env = process.env) {
   let text;
   try {
     text = readFileSync(join(root, ...CONTENT_MEDIA_MANIFEST.split("/")), "utf8");

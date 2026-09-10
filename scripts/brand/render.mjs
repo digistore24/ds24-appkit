@@ -32,7 +32,7 @@ export async function loadSharp() {
   try {
     const mod = await import("sharp");
     return mod.default ?? mod;
-  } catch (error) {
+  } catch {
     return null;
   }
 }

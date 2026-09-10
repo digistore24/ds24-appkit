@@ -254,7 +254,10 @@ function stripWebp(bytes: Uint8Array): Uint8Array {
       String.fromCharCode(part[0], part[1], part[2], part[3]) === "VP8X";
     if (isVp8x) {
       const copy = Uint8Array.from(part);
-      // eslint-disable-next-line no-bitwise -- clearing two documented flag bits
+      // Clearing two documented flag bits. (No `eslint-disable` here: `no-bitwise`
+      // is not among this config's rules, so the directive was reported as unused
+      // — and an unused suppression is indistinguishable from one that stopped
+      // working.)
       copy[8] &= ~0b0000_1100;
       body[i] = copy;
     }

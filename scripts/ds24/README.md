@@ -23,11 +23,20 @@ For apps with several offers (subscription plans + token packages),
 creates one product **per offer and language** via `createProduct` (or updates it
 via `updateProduct`) and writes the ids back into `productIds.<env>`. One per
 language because a DS24 product carries exactly one `data[language]`, and that
-is the language of the buyer's order form. **The price is NOT set on the
-product** (`data[amount]` is deprecated and discarded) — price and interval stay
-in the registry and travel with the checkout call as `payment_plan[...]`
-(`lib/digistore/checkout.ts`). Do **not** maintain payment plans in the DS24 UI;
-the price would then live in two places.
+is the language of the buyer's order form.
+
+**The price is NOT set on the PRODUCT** — `data[amount]` is deprecated and
+discarded. It is set on the product's **PAYMENT PLANS**, one per way to pay,
+which this sync also writes (`_plans.mjs`) from `paymentOptions` in the same
+registry, and whose ids go back into `payplanIds.<env>.<lang>.<option>`.
+The registry authors the price; Digistore24 holds a copy. Do **not** edit those
+plans in the DS24 UI — the next sync overwrites them.
+
+The plans exist because our checkout link is not the only way into the product:
+its own order form, an affiliate link and the buyer's own interval switch all
+charge whatever hangs on the product, and a product with no plan of ours has
+Digistore24's (~27 €). `docs/digistore-billing-modes.md` carries the whole
+argument, including which three cases are still priced inline.
 
 **Each environment has its own product set** (`dev` / `staging` / `prod`), and
 `--env` picks which one a run maintains — see `docs/environments.md`. Two older
@@ -54,12 +63,52 @@ node run.mjs ds24-sync --create-new
 run as their default, so a direct `node scripts/ds24/sync-products.mjs` still
 changes nothing. `--dry-run` beats `--apply` wherever both turn up.
 
-🚨 **Creating a product cannot be undone from here**, so the run stops the
-first time it would create one, lists what would be new, and refuses. Say yes
-with `--create-new`, or park what you do not sell with `"sell": false` in the
+🚨 **Creating a product is not free to undo**, so the run stops the first time
+it would create one, lists what would be new, and refuses. Say yes with
+`--create-new`, or park what you do not sell with `"sell": false` in the
 registry. Once an offering has an id nothing is being created and the gate is
-silent; updates are never gated. Deleting an entry afterwards does not
-unpublish the product — that is a hand in the Digistore24 backend.
+silent; updates are never gated. Taking an entry OUT of the registry makes its
+product an orphan that `--prune` removes — deleting it while it never sold,
+deactivating it once it has.
+
+### The two markers on a product (`_own.mjs`)
+
+Everything `--prune` may touch is decided here, so the two are worth telling
+apart:
+
+| | field | says | read by |
+|---|---|---|---|
+| **the stamp** | `data[note]` | `ds24-appkit:1:<syncId>:<env>` — THIS app, THIS environment | `--prune`, and nothing else |
+| **the tag** | `data[tag]` | `ds24-appkit` — made by an app built on this template | nobody here; the vendor's backoffice filter |
+
+🚨 **Only the stamp decides ownership.** Two apps built from this template
+carry the same tag, so a prune that read it could let one delete the other's
+products. That is why the stamp carries the `syncId` — a random value written
+once into `config/digistore-products.json` and never regenerated.
+
+Two properties both markers share, and both were measured rather than
+documented:
+
+- **`data[note]` keeps 47 characters** and drops the rest, silently and
+  mid-word. That is why the stamp is short and why the Product Key and the
+  language are not in it — `name_intern` already carries both. A stamp one
+  character too long does not parse, so every product this app made reads as
+  somebody else's and `--prune` reports "nothing to remove" out of a comparison
+  that could not run.
+- **Neither field is ever taken from the vendor.** A note holding something we
+  did not write is left alone (the product then stays unstamped, which is the
+  safe direction), and `data[tag]` is a comma-separated LIST written whole — so
+  the sync reads the existing tags, appends ours if it is missing, and writes
+  them all back. Writing just `ds24-appkit` would delete every tag the vendor
+  had put there.
+
+⚠️ **`data[tag]` is newer than this code.** Measured on 2026-09-09 it did not
+exist yet, and `data` is validated against a strict allowlist — an unknown key
+is an ERROR, not something ignored. So `withoutTag()` in `sync-products.mjs`
+sends it, and on a refusal drops it and repeats the same call once, then stops
+sending it for the rest of the run. When the field is live the first attempt
+succeeds and nothing repeats. Delete that function once the field is
+everywhere; nothing else depends on it.
 
 ## localhost and Digistore24 (`_public-url.mjs`)
 

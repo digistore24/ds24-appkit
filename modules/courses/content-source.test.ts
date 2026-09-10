@@ -857,6 +857,53 @@ function* productionFiles(dir: string, base = ""): Generator<string> {
   }
 }
 
+describe("🚨 every media check answers as a BUYER", () => {
+  // Header point 2 of `content-source.ts` claimed `mayAccess()` took
+  // `asBuyer()`'s result. It did not: `asBuyer()` was written, documented at
+  // length, and never called — both media checks passed the caller's real role
+  // straight through, and `mayAccess()` short-circuits its `entitled` branch on
+  // `role === "owner"`. An operator asking the assistant would have been handed
+  // every paid file in the app in a transcript. Found 2026-09-10, by the
+  // function turning up as an unused binding in `npm run lint`.
+  //
+  // ⚠️ **The rule reads the CALLS, not the absence of a word.** The existing
+  // rule for this — "no `viewer.role` anywhere in the module" — was satisfied
+  // the whole time `asBuyer()` sat unused, because a narrowing that never runs
+  // reads no role either. A predicate that a broken state also satisfies is not
+  // a guard; it is a green light.
+  const source = blankComments(
+    readFileSync(join(MODULE_ROOT, "content-source.ts"), "utf8"),
+  );
+
+  it("reads the module at all", () => {
+    expect(source.length).toBeGreaterThan(2000);
+    expect(source).toContain("function asBuyer(");
+  });
+
+  it("every mayAccess() call is given asBuyer(viewer)", () => {
+    const calls = [...source.matchAll(/mayAccess\(([^)]*\))?[^)]*\)/g)].map((m) => m[0]);
+    // Non-vacuity: a regex that matched nothing would pass over every call.
+    expect(calls.length, "no mayAccess() call found — did the module change shape?")
+      .toBeGreaterThanOrEqual(2);
+
+    const raw = calls.filter((call) => !call.includes("asBuyer("));
+    expect(
+      raw,
+      "a mayAccess() call in this module is handed the caller's viewer. It " +
+        "short-circuits on `role === \"owner\"`, so an operator asking the " +
+        "assistant would receive every `entitled` medium in the app. Pass " +
+        "`asBuyer(viewer)`.",
+    ).toEqual([]);
+  });
+
+  it("and the gate still drops the role in so many words", () => {
+    // The other half of header point 2, and it was always true — stated here so
+    // that a future refactor of `courseAccessForViewer()` cannot quietly start
+    // forwarding a role either.
+    expect(source).toMatch(/courseAccessFor\(memberId,\s*null,/);
+  });
+});
+
 describe("🚨 the purchase gate is ONE function", () => {
   const files = [...productionFiles(MODULE_ROOT)];
 

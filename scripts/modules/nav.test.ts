@@ -15,12 +15,7 @@ import { describe, expect, it } from "vitest";
 
 import { CircleUser } from "lucide-react";
 
-import {
-  mergeModuleNav,
-  type ModuleNav,
-  type ModuleNavItem,
-  type NavItemBase,
-} from "@/lib/modules/nav";
+import { mergeModuleNav, type ModuleNav, type ModuleNavItem } from "@/lib/modules/nav";
 import { NAVIGATION } from "@/components/app-shell";
 import { MODULE_NAV } from "@/lib/modules/nav-registry";
 import { blankComments as withoutComments } from "@/scripts/lib/source-text.mjs";
@@ -118,10 +113,10 @@ describe("🚨 every featureKey is declared and resolved", () => {
   it("every feature a module declares is actually used by one of its entries", () => {
     // The other direction: a declared key nothing hides behind is a promise the
     // layout keeps paying for — `shellState()` resolves it on every request.
-    for (const module of MODULE_NAV) {
-      const used = new Set(module.NAVIGATION.map((i) => i.featureKey));
-      const idle = module.features.filter((f) => !used.has(f));
-      expect(idle, `"${module.id}" declares features nothing uses: ${idle.join(", ")}`).toEqual([]);
+    for (const moduleNav of MODULE_NAV) {
+      const used = new Set(moduleNav.NAVIGATION.map((i) => i.featureKey));
+      const idle = moduleNav.features.filter((f) => !used.has(f));
+      expect(idle, `"${moduleNav.id}" declares features nothing uses: ${idle.join(", ")}`).toEqual([]);
     }
   });
 
@@ -174,8 +169,8 @@ describe("the layout asks every module, and pays nothing for none", () => {
     // `const communityUnread = isCommunityEnabled() ? …`. The guard now belongs
     // to each module's `shellState()`, so it is measured there — on every
     // installed module, so a module added later cannot skip it.
-    for (const module of MODULE_NAV) {
-      const entry = join(ROOT, "modules", module.id, "module.ts");
+    for (const moduleNav of MODULE_NAV) {
+      const entry = join(ROOT, "modules", moduleNav.id, "module.ts");
       let source: string;
       try {
         source = readFileSync(entry, "utf8");
@@ -188,7 +183,7 @@ describe("the layout asks every module, and pays nothing for none", () => {
       const body = source.slice(source.indexOf("shellState"));
       expect(
         body.slice(0, 400),
-        `modules/${module.id}/module.ts resolves shell state without returning ` +
+        `modules/${moduleNav.id}/module.ts resolves shell state without returning ` +
           `early when the module is switched off — that is a query on every ` +
           `protected page load of an app that never wanted the feature`,
       ).toMatch(/if \(![\w.]+\(\)\) return \{\};/);

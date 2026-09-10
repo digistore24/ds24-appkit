@@ -91,6 +91,39 @@ describe("update --apply writes nothing until everything is in hand", () => {
     expect(block).not.toContain('entry.action === "needs-code"');
   });
 
+  it("🚨 refuses a path outside the guidance tree before it plans anything", () => {
+    // WHERE the manifest may write, checked over the raw manifest and before
+    // the plan is built — so a bad path cannot survive as far as a mkdir. The
+    // behaviour is measured end to end in update-guard.test.ts; what is pinned
+    // here is the ORDER, which that test cannot see.
+    // The filter itself, not the import line at the top of the file.
+    const refusal = at("!isGuidancePath(file)");
+    expect(refusal).toBeLessThan(at("const plan = planUpdate("));
+    expect(refusal).toBeLessThan(at("writeFileSync(entry.path"));
+    // And it ends the run rather than filtering the entry out.
+    //
+    // ⚠️ To the end of the BLOCK, not a fixed number of characters. It was
+    // `slice(refusal, refusal + 1200)`, and adding four lines of comment inside
+    // the block pushed `process.exit(1)` out of the window — the test went red
+    // for a reason that had nothing to do with what it measures. A byte count
+    // is a measurement of the formatting, not of the code.
+    const blockEnd = SOURCE.indexOf("\n}", refusal);
+    expect(blockEnd, "the refusal block does not close").toBeGreaterThan(refusal);
+    expect(SOURCE.slice(refusal, blockEnd)).toContain("process.exit(1)");
+  });
+
+  it("🚨 pins the manifest's host before it fetches it", () => {
+    expect(at("requireKnownHost(manifestUrl")).toBeLessThan(at("await getJson(manifestUrl)"));
+  });
+
+  it("🚨 feeds the write loop from the allowlist, not from writable() alone", () => {
+    // The layer under the refusal above: even a plan that reached this point
+    // some other way cannot be written unchecked. `guidanceWritable()` throws
+    // where `writable()` would happily hand the path over.
+    expect(at("guidanceWritable(plan)")).toBeLessThan(at("writeFileSync(entry.path"));
+    expect(SOURCE).not.toContain("= writable(plan)");
+  });
+
   it("writes with an explicit exit before it when there is nothing to do", () => {
     // Not a correctness property but a diagnostic one: "Nothing to write."
     // followed by an exit is what stops the stamp being rewritten on a run that

@@ -103,8 +103,10 @@ mode, and there are two ways to do it:
 - **Delete the entry** — when you are sure you will never need it.
 
 ⚠️ Neither of them unpublishes anything. A product `ds24-sync` has already
-created stays at Digistore24 until you deactivate it there, by hand, and an old
-checkout link keeps working until you do.
+created stays at Digistore24 while its entry is merely parked, and an old
+checkout link keeps working. Taking the entry OUT of the registry is what makes
+it an orphan `node run.mjs ds24-sync --prune` removes — deleting it if it never
+sold, deactivating it if it did.
 
 🚨 **`sell` and `billingMode` are not two words for the same thing.** The mode
 is about a whole HALF of the model — it hides the surfaces of subscriptions or
@@ -116,7 +118,7 @@ has already bought.
 
 **And that is safe for the shipped test suite.** Every test here that needs a
 Product Key reads one out of THIS file through `lib/digistore/test-product-keys.ts`
-rather than naming `basic_monthly` or `starter` — so deleting a sample product
+rather than naming `basic` or `starter` — so deleting a sample product
 does not turn somebody's suite red about a product they deliberately do not sell.
 Where your registry no longer holds the *shape* a test needs at all — an app
 selling a single one-off product has neither a subscription nor a token package —
@@ -127,11 +129,11 @@ passing for a different reason than the one it was written for.
 ## Products: registry + checkout via createBuyUrl
 
 Every offer (subscription plan **and** token package) is **one DS24 product per
-language**, each with a stable id. One product per language, because a DS24
-product carries exactly one and that one is the language of the buyer's order
-form — see [`digistore-integration.md`](digistore-integration.md) → *The order
-form's language*. Declare products in `config/digistore-products.json` and
-create them:
+language**, each with a stable id, and **one payment plan per way to pay**.
+One product per language, because a DS24 product carries exactly one and that
+one is the language of the buyer's order form — see
+[`digistore-integration.md`](digistore-integration.md) → *The order form's
+language*. Declare products in `config/digistore-products.json` and create them:
 
 ```bash
 node run.mjs ds24-sync
@@ -142,12 +144,73 @@ environment's IPN connection.
 (`node scripts/ds24/sync-products.mjs --apply` only does the products — the
 purchases would then unlock nothing.)
 
-**The price stays in the registry.** `data[amount]` on the DS24 product is
-deprecated and discarded; instead `priceCents`, `currency` and `billingInterval`
-travel with every checkout call as `payment_plan[...]`. DS24 does offer a
-`createPaymentPlan` API, but a stored plan would put the price in a second place
-and could not do free trials, upgrades, vouchers or per-link affiliate
-commissions. **No payment plans in the DS24 interface.**
+### Where the price lives, and why it is written twice
+
+*(Needs template 0.36.0. An older app has no `paymentOptions` and no
+`payplanIds`: it keeps one entry per interval and sends the price with every
+checkout call, which is what the rest of this file described before.)*
+
+**The registry AUTHORS the price. Digistore24 gets a copy.**
+
+`data[amount]` on the DS24 product is deprecated and discarded, so no price is
+ever set on the product itself. It is set on the product's **payment plans**,
+one per way to pay, written by `ds24-sync` from `priceCents`, `currency` and
+`billingInterval` in the registry. **Do not edit those plans in the Digistore24
+interface** — the next sync overwrites them from this file.
+
+That is a change of mind, and it is worth saying why, because this file used to
+end the paragraph with *"no payment plans in the DS24 interface"* and mean it.
+The reasoning then was: a stored plan puts the price in a second place, and it
+cannot do free trials, upgrades, vouchers or per-link affiliate commissions.
+Half of that was right. What it missed is that **our checkout link is not the
+only way into the product**:
+
+- the product has an **order form of its own**, which no link of ours touches;
+- an **affiliate** can send traffic straight to it;
+- the buyer can **change their billing interval** from inside their purchase
+  (`switch_pay_interval_url`, which arrives on every IPN) — and that switches to
+  another *stored* plan, so with none there is nothing to switch to.
+
+All three charge whatever plans hang on the product. A product with no plan of
+ours does not have none: it has Digistore24's own, about 27 €, and on a
+subscription such an order grants access **for ever** (see
+[`digistore-integration.md`](digistore-integration.md) → *The plan on the
+product*). Writing the plans is what closes that, and it is the second reason
+for this whole shape — the first being that one offering now needs one product
+instead of two.
+
+**So which one charges the buyer?** The stored plan, on an ordinary purchase:
+`checkoutLinksFor` sends `settings[plan]` and no amounts. It sends the amounts —
+today's inline `payment_plan[...]`, unchanged — in exactly the three cases a
+stored plan cannot express:
+
+| | |
+|---|---|
+| an **upgrade or downgrade** | the price exists for this buyer against a purchase they already hold; there is nothing to store it in |
+| a **free trial** (`test_interval`) | same shape, if this app ever grows one |
+| a **plan that no longer matches the registry** | somebody edited a price and did not sync — see below |
+
+That last row is the one that protects the customer. The registry records what
+each plan was **written with**, next to its id:
+
+```json
+"payplanIds": { "prod": { "de": { "yearly": {
+  "id": "992", "priceCents": 19000, "currency": "EUR", "billingInterval": "12_month"
+} } } }
+```
+
+When those stop agreeing with `paymentOptions`, `checkoutTargetFor()` hands back
+no plan and the checkout prices itself — at the number the vendor actually
+wrote. **A buyer is never charged a price nobody refreshed**; the vendor is told
+to run `ds24-sync`.
+
+⚠️ **And one loud failure you should recognise.** `createBuyUrl` refuses a
+`payment_plan[template]` that does not belong to the product it was called for
+(`payment_plan_not_found`) — so a plan id that survived a deletion at
+Digistore24 would take out **every buy button of that offering at once**, in
+every language. `createBuyUrl()` catches exactly that error, retries once
+without the plan, and writes one line naming the plan and the product into
+`node run.mjs logs`. The page stays alive; the log says what to fix.
 
 Checkout:
 

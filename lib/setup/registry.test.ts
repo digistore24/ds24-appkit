@@ -388,3 +388,50 @@ describe("the enumerated surface", () => {
     expect(media?.inputSchema.properties.path?.type).toBe("string");
   });
 });
+
+describe("🚨 no schema default hands out a wider visibility than saying nothing does", () => {
+  // ── The finding, and why the assertion is shaped like this ─────────────────
+  // `media_upload`'s schema carried `default: "public"`. That reads like
+  // documentation and is not: `validateInput()` MATERIALISES a default into the
+  // validated input, so the value reached `acceptUpload()` and overwrote its own
+  // safe fallback (`input.visibility ?? "owner"`). An agent that uploaded a file
+  // without saying anything about who may see it got a world-readable URL —
+  // security review 2026-08-18, L-2, which read both lines rather than reasoning
+  // about schema semantics.
+  //
+  // Two assertions, because either alone is weak. The first is on the DECLARATION
+  // and would survive a rewrite of `validateInput()`; the second drives the real
+  // validator and would survive somebody re-adding the default under another
+  // name. The pair is what makes "saying nothing means `owner`" a property of the
+  // surface rather than of one line.
+  it("declares no default for media_upload's visibility", () => {
+    const media = toolsByName().get("media_upload");
+    expect(media?.inputSchema.properties.visibility?.enum).toEqual([
+      "public",
+      "owner",
+      "entitled",
+      "members",
+    ]);
+    expect(media?.inputSchema.properties.visibility?.default).toBeUndefined();
+  });
+
+  it("validates a call that says nothing about visibility into a value that says nothing", () => {
+    const media = toolsByName().get("media_upload")!;
+    const validated = validateInput(media.inputSchema, { path: "/tmp/hero.png" });
+    expect(validated.ok).toBe(true);
+    // The key is ABSENT, not `"public"`. `acceptUpload()` then applies its own
+    // `?? "owner"`, which is the one place that decision is supposed to live.
+    expect(validated.ok && Object.hasOwn(validated.value, "visibility")).toBe(false);
+  });
+
+  it("still carries an explicit visibility through untouched", () => {
+    // The non-vacuity half: a validator that had stopped copying the field at
+    // all would satisfy the test above and break every deliberate upload.
+    const media = toolsByName().get("media_upload")!;
+    const validated = validateInput(media.inputSchema, {
+      path: "/tmp/hero.png",
+      visibility: "public",
+    });
+    expect(validated.ok && validated.value.visibility).toBe("public");
+  });
+});

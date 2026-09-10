@@ -760,12 +760,26 @@ export function findNumberInputsWithoutStep(source) {
  * a field-test app: a German quote tool for painters offered "Basic (monthly)
  * — The uncomplicated way in — Cancel monthly" on /plans and on its dashboard.
  *
+ * ⚠️ "Basic" on its own is a weaker signal than "Basic (monthly)" was, before
+ * monthly and yearly became two ways to pay inside one offering — a vendor may
+ * genuinely sell something called that, and would then read one line in a UX
+ * report about a product they did name themselves. That is the right way
+ * round: this rule reports, it does not gate, and the failure it exists for (a
+ * shipped example sold to real customers) is the expensive one.
+ *
+ * 🚨 **Today's names only, never a history.** The factory holds this list
+ * against the registry beside it and demands they are EQUAL, and that is right
+ * because this file freezes with the app: `node run.mjs update` refreshes
+ * guidance, never `scripts/`. So every copy checks its own era's examples, and
+ * an older app carries its own older list. Adding a retired name here would
+ * make this copy warn about a product this template never shipped.
+ *
  * Hand-kept on purpose: the customer's tree has no other record of what the
  * examples were called. The factory checks this list against the shipped
  * registry (scripts/shipped-lists.test.mjs), so a renamed example cannot
  * silently leave the rule matching nothing.
  */
-export const SHIPPED_EXAMPLE_PRODUCT_NAMES = ["Basic (monthly)", "Basic (yearly)", "Starter Tokens"];
+export const SHIPPED_EXAMPLE_PRODUCT_NAMES = ["Basic", "Starter Tokens"];
 
 /**
  * Products on sale under a shipped example name — `{ key, name }` each.

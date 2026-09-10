@@ -709,6 +709,17 @@ export interface PurchaseGrantRef {
 }
 
 /**
+ * A database handle: the pool, or one transaction on it.
+ *
+ * The four writers below take one so that `applyGrantTransition` can run them
+ * inside a transaction it opened — see the lock there. Without this they would
+ * keep using the module-level `db`, take a DIFFERENT connection out of the
+ * pool, and the lock would be held by a transaction that none of the actual
+ * writes ran in: a lock that looks right in review and holds nothing.
+ */
+type GrantDb = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
  * Carries out what `chooseGrantTransition` decided.
  *
  * ONE write entry point beside the one decision point, so stories 2.2–2.4 add
@@ -725,15 +736,56 @@ export async function applyGrantTransition(
   transition: GrantTransition,
   ref: PurchaseGrantRef,
 ): Promise<boolean> {
+  if (transition.kind === "none") return false;
+
+  // 🚨 Every delivery of ONE purchase runs one at a time.
+  //
+  // The finding (L-1, 2026-08-18): `activateGrant` reads `orders.status` and
+  // then inserts, in two separate statements with nothing between them. The
+  // comment there argued the read was safe because the status "was written
+  // earlier in this same request" — true of THIS delivery, and the race is with
+  // a DIFFERENT one. A retried `on_payment` and an arriving `on_refund` can
+  // interleave so that the refund finds no grant to close and the payment then
+  // creates a live grant on a refunded order. Nothing would ever close it:
+  // Digistore24 does not redeliver an event it has acknowledged, and there is
+  // no reconciliation job.
+  //
+  // A transaction alone does not fix it — two concurrent transactions still
+  // read snapshots that miss each other. The lock does: whichever delivery
+  // arrives second sees what the first committed. `pg_advisory_xact_lock` is
+  // released by the commit or rollback, so there is no unlock to forget and no
+  // leak when something throws.
+  //
+  // ⚠️ Keyed on the PURCHASE, not on the member or the product: deliveries of
+  // one purchase are what must not interleave, and locking anything wider would
+  // serialise unrelated customers behind each other on a busy webhook.
+  //
+  // `hashtext` is Postgres's own, so the 64-bit lock space is used the same way
+  // everywhere; a hash collision would only make two unrelated purchases wait
+  // for each other, never lose a write.
+  if (!ref.ds24PurchaseId) return runTransition(transition, ref, db);
+
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${ref.ds24PurchaseId}))`);
+    return runTransition(transition, ref, tx);
+  });
+}
+
+/** The switch itself, on whichever handle the caller opened. */
+async function runTransition(
+  transition: GrantTransition,
+  ref: PurchaseGrantRef,
+  handle: GrantDb,
+): Promise<boolean> {
   switch (transition.kind) {
     case "activate":
-      return activateGrant(ref);
+      return activateGrant(ref, handle);
     case "end":
-      return endGrant(transition.reason, ref);
+      return endGrant(transition.reason, ref, handle);
     case "suspend":
-      return suspendGrant(ref);
+      return suspendGrant(ref, handle);
     case "resume":
-      return resumeGrant(ref);
+      return resumeGrant(ref, handle);
     case "none":
       return false;
   }
@@ -842,12 +894,13 @@ export async function openPurchaseGrantByPurchase(ds24PurchaseId: string): Promi
 async function endGrant(
   reason: GrantEndReason,
   ref: PurchaseGrantRef,
+  handle: GrantDb = db,
 ): Promise<boolean> {
   // No purchase id, no key to end on. A purchase grant always has one (the
   // CHECK), so this is the "the event carried none" case, not a missing row.
   if (!ref.ds24PurchaseId) return false;
 
-  const ended = await db
+  const ended = await handle
     .update(grants)
     .set({
       // Database time, not the app's: `created_at`/`updated_at` default to
@@ -937,10 +990,10 @@ async function endGrant(
  * arrives once per retry, so a warning would fire on healthy traffic and
  * teach the Operator to ignore the log.
  */
-async function suspendGrant(ref: PurchaseGrantRef): Promise<boolean> {
+async function suspendGrant(ref: PurchaseGrantRef, handle: GrantDb = db): Promise<boolean> {
   if (!ref.ds24PurchaseId) return false;
 
-  const suspended = await db
+  const suspended = await handle
     .update(grants)
     .set({
       // Database time, for the reason endGrant gives: a clock-skewed app
@@ -986,10 +1039,10 @@ async function suspendGrant(ref: PurchaseGrantRef): Promise<boolean> {
  * NULL changes nothing anybody can observe, and the missing condition means a
  * resume cannot be defeated by a stale read of the suspension state.
  */
-async function resumeGrant(ref: PurchaseGrantRef): Promise<boolean> {
+async function resumeGrant(ref: PurchaseGrantRef, handle: GrantDb = db): Promise<boolean> {
   if (!ref.ds24PurchaseId) return false;
 
-  const resumed = await db
+  const resumed = await handle
     .update(grants)
     .set({
       suspendedAt: null,
@@ -1010,7 +1063,7 @@ async function resumeGrant(ref: PurchaseGrantRef): Promise<boolean> {
   return resumed.length > 0;
 }
 
-async function activateGrant(ref: PurchaseGrantRef): Promise<boolean> {
+async function activateGrant(ref: PurchaseGrantRef, handle: GrantDb = db): Promise<boolean> {
   // Provenance is a CHECK constraint: source='purchase' requires a purchase
   // id. Inserting without one would raise 23514, and an uncaught throw inside
   // the IPN handler 500s the webhook — Digistore24 would then redeliver the
@@ -1038,12 +1091,20 @@ async function activateGrant(ref: PurchaseGrantRef): Promise<boolean> {
   // would ever close it: Digistore24 does not redeliver an event it already
   // acknowledged.
   //
-  // `orders.status` is terminal for refunded/chargeback and was written
-  // earlier in this same request, so it is the one piece of state that
-  // survives the missing grant row. Note this makes the WRITE path read
-  // `orders`; AD-1 constrains the READ path (`entitlementsFor`), which still
-  // reads `grants` alone.
-  const [reversed] = await db
+  // `orders.status` is terminal for refunded/chargeback, so it is the one piece
+  // of state that survives the missing grant row. Note this makes the WRITE
+  // path read `orders`; AD-1 constrains the READ path (`entitlementsFor`),
+  // which still reads `grants` alone.
+  //
+  // ⚠️ This paragraph used to end "…and was written earlier in this same
+  // request, so it is safe to read it here". That was the reasoning under which
+  // finding L-1 grew: it is true of THIS delivery and says nothing about a
+  // CONCURRENT one, and the read and the insert below are two statements. What
+  // makes them safe is the advisory lock in `applyGrantTransition`, which
+  // serialises every delivery of one purchase. **If that lock ever goes, this
+  // check goes back to being a suggestion** — do not remove one without the
+  // other.
+  const [reversed] = await handle
     .select({ status: orders.status })
     .from(orders)
     .where(
@@ -1060,7 +1121,7 @@ async function activateGrant(ref: PurchaseGrantRef): Promise<boolean> {
     return false;
   }
 
-  const created = await db
+  const created = await handle
     .insert(grants)
     .values({
       memberId: ref.memberId,

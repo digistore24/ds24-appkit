@@ -22,7 +22,6 @@ import { UserMinus, UserPlus } from "lucide-react";
 import { useActionToast } from "@/hooks/use-action-toast";
 import { Button } from "@/components/ui/button";
 
-import type { ActionState } from "../actions";
 import { setFollowAction } from "./actions";
 import { EMPTY_ACTION_STATE } from "@/lib/action-state";
 

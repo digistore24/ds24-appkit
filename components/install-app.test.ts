@@ -53,6 +53,16 @@ describe("the install offer on the server", () => {
     // app never renders this component without a zone (`i18n/request.ts`), so a
     // provider built here without one measures a configuration no request has.
     const markup = renderToStaticMarkup(
+      // ⚠️ `children` as a PROP, and the disable below is the finding rather than
+      // a way around one: `react/no-children-prop` wants it as the third
+      // argument, and next-intl's own type does not allow that — its props are
+      // `Omit<IntlConfig & { children: ReactNode }, "locale">`, so `children` is
+      // REQUIRED in the object and a positional child leaves it missing
+      // (`npm run typecheck`: "Property 'children' is missing"). The rule's
+      // premise — that a positional child silently overwrites the prop — cannot
+      // arise here, because there is no positional child. Measured 2026-09-10,
+      // in both directions.
+      // eslint-disable-next-line react/no-children-prop
       createElement(NextIntlClientProvider, {
         locale: "de",
         timeZone: appTimeZone(),

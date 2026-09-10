@@ -768,16 +768,21 @@ const mediaUpload: SetupTool = {
       // transcript and the bill — and `registry.test.ts` fails the build on any
       // field name that invites one.
       path: { type: "string", minLength: 1, maxLength: 1024 },
-      visibility: {
-        type: "string",
-        enum: ["public", "owner", "entitled", "members"],
-        default: "public",
-      },
+      // 🚨 **No `default` here, and the absence is the security property.**
+      // `validateInput()` MATERIALISES a schema default into the validated
+      // input (`lib/setup/rules.ts`: `if (property.default !== undefined)
+      // out[key] = property.default`), so a `default: "public"` did not merely
+      // document a fallback — it overwrote `acceptUpload()`'s own safe one
+      // (`input.visibility ?? "owner"` in `lib/media/manage.ts`). A caller that
+      // said nothing about visibility got a world-readable URL, which is the
+      // opposite of what saying nothing should buy. Measured, not reasoned
+      // about: the security review of 2026-08-18 (L-2) read both lines.
+      // Leaving it out hands the decision back to the one place that owns it.
+      visibility: { type: "string", enum: ["public", "owner", "entitled", "members"] },
       // Required by `acceptUpload()` when the visibility is `entitled` — this is
       // a file somebody paid for, and every key is validated there because
-      // `hasPlan()` throws on one it does not know. A LIST, because one
-      // offering is one Digistore24 product per billing interval: holding any
-      // one of them buys the file.
+      // `hasPlan()` throws on one it does not know. A LIST, because one file
+      // may be sold under several offerings — holding any one of them buys it.
       planKeys: { type: "array", items: { type: "string", maxLength: 120 }, maxItems: 32 },
       // Not derived from anything, and required for a picture: alternative text
       // is a sentence for a person, and a filename is not one.
@@ -818,7 +823,13 @@ const mediaUpload: SetupTool = {
         found: 0,
         changed: 0,
         subjects: [path],
-        detail: `${filename ?? path} (${bytes.length} bytes) would be stored as ${String(input.visibility ?? "public")}`,
+        // ⚠️ `?? "owner"` and not `?? "public"`: this sentence is the FIRST act
+        // of the two, and it is what the operator confirms. It has to name the
+        // visibility the second act will actually store — `acceptUpload()`'s
+        // fallback — or the plan describes a different file from the one that
+        // lands. While the schema carried `default: "public"` the two agreed by
+        // accident; with the default gone, only this line keeps them together.
+        detail: `${filename ?? path} (${bytes.length} bytes) would be stored as ${String(input.visibility ?? "owner")}`,
       };
     }
 
@@ -1140,6 +1151,45 @@ const contentMediaConfirm: SetupTool = {
   targetField: "path",
   subjectEmailField: null,
   mutates: true,
+  // ── `destructive` stays UNSET, and that is a decision rather than an omission
+  //
+  // 🚨 **This tool removes an object in `plan` mode** (`discard()` below, called
+  // from three refusal branches that all sit ABOVE the `mode === "plan"` return).
+  // The security review of 2026-08-18 (L-8) is right that this is a destructive
+  // effect at the act the protocol otherwise describes as consequence-free, and
+  // it asked for one of two answers: set `destructive: true`, or carry the
+  // deviation as a NAMED exception. It is the second, and here is why the first
+  // does not work:
+  //
+  //   · **The flag is an environment switch, not a mode switch.** The one line
+  //     that reads it is `lib/setup/guard.ts` — `tool.destructive &&
+  //     !mayRunDestructive(appEnv, name, allowDestructive)` — and
+  //     `mayRunDestructive()` is `isDev(env) || allowed.includes(name)`. In DEV
+  //     it is true, so the plan-mode removal this finding is about would carry
+  //     on exactly as it does now. Outside DEV the WHOLE tool would be refused,
+  //     `plan` and `apply` alike, and the only remedy an operator has — naming
+  //     it in `config/setup.json`'s `allowDestructive` — puts the behaviour back
+  //     the way it was. The flag would therefore never once change the act the
+  //     finding names. It would be a second claim about it.
+  //
+  //   · **And it would break the staged leg outside DEV by default.** This tool
+  //     is the second half of `content_media_url`; every operator publishing
+  //     content media to staging or production goes through it. Shipping it as
+  //     `destructiveRefused` until they edit a config file is a real cost paid
+  //     for no change in exposure.
+  //
+  // What is destructive here is NARROW and bounded in a way `allowDestructive`
+  // cannot express: the only key that can be removed is the one the manifest
+  // itself derives for the file named in `path`, and it is removed only when the
+  // bytes at that key CONTRADICT the manifest. Nothing a caller writes chooses a
+  // victim. That is the shape of an undo, not of a delete tool, and it is the
+  // ruling `lib/setup/registry.test.ts` already holds this pair to.
+  //
+  // The exception is therefore written down where an operator reads the promise
+  // — `docs/setup-mcp.md`, "One named exception to *a plan writes nothing*" —
+  // and `lib/setup/content-media.test.ts` fails the build if that paragraph ever
+  // stops naming this tool. An undocumented deviation is the thing the finding
+  // actually objected to.
   inputSchema: {
     type: "object",
     properties: { path: { type: "string", minLength: 1, maxLength: 1024 } },
@@ -1172,6 +1222,13 @@ const contentMediaConfirm: SetupTool = {
      * makes `content-check` lie. (`content_publish`'s "a plan writes nothing" is
      * that tool's claim about ITS appliers, in a read-only transaction; this is
      * a different act.)
+     *
+     * 🚨 **It is the one exception in the surface, and it is NAMED** — in
+     * `docs/setup-mcp.md` under "One named exception to *a plan writes
+     * nothing*", pinned by `lib/setup/content-media.test.ts`. The reasoning for
+     * naming it rather than flagging the tool `destructive` is on the tool
+     * declaration above; the short of it is that the flag refuses the tool by
+     * ENVIRONMENT and would not touch this branch at all.
      */
     const discard = async (): Promise<void> => {
       try {

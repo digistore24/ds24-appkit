@@ -79,6 +79,20 @@ export const subscriptions = pgTable(
     status: subscriptionStatusEnum("status").notNull(),
     // e.g. "1_month" | "12_month". Determines monthly/yearly.
     billingInterval: text("billing_interval"),
+    // WHICH way to pay of the offering was bought — the key out of
+    // `paymentOptions` in config/digistore-products.json ("monthly",
+    // "yearly").
+    //
+    // 🚨 DISPLAY ONLY, and more emphatically than the fields around it: with
+    // payment options, the monthly and the yearly buyer hold the SAME Product
+    // Key and the same entitlement. Gating a feature on this column would
+    // invent a difference the vendor never sold. What a Member may use is
+    // `hasPlan(memberId, productKey)` and nothing else (docs/entitlements.md).
+    //
+    // It is written from the `o:` pair in tracking[custom], because the IPN
+    // does not carry the answer: on a captured live payload `payplan_id` came
+    // back empty and `other_billing_intervals` was not among its 173 fields.
+    paymentOption: text("payment_option"),
     amount: numeric("amount", { precision: 12, scale: 2 }),
     currency: text("currency"),
     // When the next charge falls due — DISPLAY ONLY (story 2.5). Access is
@@ -104,6 +118,14 @@ export const subscriptions = pgTable(
     rebillingStopUrl: text("rebilling_stop_url"),
     invoiceUrl: text("invoice_url"),
     supportUrl: text("support_url"),
+    // Digistore24's own "change your billing interval" page for this purchase.
+    //
+    // It only leads anywhere once the product carries several PAYMENT PLANS —
+    // which is what `scripts/ds24/sync-products.mjs` writes, one per way to
+    // pay. Offering it saves building an upgrade flow for the commonest change
+    // a subscriber makes; the switch happens at Digistore24 and comes back as
+    // an ordinary IPN.
+    switchIntervalUrl: text("switch_interval_url"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },

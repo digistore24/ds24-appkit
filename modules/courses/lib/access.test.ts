@@ -5,8 +5,8 @@
 //
 // 🚨 **This file exists because the gate learned to take a LIST and nothing
 // could tell.** Until Story 44.1 `config/course.json` held one `productKey`;
-// one offering is one Digistore24 product per billing interval, so a course
-// sold monthly and yearly is two keys before it has a second customer.
+// a course may be sold under several offerings — on its own and inside a
+// bundle, or in both tiers of a ladder — so one key was never enough.
 // Measured while writing this: with `courseAccessFor()` reduced to asking the
 // FIRST key only, the whole suite of 7206 tests stayed green — every other
 // test passes a one-key list, so none of them can tell the two apart.

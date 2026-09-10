@@ -100,12 +100,12 @@ not a listed tool, it cannot be done here.
 | create or update an account | `user_upsert` |
 | give somebody a plan by hand | `grant_by_hand` — needs a written reason |
 | end a manual grant | `grant_revoke` — **irreversible**, needs a reason |
-| put a file in the media store | `media_upload` — give a **path**, not the bytes |
+| put a file in the media store | `media_upload` — give a **path**, not the bytes, and it lands **private to its owner** unless you say `visibility: "public"` |
 | ask whether the content is there | `content_presence` — each owner answers for its own rows |
 | see what publishing would do | `content_publish`, mode `plan` — writes nothing *(needs template 0.24.0)* |
 | publish this repo's content there | `content_publish`, mode `apply` *(needs template 0.24.0)* |
 | publish it **including the big media** | `node run.mjs content-publish --env <env> --apply` — the COMMAND, not a tool *(needs template 0.24.0)* |
-| place ONE declared media file there | `content_media_url`, then `content_media_confirm` — the command above drives them in the right order; you do not call them by hand *(needs template 0.24.0)* |
+| place ONE declared media file there | `content_media_url`, then `content_media_confirm` — the command above drives them in the right order; you do not call them by hand. ⚠️ The one place where a `plan` is not inert: `content_media_confirm` removes a failed landing from the store, at the key the manifest derives and nowhere else (`docs/setup-mcp.md`) *(needs template 0.24.0)* |
 | see what this surface has done there | `list_acts` |
 | see the course an environment holds | `courses_outline` *(the module contributes it)* |
 | create a community room | `community_group_upsert` *(the module contributes it)* |

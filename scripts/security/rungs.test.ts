@@ -44,6 +44,34 @@ import { RUNGS } from "./check.mjs";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const RUNG_DIR = path.join(HERE, "rungs");
 
+/**
+ * The two shapes this file drives `it.each` with.
+ *
+ * ⚠️ Written out rather than inferred, and that is what the annotations below
+ * are for: `it.each` over a tuple array widens both members to the union of
+ * their types, so the callback parameters arrive untyped. They carried `any`
+ * until 2026-09-10, which made `npm run lint` red — and an `any` here is
+ * worse than untidy: every `rung.<field>` this file checks at RUNTIME would
+ * also have been accepted at compile time under any spelling, including a
+ * field that no longer exists.
+ *
+ * `RUNGS` comes from `check.mjs` and carries no types of its own, so this is a
+ * CLAIM about it — one the assertions in the first test then verify.
+ */
+interface RungShape {
+  id: string;
+  label?: string;
+  tier?: number;
+  covers?: string;
+  run?: unknown;
+}
+
+/** One rung's source file, as the walk below produces it. */
+interface RungFile {
+  name: string;
+  source: string;
+}
+
 /** Every rung file, as `{ name, source }` with comments already blanked. */
 const FILES = readdirSync(RUNG_DIR)
   .filter((name) => name.endsWith(".mjs"))
@@ -65,7 +93,7 @@ describe("every registered rung keeps the shape the aggregator was written again
     expect(FILES.map((file) => file.name)).toContain("container.mjs");
   });
 
-  it.each(RUNGS.map((rung) => [rung.id, rung]))("%s declares id, label, tier, covers, run", (_id, rung: any) => {
+  it.each(RUNGS.map((rung) => [rung.id, rung]))("%s declares id, label, tier, covers, run", (_id, rung: RungShape) => {
     expect(typeof rung.id).toBe("string");
     expect(rung.id.trim()).not.toBe("");
     expect(String(rung.label ?? "").trim()).not.toBe("");
@@ -210,7 +238,7 @@ describe("🚨 no rung ever acquires its own tool", () => {
     expect(hostsIn('await fetch("https://evil.example.net/x")')).toEqual(["evil.example.net"]);
   });
 
-  it.each(FILES.map((file) => [file.name, file]))("%s downloads nothing", (_name, file: any) => {
+  it.each(FILES.map((file) => [file.name, file]))("%s downloads nothing", (_name, file: RungFile) => {
     expect(
       acquisitionsIn(file.source),
       `${file.name} would acquire a tool: ${acquisitionsIn(file.source).join(", ")}\n` +
@@ -220,7 +248,7 @@ describe("🚨 no rung ever acquires its own tool", () => {
     ).toEqual([]);
   });
 
-  it.each(FILES.map((file) => [file.name, file]))("%s needs no account and no key", (_name, file: any) => {
+  it.each(FILES.map((file) => [file.name, file]))("%s needs no account and no key", (_name, file: RungFile) => {
     // NFR-65 made structural: no rung reads — or even names — an environment
     // variable that would be a credential. ⚠️ A text scan cannot see a name that
     // arrives through an IMPORTED table; `rungs/live.mjs` is the shipped case
@@ -233,7 +261,7 @@ describe("🚨 no rung ever acquires its own tool", () => {
     ).toEqual([]);
   });
 
-  it.each(FILES.map((file) => [file.name, file]))("%s talks only to a declared database", (_name, file: any) => {
+  it.each(FILES.map((file) => [file.name, file]))("%s talks only to a declared database", (_name, file: RungFile) => {
     for (const host of hostsIn(file.source)) {
       expect(
         DECLARED_HOSTS,

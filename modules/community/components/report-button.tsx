@@ -39,7 +39,6 @@ import {
 } from "@/components/ui/dialog";
 import { MAX_MODERATION_REASON_LENGTH } from "@/modules/community/lib/rules";
 
-import type { ActionState } from "@/modules/community/pages/actions";
 import { reportAction } from "@/modules/community/pages/reports/actions";
 import { EMPTY_ACTION_STATE } from "@/lib/action-state";
 

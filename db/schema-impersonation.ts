@@ -98,6 +98,18 @@ export const IMPERSONATION_END_REASONS = [
   "signout",
   /** Nobody came back; the scheduled job closed it. */
   "abandoned",
+  /**
+   * 🚨 The access never happened.
+   *
+   * The row is written BEFORE the session is switched — deliberately, so that
+   * no access can exist that is not on the record. When the switch then fails,
+   * the row is standing there claiming an access nobody ever had, and this
+   * table IS the authorisation (see CLAUDE.md). A register that claims more
+   * than happened is worse than one with a gap: it stops being usable as
+   * evidence at all. So the failure closes its own row with this reason
+   * instead of leaving it open. Found 2026-08-18 (L-9).
+   */
+  "notstarted",
 ] as const;
 
 export type ImpersonationEndReason = (typeof IMPERSONATION_END_REASONS)[number];

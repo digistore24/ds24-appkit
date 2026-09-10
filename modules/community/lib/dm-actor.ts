@@ -25,7 +25,7 @@
 // It answers ONE question — "which member may act on a direct-message surface
 // in this request" — and it answers `null` (or refuses) for an impersonated
 // session. Every DM surface obtains its actor here and by no other route;
-// `lib/community/impersonation-guard.test.ts` reads the files and fails the
+// `modules/community/lib/impersonation-guard.test.ts` reads the files and fails the
 // build when one of them stops doing so, the same mechanism
 // `app/api/v1/guard-presence.test.ts` uses for the API's own door.
 //

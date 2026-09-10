@@ -18,7 +18,7 @@
 // branch below unreachable.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { keysOrSkip, planShapedKey, tokenKey } from "@/lib/digistore/test-product-keys";
+import { planShapedKey, } from "@/lib/digistore/test-product-keys";
 
 /** One object, mutated per test — `file()` reads it fresh on every call. */
 const CONFIG: Record<string, unknown> = {};
@@ -33,7 +33,6 @@ const { courseConfig, courseConfigProblems, courseOffReason } = await import("./
 // (field test 2026-08-11). Where a shape is genuinely absent the test skips and
 // says why: `lib/digistore/test-product-keys.ts`.
 const PLAN = planShapedKey();
-const TOKEN = tokenKey();
 
 function set(fields: Record<string, unknown>) {
   for (const key of Object.keys(CONFIG)) delete CONFIG[key];

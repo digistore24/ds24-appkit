@@ -27,12 +27,7 @@ import { guardApi } from "@/modules/api/api/guard";
 import { apiError, apiJson } from "@/modules/api/api/rules";
 
 import { isCommunityEnabled } from "@/modules/community/lib/config";
-import {
-  liveAnswerFor,
-  type LiveScope,
-  type LiveScopeAnswer,
-  type PostRow,
-} from "@/modules/community/lib/manage";
+import { liveAnswerFor, type LiveScope, type LiveScopeAnswer } from "@/modules/community/lib/manage";
 import { wirePost } from "../lib/wire";
 
 export const runtime = "nodejs";

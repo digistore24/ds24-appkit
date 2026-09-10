@@ -228,10 +228,44 @@ Fields worth knowing before you design anything:
 | `merchant_id`, `merchant_name` | **who sold.** The vendor's numeric id and Digistore24 name |
 | `ipn_config_api_key_id` | the numeric prefix of the API key whose connection this is — for key `12345-xxxx`, `12345`. **Present on order events, absent on the connection test** |
 | `ipn_config_domain_id` | the `domain_id` passed to `ipnSetup` |
-| `custom` | whatever the app sent as `tracking[custom]`, returned on *every* later event for that purchase. Documented as `string(63)`, and the identity pairs already fill most of it |
+| `custom` | whatever the app sent as `tracking[custom]`, returned on *every* later event for that purchase. Documented as `string(63)`, and the identity pairs already fill most of it. 🚨 **It does not decide what was bought** — see *Who decides which product was bought* below |
 | `api_mode` | `live` or `test`. Test purchases arrive as `test` — whether made with the test-purchase cookie or with the testpay parameter that DEV checkout links append by themselves (`node run.mjs ds24-testpay`). The template deliberately processes `test` events exactly like `live` ones: that identical path is what makes a test purchase prove the chain. An operator who wants test orders segregated in PROD branches on this field — nothing in the template does |
 | `order_id` | stable across all transactions of one order → the idempotency key, **and the key everything downstream hangs on**: the grant, the subscription mirror and the auto top-up mandate are all stored under it (columns named `ds24_purchase_id`, for historical reasons). A refund carries the same value as the payment it reverses, which is what lets it close what the payment opened |
 | ~~`purchase_id`~~ | 🚨 **there is no such IPN field.** It is in no parameter table Digistore24 publishes, and a captured live `on_payment` of 173 parameters does not carry it (`lib/digistore/ipn-vectors.json` → `captured-on-payment`). The name belongs to the **API**, where `getPurchase` documents it as *"the Digistore24 order id"* — the same value, under a different name, in a different place. Reading it out of a payload is what cost every app built from this template its grants: the order was written, the webhook answered 200, and the paying customer got nothing (`lib/digistore/payment-event.ts` carries the post-mortem; `lib/digistore/ipn-fields.test.ts` is what now refuses the whole class) |
+
+### Who decides which product was bought
+
+**The charged `product_id` does, not `custom`.**
+
+`custom` carries the identity pairs this app wrote — `m:`, `t:`, `p:`, `k:`
+(`lib/digistore/custom.ts`) — and its `p:` pair names the Product Key the buyer
+clicked. Until 2026-09-10 that key simply won: `resolveProduct()`
+(`lib/digistore/payment-event.ts`) granted whatever `custom` named and consulted
+`product_id` only when `custom` produced nothing. Nothing held the two against
+each other, and `amount` is read twice in that file and logged both times — so
+the price was not a second opinion either. Finding M-2 of the 2026-08-18 scan.
+
+Today the two are compared. The named key stands only when it **is** the product
+Digistore24 says it charged; when they differ, the **charged** one wins and a
+`console.error` with an `Error` goes into the log, where `node run.mjs errors`
+can see it. A `product_id` this registry cannot resolve is not a mismatch — an
+unsynced product and a product sold outside the registry both look like that,
+and a purchase carrying no `custom` at all still resolves through `product_id`
+alone, which is what gives an anonymous purchase its Product Key.
+
+⚠️ **The open question, and its date.** `lib/digistore/buyUrl.ts` sets
+`tracking[custom]` server-side in the `createBuyUrl` call and the checkout URL
+comes back from Digistore24 — that is the defence. Whether a `custom` **appended
+to that checkout link by the buyer** overrides the merchant's value is behaviour
+on Digistore24's side and cannot be settled from this code. Checked 2026-09-10
+against the `createBuyUrl` API source: `tracking[custom]` is carried there as
+`merchant_custom`, which is consistent with "the merchant's value" and is **not**
+proof that an override is impossible. Nobody has asked Digistore24 outright.
+
+So the comparison above is depth, not a patch — and it is the only layer between
+that open question and granting the expensive plan for the cheap one's money.
+If the answer ever comes back "yes, the buyer can override it", this stops being
+a MEDIUM and the comparison becomes the thing holding the money path up.
 
 ### 🚨 Replay — the signature does not stop it, and neither does the handler
 
@@ -283,16 +317,34 @@ language, which is exactly the moment a purchase gets abandoned.
 **Two products, one per language, is the only way**, and the registry says so:
 
 ```json
-"basic_monthly": {
-  "name": "Basic (monthly)",
-  "priceCents": 1900,
+"basic": {
+  "name": "Basic",
+  "kind": "subscription",
+  "paymentOptions": {
+    "monthly": { "priceCents": 1900,  "billingInterval": "1_month" },
+    "yearly":  { "priceCents": 19000, "billingInterval": "12_month" }
+  },
   "sell": true,
   "productIds": {
     "dev":  { "de": null, "en": null },
     "prod": { "de": null, "en": null }
+  },
+  "payplanIds": {
+    "dev":  { "de": { "monthly": null, "yearly": null }, "en": { "monthly": null, "yearly": null } },
+    "prod": { "de": { "monthly": null, "yearly": null }, "en": { "monthly": null, "yearly": null } }
   }
 }
 ```
+
+*(`paymentOptions` and `payplanIds` need template 0.36.0. Before that an
+offering carried one `priceCents` and one `billingInterval`, and monthly and
+yearly were two entries.)*
+
+**Two products here, and four payment plans — but ONE Product Key.** The
+language axis doubles the products because the order form's language is a
+property of the product. The way to pay does not: it is a payment plan ON that
+product, so the German and the English monthly buyer, and the yearly one, all
+hold `basic` and `hasPlan(memberId, "basic")` answers for every one of them.
 
 (`sell` is optional and defaults to sold — see *Keeping an entry without
 selling it* below. It is written out in the shipped entries so the switch is
@@ -309,14 +361,15 @@ running environment's products they are sent to
 
 ### Nothing is created without your yes
 
-🚨 **Creating a Digistore24 product cannot be undone from this repo.** Removing
-the entry from `config/digistore-products.json` afterwards does not unpublish
-it — the product stays in the vendor account and an existing checkout link
-keeps working until somebody deactivates it in the Digistore24 backend, by
-hand.
+🚨 **Creating a Digistore24 product is not free to undo.** Since `--prune` a
+product this app created CAN be removed again — but only cleanly while it has
+never sold anything. One that has sales is deactivated instead, because its
+buyers' refunds, chargebacks and cancellations still arrive as IPNs naming its
+id; and until it is, an existing checkout link keeps working. A product that
+has taken money is a decision you keep.
 
-So `ds24-sync` refuses the first time it would create something. It prints
-every row that would be NEW, says the step is irreversible, and stops without
+So `ds24-sync` still refuses the first time it would create something. It
+prints every row that would be NEW, says what the step costs, and stops without
 writing anything — no product, no product group, and no IPN registration
 either, so `APP_URL` being local does not put a Cloudflare tunnel up for a run
 that was declined. Two ways on:
@@ -331,12 +384,12 @@ added next year asks again, because the irreversible step is per product.
 
 ### The two token packages the template used to ship
 
-`config/digistore-products.json` ships three example offerings — two
-subscription intervals and one token package — because that is the smallest set
+`config/digistore-products.json` ships two example offerings — one subscription
+with two ways to pay, and one token package — because that is the smallest set
 that still demonstrates the two rules the rest of this file is about: one
-product per language, and monthly-and-yearly naming both keys. It used to ship
-five, and the other two were a price ladder. If you want one, this is the
-shape; paste it beside `starter` and adjust:
+product per language, and monthly-and-yearly living INSIDE one offering rather
+than doubling it. It used to ship five, and two of those were a price ladder.
+If you want one, this is the shape; paste it beside `starter` and adjust:
 
 ```json
 "pro": {
@@ -580,8 +633,10 @@ above), and there is one Digistore24 product per key — so **an offering sold
 in both languages is submitted to both marketplaces**, each product where it
 belongs, and each gets its own verdict. Submitted is always the **prod set**:
 approval is a go-live step, and `[DEV]`/`[STAGING]` products have no business
-on a marketplace. `node run.mjs ds24-approval` lists them as `basic_monthly (de)` and
-`basic_monthly (en)`; an offering with a single language keeps its bare key.
+on a marketplace. `node run.mjs ds24-approval` lists them as `basic (de)` and
+`basic (en)`; an offering with a single language keeps its bare key. The WAYS TO
+PAY are not on that list — they are payment plans on those two products, and a
+marketplace approves the product.
 
 That is not a feature of the approval command. It falls out of the registry
 already holding one product per language, for the order-form reason above.

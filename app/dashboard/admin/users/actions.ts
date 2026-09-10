@@ -187,10 +187,16 @@ export async function sendLoginLinkAction(
     const email = await loginLinkTarget(me, String(formData.get("id") ?? ""));
 
     const { signIn } = await import("@/auth");
+    const { asOperatorInvitation } = await import("@/lib/auth/link-context");
     // `redirect: false` is essential here: a redirect would throw the admin
     // who just clicked off their own page. They should stay where they are and
     // only see a confirmation.
-    await signIn("email", { email, redirect: false });
+    //
+    // Wrapped so the link meter in `sendVerificationRequest()` lets this one
+    // through: it is `requireOwner()`-gated and must not be counted against the
+    // person being invited. The wrap covers the `signIn` call and nothing
+    // wider — an exemption is a statement about ONE act.
+    await asOperatorInvitation(() => signIn("email", { email, redirect: false }));
 
     const t = await getTranslations("users");
     return { error: null, ok: t("linkSent", { email }) };
@@ -250,17 +256,38 @@ export async function startImpersonationAction(
     });
     if (denial) throw new UserError(denial);
 
-    const { openImpersonation } = await import("@/lib/impersonation/manage");
+    const { openImpersonation, closeImpersonation } = await import(
+      "@/lib/impersonation/manage"
+    );
+    // 🚨 The row FIRST, and that order is deliberate: there must be no access
+    // that is not on the record. The repair below keeps that direction and only
+    // cleans up the failed case — it does not swap the two.
     const record = await openImpersonation({ operatorId: me.id, memberId: target.id });
 
     const { unstable_update } = await import("@/auth");
-    await unstable_update({
-      // The id and nothing else. Every other value the callback needs it reads
-      // from the row or from the database — a member id sent from here would be
-      // a value the callback might be tempted to believe, and this payload
-      // arrives over an endpoint any signed-in user can reach.
-      impersonation: { start: record.id },
-    } as Parameters<typeof unstable_update>[0]);
+    try {
+      await unstable_update({
+        // The id and nothing else. Every other value the callback needs it reads
+        // from the row or from the database — a member id sent from here would be
+        // a value the callback might be tempted to believe, and this payload
+        // arrives over an endpoint any signed-in user can reach.
+        impersonation: { start: record.id },
+      } as Parameters<typeof unstable_update>[0]);
+    } catch (error) {
+      // The switch did not happen, so the row is claiming an access nobody had.
+      // It happens for real: an EXPIRED but unclosed claim presents as
+      // `impersonation: null` in the session (auth.config.ts), so
+      // `alreadyImpersonating` above is false and `canImpersonate` lets this
+      // through — and then `lib/impersonation/session.ts` refuses, because
+      // `token.sub` is still the member's id. Before this catch that left an
+      // `impersonations` row with no matching access and no error anywhere.
+      //
+      // This table IS the authorisation (CLAUDE.md), and a register that claims
+      // more than happened is worse than one with a gap: it is no longer usable
+      // as evidence. Found 2026-08-18 (L-9).
+      await closeImpersonation(record.id, "notstarted");
+      throw error;
+    }
 
     revalidatePath(PAGE, "layout");
   } catch (error) {

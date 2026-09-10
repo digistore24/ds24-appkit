@@ -12,7 +12,7 @@
 // string can prove a call exists but not that a Set-Cookie deletion comes out.
 import { readFileSync } from "node:fs";
 import type { NextFetchEvent } from "next/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { blankComments } from "@/scripts/lib/source-text.mjs";
 
 const source = readFileSync(new URL("./proxy.ts", import.meta.url), "utf8");

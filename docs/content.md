@@ -202,9 +202,10 @@ in **`content/media-manifest.json`**, one entry per file:
 - **`visibility`** is `public` or `entitled` (+ `planKeys`, a LIST of Product
   Keys from `config/digistore-products.json` — every one validated, because
   `hasPlan()` throws on an unknown key). Holding **any one** of them buys the
-  file, which is what lets one offering be sold monthly and yearly without its
-  files having to choose an interval. `owner` does not apply: product media belong to
-  the product, not to an account (`ownerId` stays null).
+  file, which is what lets one file belong to several offerings at once — the
+  workbook that comes with the course and with the bundle. `owner` does not
+  apply: product media belong to the product, not to an account (`ownerId`
+  stays null).
 - **`alt`** is required for images — the same rule the upload endpoint
   enforces.
 

@@ -312,10 +312,14 @@ One field:
 
 ```ts
 // ⚠️ ONE key, while `config/course.json` → `planKeys` is a list. A companion
-// inside a course sold monthly AND yearly must name a key every buyer holds —
-// or `null`, which means every signed-in member and leaves the decision to the
-// page's own gate. Picking one interval refuses the other half of the buyers.
-requiresPlan: "course_yearly",
+// inside a course sold under SEVERAL offerings — on its own and in a bundle —
+// must name a key every buyer holds, or `null`, which means every signed-in
+// member and leaves the decision to the page's own gate. Picking one of the
+// offerings refuses the buyers of the other.
+//
+// Monthly and yearly are NOT such a case: they are two ways to pay for one
+// Product Key (`paymentOptions`), so both buyers hold `course_complete`.
+requiresPlan: "course_complete",
 ```
 
 `hasPlan(memberId, "course_yearly")` does the rest inside the shipped action. The key

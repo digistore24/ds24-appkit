@@ -565,7 +565,6 @@ describe("the cursor advance loop — the channel that used to stop for ever", (
 // by building the real query and looking at the parameters.
 describe("CHANGED_AT is never compared against a raw value", () => {
   it("binds every comparison through changedAtParam()", async () => {
-    const { readFileSync } = await import("node:fs");
     const { blankComments } = await import("@/scripts/lib/source-text.mjs");
 
     const source = blankComments(

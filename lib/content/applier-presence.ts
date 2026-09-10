@@ -40,17 +40,17 @@ export async function applierPresence(): Promise<PresenceItem[]> {
     // absolute path is deprecated on POSIX and simply fails on Windows, and
     // this template ships to three systems (`scripts/content/apply.mjs` imports
     // its appliers the same way).
-    const module = await import(
+    const loaded = await import(
       /* webpackIgnore: true */ /* turbopackIgnore: true */ /* @vite-ignore */
       pathToFileURL(file).href
     );
-    if (typeof module.present !== "function") {
+    if (typeof loaded.present !== "function") {
       // 🚨 Not skipped. An applier that cannot say what it put there is exactly
       // the silence this whole check exists to break — `collectPresence()` turns
       // a throw into an `unanswered` report, which is a failure.
       throw new Error(`${file} exports no present(sql) — see docs/content.md`);
     }
-    items.push({ what: label, found: await module.present(applierSql), expected: null });
+    items.push({ what: label, found: await loaded.present(applierSql), expected: null });
   }
   return items;
 }

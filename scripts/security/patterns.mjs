@@ -347,7 +347,7 @@ export const ALLOWLIST = [
       "the OAuth sense — it identifies the application to requestApiKey and carries " +
       "no rights to any account; the key that carries rights is minted only when a " +
       "merchant grants access in their browser and lives in their own .env. A " +
-      "scanner WILL raise it, which is why .gitleaks.toml:17-22 allowlists the same " +
+      "scanner WILL raise it, which is why .gitleaks.toml:43-53 allowlists the same " +
       "value: the two agree by construction rather than by luck. ⚠️ The condition " +
       "here is value AND path where gitleaks ORs the two — a blanket path exemption " +
       "would excuse a real key pasted into the same file, and this entry is narrower " +

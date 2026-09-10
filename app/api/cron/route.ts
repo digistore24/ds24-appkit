@@ -29,8 +29,31 @@ import { jobStatuses, runDueJobs, runJobById } from "@/lib/cron/run";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/**
+ * The configured secret, or `undefined` — the ONE reading of it in this file.
+ *
+ * 🚨 `.trim()`, because `!process.env.CRON_SECRET` reads a value made of
+ * spaces as SET. `CRON_SECRET=" "` is truthy, so this endpoint would have
+ * armed itself with a single space as the credential while the operator
+ * believed they had never configured it — finding L-6 of the 2026-08-18 scan.
+ * The realistic way there is a copied empty value in a host's secret store,
+ * and that is also the one place nobody re-reads the value afterwards.
+ *
+ * Trimming the VALUE and not merely the emptiness test is deliberate: a secret
+ * store that appends a newline would otherwise make every correct `Bearer`
+ * header wrong by one invisible byte, with no way for the operator to see it.
+ *
+ * ⚠️ It is a function rather than a module constant because both readers below
+ * ask at REQUEST time — `process.env` is written by the host after this module
+ * is loaded on some platforms, and a constant captured at import would freeze
+ * whichever value happened to exist then.
+ */
+function cronSecret(): string | undefined {
+  return process.env.CRON_SECRET?.trim();
+}
+
 function authorized(request: Request): boolean {
-  const secret = process.env.CRON_SECRET;
+  const secret = cronSecret();
   if (!secret) return false; // fail closed — no secret, no run
   const header = request.headers.get("authorization") || "";
   const expected = `Bearer ${secret}`;
@@ -42,7 +65,10 @@ function authorized(request: Request): boolean {
 }
 
 async function handle(request: Request): Promise<Response> {
-  if (!process.env.CRON_SECRET) {
+  // ⚠️ The unset case stays FIRST, ahead of the credential compare — the same
+  // fail-closed ordering `guardDiagnostics()` keeps. L-6 changed the value this
+  // reads, never the order it reads it in.
+  if (!cronSecret()) {
     // 503, not 401: an Operator has to be able to tell "I never set the secret"
     // apart from "my scheduler is sending the wrong one". Those have completely
     // different fixes and the same symptom.

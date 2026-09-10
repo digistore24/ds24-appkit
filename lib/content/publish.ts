@@ -372,7 +372,7 @@ async function preflight(root: string, ids?: string[]): Promise<LoadedApplier[]>
 
   const loaded: LoadedApplier[] = [];
   for (const source of sources) {
-    let module: Record<string, unknown>;
+    let applier: Record<string, unknown>;
     try {
       // 🚨 **The bundler has to be told to keep its hands off**, exactly as in
       // `applier-presence.ts` and `applier-plan.ts` — this runs inside the Next
@@ -380,7 +380,7 @@ async function preflight(root: string, ids?: string[]): Promise<LoadedApplier[]>
       // expression is too dynamic". A file URL rather than a bare path: a native
       // dynamic import of an absolute path is deprecated on POSIX and fails
       // outright on Windows, and this template ships to three systems.
-      module = (await import(
+      applier = (await import(
         /* webpackIgnore: true */ /* turbopackIgnore: true */ /* @vite-ignore */
         pathToFileURL(source.file).href
       )) as Record<string, unknown>;
@@ -394,7 +394,7 @@ async function preflight(root: string, ids?: string[]): Promise<LoadedApplier[]>
       );
     }
 
-    if (typeof module.apply !== "function") {
+    if (typeof applier.apply !== "function") {
       throw new PublishError(
         "applierWithoutApply",
         `${source.label} exports no apply(sql, helpers) function, so NOTHING was published. ` +
@@ -406,8 +406,8 @@ async function preflight(root: string, ids?: string[]): Promise<LoadedApplier[]>
     loaded.push({
       label: source.label,
       module: source.module,
-      apply: module.apply as LoadedApplier["apply"],
-      plan: typeof module.plan === "function" ? (module.plan as LoadedApplier["plan"]) : undefined,
+      apply: applier.apply as LoadedApplier["apply"],
+      plan: typeof applier.plan === "function" ? (applier.plan as LoadedApplier["plan"]) : undefined,
     });
   }
 

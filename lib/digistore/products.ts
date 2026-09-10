@@ -87,6 +87,69 @@ export type SyncEnv = (typeof SYNC_ENVS)[number];
 export const PRODUCT_KINDS = ["subscription", "token", "one_time"] as const;
 export type ProductKind = (typeof PRODUCT_KINDS)[number];
 
+/**
+ * The key of the single payment option an offering has when it declares none —
+ * the shape every registry written before payment options existed has. It never
+ * reaches Digistore24 and never reaches a Member; it exists so that nothing
+ * below `paymentOptionsOf()` has to ask which of the two shapes it is holding.
+ */
+export const DEFAULT_OPTION_KEY = "default";
+
+/**
+ * Option keys travel: into the buy-URL cache key, and into `tracking[custom]`
+ * as `o:<key>` (`lib/digistore/custom.ts`). Same alphabet as a Product Key
+ * there, and for the same reason — a `;` or a `:` inside one would split a pair
+ * and the IPN would read the rest of the value as something else.
+ */
+const OPTION_KEY_RE = /^[A-Za-z0-9_-]+$/;
+
+/** ONE WAY TO PAY for an offering, as the registry declares it. */
+export interface PaymentOptionDef {
+  /** Price in cents — THE authoritative price for this way to pay. */
+  priceCents?: number;
+  /** Defaults to the offering's own `currency`. */
+  currency?: string;
+  /** e.g. "1_month" | "12_month". Absent = a one-off payment. */
+  billingInterval?: string;
+  /** The recommended way to pay; at most one per offering. */
+  highlight?: boolean;
+}
+
+/**
+ * A payment option after normalisation — what every reader sees, whichever of
+ * the two registry shapes was written. See `paymentOptionsOf`.
+ */
+export interface PaymentOption extends PaymentOptionDef {
+  /** Stable key inside the offering, or `DEFAULT_OPTION_KEY`. */
+  key: string;
+  /** Declaration order — the order the page renders and the sync writes. */
+  position: number;
+}
+
+/**
+ * A Digistore24 payment plan this app created, as the registry records it: the
+ * id, **and what the plan was written with**.
+ *
+ * The second half is not bookkeeping. Once the checkout sells through the
+ * STORED plan (see `lib/digistore/buyUrl.ts`), Digistore24s copy of the price
+ * is what the buyer is charged — so a price edited here and not synced would
+ * show one number on `/plans` and take another off the card, silently and for
+ * ever. Recording what was written makes that drift a thing the code can SEE:
+ * `payplanMatches()` compares, and a mismatch sends the checkout back to the
+ * inline plan, where the registry price wins. The customer is never charged a
+ * stale price; the vendor is told to run `ds24-sync`.
+ *
+ * A bare string is accepted as shorthand for "id only, nothing recorded" —
+ * that is what a hand-written registry produces, and it means the drift check
+ * cannot run rather than that it passed.
+ */
+export interface PayplanRef {
+  id: string;
+  priceCents?: number;
+  currency?: string;
+  billingInterval?: string;
+}
+
 export interface ProductDef {
   /** Stable key (e.g. "starter"). */
   key: string;
@@ -131,12 +194,53 @@ export interface ProductDef {
    * `sellableProducts()` below, and which reader needs which list is spelled
    * out there.
    *
-   * ⚠️ It also does not unpublish the product at Digistore24. One that was
-   * synced before stays buyable over there through an old checkout link until
-   * it is deactivated in the vendor backend, by hand — `ds24-sync` says so
-   * when it meets one.
+   * ⚠️ It also does not unpublish the product at Digistore24, and that is the
+   * difference from taking the entry OUT. One that was synced before stays
+   * buyable over there through an old checkout link — `ds24-sync` says so when
+   * it meets one. Removing the entry entirely is what makes the product an
+   * orphan `node run.mjs ds24-sync --prune` can delete (or, if it ever sold,
+   * deactivate).
    */
   sell?: boolean;
+  /**
+   * THE WAYS TO PAY for this one offering — monthly and yearly are two of
+   * these, not two offerings.
+   *
+   * Absent means the offering has exactly one way to pay, the one described by
+   * `priceCents` / `billingInterval` above. `paymentOptionsOf()` normalises
+   * both shapes into a list and nothing downstream branches on which was
+   * written. Declaring BOTH is refused when this module loads: two prices in
+   * one entry is exactly the drift the registry exists to prevent.
+   *
+   *   "paymentOptions": {
+   *     "monthly": { "priceCents": 1900,  "billingInterval": "1_month" },
+   *     "yearly":  { "priceCents": 19000, "billingInterval": "12_month" }
+   *   }
+   *
+   * 🚨 **An option is a PRICE, never an entitlement.** The monthly and the
+   * yearly buyer of this offering hold the SAME Product Key, so `hasPlan()`
+   * asks one question and a `planKeys` list names one key. That is the whole
+   * point of the shape: the older registry made every gate name both
+   * intervals, and a gate that named one silently refused half the buyers —
+   * with a page that rendered and a file that was not there.
+   */
+  paymentOptions?: Record<string, PaymentOptionDef>;
+  /**
+   * The Digistore24 PAYMENT PLAN ids — `productIds` with one axis more, and
+   * the same contract: written back by `scripts/ds24/sync-products.mjs`,
+   * committed, never edited by hand.
+   *
+   *   "payplanIds": { "prod": { "de": { "monthly": "991", "yearly": "992" } } }
+   *
+   * ⚠️ A stale id here is not cosmetic. `createBuyUrl` refuses a
+   * `payment_plan[template]` that does not belong to the product it was called
+   * for (`payment_plan_not_found`), which would take out EVERY buy button of
+   * the offering at once. `lib/digistore/buyUrl.ts` retries once without it
+   * and logs the mismatch rather than letting the page go dark.
+   */
+  payplanIds?: Partial<
+    Record<SyncEnv, Record<string, Record<string, PayplanRef | string | null>>>
+  >;
   /**
    * **One product set per ENVIRONMENT, one Digistore24 product per language
    * inside each set** — the id, keyed by env and by the language its order
@@ -213,6 +317,60 @@ export function productIdsOf(
 }
 
 /**
+ * The ways to pay for this offering, normalised — the ONE place the two
+ * registry shapes are understood, and the twin of `productIdsOf` for the price
+ * axis.
+ *
+ * An entry with no `paymentOptions` yields exactly one option, keyed
+ * `DEFAULT_OPTION_KEY` and carrying the entry's own price and interval. So
+ * every reader below this line sees a list, a registry written before options
+ * existed keeps working untouched, and an offering with a single way to pay
+ * stays the normal case rather than a special one.
+ *
+ * The order is the DECLARATION order, and it is load-bearing twice: it is the
+ * order the plans page renders in, and it is the `position` the sync writes
+ * onto the Digistore24 payment plans — so the order form lists them the way
+ * the registry does rather than however Digistore24 happens to sort.
+ */
+export function paymentOptionsOf(def: ProductDef): PaymentOption[] {
+  const declared = Object.entries(def.paymentOptions ?? {});
+  if (declared.length === 0) {
+    return [
+      {
+        key: DEFAULT_OPTION_KEY,
+        position: 0,
+        priceCents: def.priceCents,
+        currency: def.currency,
+        billingInterval: def.billingInterval,
+        highlight: def.highlight,
+      },
+    ];
+  }
+  return declared.map(([key, option], position) => ({
+    key,
+    position,
+    priceCents: option.priceCents,
+    currency: option.currency ?? def.currency,
+    billingInterval: option.billingInterval,
+    highlight: option.highlight,
+  }));
+}
+
+/**
+ * One way to pay, by key — `null` for a key this offering does not declare.
+ *
+ * Deliberately not forgiving: an unknown option is not a near-miss the way an
+ * unknown LANGUAGE is, it is a caller naming a price that does not exist, and
+ * answering with a different one would charge the buyer for the wrong thing.
+ */
+export function findPaymentOption(
+  def: ProductDef,
+  optionKey: string,
+): PaymentOption | null {
+  return paymentOptionsOf(def).find((o) => o.key === optionKey) ?? null;
+}
+
+/**
  * The ids this instance actually SELLS in `env`: the environment's own set —
  * or the PROD set when that is empty and `env` is not prod. The fallback is
  * the pre-split behaviour, and it is what keeps an app selling that updated
@@ -265,6 +423,117 @@ export function checkoutProductFor(
 }
 
 /**
+ * WHICH environment's product set `env` actually sells from — `env` itself, or
+ * PROD when this offering has no set of its own there. The env twin of the
+ * language fallback in `checkoutProductFor`, and it exists because a payment
+ * plan belongs to ONE product: reading dev plan ids for a product that came out
+ * of the PROD set hands `createBuyUrl` a plan that is not its own, and it
+ * answers `payment_plan_not_found` for every buyer.
+ */
+function effectiveEnv(def: ProductDef, env: SyncEnv): SyncEnv {
+  if (env === "prod") return "prod";
+  return Object.keys(productIdsOf(def, env)).length > 0 ? env : "prod";
+}
+
+/**
+ * The Digistore24 payment plans of an offering, for one environment and one
+ * language, by option key — only the ones that exist, exactly as
+ * `productIdsOf` drops the products nobody has created yet.
+ *
+ * There is no legacy shape to read: payment plans postdate all three of them.
+ * And a missing plan is not an error — it means the checkout falls back to
+ * sending its own inline payment plan, which is what every checkout in this
+ * template did before payment plans existed at all.
+ */
+export function payplansOf(
+  def: ProductDef,
+  language: string,
+  env: SyncEnv = "prod",
+): Record<string, PayplanRef> {
+  const plans: Record<string, PayplanRef> = {};
+  for (const [option, ref] of Object.entries(
+    def.payplanIds?.[env]?.[language] ?? {},
+  )) {
+    if (!ref) continue;
+    if (typeof ref === "string" || typeof ref === "number") {
+      plans[option] = { id: String(ref) };
+    } else if (ref.id) {
+      plans[option] = { ...ref, id: String(ref.id) };
+    }
+  }
+  return plans;
+}
+
+/**
+ * Does the stored plan still describe what the registry says this option
+ * costs? A plan that recorded nothing answers `true` — "not checkable" is not
+ * "wrong", and refusing there would push every hand-written registry onto the
+ * inline path for no reason.
+ *
+ * 🚨 Currency and interval count as much as the amount. A plan written as
+ * `12_month` and edited to `1_month` in the registry charges the yearly price
+ * every month; nothing about that is a rounding difference.
+ */
+export function payplanMatches(
+  plan: PayplanRef,
+  option: PaymentOption,
+): boolean {
+  if (
+    plan.priceCents === undefined &&
+    plan.currency === undefined &&
+    plan.billingInterval === undefined
+  ) {
+    return true;
+  }
+  return (
+    plan.priceCents === option.priceCents &&
+    (plan.currency ?? "EUR") === (option.currency ?? "EUR") &&
+    (plan.billingInterval ?? null) === (option.billingInterval ?? null)
+  );
+}
+
+/**
+ * Everything one buy button needs: which Digistore24 product the buyer is sent
+ * to, which stored payment plan describes what they are about to pay, and which
+ * of the offering's ways to pay this is.
+ *
+ * The language axis is `checkoutProductFor`'s, unchanged — including its
+ * deliberate preference for a sale in the wrong language over no sale. The
+ * option axis has no fallback at all, for the reason `findPaymentOption` gives.
+ */
+export function checkoutTargetFor(
+  def: ProductDef,
+  optionKey: string,
+  locale: string,
+  env: SyncEnv = "prod",
+): {
+  productId: string;
+  /** The stored plan to sell through, or `null` — then the checkout prices it itself. */
+  payplan: PayplanRef | null;
+  /** The stored plan exists but no longer matches the registry. `ds24-sync` is due. */
+  payplanStale: boolean;
+  language: string;
+  option: PaymentOption;
+} | null {
+  const option = findPaymentOption(def, optionKey);
+  if (!option) return null;
+  const resolved = checkoutProductFor(def, locale, env);
+  if (!resolved) return null;
+  const from = effectiveEnv(def, env);
+  const stored = payplansOf(def, resolved.language, from)[optionKey] ?? null;
+  const stale = stored !== null && !payplanMatches(stored, option);
+  return {
+    productId: resolved.productId,
+    // A stale plan is handed back as "no plan": the caller must price the
+    // checkout itself rather than sell through a number nobody refreshed.
+    payplan: stale ? null : stored,
+    payplanStale: stale,
+    language: resolved.language,
+    option,
+  };
+}
+
+/**
  * Price formatted per the language's conventions: "19,00 €" (de), "€19.00"
  * (en). `null` when no price is set — the UI then writes "on request"
  * (`plans.onRequest`).
@@ -273,7 +542,10 @@ export function checkoutProductFor(
  * Converting prices would be wrong — what gets billed is what Digistore24
  * holds.
  */
-export function formatPrice(def: ProductDef, locale: string): string | null {
+export function formatPrice(
+  def: Pick<ProductDef, "priceCents" | "currency">,
+  locale: string,
+): string | null {
   if (def.priceCents == null) return null;
   return new Intl.NumberFormat(locale, {
     style: "currency",
@@ -289,10 +561,14 @@ export type IntervalKey = "perMonth" | "perYear" | "oneTime";
  * finished text, so the plans page can render it in the visitor's language.
  * `null` for an interval we do not know; the UI then shows the raw value.
  */
-export function intervalKey(def: ProductDef): IntervalKey | null {
+export function intervalKey(
+  def: Pick<ProductDef, "kind" | "billingInterval">,
+  option?: Pick<PaymentOption, "billingInterval">,
+): IntervalKey | null {
   if (def.kind !== "subscription") return "oneTime";
-  if (def.billingInterval === "1_month") return "perMonth";
-  if (def.billingInterval === "12_month") return "perYear";
+  const interval = option ? option.billingInterval : def.billingInterval;
+  if (interval === "1_month") return "perMonth";
+  if (interval === "12_month") return "perYear";
   return null;
 }
 
@@ -390,6 +666,93 @@ export function sellFieldProblems(
     );
 }
 
+/**
+ * The registry entries whose payment options the sync could not describe —
+ * the third pure, list-taking check beside `unknownKindProblems` and
+ * `sellFieldProblems`, refused at module load for the same reason: there is no
+ * harmless direction here either.
+ *
+ * 🚨 The sharp one is the last: a product with NO payment plan of ours does
+ * not have none — it has Digistore24's own default (about 27 €), its order
+ * form charges it, and on a subscription such an order grants access for ever
+ * (`docs/digistore-integration.md`). An option the sync refuses to write is
+ * therefore not a missing card on a page; it is a price nobody set, collecting
+ * money.
+ */
+export function paymentOptionProblems(
+  products: ReadonlyArray<{
+    key: string;
+    kind?: unknown;
+    priceCents?: unknown;
+    billingInterval?: unknown;
+    paymentOptions?: unknown;
+  }>,
+): string[] {
+  const problems: string[] = [];
+  for (const p of products) {
+    const declared = p.paymentOptions;
+    if (declared === undefined) continue;
+    if (
+      typeof declared !== "object" ||
+      declared === null ||
+      Array.isArray(declared)
+    ) {
+      problems.push(
+        `"${p.key}": "paymentOptions" muss ein Objekt sein — steht auf ${JSON.stringify(declared)}`,
+      );
+      continue;
+    }
+    const entries = Object.entries(declared as Record<string, unknown>);
+    if (entries.length === 0) {
+      problems.push(
+        `"${p.key}": "paymentOptions" ist leer — entweder Bezahlweisen deklarieren oder das Feld weglassen`,
+      );
+      continue;
+    }
+    if (p.priceCents !== undefined || p.billingInterval !== undefined) {
+      problems.push(
+        `"${p.key}": "paymentOptions" und "priceCents"/"billingInterval" zugleich — der Preis staende an zwei Stellen, die Bezahlweisen sind die eine`,
+      );
+    }
+    if (p.kind === "token" && entries.length > 1) {
+      problems.push(
+        `"${p.key}": ein Token-Paket hat genau eine Bezahlweise — mehrere Paketgroessen sind mehrere Angebote`,
+      );
+    }
+    let highlighted = 0;
+    for (const [optionKey, option] of entries) {
+      if (!OPTION_KEY_RE.test(optionKey)) {
+        problems.push(
+          `"${p.key}": Bezahlweise ${JSON.stringify(optionKey)} — erlaubt sind Buchstaben, Ziffern, _ und -`,
+        );
+      }
+      if (
+        typeof option !== "object" ||
+        option === null ||
+        Array.isArray(option)
+      ) {
+        problems.push(
+          `"${p.key}.${optionKey}": muss ein Objekt sein — steht auf ${JSON.stringify(option)}`,
+        );
+        continue;
+      }
+      const o = option as PaymentOptionDef;
+      if (o.priceCents !== undefined && typeof o.priceCents !== "number") {
+        problems.push(
+          `"${p.key}.${optionKey}": "priceCents" muss eine Zahl sein — steht auf ${JSON.stringify(o.priceCents)}`,
+        );
+      }
+      if (o.highlight === true) highlighted += 1;
+    }
+    if (highlighted > 1) {
+      problems.push(
+        `"${p.key}": ${highlighted} Bezahlweisen mit "highlight" — genau eine kann die empfohlene sein`,
+      );
+    }
+  }
+  return problems;
+}
+
 // The cast above (`as unknown as ProductsFile`) is a claim, and the registry
 // is a JSON file the vendor edits by hand — so the claim is checked here,
 // once, when the module loads, and a `"kind": "one-time"` (hyphen typo)
@@ -413,6 +776,7 @@ export function sellFieldProblems(
   const problems = [
     ...unknownKindProblems(allProducts()),
     ...sellFieldProblems(allProducts()),
+    ...paymentOptionProblems(allProducts()),
   ];
   if (problems.length > 0) {
     throw new Error(`config/digistore-products.json: ${problems.join("; ")}`);

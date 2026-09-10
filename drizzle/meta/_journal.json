@@ -71,6 +71,13 @@
       "when": 1786632546382,
       "tag": "0009_plan_keys_list",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788966461815,
+      "tag": "0010_payment_option",
+      "breakpoints": true
     }
   ]
 }

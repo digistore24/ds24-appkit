@@ -10,7 +10,7 @@
 // `actions.ts` next door owns the rooms; this owns the inbox. Keeping them
 // apart is not tidiness — the impersonation carve-out (FR-209) is only
 // enforceable if the DM surfaces are countable, and
-// `lib/community/impersonation-guard.test.ts` counts them. Anything that adds
+// `modules/community/lib/impersonation-guard.test.ts` counts them. Anything that adds
 // one adds it to that enumeration.
 //
 // SECURITY — the shape every action repeats, through ONE seam:
@@ -51,7 +51,7 @@ import type { ActionState } from "../actions";
  * impersonation carve-out (FR-209) in one call that signals by throwing. The
  * three checks are not repeated per action deliberately: a fourth action added
  * next year gets all three by writing one line, and
- * `lib/community/impersonation-guard.test.ts` fails the build if it writes a
+ * `modules/community/lib/impersonation-guard.test.ts` fails the build if it writes a
  * different one.
  */
 async function dmViewer(): Promise<{ memberId: string; role: string }> {

@@ -119,6 +119,7 @@ async function ask(message = "Wo lerne ich Knoten?"): Promise<string> {
       body: JSON.stringify({ message }),
     }),
     locale: "de",
+    impersonating: false,
   });
   return await response.text();
 }

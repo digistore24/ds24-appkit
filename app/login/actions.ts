@@ -87,12 +87,22 @@ async function lookUp(email: string): Promise<SignInFormState> {
  * LOOKUP_LIMIT for the ANSWER it gives; this path gives no answer, so for a
  * while it paid nothing — and `intent === "link"` reaches it from the form
  * directly, without step 1. Posting that submit in a loop mailed anybody, as
- * often as anybody liked, from the operator's own sending domain. The counter
- * belongs HERE rather than one level down in `signIn`, because both ways in
- * pass through this function and neither reaches the other.
+ * often as anybody liked, from the operator's own sending domain.
+ *
+ * ⚠️ This comment used to end "the counter belongs HERE rather than one level
+ * down in `signIn`, because both ways in pass through this function and neither
+ * reaches the other". **That was not true**, and it is the assumption finding
+ * M-6 grew under: `POST /api/auth/signin/email` reaches the Auth.js provider
+ * directly, past this function entirely. The counter is in
+ * `sendVerificationRequest()` now (`lib/email.ts`), where every path really does
+ * pass.
+ *
+ * What is left here is a LOOK, not a count (`commit: false`): it exists so the
+ * dialog can say "too many links" in the reader's own language instead of the
+ * provider's flat refusal. Counting in both places would halve the limit.
  */
 async function sendLink(email: string): Promise<SignInFormState> {
-  if (!(await mayMailSignInLink(email, await currentOrigin()))) {
+  if (!(await mayMailSignInLink(email, await currentOrigin(), { commit: false }))) {
     return { step: "email", email, error: "tooManyLinks" };
   }
   // Auth.js sends the mail and then redirects to its own verify-request page —

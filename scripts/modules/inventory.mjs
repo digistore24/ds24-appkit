@@ -397,7 +397,7 @@ export function composedMessages(locale, core, root = ROOT) {
  */
 export async function moduleExportSections(sql, memberId, root) {
   const sections = {};
-  for (const { id, dir, manifest } of safeModules(root)) {
+  for (const { dir, manifest } of safeModules(root)) {
     const privacy = manifest.privacy;
     if (!privacy || typeof privacy.mjs !== "string") continue;
     const file = `${dir}/${privacy.mjs}`;

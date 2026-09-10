@@ -116,7 +116,8 @@ the scripts under `scripts/`.
 5. The language's word for a machine in `NAMES_A_MACHINE` (`lib/ai/disclosure.mjs`).
 6. `content/legal/<slug>.<code>.md` for every legal page in `content/legal/`.
 7. `<code>` in `productIds` of every product in `config/digistore-products.json`,
-   then `node run.mjs ds24-sync` — one Digistore24 product per language.
+   then `node run.mjs ds24-sync` — one Digistore24 product per language, and the
+   sync writes that product's payment plans too, one per way to pay.
 8. The currency an operator in that language is most likely billed in —
    `CURRENCY_BY_LOCALE` in `lib/ai/pricing.mjs`, `EUR` or `USD`. A suggestion
    `ai-check` prints, never a rule; but a language with no row there used to be
@@ -134,9 +135,13 @@ and 6. The same list is the header of `i18n/config.ts`.
 4. Remove `title.<code>` from every `modules/<id>/module.json`.
 5. Remove the entry from `NAMES_A_MACHINE` (`lib/ai/disclosure.mjs`).
 6. Delete `content/legal/<slug>.<code>.md`.
-7. Remove `<code>` from `productIds` in `config/digistore-products.json`. A product
-   that already exists at Digistore24 is deactivated **there**, by hand —
-   removing its id here does not unpublish it.
+7. Remove `<code>` from `productIds` **and `payplanIds`** in
+   `config/digistore-products.json`, then `node run.mjs ds24-sync --prune`
+   *(needs template 0.36.0; before that the product is deactivated by hand in
+   the Digistore24 backend)* —
+   that language's product is then an orphan this app created, and the prune
+   deletes it, or deactivates it if it ever sold. Removing the id alone does
+   not unpublish anything.
 8. Remove the row from `CURRENCY_BY_LOCALE` in `lib/ai/pricing.mjs`.
 9. If `config/notifications.json` names `<code>`, set its `locale` to a language
    the app still speaks.

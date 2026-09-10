@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA
 // SPDX-License-Identifier: MIT
 
-import { and, eq, or, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { communityDiscussions, communityPosts } from "../schema";
 import { findEmbed } from "./embeds";
@@ -280,7 +280,7 @@ export async function addEmbeddedPost(
       return { postId: post.id };
       });
     } catch (error) {
-      await discardPostImages(mediaIds);
+      await discardPostImages(mediaIds, viewer.memberId);
       throw error;
     }
   });

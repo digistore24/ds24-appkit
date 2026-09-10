@@ -135,11 +135,15 @@ export async function setPasswordAction(
 ): Promise<ActionState> {
   try {
     const session = await requireActiveUser();
-    const { email, created } = await setPassword(session.user.id, {
-      password: String(formData.get("password") ?? ""),
-      confirmation: String(formData.get("confirmation") ?? ""),
-      current: String(formData.get("current") ?? ""),
-    });
+    const { email, created } = await setPassword(
+      session.user.id,
+      {
+        password: String(formData.get("password") ?? ""),
+        confirmation: String(formData.get("confirmation") ?? ""),
+        current: String(formData.get("current") ?? ""),
+      },
+      { impersonating: Boolean(session.user.impersonation) },
+    );
     await notify(email, created ? "passwordSet" : "passwordChanged");
     revalidatePath(PAGE);
     const t = await getTranslations("account");
@@ -171,6 +175,7 @@ export async function requestEmailChangeAction(
     const { newEmail, token } = await requestEmailChange(
       session.user.id,
       formData.get("email"),
+      { impersonating: Boolean(session.user.impersonation) },
     );
 
     const url = `${await appOrigin()}/account/confirm-email?token=${encodeURIComponent(token)}`;
@@ -196,9 +201,11 @@ export async function removePasswordAction(
 ): Promise<ActionState> {
   try {
     const session = await requireActiveUser();
-    const { email } = await removePassword(session.user.id, {
-      current: String(formData.get("current") ?? ""),
-    });
+    const { email } = await removePassword(
+      session.user.id,
+      { current: String(formData.get("current") ?? "") },
+      { impersonating: Boolean(session.user.impersonation) },
+    );
     await notify(email, "passwordRemoved");
     revalidatePath(PAGE);
     const t = await getTranslations("account");

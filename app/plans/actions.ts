@@ -22,7 +22,11 @@ import { redirect } from "next/navigation";
 import { getLocale } from "next-intl/server";
 
 import { auth } from "@/auth";
-import { getProduct, isSold } from "@/lib/digistore/products";
+import {
+  getProduct,
+  isSold,
+  findPaymentOption,
+} from "@/lib/digistore/products";
 import { checkoutLinkFor } from "@/lib/digistore/checkout";
 import { buildIdentity, purchaseOriginFor } from "@/lib/digistore/custom";
 import { ensureCheckoutToken } from "@/lib/users/checkout-token";
@@ -35,6 +39,11 @@ export async function startCheckoutAction(formData: FormData): Promise<void> {
   if (!memberId) redirect("/login");
 
   const productKey = String(formData.get("planKey") ?? "");
+  // WHICH way to pay — monthly, yearly. A separate field rather than a suffix
+  // on `planKey`, so everything that reads a Product Key out of a form keeps
+  // reading a Product Key. An empty value means "the one the offering
+  // declares first", which is the only one a single-option offering has.
+  const optionKey = String(formData.get("optionKey") ?? "") || undefined;
   // The checkbox on a token card. Only meaningful for a package — a
   // subscription has no balance to keep topped up — so the product decides
   // below, not the form.
@@ -58,6 +67,16 @@ export async function startCheckoutAction(formData: FormData): Promise<void> {
     if (!isSold(def)) {
       throw new Error(`Produkt "${productKey}" wird nicht mehr verkauft.`);
     }
+    // 🚨 And a way to pay this offering does not have is refused rather than
+    // resolved to another one. Same reasoning as the parked check above: this
+    // is an HTTP endpoint, and a tampered `optionKey` that quietly fell back
+    // to the cheapest option would sell a yearly plan at the monthly price.
+    const option = optionKey ? findPaymentOption(def, optionKey) : null;
+    if (optionKey && !option) {
+      throw new Error(
+        `Produkt "${productKey}" hat keine Bezahlweise "${optionKey}".`,
+      );
+    }
     const checkoutToken = await ensureCheckoutToken(memberId);
     // Decides WHICH of the offering's Digistore24 products they are sent to,
     // and with it the language of the order form — a DS24 product carries
@@ -76,6 +95,11 @@ export async function startCheckoutAction(formData: FormData): Promise<void> {
           memberId,
           checkoutToken,
           productKey,
+          // Comes back on every later event for this purchase, which is how
+          // the dashboard knows whether the Member is on the monthly or the
+          // yearly plan. It is NOT an access answer — both are the same
+          // Product Key and the same entitlement.
+          optionKey: option?.key,
           // Plans and prepaid top-ups are told apart by this; an unattended
           // auto top-up carries "auto" (set in autoReloadIfNeeded). The rule
           // lives with the type it belongs to — a `one_time` purchase is a
@@ -89,6 +113,7 @@ export async function startCheckoutAction(formData: FormData): Promise<void> {
         }),
       },
       locale,
+      option?.key,
     );
     url = link.url;
   } catch (error) {

@@ -47,11 +47,6 @@ const ACTS: Record<keyof MemberStanding, [ModerationAct, ModerationAct]> = {
   reportsIgnored: ["reportsIgnored", "reportsCounted"],
 };
 
-const COLUMNS = {
-  protected: communityMemberStanding.protectedAt,
-  writeBlocked: communityMemberStanding.writeBlockedAt,
-  reportsIgnored: communityMemberStanding.reportsIgnoredAt,
-} as const;
 
 function toStanding(row: {
   protectedAt: Date | null;

@@ -27,6 +27,10 @@ export async function POST(request: Request): Promise<Response> {
   return runChatRequest({
     memberId: g.memberId,
     request,
+    // A bearer key is not a session, so nobody is impersonating anybody here.
+    // Stated rather than defaulted: the flag guards a charge on a customer's
+    // card, and a door that says nothing would be a door that guessed.
+    impersonating: false,
     // No cookie on this path — the client says what language it speaks, the
     // same negotiation the first web visit does (i18n/config.ts).
     locale: matchLocale(request.headers.get("accept-language")),

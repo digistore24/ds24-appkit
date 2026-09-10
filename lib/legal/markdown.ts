@@ -44,8 +44,41 @@ export type Block =
  * operator is a trusted author, but these files are edited by an agent acting
  * on their behalf and pasted from generators — "trusted" is about intent, not
  * about every character that ends up in the file.
+ *
+ * 🚨 **The second character of the app-relative alternative is the whole
+ * point.** It used to be a bare `/`, and a bare `/` is not "stays in this app":
+ * `//evil.example/x` is a PROTOCOL-RELATIVE URL — a browser reads it as
+ * `https://evil.example/x` and leaves the site. `/\evil.example` is the same
+ * thing with a backslash, which browsers fold to a slash, so a rule that only
+ * catches `//` is half a rule. Measured 2026-08-18 against the old expression:
+ *
+ *     PASS   "//evil.example/x"    -> https://evil.example/x
+ *     PASS   "/\evil.example"      -> https://evil.example/
+ *     BLOCK  "javascript:alert(1)"
+ *     BLOCK  "data:text/html,x"
+ *
+ * It is not an XSS — the dangerous schemes were always refused. It is worse in
+ * a quieter way: `components/legal-body.tsx` decides EXTERNALITY with
+ * `/^https?:\/\//i`, which these payloads do not match, so they rendered in the
+ * same tab, without `target`, without `rel` — indistinguishable from a link to
+ * `/datenschutz`. On an Impressum or a privacy policy, the two pages a reader
+ * visits precisely BECAUSE they want to check who they are dealing with, that
+ * is a phishing ramp with the operator's own domain around it.
+ *
+ * The reach is both surfaces this parser serves: the legal pages
+ * (`components/legal-page.tsx`) and, since 2026-08-12, lesson bodies
+ * (`modules/courses/pages/unit/page.tsx` via `LegalBody`) — text an operator
+ * types into a `<textarea>` in the admin area.
+ *
+ * ⚠️ Same rule as `LINK_TARGET_PATTERN` in `lib/content-source/link-marker.ts`,
+ * whose comment spells out the reasoning at length ("the single most important
+ * character in this file is the second one"). Deliberately re-stated here
+ * rather than imported: that pattern also fixes a segment charset and a length
+ * bound for a marker grammar this subset does not have, so importing it would
+ * refuse `/impressum#§5` for reasons that have nothing to do with safety. What
+ * travels is the RULE, not the expression.
  */
-const SAFE_HREF = /^(https?:\/\/|mailto:|tel:|\/)/i;
+const SAFE_HREF = /^(?:https?:\/\/|mailto:|tel:|\/(?![/\\]))/i;
 
 /**
  * `[text](href)`, `**strong**`, `*em*` — in that order of precedence.

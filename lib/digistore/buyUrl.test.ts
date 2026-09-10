@@ -6,6 +6,8 @@ import {
   buildBuyUrlBody,
   offerHash,
   isUnknownAffiliateError,
+  isStalePaymentPlanError,
+  sellsThroughStoredPlan,
   isUserSpecific,
   type Offer,
 } from "./buyUrl";
@@ -163,5 +165,101 @@ describe("isUserSpecific", () => {
     expect(isUserSpecific({ campaignKey: "spring" })).toBe(true);
     expect(isUserSpecific({ trackingKey: "abc" })).toBe(true);
     expect(isUserSpecific({ upgradeOrderId: "4711" })).toBe(true);
+  });
+});
+
+// ===========================================================================
+// The stored payment plan — which of the two ways this checkout is priced
+// ===========================================================================
+
+const stored: Offer = { ...monthly, payplanId: "991", optionKey: "yearly" };
+
+describe("selling through the product's stored plan", () => {
+  it("selects the plan and hides the others instead of sending amounts", () => {
+    const b = buildBuyUrlBody(stored);
+    expect(b.get("settings[plan]")).toBe("991");
+    expect(b.get("settings[hide_plans]")).toBe("Y");
+    // No amounts: the stored plan prices the sale. Sending a copy of it would
+    // put the price in a second place, which is the whole thing this avoids.
+    expect(b.get("payment_plan[first_amount]")).toBeNull();
+    expect(b.get("payment_plan[other_amounts]")).toBeNull();
+    expect(b.get("payment_plan[number_of_installments]")).toBeNull();
+  });
+
+  it("sends the plan as a template TOO — that is what makes a stale id loud", () => {
+    // createBuyUrl.php:427-430 refuses a template that is not this product's.
+    // Without it, a stale settings[plan] would be ignored in silence and the
+    // buyer would meet the product's default plan at whatever price that is.
+    expect(buildBuyUrlBody(stored).get("payment_plan[template]")).toBe("991");
+  });
+
+  it("prices an UPGRADE inline — a stored plan cannot express one", () => {
+    const b = buildBuyUrlBody(stored, { upgradeOrderId: "ABC12345" });
+    expect(b.get("payment_plan[first_amount]")).toBe("9.00");
+    expect(b.get("payment_plan[upgrade_order_id]")).toBe("ABC12345");
+    expect(b.get("settings[plan]")).toBeNull();
+    expect(b.get("payment_plan[template]")).toBeNull();
+  });
+
+  it("prices inline when there is no stored plan at all", () => {
+    expect(buildBuyUrlBody(monthly).get("payment_plan[first_amount]")).toBe("9.00");
+    expect(buildBuyUrlBody(monthly).get("settings[plan]")).toBeNull();
+  });
+
+  it("still forces rebilling for a token package — that lives in settings", () => {
+    const b = buildBuyUrlBody({ ...stored, forceRebilling: true });
+    expect(b.get("settings[force_rebilling]")).toBe("Y");
+  });
+
+  it("sellsThroughStoredPlan says which branch was taken", () => {
+    expect(sellsThroughStoredPlan(stored)).toBe(true);
+    expect(sellsThroughStoredPlan(monthly)).toBe(false);
+    expect(sellsThroughStoredPlan(stored, { upgradeOrderId: "X" })).toBe(false);
+  });
+});
+
+describe("isStalePaymentPlanError", () => {
+  it("🚨 matches the message Digistore24 REALLY sends — in any language", () => {
+    // Captured from a live account: the API source raises this as
+    // `payment_plan_not_found`, but that is an internal key and the wire
+    // carries the account's language. Matching the marker matched nothing,
+    // and the retry that keeps a page alive never fired.
+    const real =
+      'Digistore24 API HTTP 404 (createBuyUrl): {"result":"error","message":' +
+      '"Ung\u00fctlige Bezahlplan-ID: 999999999 - Bezahlplan nicht vorhanden ' +
+      'oder nicht f\u00fcr das gew\u00e4hlte Produkt.","code":4}';
+    expect(isStalePaymentPlanError(new Error(real), "999999999")).toBe(true);
+  });
+
+  it("still accepts the literal marker, wherever it surfaces", () => {
+    expect(isStalePaymentPlanError(new Error("payment_plan_not_found"), "991")).toBe(true);
+  });
+
+  it("does not swallow an unrelated failure", () => {
+    // Retrying on any error would report the second attempt's failure and
+    // hide a bad API key or an unknown product.
+    expect(isStalePaymentPlanError(new Error("invalid api key"), "991")).toBe(false);
+    expect(isStalePaymentPlanError(new Error("product_not_found"), "991")).toBe(false);
+  });
+
+  it("answers false when no plan was sent — there is nothing to blame", () => {
+    expect(isStalePaymentPlanError(new Error("991 is broken"), undefined)).toBe(false);
+  });
+});
+
+describe("offerHash", () => {
+  it("gives two ways to pay two different cache rows", () => {
+    // A shared hash would let the monthly and the yearly link serve each
+    // other out of buy_url_cache — the same failure the language axis is
+    // already guarded against.
+    const a = offerHash({ ...monthly, payplanId: "991", optionKey: "monthly" });
+    const b = offerHash({ ...monthly, payplanId: "992", optionKey: "yearly" });
+    expect(a).not.toBe(b);
+  });
+
+  it("is unchanged for an offering that has no stored plan", () => {
+    // Every registry written before payment plans existed keeps its cached
+    // URLs rather than regenerating all of them on the first deploy.
+    expect(offerHash(monthly)).toBe(offerHash({ ...monthly, payplanId: undefined }));
   });
 });

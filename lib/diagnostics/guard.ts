@@ -61,7 +61,21 @@ function refuse(): Response {
  * different answer out of a malformed request than out of a well-formed one.
  */
 export function guardDiagnostics(request: Request): Response | null {
-  const secret = process.env.DIAGNOSTICS_SECRET;
+  // 🚨 `.trim()`, because `!secret` alone reads a value made of spaces as SET.
+  // `DIAGNOSTICS_SECRET=" "` is truthy, so this surface would have switched
+  // itself on with a one-space bearer token as the credential — finding L-6 of
+  // the 2026-08-18 scan. The realistic way there is not a typo in the code but
+  // a copied empty value in a host's secret store, which is also the one place
+  // nobody looks at the value afterwards.
+  //
+  // Trimming the VALUE and not just the emptiness test is deliberate: a secret
+  // store that appends a newline would otherwise make every correct token
+  // wrong by one invisible byte, and the operator has no way to see it.
+  //
+  // ⚠️ The ORDER below is untouched by this. The unset branch stays FIRST,
+  // before a header is parsed and before the meter — that is the fail-closed
+  // property the rest of this guard rests on, and it is the control here.
+  const secret = process.env.DIAGNOSTICS_SECRET?.trim();
   if (!secret) return refuse();
 
   const caller = callerKey(request);

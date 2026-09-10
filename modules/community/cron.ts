@@ -51,7 +51,7 @@
 //
 // Age is the one selector that needs no look inside. There is no `--conversation`
 // here for the same reason there is none there.
-import { and, isNotNull, lt } from "drizzle-orm";
+import { isNotNull } from "drizzle-orm";
 
 import type { CronJob } from "@/lib/cron/types";
 import {

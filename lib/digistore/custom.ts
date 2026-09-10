@@ -12,11 +12,18 @@
 //
 // The format is `;`-separated `key:value` pairs:
 //
-//   m:<memberId>;t:<checkoutToken>;p:<productKey>
+//   m:<memberId>;t:<checkoutToken>;p:<productKey>;o:<optionKey>
 //
 //   m  the Member the purchase belongs to
 //   t  that Member's checkout token — corroborates `m`
 //   p  the Product Key bought, so nothing has to be reverse-looked-up later
+//   o  WHICH WAY TO PAY — monthly, yearly. Not an access question (both are
+//      the same Product Key and the same entitlement), a display one: the
+//      dashboard says what the Member is on. It travels here because the IPN
+//      cannot be asked: the real payload's `payplan_id` came back EMPTY on a
+//      captured purchase, and `other_billing_intervals` was not in its 173
+//      fields at all. This pair is written by us and comes back on every later
+//      event for the purchase, which is the same reason `p` is here.
 //
 // EXTENSIBLE BY DESIGN. A new id is a new pair; unknown keys are ignored
 // rather than fatal, so an older parser keeps working against a newer writer.
@@ -53,6 +60,8 @@ export type CustomValue =
       memberId: string;
       checkoutToken: string;
       productKey: string | undefined;
+      /** Which way to pay was bought. Display only — never an access answer. */
+      optionKey: string | undefined;
       /** How the purchase was initiated: subscription, one-off top-up, or an
        *  unattended auto top-up. Undefined when the writer did not say. */
       origin: PurchaseOrigin | undefined;
@@ -79,6 +88,10 @@ const MEMBER_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TOKEN_RE = /^[A-Za-z0-9]{10}$/;
 const PRODUCT_KEY_RE = /^[A-Za-z0-9_-]+$/;
+// Same alphabet, and it has to be: an option key with a `;` or a `:` in it
+// would split a pair and the rest of the value would be read as something
+// else. `lib/digistore/products.ts` refuses one when the registry loads.
+const OPTION_KEY_RE = PRODUCT_KEY_RE;
 
 /** The recognised values of the `k:` pair. */
 export type PurchaseOrigin = "sub" | "topup" | "auto";
@@ -135,12 +148,20 @@ export function buildIdentity(input: {
   memberId: string;
   checkoutToken: string;
   productKey?: string;
+  /** Which way to pay (`paymentOptions` in the registry). */
+  optionKey?: string;
   kind?: PurchaseOrigin;
   /** The buyer asked for auto top-up while buying this package. */
   armAutoReload?: boolean;
 }): string {
   const pairs = [`m:${input.memberId}`, `t:${input.checkoutToken}`];
   if (input.productKey) pairs.push(`p:${input.productKey}`);
+  // Left out for an offering with a single way to pay: there is nothing to
+  // tell apart, and every value that does not need to travel is one fewer
+  // thing that can be wrong on the way back.
+  if (input.optionKey && input.optionKey !== "default") {
+    pairs.push(`o:${input.optionKey}`);
+  }
   if (input.kind) pairs.push(`k:${input.kind}`);
   // Only ever emitted when true — an absent pair and `r:0` mean the same thing,
   // and not writing it keeps the value short and the intent unambiguous.
@@ -182,6 +203,7 @@ export function parseCustom(
     // weaker identity — it is no identity.
     if (!MEMBER_RE.test(memberId) || !TOKEN_RE.test(checkoutToken)) return null;
     const productKey = pairs.get("p");
+    const optionKey = pairs.get("o");
     const rawKind = pairs.get("k");
     const origin =
       rawKind && (ORIGINS as readonly string[]).includes(rawKind)
@@ -193,6 +215,8 @@ export function parseCustom(
       checkoutToken,
       productKey:
         productKey && PRODUCT_KEY_RE.test(productKey) ? productKey : undefined,
+      optionKey:
+        optionKey && OPTION_KEY_RE.test(optionKey) ? optionKey : undefined,
       origin,
       // Strictly `"1"`, checked against the RAW pair rather than the trimmed
       // one. The parser trims every value, so `r: 1` would otherwise arrive

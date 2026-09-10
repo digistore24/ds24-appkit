@@ -22,7 +22,7 @@
 // `.template-version` upstream. So there is no second copy of the truth
 // anywhere: whatever `git clone` would give somebody today is what this reads.
 //
-// Three rules hold, and they are the whole design:
+// Four rules hold, and they are the whole design:
 //
 //  1. **Text only, never code.** A doc cannot conflict with the pages you built;
 //     a lib/ file can. A code update stays a deliberate, separate step.
@@ -31,6 +31,11 @@
 //     those get replaced. Everything else is reported and left alone.
 //  3. **Nothing is written without `--apply`**, and what is written is visible in
 //     `git diff` afterwards — so it can be read, kept or thrown away.
+//  4. **The manifest says WHAT is new, never WHERE it goes.** The paths it may
+//     name are a closed list (`isGuidancePath()` in update-plan.mjs) and the
+//     host it may be fetched from is pinned; one path outside that list ends
+//     the whole run before a single directory is made. Rules 1 to 3 all read
+//     the same file this one distrusts, so it comes first in practice.
 //
 // The decisions live in update-plan.mjs and are unit-tested; this file is the
 // shell: read, fetch, print, write.
@@ -39,7 +44,13 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { isPrunedPath, readAgentProfile } from "./agent-configs.mjs";
-import { confirmsApply, normalizeText, planUpdate, writable } from "./update-plan.mjs";
+import {
+  confirmsApply,
+  guidanceWritable,
+  isGuidancePath,
+  normalizeText,
+  planUpdate,
+} from "./update-plan.mjs";
 
 const STAMP = ".template-version";
 const args = process.argv.slice(2);
@@ -101,7 +112,48 @@ const stamp = readJson(STAMP);
 const codeVersion = readJson("package.json").version;
 const manifestUrl = override ?? stamp.source;
 
+// ── who is allowed to answer ────────────────────────────────────────────────
+//
+// Both addresses this command uses — the manifest's and the one the files
+// themselves come from — are read out of `.template-version`, which is tracked
+// in git in this app; `raw` is read out of the manifest, which is worse. The
+// hash check further down compares a file against the same manifest that named
+// it, so it is transport integrity and says nothing about who wrote either.
+// Pinning the host is what makes it mean something.
+const RAW_HOST = "raw.githubusercontent.com";
+
+/**
+ * Refuse an address that does not lead to the public template repo.
+ *
+ * `--from` still works — it is how this command is tried against a manifest
+ * that is not published yet — but it says so out loud rather than quietly:
+ * a foreign host somebody asked for on the command line is a decision, a
+ * foreign host that arrived in a file is the finding. The path allowlist holds
+ * either way; it is the actual protection, this is the second row.
+ */
+function requireKnownHost(url, what) {
+  let host;
+  try {
+    host = new URL(url).host;
+  } catch {
+    console.error(`✗ ${what} is not a URL: ${url} — nothing written.`);
+    process.exit(1);
+  }
+  if (host === RAW_HOST) return;
+  if (override) {
+    console.error(`⚠ ${what} is on a foreign host: ${url}`);
+    console.error("  Allowed because --from was given. The path allowlist still holds.");
+    return;
+  }
+  console.error(`✗ ${what} is on a foreign host: ${url} — nothing written.`);
+  console.error(`  This command reads ${RAW_HOST} and nothing else.`);
+  console.error(`  Check ${STAMP} in this app: somebody changed where it points.`);
+  process.exit(1);
+}
+
 console.log(`This app: template ${stamp.version} (code ${codeVersion})`);
+
+requireKnownHost(manifestUrl, "The manifest");
 
 let remote;
 try {
@@ -109,6 +161,44 @@ try {
 } catch (error) {
   // Being offline is a normal state, not a failure of the app.
   console.error(`✗ Could not reach ${manifestUrl} — ${error.message}`);
+  process.exit(1);
+}
+
+// 🚨 One path this command may not write ends the WHOLE run — here, before the
+// plan, before the first mkdir, before a single file has been fetched.
+//
+// Not skipped, and this is the part that matters: a manifest offering
+// `../../.git/hooks/pre-commit` or `.env` is not a manifest with one bad entry
+// in it, it is one nothing in it can be believed from any more. Taking the
+// other 150 entries would write the guidance of a source we have just caught
+// lying, and it would look like a normal update while doing it. Refusing the
+// lot is also the same shape the rest of this file already has: everything is
+// in hand before anything is written, or nothing is.
+//
+// The check runs over the RAW manifest and not over the plan: a bad path that
+// happens to be pruned away by the agent profile, or to be identical to what is
+// already here, still says everything about who wrote this file.
+const refused = Object.keys(remote.files ?? {}).filter((file) => !isGuidancePath(file));
+if (refused.length > 0) {
+  console.error(`✗ ${manifestUrl} offers ${refused.length} path(s) this command may not write:`);
+  for (const file of refused.slice(0, 5)) console.error(`    ${JSON.stringify(file)}`);
+  if (refused.length > 5) console.error(`    … and ${refused.length - 5} more`);
+  console.error("");
+  // ⚠️ No `docs/` + star in these strings, however natural it reads: the
+  // checkers that walk this tree read it as TEXT through `blankComments()`, and
+  // a star-slash inside a string literal opens a phantom block comment there
+  // that swallows everything down to the next real one (the reason that helper
+  // exists is written up in scripts/lib/source-text.mjs). It cost one test
+  // above a needle it could no longer see.
+  // ⚠️ And no file name at the END of one of these lines either: the citation
+  // checker (scripts/citations.test.mjs) reads `AGENTS.md,");` as a citation
+  // whose section is whatever follows, and then reports a heading that cannot
+  // exist. Keep the names away from the line breaks.
+  console.error("  An update writes guidance and nothing else — the three root files");
+  console.error("  (CLAUDE.md, AGENTS.md, README.md), the docs, and the skills under");
+  console.error("  .claude/skills/ and .agents/skills/. Nothing was written, and");
+  console.error(`  nothing will be from this manifest — check where ${STAMP} points`);
+  console.error("  and who last changed it.");
   process.exit(1);
 }
 
@@ -147,7 +237,11 @@ for (const file of paths) {
   local[file] = { current: currentHash(file), shipped: stamp.files?.[file] ?? null };
 }
 
+// Where the files themselves come from. It arrives in the manifest — so the
+// document that says what to fetch also says whom to ask, which is exactly the
+// combination the host pin exists for.
 const raw = remote.raw ?? stamp.raw;
+requireKnownHost(raw, "The file host");
 
 /** Fetched file contents, keyed by path. Filled as needed, never twice. */
 const fetched = {};
@@ -182,7 +276,11 @@ const plan = planUpdate({
   codeVersion,
 });
 
-const changes = writable(plan);
+// guidanceWritable and not writable: the allowlist a second time, as the layer
+// that sits between the plan and `writeFileSync`. The manifest was already
+// refused above if it named anything else, so this can only fire on a path that
+// found its way in some other way — and then it throws rather than writes.
+const changes = guidanceWritable(plan);
 const skipped = plan.filter(
   (entry) => entry.action === "local-change" || entry.action === "needs-code",
 );

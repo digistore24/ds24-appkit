@@ -32,7 +32,7 @@ hasPlan(memberId: string, productKey: string): Promise<boolean>
 One Member, one plan, one boolean. This is what a feature asks.
 
 ```ts
-if (await hasPlan(memberId, "basic_monthly")) {
+if (await hasPlan(memberId, "basic")) {
   // the feature
 }
 ```
@@ -61,7 +61,7 @@ a badge or an account overview:
 
 ```ts
 const owned = await entitlementsFor(memberId);
-const keys = owned.map((e) => e.productKey);   // ["basic_monthly"]
+const keys = owned.map((e) => e.productKey);   // ["basic"]
 ```
 
 `source` says where it came from: `"purchase"` — somebody paid — or `"manual"`,
@@ -77,7 +77,7 @@ And that is the point of the whole design, not an accident of the return type.
 // Answers true for a subscription that billed this morning AND for the comp
 // the operator typed in at 11pm to fix a support case. Identically. There is
 // no second function and no flag.
-if (await hasPlan(memberId, "basic_monthly")) { /* the feature */ }
+if (await hasPlan(memberId, "basic")) { /* the feature */ }
 ```
 
 An operator can settle a purchase that never matched, or hand somebody a month
@@ -174,8 +174,8 @@ export default async function ReportsPage() {
   if (!session?.user?.id) redirect("/login");
 
   // Not entitled? Send them where they can become entitled.
-  if (!(await hasPlan(session.user.id, "basic_monthly"))) {
-    redirect("/plans?needs=basic_monthly");
+  if (!(await hasPlan(session.user.id, "basic"))) {
+    redirect("/plans?needs=basic");
   }
 
   return <p>The paid feature.</p>;
@@ -316,7 +316,7 @@ import { pausedKeys } from "@/lib/entitlements/rules";
 
 const owned  = await entitlementsFor(memberId);
 const paused = pausedKeys(owned, await suspendedKeysFor(memberId));
-// paused = ["basic_monthly"] → "your access to Basis is paused"
+// paused = ["basic"] → "your access to Basis is paused"
 ```
 
 `suspendedKeysFor` returns Product Keys and nothing else — no note, no operator
@@ -331,11 +331,17 @@ which is the failure this whole section is about.
 ### 3. A Member can hold two plans at once — or briefly none
 
 A Digistore24 plan switch is not one event. The old rebilling stops and a new
-purchase starts, and the two arrive **days apart, in either order**. So an
-upgrading customer holds:
+purchase starts, and the two arrive **days apart, in either order**. So a
+customer moving from Silber to Gold holds:
 
 - **both** keys for a while — the old one has not expired, the new one is live;
 - or, if the old plan expired first, **neither**, until the new payment lands.
+
+⚠️ **Changing from monthly to yearly is NOT one of these.** Those are two ways
+to pay for the same offering (`paymentOptions`), so the Product Key does not
+change and neither does the entitlement — the switch happens at Digistore24
+(`switch_pay_interval_url`) and comes back as an ordinary rebill. This section
+is about a move between two OFFERINGS.
 
 The per-key dedupe merges duplicate grants for the *same* Product Key. It does
 not merge different keys, and it must not: they are different entitlements.
@@ -348,7 +354,7 @@ So there is no such thing as "the Member's plan":
 const plan = (await entitlementsFor(memberId))[0].productKey;
 
 // RIGHT — ask per feature.
-const canExport = await hasPlan(memberId, "basic_yearly");
+const canExport = await hasPlan(memberId, "pro");
 ```
 
 If you want to *display* something like a current plan, pick it deliberately —
@@ -469,7 +475,7 @@ The two models combine well and are meant to: a subscription gates *whether*
 the feature exists for this customer, the balance limits *how much* they use it.
 
 ```ts
-if (!(await hasPlan(memberId, "basic_monthly"))) return notEntitled();
+if (!(await hasPlan(memberId, "basic"))) return notEntitled();
 await spendTokens({ amount: cost, note: "report generation" });
 ```
 

@@ -1,7 +1,6 @@
 // Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA
 // SPDX-License-Identifier: MIT
 
-import { cache } from "react";
 import { and, asc, count, eq, inArray, isNotNull, isNull, ne, or } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";

@@ -13,6 +13,7 @@ import {
   isSold,
   sellFieldProblems,
   parkedTargets,
+  readProducts,
 } from "./_products.mjs";
 import {
   contradictingProducts as appContradictingProducts,
@@ -519,5 +520,61 @@ describe("contradictingProducts ignores a parked product", () => {
       },
     };
     expect(contradictingProducts(shifted)).toEqual([]);
+  });
+});
+
+// ===========================================================================
+// The SHIPPED registry, read the way the sync reads it
+//
+// Every other test here builds its own fixture, which is right — the customer
+// reshapes this file and a test nailed to its contents goes red about their
+// app. What is asserted here is different: that the file the template ships
+// actually flows through `productTargets` into the shape `_plans.mjs` and the
+// stamp expect. A registry that no longer parses that far would take the sync
+// down on a fresh app, and nothing else looks.
+// ===========================================================================
+describe("productTargets over the shipped registry", () => {
+  const shipped = readProducts();
+  const rows = productTargets(shipped.products, "dev");
+
+  it("carries the ways to pay and the recorded plans on every row", () => {
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(Array.isArray(row.options)).toBe(true);
+      expect(row.options.length).toBeGreaterThan(0);
+      expect(typeof row.payplans).toBe("object");
+    }
+  });
+
+  it("gives a subscription with several options one ROW per language, not per price", () => {
+    // The whole point of the change: the price axis folds into the product,
+    // the language axis does not. A row is a Digistore24 product.
+    const multi = rows.find((r) => r.options.length > 1);
+    if (!multi) {
+      // A registry reshaped down to single-option offerings is legitimate.
+      return;
+    }
+    const sameKey = rows.filter((r) => r.key === multi.key);
+    const languages = new Set(sameKey.map((r) => r.language));
+    expect(sameKey.length).toBe(languages.size);
+  });
+
+  it("declares a price for every way to pay it ships", () => {
+    // A way to pay with no priceCents gets no payment plan, and a product with
+    // no plan of ours has Digistore24's own (~27 EUR) — whose order form
+    // charges it, and whose orders grant. The shipped file must not be the
+    // example of that.
+    for (const row of rows) {
+      for (const option of row.options) {
+        expect(
+          typeof option.priceCents === "number",
+          `${row.key}.${option.key} has no priceCents`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("has a syncId slot, so ownership is answerable from the first sync on", () => {
+    expect(Object.hasOwn(shipped, "syncId")).toBe(true);
   });
 });

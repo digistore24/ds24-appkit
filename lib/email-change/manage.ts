@@ -75,7 +75,19 @@ export async function pendingChangeFor(
 export async function requestEmailChange(
   userId: string,
   rawEmail: unknown,
+  opts: { impersonating: boolean },
 ): Promise<{ newEmail: string; token: string; expiresAt: Date }> {
+  // 🚨 BEFORE the transport check, and before the row. An operator signed in AS
+  // this member may not move the address: the confirmation goes to the NEW
+  // mailbox — the one the operator typed — and the old address is never told.
+  // The change outlives the thirty minutes and appears in no impersonation
+  // record. Same reasoning, spelled out, in `lib/credentials/manage.ts`.
+  //
+  // ⚠️ `confirmEmailChange()` below deliberately gets NO such guard: it is a
+  // public token endpoint with no session at all. The refusal belongs at the
+  // request, not at the confirmation.
+  if (opts.impersonating) throw new EmailChangeError("notWhileImpersonating");
+
   // FIRST, before anything is read or written. Mail is not a delivery detail of
   // this feature, it IS the mechanism: the link is the only thing that can move
   // an address. Without a transport there is nothing to send and therefore

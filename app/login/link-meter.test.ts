@@ -19,6 +19,16 @@
 // The other half is the survivor: the fourth call must be refused AND the first
 // three must have gone out. A brake that refuses everything passes any test
 // that only counts refusals.
+//
+// ── 🚨 What changed on 2026-09-10, and why this file had to change with it ──
+//
+// This file used to drive the meter through `signInAction` alone, with `signIn`
+// faked. That measured the architecture the finding disproved: the brake sat in
+// the ACTION, and `POST /api/auth/signin/email` reaches the Auth.js provider
+// directly, past it (finding M-6). The meter is in `sendVerificationRequest()`
+// now, so the fake `signIn` below CALLS THROUGH to it — which is what Auth.js
+// really does — and the file gained a second describe block that posts at the
+// provider directly, the way the open door did.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { resetRateLimits } from "@/lib/rate-limit";
@@ -33,12 +43,18 @@ import { LINK_SEND_LIMIT, LINK_SEND_ORIGIN_LIMIT } from "@/lib/credentials/rules
  * says so: "unreachable: signIn redirects"). So the spy throws the same shape
  * Next does, and the action is expected to let it through.
  */
-const signIn = vi.fn((..._args: unknown[]) => {
-  const error = new Error("NEXT_REDIRECT");
-  throw error;
+const signIn = vi.fn(async (_provider: unknown, options: unknown) => {
+  // 🚨 Through the guard, not around it. Auth.js calls
+  // `sendVerificationRequest()`, which calls `guardSignInLink()` before it
+  // sends; a fake that only threw would leave the meter untouched and this
+  // whole file green over an unmetered door. The structural test at the bottom
+  // is what holds the provider to actually calling it.
+  const email = (options as { email?: string } | undefined)?.email ?? "";
+  await sendVerification(email);
+  throw new Error("NEXT_REDIRECT");
 });
 
-vi.mock("@/auth", () => ({ signIn: (...args: unknown[]) => signIn(...args) }));
+vi.mock("@/auth", () => ({ signIn: (...args: unknown[]) => signIn(args[0], args[1]) }));
 
 // Headers are read for the origin. Kept variable so the origin-keyed half can
 // be driven independently of the address-keyed one.
@@ -47,12 +63,31 @@ vi.mock("next/headers", () => ({
   headers: async () => new Headers(forwardedFor ? { "x-forwarded-for": forwardedFor } : {}),
 }));
 
-// The dialog asks these two before it decides anything. Neither is under test.
+// The dialog asks this before it decides anything, and it is not under test.
 vi.mock("@/lib/auth/dev-login", () => ({ isDevLoginActive: () => false }));
+
 vi.mock("@/lib/email", () => ({ isEmailLoginEnabled: () => true }));
 
 const { signInAction } = await import("./actions");
 const { INITIAL_SIGN_IN_STATE } = await import("./state");
+const { asOperatorInvitation, guardSignInLink } = await import("@/lib/auth/link-context");
+
+/**
+ * What the provider does before it sends — the door `POST
+ * /api/auth/signin/email` reaches, with the transport left out.
+ *
+ * ⚠️ The guard is called rather than `buildEmailProvider()`: the provider
+ * closes over its own module's `isEmailLoginEnabled()` and `sendLoginEmail()`,
+ * and a partial mock does not intercept a module's calls to itself — so driving
+ * it would need the real transport. The decision lives in its own function for
+ * exactly that reason, and the last test in this file reads the provider's
+ * source to prove the two are still wired together.
+ */
+const mailed = { to: [] as string[] };
+async function sendVerification(email: string) {
+  await guardSignInLink(email);
+  mailed.to.push(email);
+}
 
 /** One press of "mail me a link instead". */
 async function requestLink(email: string) {
@@ -65,6 +100,7 @@ async function requestLink(email: string) {
 beforeEach(() => {
   resetRateLimits();
   signIn.mockClear();
+  mailed.to.length = 0;
   forwardedFor = null;
 });
 
@@ -125,5 +161,77 @@ describe("mailing a sign-in link", () => {
     const refused = await requestLink("someone@example.com");
     expect(refused.error).toBe("tooManyLinks");
     expect(signIn).toHaveBeenCalledTimes(LINK_SEND_LIMIT.max);
+  });
+});
+
+describe("🚨 the door the action never covered", () => {
+  // `POST /api/auth/signin/email` with a csrf token and any address goes
+  // straight to the provider. Before 2026-09-10 nothing metered it, and the
+  // provider exists exactly when a mail transport is configured — which in
+  // STAGING and PROD is mandatory. So the unmetered door existed precisely
+  // where it counted.
+  it("meters a caller that bypasses the sign-in dialog entirely", async () => {
+    const address = "victim@example.com";
+
+    for (let i = 0; i < LINK_SEND_LIMIT.max; i += 1) {
+      await sendVerification(address);
+    }
+    expect(mailed.to).toHaveLength(LINK_SEND_LIMIT.max);
+
+    await expect(sendVerification(address)).rejects.toThrow(/rate limit/);
+    // The measurement: still three mails, not four.
+    expect(mailed.to).toHaveLength(LINK_SEND_LIMIT.max);
+  });
+
+  it("lets the operator's invitation through — an exemption, not a gap", async () => {
+    const address = "invited@example.com";
+
+    // Fill the address's quota the ordinary way first.
+    for (let i = 0; i < LINK_SEND_LIMIT.max; i += 1) {
+      await sendVerification(address);
+    }
+    await expect(sendVerification(address)).rejects.toThrow(/rate limit/);
+
+    // The admin's "send a sign-in link" is requireOwner-gated and must not be
+    // counted against the person being invited.
+    await asOperatorInvitation(() => sendVerification(address));
+    expect(mailed.to).toHaveLength(LINK_SEND_LIMIT.max + 1);
+  });
+
+  it("the exemption does not leak past the act it wraps", async () => {
+    // The reason it is AsyncLocalStorage and not a module-level flag: two
+    // requests are served at once, and a flag set by one would exempt the
+    // other's send.
+    const address = "leak@example.com";
+    for (let i = 0; i < LINK_SEND_LIMIT.max; i += 1) await sendVerification(address);
+    await asOperatorInvitation(() => sendVerification(address));
+
+    await expect(sendVerification(address)).rejects.toThrow(/rate limit/);
+  });
+});
+
+describe("and the provider really reaches it", () => {
+  // The behavioural half above drives `guardSignInLink()` directly, which
+  // cannot see whether `sendVerificationRequest()` still calls it. This is the
+  // other half: the source, read, with the ORDER asserted. A guard that runs
+  // after the send has already paid for what it refuses.
+  it("calls the guard before the mail, in sendVerificationRequest", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const { join } = await import("node:path");
+    const { blankComments } = await import("@/scripts/lib/source-text.mjs");
+
+    const root = fileURLToPath(new URL("../../", import.meta.url));
+    const source = blankComments(readFileSync(join(root, "lib/email.ts"), "utf8"));
+
+    const start = source.indexOf("async sendVerificationRequest(");
+    expect(start, "sendVerificationRequest is gone from lib/email.ts").toBeGreaterThan(0);
+    const body = source.slice(start, source.indexOf("\n    },", start));
+
+    const guard = body.indexOf("guardSignInLink(");
+    const send = body.indexOf("sendLoginEmail(");
+    expect(guard, "the provider no longer calls the guard").toBeGreaterThan(-1);
+    expect(send).toBeGreaterThan(-1);
+    expect(guard, "the guard runs after the mail").toBeLessThan(send);
   });
 });

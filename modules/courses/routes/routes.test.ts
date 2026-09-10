@@ -59,7 +59,6 @@ import { guardApi } from "@/modules/api/api/guard";
 
 import { courseAccessFor } from "../lib/access";
 import { courseOffReason } from "../lib/config";
-import { courseById, courseBySlug, usableCourses } from "../lib/courses";
 import {
   blockById,
   completedSlugsFor,

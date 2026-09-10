@@ -1054,12 +1054,12 @@ describe("findExampleProducts", () => {
 
   it("flags a product on sale under a shipped example name", () => {
     expect(
-      findExampleProducts(registry({ basic_monthly: { name: "Basic (monthly)", sell: true } })),
-    ).toEqual([{ key: "basic_monthly", name: "Basic (monthly)" }]);
+      findExampleProducts(registry({ basic: { name: "Basic", sell: true } })),
+    ).toEqual([{ key: "basic", name: "Basic" }]);
   });
 
   it("a missing sell field is on sale — the registry's own default", () => {
-    expect(findExampleProducts(registry({ basic_yearly: { name: "Basic (yearly)" } }))).toHaveLength(1);
+    expect(findExampleProducts(registry({ basic: { name: "Basic" } }))).toHaveLength(1);
   });
 
   it("a parked example and a renamed product are not findings", () => {

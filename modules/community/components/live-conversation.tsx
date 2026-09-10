@@ -42,15 +42,10 @@ import {
   type MessageView,
 } from "@/modules/community/pages/messages/ui";
 
-/**
- * A message on the wire.
- *
- * The endpoint answers with one shape for every scope (`posts`), which is
- * AD-70's one-grammar clause reaching all the way to the browser. A message
- * carries an `editedAt` that is always `null` — a direct message cannot be
- * edited — and this component simply does not read it.
- */
-type WireMessage = MessageView & { editedAt: string | null };
+// The endpoint answers with one shape for every scope (`posts`), which is
+// AD-70's one-grammar clause reaching all the way to the browser. A message on
+// the wire therefore carries an `editedAt` that is always `null` here — a
+// direct message cannot be edited — and this component simply does not read it.
 
 /** The id an optimistic message carries until the server names the real one. */
 const PENDING_ID = "__pending__";

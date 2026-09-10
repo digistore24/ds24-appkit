@@ -100,9 +100,25 @@ export function useLiveScope<T>(input: {
   // which every caller does — cannot churn the effect below into tearing the
   // timer down and up on every render.
   const scopeRef = useRef(input.scope);
-  scopeRef.current = input.scope;
   const onAnswerRef = useRef(input.onAnswer);
-  onAnswerRef.current = input.onAnswer;
+
+  // 🚨 Written in an EFFECT, not during render. The two lines used to sit bare
+  // in the body (`scopeRef.current = input.scope;`), which React refuses —
+  // `react-hooks` reports it as "Cannot access refs during render", and it made
+  // `npm run lint` red. It is not a formality: a render can be started, thrown
+  // away and started again (StrictMode does exactly that, and concurrent
+  // rendering does it for real), so a ref written during render can end up
+  // carrying a value from a render that never became the screen.
+  //
+  // ⚠️ **No dependency array, deliberately** — after every commit, which is what
+  // "the latest one" means. Nothing reads these two during render: `poll()`
+  // reads them, and `poll()` runs from the timer below, i.e. after a commit.
+  // The `useRef` seeds above already hold the first render's values, so the
+  // first poll is correct whichever order the effects run in.
+  useEffect(() => {
+    scopeRef.current = input.scope;
+    onAnswerRef.current = input.onAnswer;
+  });
 
   const poll = useCallback(async (): Promise<void> => {
     if (stoppedRef.current) return;

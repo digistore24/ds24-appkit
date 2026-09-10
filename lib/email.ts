@@ -11,6 +11,7 @@
 // has to stay free of Node-only dependencies).
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { guardSignInLink } from "@/lib/auth/link-context";
 
 import type { Provider } from "next-auth/providers";
 import {
@@ -805,6 +806,23 @@ export function buildEmailProvider(): Provider | null {
     from: emailFrom(),
     maxAge: 24 * 60 * 60,
     async sendVerificationRequest({ identifier, url }: { identifier: string; url: string }) {
+      // 🚨 THE brake on the sign-in link, and it is here because this is the one
+      // place every caller passes. `app/login/actions.ts` used to be the only
+      // metered door, on the written assumption that "both ways in pass through
+      // this function" — they do not: `POST /api/auth/signin/email` with a csrf
+      // token and any address arrives straight here, past the action, and this
+      // provider exists exactly when a mail transport is configured, which in
+      // STAGING and PROD is mandatory. Finding M-6, 2026-08-18.
+      //
+      // What it costs when it is missing is the operator's own sending domain:
+      // deliverability and sender reputation, the same good `lib/env-guard.ts`
+      // refuses to start the app without.
+      //
+      // The decision itself is in `lib/auth/link-context.ts` — including the
+      // operator's invitation, which is exempt BY AN ACT rather than by the
+      // absence of a counter. BEFORE the send, always: a brake that fires after
+      // has already paid for what it refuses.
+      await guardSignInLink(identifier);
       await sendLoginEmail(identifier, url);
     },
     options: {},

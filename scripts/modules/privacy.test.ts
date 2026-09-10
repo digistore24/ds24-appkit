@@ -62,7 +62,7 @@ describe("🚨 both halves declare exactly what the manifest declares", () => {
   });
 
   it(`checks the ${withPrivacy.length} module(s) that answer Art. 15`, async () => {
-    for (const { id, dir, manifest } of withPrivacy) {
+    for (const { dir, manifest } of withPrivacy) {
       const declared = [...(manifest.privacy as { sections: string[] }).sections].sort();
       const privacy = manifest.privacy as { ts: string; mjs: string };
 
@@ -89,7 +89,7 @@ describe("🚨 neither half consults whether the module is switched on", () => {
   // ABSENT — and `module remove` refuses while its tables hold rows, so absent
   // code and absent data stay the same statement.
   it("names no enablement check in either contributor", () => {
-    for (const { id, dir, manifest } of withPrivacy) {
+    for (const { dir, manifest } of withPrivacy) {
       const privacy = manifest.privacy as { ts: string; mjs: string };
       for (const file of [privacy.ts, privacy.mjs]) {
         // Comments stripped: a contributor may EXPLAIN this rule while obeying

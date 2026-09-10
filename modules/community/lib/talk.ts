@@ -1,14 +1,14 @@
 // Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA
 // SPDX-License-Identifier: MIT
 
-import { and, asc, count, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { media, users } from "@/db/schema";
 import { communityDiscussions, communityGroups, communityPostMedia, communityPosts, communityProfiles } from "../schema";
 import { forgetOne, isLimited, record } from "@/lib/rate-limit";
 import { mediaConfig } from "@/lib/media/config";
 import { formatBytes, slotCeilingBytes } from "@/lib/media/rules";
-import { findMedia, mayAccess, type Viewer } from "@/lib/media/manage";
+import { mayAccess, type Viewer } from "@/lib/media/manage";
 import { mediaImageFor } from "@/lib/media/url";
 import { communityConfig } from "./config";
 import { findEmbed } from "./embeds";
@@ -374,7 +374,7 @@ export async function startDiscussion(
     } catch (error) {
       // The rows rolled back, so nothing points at these objects any more and
       // nothing ever will — the row is the only record they exist.
-      await discardPostImages(mediaIds);
+      await discardPostImages(mediaIds, viewer.memberId);
       throw error;
     }
   });
@@ -442,7 +442,7 @@ export async function addPost(
         return { postId: post.id };
       });
     } catch (error) {
-      await discardPostImages(mediaIds);
+      await discardPostImages(mediaIds, viewer.memberId);
       throw error;
     }
   });

@@ -122,7 +122,7 @@ describe("what it uses to navigate", () => {
   });
 
   it("uses the link component a caller supplies, so in-app pages keep client navigation", async () => {
-    const Link = ({ href, children }: { href: string; children: unknown }) => null;
+    const Link = (_props: { href: string; children: unknown }) => null;
     const tree = await Pager({ page: 2, pages: 3, hrefFor, link: Link });
     expect(links(tree).every((el) => el.type === Link)).toBe(true);
   });

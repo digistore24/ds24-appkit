@@ -23,6 +23,13 @@ import {
   checkoutProductFor,
   formatPrice,
   intervalKey,
+  paymentOptionsOf,
+  findPaymentOption,
+  payplansOf,
+  payplanMatches,
+  checkoutTargetFor,
+  paymentOptionProblems,
+  DEFAULT_OPTION_KEY,
   type ProductDef,
 } from "./products";
 
@@ -549,5 +556,218 @@ describe("sellFieldProblems", () => {
     // The module-load guard throws on a problem here, so this is really an
     // assertion that importing this file at all was legitimate.
     expect(sellFieldProblems(allProducts())).toEqual([]);
+  });
+});
+
+// ===========================================================================
+// Payment options — the fourth registry shape
+//
+// The property that carries everything: the OLD shape and the NEW one have to
+// answer the same, or every registry written before this existed starts
+// selling something else. So most of what follows is written twice.
+// ===========================================================================
+
+const legacyDef: ProductDef = {
+  key: "basic_monthly",
+  name: "Basic",
+  kind: "subscription",
+  billingInterval: "1_month",
+  priceCents: 1900,
+  currency: "EUR",
+  productIds: { prod: { de: "111", en: "222" } },
+};
+
+const optionDef: ProductDef = {
+  key: "silber",
+  name: "Silber",
+  kind: "subscription",
+  currency: "EUR",
+  paymentOptions: {
+    monthly: { priceCents: 1900, billingInterval: "1_month" },
+    yearly: { priceCents: 19000, billingInterval: "12_month", highlight: true },
+  },
+  productIds: { prod: { de: "111", en: "222" } },
+  payplanIds: {
+    prod: {
+      de: {
+        monthly: { id: "991", priceCents: 1900, currency: "EUR", billingInterval: "1_month" },
+        yearly: { id: "992", priceCents: 19000, currency: "EUR", billingInterval: "12_month" },
+      },
+    },
+  },
+};
+
+describe("paymentOptionsOf — one shape out of two", () => {
+  it("gives an entry that declares none exactly one option", () => {
+    const options = paymentOptionsOf(legacyDef);
+    expect(options).toHaveLength(1);
+    expect(options[0].key).toBe(DEFAULT_OPTION_KEY);
+    expect(options[0].priceCents).toBe(1900);
+    expect(options[0].billingInterval).toBe("1_month");
+  });
+
+  it("keeps the DECLARATION order — the page renders it and the sync writes it", () => {
+    expect(paymentOptionsOf(optionDef).map((o) => o.key)).toEqual([
+      "monthly",
+      "yearly",
+    ]);
+    expect(paymentOptionsOf(optionDef).map((o) => o.position)).toEqual([0, 1]);
+  });
+
+  it("lets an option inherit the offering's currency", () => {
+    const def = { ...optionDef, currency: "CHF" };
+    expect(paymentOptionsOf(def).every((o) => o.currency === "CHF")).toBe(true);
+  });
+
+  it("refuses an unknown option rather than answering with another price", () => {
+    expect(findPaymentOption(optionDef, "weekly")).toBeNull();
+  });
+});
+
+describe("payplansOf / payplanMatches — the drift guard", () => {
+  it("reads the recorded plan", () => {
+    expect(payplansOf(optionDef, "de", "prod").yearly.id).toBe("992");
+  });
+
+  it("takes a bare string as an id with nothing recorded", () => {
+    const def = { ...optionDef, payplanIds: { prod: { de: { monthly: "991" } } } };
+    expect(payplansOf(def, "de", "prod").monthly).toEqual({ id: "991" });
+  });
+
+  it("calls a plan that recorded nothing a match — not checkable is not wrong", () => {
+    const option = paymentOptionsOf(optionDef)[0];
+    expect(payplanMatches({ id: "991" }, option)).toBe(true);
+  });
+
+  it("catches an edited price", () => {
+    const option = { ...paymentOptionsOf(optionDef)[0], priceCents: 2400 };
+    expect(
+      payplanMatches(
+        { id: "991", priceCents: 1900, currency: "EUR", billingInterval: "1_month" },
+        option,
+      ),
+    ).toBe(false);
+  });
+
+  it("catches an edited INTERVAL, which is the expensive one", () => {
+    // A plan written as 12_month and edited to 1_month charges the yearly
+    // price every month. Nothing about that is a rounding difference.
+    const option = { ...paymentOptionsOf(optionDef)[1], billingInterval: "1_month" };
+    expect(
+      payplanMatches(
+        { id: "992", priceCents: 19000, currency: "EUR", billingInterval: "12_month" },
+        option,
+      ),
+    ).toBe(false);
+  });
+
+  it("catches an edited currency", () => {
+    const option = { ...paymentOptionsOf(optionDef)[0], currency: "CHF" };
+    expect(
+      payplanMatches(
+        { id: "991", priceCents: 1900, currency: "EUR", billingInterval: "1_month" },
+        option,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("checkoutTargetFor", () => {
+  it("hands back the product, the plan and the way to pay", () => {
+    const t = checkoutTargetFor(optionDef, "yearly", "de", "prod");
+    expect(t?.productId).toBe("111");
+    expect(t?.payplan?.id).toBe("992");
+    expect(t?.option.priceCents).toBe(19000);
+    expect(t?.payplanStale).toBe(false);
+  });
+
+  it("hands back NO plan when the recorded one no longer matches the registry", () => {
+    // The buyer is then priced inline, at what the vendor actually wrote —
+    // never at a number nobody refreshed.
+    const edited = {
+      ...optionDef,
+      paymentOptions: {
+        ...optionDef.paymentOptions,
+        yearly: { priceCents: 24000, billingInterval: "12_month" },
+      },
+    } as ProductDef;
+    const t = checkoutTargetFor(edited, "yearly", "de", "prod");
+    expect(t?.payplan).toBeNull();
+    expect(t?.payplanStale).toBe(true);
+  });
+
+  it("has no plan for a language that fell back to another product", () => {
+    // "en" has a product but no plans recorded — the checkout prices itself.
+    expect(checkoutTargetFor(optionDef, "monthly", "en", "prod")?.payplan).toBeNull();
+  });
+
+  it("does NOT hand a dev plan id to a product that came out of the prod set", () => {
+    // sellableIdsOf falls back to prod when an env has no set of its own. A
+    // plan belongs to ONE product, so reading dev plan ids there would give
+    // createBuyUrl a plan that is not its own — payment_plan_not_found, for
+    // every buyer.
+    const def = {
+      ...optionDef,
+      payplanIds: {
+        ...optionDef.payplanIds,
+        dev: { de: { monthly: { id: "555", priceCents: 1900, currency: "EUR", billingInterval: "1_month" } } },
+      },
+    } as ProductDef;
+    const t = checkoutTargetFor(def, "monthly", "de", "dev");
+    expect(t?.productId).toBe("111");
+    expect(t?.payplan?.id).toBe("991");
+  });
+
+  it("answers null for a way to pay the offering does not have", () => {
+    expect(checkoutTargetFor(optionDef, "weekly", "de", "prod")).toBeNull();
+  });
+});
+
+describe("paymentOptionProblems — refused at load, like kind and sell", () => {
+  const problems = (over: Record<string, unknown>) =>
+    paymentOptionProblems([{ key: "x", kind: "subscription", ...over }]);
+
+  it("passes an entry that declares none", () => {
+    expect(problems({ priceCents: 1900 })).toEqual([]);
+  });
+
+  it("refuses a price in two places", () => {
+    expect(
+      problems({ priceCents: 1900, paymentOptions: { m: { priceCents: 1900 } } })[0],
+    ).toMatch(/zwei Stellen/);
+  });
+
+  it("refuses an empty options object — that is a typo, not a declaration", () => {
+    expect(problems({ paymentOptions: {} })[0]).toMatch(/leer|empty/i);
+  });
+
+  it("refuses several ways to pay for a token package", () => {
+    expect(
+      problems({
+        kind: "token",
+        paymentOptions: { a: { priceCents: 1 }, b: { priceCents: 2 } },
+      })[0],
+    ).toMatch(/Token/);
+  });
+
+  it("refuses an option key that would split a custom pair", () => {
+    expect(problems({ paymentOptions: { "a:b": { priceCents: 1 } } })[0]).toMatch(
+      /Bezahlweise/,
+    );
+  });
+
+  it("refuses two highlights in one offering", () => {
+    expect(
+      problems({
+        paymentOptions: {
+          a: { priceCents: 1, highlight: true },
+          b: { priceCents: 2, highlight: true },
+        },
+      })[0],
+    ).toMatch(/highlight/);
+  });
+
+  it("finds the shipped registry clean — the module-load guard would have thrown", () => {
+    expect(paymentOptionProblems(allProducts())).toEqual([]);
   });
 });

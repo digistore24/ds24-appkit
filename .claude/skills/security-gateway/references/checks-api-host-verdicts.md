@@ -39,11 +39,15 @@ Then the questions that apply to all of them, and to every server action:
 ## 7 · `host` — configuration and the live environment
 
 - **Security headers.** `next.config.ts` sets `Referrer-Policy`,
-  `X-Content-Type-Options`, `X-Frame-Options` and HSTS on every response. Check
-  they are still there and actually arriving. There is deliberately
-  **no CSP** — Next.js emits inline scripts, so a useful policy needs per-request
-  nonces, and a `unsafe-inline` policy pasted in to look green is not protection.
-  Its absence is a documented decision, not a finding.
+  `X-Content-Type-Options`, `X-Frame-Options`, HSTS, `Permissions-Policy`,
+  `Cross-Origin-Opener-Policy` and a CSP carrying `frame-ancestors 'none'` on
+  every response, and switches `X-Powered-By` off (`poweredByHeader: false`).
+  Check they are still there and actually arriving. There is deliberately
+  **no CONTENT policy** — Next.js emits inline scripts, so a useful `script-src`
+  needs per-request nonces, and an `unsafe-inline` policy pasted in to look
+  green is not protection. `frame-ancestors` is the one directive that costs no
+  nonce work, and having it does not make the rest a finding: its absence is a
+  documented decision.
   **Do not do this by hand:** `node run.mjs security-check --url https://…`
   asks the live domain for exactly these headers, the cookie flags and every
   `/dashboard` route with no session, and prints what each one is set to. The

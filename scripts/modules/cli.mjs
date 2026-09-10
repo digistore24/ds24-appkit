@@ -88,11 +88,7 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-
-/** The app root, from this file's own location — never `process.cwd()`. */
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+import { join } from "node:path";
 
 const args = process.argv.slice(2);
 const command = args[0] ?? "list";

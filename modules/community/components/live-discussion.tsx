@@ -70,11 +70,6 @@ export type LiveScope =
   | { kind: "discussion"; discussionId: string }
   | { kind: "subject"; subjectKey: string };
 
-/** One scope's answer, as the endpoint sends it. */
-type ScopeAnswer =
-  | { state: "unavailable" }
-  | { state: "ok"; cursor: string | null; locked: boolean; posts: PostView[] };
-
 /**
  * The id an optimistic post carries until the server names the real one.
  *

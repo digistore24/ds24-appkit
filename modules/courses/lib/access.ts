@@ -69,11 +69,10 @@ export async function courseAccessFor(
   // "not entitled" here rather than throwing keeps a member on the honest path.
   if (planKeys.length === 0) return { entitled: false, startedAt: null, asOperator: false };
 
-  // 🚨 **ANY of them, never all of them.** One offering is one Digistore24
-  // product per billing interval, so a course sold monthly and yearly is two
-  // keys — and asking only the first would leave the yearly buyer outside a
-  // course they paid for. Same sentence as `mayEnterGroup()` in the community
-  // and `mayAccess()` in the media layer.
+  // 🚨 **ANY of them, never all of them.** A course may be sold under several
+  // offerings — on its own and inside a bundle — so asking only the first would
+  // leave the bundle's buyers outside a course they paid for. Same sentence as
+  // `mayEnterGroup()` in the community and `mayAccess()` in the media layer.
   //
   // 🚨 `hasPlan()` throws on a key the product registry does not know. That is
   // deliberate and it is why every key is validated when the config is read: an

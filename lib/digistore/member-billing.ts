@@ -17,8 +17,9 @@
 // buyer email or an order id from the request: that is the IDOR that would let
 // one customer read another's invoices.
 import { db } from "@/db";
-import { orders, invoices } from "@/db/schema";
+import { orders, invoices, subscriptions } from "@/db/schema";
 import { and, desc, eq, inArray } from "drizzle-orm";
+import { ds24HttpsUrl } from "./safe-url";
 
 import type { IpnParams } from "./ipn";
 import { findProduct } from "./products";
@@ -39,7 +40,10 @@ export interface InvoiceInsert {
 // is testable without a database.
 export function invoiceRowFromIpn(body: IpnParams): InvoiceInsert | null {
   const ds24OrderId = body["order_id"] || "";
-  const invoiceUrl = body["invoice_url"] || "";
+  // The scheme whitelist: this URL is rendered as a download link. A value that
+  // is not https is dropped here, which makes the row `null` below and the
+  // invoice simply absent — see ./safe-url.
+  const invoiceUrl = ds24HttpsUrl("invoice_url", body["invoice_url"]) ?? "";
   const ds24TransactionId = body["transaction_id"] || "";
   // All three are load-bearing: without the transaction id there is no
   // idempotency key, and without a URL there is nothing to download.
@@ -74,6 +78,22 @@ export interface BillingOrder {
   createdAt: Date;
   rebillingStopUrl: string | null;
   renewUrl: string | null;
+  /**
+   * Digistore24's own page for changing the billing interval of this
+   * subscription — monthly to yearly and back.
+   *
+   * It comes off the `subscriptions` mirror rather than `orders`, and it leads
+   * somewhere only because the product carries several PAYMENT PLANS, one per
+   * way to pay (`scripts/ds24/sync-products.mjs`). Offering it saves building an
+   * upgrade flow for the commonest change a subscriber makes: the switch happens
+   * over there and comes back as an ordinary rebill, on the same Product Key.
+   */
+  switchIntervalUrl: string | null;
+  /**
+   * Which way to pay this subscription runs on ("monthly", "yearly").
+   * DISPLAY ONLY — both are the same Product Key and the same entitlement.
+   */
+  paymentOption: string | null;
   invoices: BillingInvoice[];
 }
 
@@ -119,6 +139,22 @@ export async function listBillingForMember(
     )
     .orderBy(desc(invoices.createdAt));
 
+  // A third query rather than a join, the same trade the two above make: the
+  // subscription mirror has at most one row per order and a member has few of
+  // them. It is a LEFT-join in spirit — a one-off purchase has no row here and
+  // simply gets nulls, which is what the UI renders as "nothing to manage".
+  const subRows = await db
+    .select({
+      ds24OrderId: subscriptions.ds24OrderId,
+      switchIntervalUrl: subscriptions.switchIntervalUrl,
+      paymentOption: subscriptions.paymentOption,
+    })
+    .from(subscriptions)
+    .where(eq(subscriptions.memberId, memberId));
+  const subByOrder = new Map(
+    subRows.filter((r) => r.ds24OrderId).map((r) => [r.ds24OrderId as string, r]),
+  );
+
   const byOrder = new Map<string, BillingInvoice[]>();
   for (const row of invoiceRows) {
     const list = byOrder.get(row.ds24OrderId) ?? [];
@@ -135,6 +171,8 @@ export async function listBillingForMember(
 
   return orderRows.map((o) => ({
     ...o,
+    switchIntervalUrl: subByOrder.get(o.ds24OrderId)?.switchIntervalUrl ?? null,
+    paymentOption: subByOrder.get(o.ds24OrderId)?.paymentOption ?? null,
     invoices: byOrder.get(o.ds24OrderId) ?? [],
   }));
 }

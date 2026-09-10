@@ -130,6 +130,22 @@ An applier that has no `plan(sql)` is reported as *"does not say what it would
 change"*, never as *"nothing to do"*: those are two different answers and only
 one of them means the environment is fine.
 
+**One named exception to *a plan writes nothing*: `content_media_confirm`.**
+A `plan` of that tool does remove one object from the store, and only one — the
+key the manifest itself derives for the file you named, and only when the bytes
+sitting at that key contradict the manifest (wrong length, or first bytes that
+are not the kind the extension implies). Nothing you write chooses what is
+removed. It is deliberate and it is the lesser of two evils: by the time the
+confirm step has looked, the bad object already exists under a *deterministic*
+key, and a plan that noticed it and walked away would leave the next
+`content-check` HEAD-ing that key, finding something, and reporting the file as
+present. The removal is the undoing of a landing that failed, not an act a
+caller can ask for — which is also why the tool is not flagged `destructive`:
+that flag refuses a tool by ENVIRONMENT (`config/setup.json`'s
+`allowDestructive`), it does not distinguish `plan` from `apply`, and setting it
+would refuse the whole staged upload leg outside development without changing
+this branch by one line. **No row is asserted and no other object is touched.**
+
 **And `mode: "apply"` publishes.** Three steps, in an order that is not
 stylistic: the media rows the manifest declares, then the files the image
 carries into that environment's own store (HEAD first, so a re-run copies

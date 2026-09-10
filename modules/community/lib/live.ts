@@ -5,7 +5,6 @@ import { and, asc, desc, eq, gt, isNotNull, isNull, or, sql } from "drizzle-orm"
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { communityDiscussions, communityMessages, communityModerationAudit, communityPosts, communitySpamReports, communityProfiles } from "../schema";
-import { record } from "@/lib/rate-limit";
 import { advanceCursor, liveCursorToken, parseLiveCursorToken, type LiveCursor, contentState, changedAt, postVisibleTo } from "./rules";
 
 import { CHANGED_AT, changedAtParam } from "./_change-stamp";

@@ -4,7 +4,7 @@
      scripts/api-map.test.ts compares this file with what the generator
      produces, and a hand edit is undone by the next run. -->
 
-_50 files, 221 exported functions, 46 tables. Regenerate
+_50 files, 223 exported functions, 46 tables. Regenerate
 with `node run.mjs api-map` after adding an export or a table; the suite says so
 when it is behind._
 
@@ -189,7 +189,6 @@ tests — `docs/ux.md` owns each, this is where they are needed:
 
 ## lib/auth/dev-login.ts
 
-- `isLocalUrl(appUrl?: string): boolean` — true if the URL points at this machine.
 - `isDevLoginAllowed(env: DevLoginEnv): boolean` — The one place that decides whether the development login exists at all.
 - `isDevLoginActive(): boolean` — Reads the conditions from the actual environment.
 - `demoLoginSuggestion(): Promise<string | null>` — The address offered as a suggestion on the sign-in page: preferably the oldest admin, otherwise the oldest user.
@@ -285,7 +284,7 @@ tests — `docs/ux.md` owns each, this is where they are needed:
 ## lib/email-change/manage.ts
 
 - `pendingChangeFor(userId: string): Promise<PendingChange | null>` — The change this Member is waiting on, if any.
-- `requestEmailChange(userId: string, rawEmail: unknown): Promise<{ newEmail: string; token: string; expiresAt: Date }>` — Records that this Member would like to move to `rawEmail`, and returns the token to mail there.
+- `requestEmailChange(userId: string, rawEmail: unknown, opts: { impersonating: boolean }): Promise<{ newEmail: string; token: string; expiresAt: Date }>` — Records that this Member would like to move to `rawEmail`, and returns the token to mail there.
 - `confirmEmailChange(rawToken: string): Promise<ConfirmResult>` — Moves the account, for whoever proves they can read mail at the new address.
 
 ## lib/email.ts
@@ -334,6 +333,8 @@ tests — `docs/ux.md` owns each, this is where they are needed:
 - `hasEmailConfig(env: MailEnv): boolean` — true if at least one transport is fully configured.
 - `appEnv(value?: string): AppEnv` — Normalizes APP_ENV.
 - `isRealEnvironment(value?: string): boolean` — true for environments real users see (STAGING and PROD).
+- `serverEnv(raw: string | undefined): AppEnv | null` — The server's own environment, refusing the empty case (AD-76).
+- `isLocalUrl(appUrl?: string): boolean` — true if the URL points at this machine.
 - `checkEnvironment(env: EnvCheckInput): string[]` — Checks the environment and returns the list of violations (empty = fine).
 - `mediaProblem(environment: AppEnv, env: { MEDIA_DRIVER?: string; mediaBucketConfigured?: boolean; mediaEnabled?: boolean }): string | null` — Media on a real environment: object storage, or the app does not start.
 
@@ -416,6 +417,7 @@ tests — `docs/ux.md` owns each, this is where they are needed:
 - `isSpendableAmount(amount: number): boolean` — Is this a price this app may charge?
 - `spendErrorFor(err: unknown): TokenError | null` — The one error a Member is meant to read, as a translatable code — everything else stays itself.
 - `spendTokens(args: { amount: number; note?: string }): Promise<number>` — Charges the signed-in Member for something they just used.
+- `spendTokensAs(args: { memberId: string; impersonating: boolean; amount: number; note?: string }): Promise<number>` — The same spend, for a door that authenticated the payer ITSELF.
 - `scheduleTopUp(memberId: string): void` — Runs the top-up AFTER the response has been sent.
 
 ## lib/users/bootstrap.ts
@@ -521,7 +523,7 @@ commit — `lib/privacy/inventory.test.ts` fails the build otherwise.
 
 ### db/schema-tokens.ts
 
-- `subscriptions` (`subscriptions`): `id`, `ds24PurchaseId`, `ds24OrderId`, `ds24ProductId`, `memberId`, `buyerEmail`, `status` (subscriptionStatusEnum), `billingInterval`, `amount` (numeric), `currency`, `nextPaymentAt` (date), `renewUrl`, `rebillingStopUrl`, `invoiceUrl`, `supportUrl`, `createdAt` (timestamp), `updatedAt` (timestamp)
+- `subscriptions` (`subscriptions`): `id`, `ds24PurchaseId`, `ds24OrderId`, `ds24ProductId`, `memberId`, `buyerEmail`, `status` (subscriptionStatusEnum), `billingInterval`, `paymentOption`, `amount` (numeric), `currency`, `nextPaymentAt` (date), `renewUrl`, `rebillingStopUrl`, `invoiceUrl`, `supportUrl`, `switchIntervalUrl`, `createdAt` (timestamp), `updatedAt` (timestamp)
 - `token_accounts` (`tokenAccounts`): `id`, `memberId`, `balance` (integer), `autoReloadEnabled` (boolean), `autoReloadThreshold` (integer), `autoReloadPackageKey`, `ds24PurchaseId`, `reloadLockedAt` (timestamp), `lastReloadAt` (timestamp), `reloadAttempts` (integer), `createdAt` (timestamp), `updatedAt` (timestamp)
 - `token_ledger` (`tokenLedger`): `id`, `accountId`, `type` (tokenLedgerTypeEnum), `amount` (integer), `balanceAfter` (integer), `ds24OrderId`, `note`, `issuedBy`, `origin`, `createdAt` (timestamp)
 

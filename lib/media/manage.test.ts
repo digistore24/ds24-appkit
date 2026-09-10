@@ -449,12 +449,12 @@ describe("mayAccess — entitled", () => {
 
 describe("🚨 mayAccess — entitled under SEVERAL plans, and holding one is enough", () => {
   // ── What this catches, and why it had nothing ──────────────────────────
-  // The column was ONE key until Story 44.1. One offering is one Digistore24
-  // product per billing interval, so a course sold monthly and yearly is two
-  // keys before it has a second customer — and the failure of asking only the
-  // first is invisible by construction: the yearly buyer's lesson page passes
-  // its own gate and every medium on it resolves to `null`, which the page
-  // renders as "there is none". A clean 200 over a product half-delivered,
+  // The column was ONE key until Story 44.1. A course may be sold under several
+  // offerings — on its own and inside a bundle — so one key was never enough,
+  // and the failure of asking only the first is invisible by construction: the
+  // bundle buyer's lesson page passes its own gate and every medium on it
+  // resolves to `null`, which the page renders as "there is none". A clean 200
+  // over a product half-delivered,
   // exactly the class `CLAUDE.md` → *Never ship a broken page* is about.
   //
   // ⚠️ Measured while writing it: with `mayAccess()` reduced to
@@ -1017,5 +1017,51 @@ describe("🚨 deleteMedia removes every object of an item, not only the origina
     await deleteMedia("gone");
     expect(remove).not.toHaveBeenCalled();
     expect(deleteWhere).not.toHaveBeenCalled();
+  });
+});
+
+describe("🚨 deleteMedia carries the ownership rule itself, not its call site's", () => {
+  // ── Why this block exists at all ───────────────────────────────────────────
+  // The security review of 2026-08-18 (L-4) read every caller of `deleteMedia()`
+  // and found all of them correct: each hands over an id it had just read off
+  // the member's OWN profile row, or one it had just written itself. So there is
+  // no reachable exploit here today, and a test asserting there is one would be
+  // a fiction.
+  //
+  // What there was, was a delete addressed by id ALONE — `where(eq(media.id,
+  // id))`, no owner in the statement — whose safety lived entirely in three
+  // other files. That is a property of the CALL SITES, and the fourth call site
+  // is warned by nothing. These three tests hold the rule where it now lives:
+  // in the function.
+  beforeEach(() => {
+    selected.mockResolvedValue([row({ id: "m1", ownerId: "alice" })]);
+  });
+
+  it("refuses an id that belongs to somebody else, and touches NOTHING", async () => {
+    await expect(deleteMedia("m1", "mallory")).rejects.toMatchObject({
+      name: "MediaError",
+      code: "notAllowedForRole",
+    });
+    // The order of the checks is the point: the refusal comes before the bucket
+    // and before the row. A delete that removed the objects and then refused
+    // would have destroyed the item it was declining to destroy.
+    expect(remove).not.toHaveBeenCalled();
+    expect(deleteWhere).not.toHaveBeenCalled();
+  });
+
+  it("deletes when the owner matches", async () => {
+    await deleteMedia("m1", "alice");
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(deleteWhere).toHaveBeenCalledTimes(1);
+  });
+
+  it("still deletes when no owner is named — the parameter is OPTIONAL", async () => {
+    // Two legitimate callers have no member to name: the account sweep, which
+    // has already selected by owner, and the operator's setup surface. Making
+    // the parameter required would have forced those two to invent a value, and
+    // an invented owner check is worse than a missing one.
+    await deleteMedia("m1");
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(deleteWhere).toHaveBeenCalledTimes(1);
   });
 });

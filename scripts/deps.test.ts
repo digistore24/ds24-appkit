@@ -17,8 +17,39 @@
 // at the call site), and a reason that cannot be recovered from git history says
 // **that**, plus what was measured, rather than an invented rationale.
 //
-// Five overrides are pinned here, one measurement, one refusal, and one
-// non-decision.
+// Five overrides are pinned here, one measurement, one refusal, one
+// non-decision — and one field that is not an override at all (`allowScripts`,
+// section 6).
+//
+// ── 6. `allowScripts` — the install scripts, decided rather than defaulted ──
+// npm 11.19 BLOCKS a dependency's `install`/`postinstall` by default and ends
+// the install with a list of the packages whose scripts it skipped, so that
+// somebody reviews them. Until 2026-09-10 nobody had: a customer's very first
+// command printed seven lines of
+// `npm warn install-scripts … not yet covered by allowScripts`, and
+// `make deploy-local-check` — whose whole question is *what does npm SAY on a
+// customer's first install* — was red on it.
+//
+// The answer is `false` for all five: DENY, which is what npm already does by
+// default. It is written down so that the default is a decision rather than an
+// accident, and so the customer's install says nothing. Nothing is lost by it —
+// the four that ship on Linux have been skipped since npm changed, and
+// `make check`, `deploy-test` and the whole suite were green throughout;
+// esbuild and @swc/core resolve their platform binaries through optional
+// packages rather than through a postinstall.
+//
+// 🚨 `fsevents` is in the list although it never installs here. It is
+// `os: ["darwin"]`, so a Linux measurement cannot see it — and a template that
+// must behave the same on three systems (`docs/portability.md`) would otherwise
+// print on a Mac exactly the warning this field exists to stop. The list below
+// is derived from the LOCKFILE rather than from what one machine installed,
+// which is what makes that hold.
+//
+// ⚠️ Approving one later is a real decision, not a formality: an install script
+// runs with the developer's own permissions before a line of this app has been
+// read. Whoever needs one writes `true` AND a line
+// `// APPROVED: <package> — <what its script does and why it must run>`,
+// which is what the test below looks for.
 //
 // ── 1. The esbuild override is a FLOOR, not a pin ───────────────────────────
 // It exists because GHSA-67mh-4wv8-2f99 let esbuild's development server answer
@@ -464,6 +495,70 @@ describe("the deprecation warnings a first install prints", () => {
 // assertion is unchanged; only the sentence describing it moved. 🚨 No fixed
 // count of advisories belongs anywhere here, in code or in prose.
 // Section 5 of the header: not a dependency decision, but the same pair of files.
+describe("every package that wants to run an install script is decided about", () => {
+  // 🚨 Derived from the LOCKFILE, never from `node_modules`. A machine only
+  // installs what its platform gets: `fsevents` is darwin-only, so a list built
+  // from what is on disk here would be complete on Linux and short on a Mac —
+  // and a Mac customer would meet the warning this field exists to prevent.
+  const wantsScripts = [
+    ...new Set(
+      Object.entries(lock.packages as Record<string, { hasInstallScript?: boolean }>)
+        .filter(([, entry]) => entry?.hasInstallScript)
+        .map(([where]) => where.split("node_modules/").pop() as string),
+    ),
+  ].sort();
+
+  it("the lockfile really names some — otherwise this block asks nothing", () => {
+    // Non-vacuity: a lockfile shape this parse no longer recognises would make
+    // every assertion below pass over an empty list.
+    expect(wantsScripts.length).toBeGreaterThan(0);
+    expect(wantsScripts).toContain("esbuild");
+  });
+
+  it("each of them is named in allowScripts", () => {
+    const allow = (pkg.allowScripts ?? {}) as Record<string, boolean>;
+    const unjudged = wantsScripts.filter((name) => !(name in allow));
+    expect(
+      unjudged,
+      `these packages want to run an install script and nobody has decided about ` +
+        `them: ${unjudged.join(", ")}. npm blocks them by default and says so on the ` +
+        `customer's FIRST command, which is what make deploy-local-check reads. Add ` +
+        `each to "allowScripts" in package.json — false to deny, which is what npm ` +
+        `already does — and if any gets true, say why in section 6 of this file.`,
+    ).toEqual([]);
+  });
+
+  it("and none of them is approved without a written reason", () => {
+    // `true` means somebody's install script runs with the developer's own
+    // permissions before a line of this app has been read.
+    //
+    // ⚠️ **An explicit marker, not the package's NAME.** Two weaker versions
+    // were tried and both passed while nothing had been written: "the name
+    // appears anywhere in this file" (esbuild has a section of its own three
+    // hundred lines up), then "the name appears in section 6" (section 6 names
+    // esbuild too, for a different reason). A mention is not a justification,
+    // and no name search can tell the two apart.
+    const allow = (pkg.allowScripts ?? {}) as Record<string, boolean>;
+    const approved = Object.entries(allow)
+      .filter(([, value]) => value === true)
+      .map(([name]) => name);
+
+    const source = readFileSync(path.join(ROOT, "scripts/deps.test.ts"), "utf8");
+    const marked = new Set(
+      [...source.matchAll(/^\s*\/\/\s*APPROVED:\s*(\S+)\s+—\s+\S/gm)].map((m) => m[1]),
+    );
+
+    const silent = approved.filter((name) => !marked.has(name));
+    expect(
+      silent,
+      `approved to run an install script with no \`// APPROVED: <name> — <reason>\` ` +
+        `line in this file: ${silent.join(", ")}. An install script runs with the ` +
+        `developer's own permissions before a line of this app has been read; write ` +
+        `what it does and why it has to run.`,
+    ).toEqual([]);
+  });
+});
+
 describe("the app's own name and version, and the lockfile's two copies of each", () => {
   it("is a plain version and a name in package.json to begin with", () => {
     // Non-vacuity for the comparisons below: an absent or exotic field would

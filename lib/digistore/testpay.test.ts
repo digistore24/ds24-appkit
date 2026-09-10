@@ -227,7 +227,9 @@ describe("withTestpayParam", () => {
   beforeEach(async () => {
     resetTestpayForTests();
     process.env.APP_ENV = "development";
-    delete process.env.APP_URL;
+    // An UNSET APP_URL is no longer a local one (finding H-3, 2026-09-10), and
+    // the gate below reads it — so the DEV case has to say where the app is.
+    process.env.APP_URL = "http://localhost:3000";
     delete process.env.DS24_TESTPAY;
     dir = await mkdtemp(path.join(tmpdir(), "testpay-"));
     stateFile = path.join(dir, "testpay.json");

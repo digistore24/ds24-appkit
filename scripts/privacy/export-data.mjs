@@ -29,7 +29,7 @@
 //    the Member's own page and does not apply here.** A subject access request
 //    asks what you hold, and you hold those. Stripping them from this file
 //    would be answering the request untruthfully.
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { connect } from "../users/_db.mjs";
 import { moduleExportSections } from "../modules/inventory.mjs";
 import { flagsFrom } from "../lib/args.mjs";

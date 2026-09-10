@@ -1,11 +1,9 @@
 // Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA
 // SPDX-License-Identifier: MIT
 
-import { and, or } from "drizzle-orm";
 import { db } from "@/db";
-import { media } from "@/db/schema";
 import { communityPostMedia } from "../schema";
-import { acceptUpload, deleteMedia, mayAccess } from "@/lib/media/manage";
+import { acceptUpload, deleteMedia } from "@/lib/media/manage";
 import { guardUploadEntry } from "@/lib/media/upload-endpoint";
 import { communityConfig } from "./config";
 import { CommunityError, checkPostImages } from "./rules";
@@ -108,7 +106,7 @@ export async function storePostImages(
     }
     return stored;
   } catch (error) {
-    await discardPostImages(stored);
+    await discardPostImages(stored, viewer.memberId);
     throw error;
   }
 }
@@ -122,10 +120,18 @@ export async function storePostImages(
  * object left behind is swept when the account is deleted, and `node run.mjs
  * errors` finds the line meanwhile.
  */
-export async function discardPostImages(mediaIds: readonly string[]): Promise<void> {
+export async function discardPostImages(
+  mediaIds: readonly string[],
+  ownerId?: string,
+): Promise<void> {
   for (const id of mediaIds) {
     try {
-      await deleteMedia(id);
+      // The owner travels with the id (L-4). Everything on this list was
+      // written by `storePostImages()` with `ownerId: viewer.memberId`, so the
+      // check can never fire on a correct caller — it is there so that a future
+      // caller handing over an id from somewhere else is refused by the delete
+      // itself rather than by whoever reviews the diff.
+      await deleteMedia(id, ownerId);
     } catch (error) {
       console.error("[community] could not remove an unattached post image", id, error);
     }
