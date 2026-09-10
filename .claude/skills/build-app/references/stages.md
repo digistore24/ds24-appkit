@@ -100,6 +100,13 @@ before they read anything.** A hand-back that stops the app and ends with
 of a page, and one that ends with "shall I commit?" asks them to decide what
 `CLAUDE.md` → *Rules* already decided — both measured 2026-09-10.
 
+**Every line between the yes and the hand-back is in the customer's language
+too, and says what they get.** `CLAUDE.md` → *Rules* says so; measured
+2026-09-10 in two of three runs, the plan and the hand-back were German and
+the twenty progress lines between them were English developer talk ("Now wire
+the two export paths"). The customer reads those lines. Say what the step
+gives them, in their words, or say nothing until the next thing they can use.
+
 **The stage is built in THIS session, not handed to a subagent as a whole.**
 Measured 2026-09-10: one hand-off was thirty-four minutes without a word to the
 customer, and the session then vouched for checks it had not seen. A subagent

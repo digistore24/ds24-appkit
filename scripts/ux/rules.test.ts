@@ -1077,12 +1077,21 @@ describe("findExampleProducts", () => {
     expect(findExampleProducts("{ not json")).toEqual([]);
   });
 
-  it("the list is what the shipped registry says today", () => {
-    // The factory holds the same list against template/config/digistore-products.json;
-    // here the local copy is read so a renamed example is red in the app too.
-    const names = Object.values(
-      JSON.parse(readFileSync(join(__dirname, "..", "..", "config", "digistore-products.json"), "utf8")).products,
-    ).map((def) => (def as { name: string }).name);
-    for (const name of names) expect(SHIPPED_EXAMPLE_PRODUCT_NAMES).toContain(name);
+  it("reads this app's own registry without a verdict on its names", () => {
+    // This used to insist every product here still carries a SHIPPED name —
+    // which is red the moment a customer does what build-app tells them to
+    // (rename the one they sell). Measured 2026-09-10: a session then rewrote
+    // this test to get back to green. A renamed product is ux-check's WARNING
+    // (findExampleProducts, reported by the caller), never a red test; the
+    // list itself is held against the shipped registry in the factory, where
+    // the registry is the shipped one. Here the only claim that holds in the
+    // template AND in every app built from it: the finder and the list agree.
+    const source = readFileSync(join(__dirname, "..", "..", "config", "digistore-products.json"), "utf8");
+    const onSale = Object.entries(JSON.parse(source).products as Record<string, { name: string; sell?: boolean }>)
+      .filter(([, def]) => def.sell !== false);
+    const expected = onSale
+      .filter(([, def]) => SHIPPED_EXAMPLE_PRODUCT_NAMES.includes(def.name))
+      .map(([key, def]) => ({ key, name: def.name }));
+    expect(findExampleProducts(source)).toEqual(expected);
   });
 });
