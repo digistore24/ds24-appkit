@@ -19,6 +19,14 @@
 // the row's own evidence rather than out of a sentence written here, so it cannot
 // describe a state the app is not in.
 //
+// **The offer knows who is reading — and is TOLD, never guesses.** "Shall I
+// start it?" is right when the AI program relays the line: it can start the
+// skill. It is wrong in front of a person who typed `node run.mjs journey` into
+// a terminal — nothing there can start anything, and a question with nobody to
+// answer it is a dead end (measured 2026-09-10). So `forHuman` ends the line
+// with where to say it instead. The flag is the CALLER's (`./journey-cli.mjs`
+// reads `process.stdout.isTTY`); this file has no `process` and stays pure.
+//
 // **The shelf is a count and a question, never ten rows.** Ten optional things
 // most apps do not want, listed in order, is a checklist — and a checklist is
 // what makes somebody build a mobile app for a product nobody has bought yet. So
@@ -274,6 +282,18 @@ function collapsedLines(phase, rows, currentPhase) {
 }
 
 /**
+ * The offer that ends the `Next:` line — one for each reader.
+ *
+ * The agent can start the step, so it is asked. A person at a terminal cannot,
+ * so they are told where to say it: to the AI program they build with, in the
+ * words `coach` recognises ("what is the next step?").
+ */
+const OFFER = {
+  agent: "Shall I start it?",
+  human: 'Start it: say "next step" to your AI program.',
+};
+
+/**
  * The ONE next line: what, why, and an offer to start it.
  *
  * 🚨 Two sentences and nothing else. The reason is the row's own evidence, so it
@@ -285,8 +305,10 @@ function collapsedLines(phase, rows, currentPhase) {
  * answered" and "this command is broken" look the same.
  *
  * @param {JourneyView} state
+ * @param {{ forHuman?: boolean }} [options] `true` when a person reads the
+ *   terminal; the default is the agent's wording, which is what `--json` carries
  */
-export function describeNext(state) {
+export function describeNext(state, { forHuman = false } = {}) {
   const next = state?.next ?? null;
   if (!next) {
     return (
@@ -315,7 +337,7 @@ export function describeNext(state) {
   // anybody can type.
   return (
     `Next: ${step}${lower(next.title.en)}. ${next.evidence}` +
-    `${skill ? ` — the skill is ${skill}` : ""}. Shall I start it?`
+    `${skill ? ` — the skill is ${skill}` : ""}. ${forHuman ? OFFER.human : OFFER.agent}`
   );
 }
 
@@ -323,10 +345,11 @@ export function describeNext(state) {
  * The whole journey, as the user sees it.
  *
  * @param {JourneyView} state
- * @param {{ appName?: string|null }} [options] the app's own name, where it has one
+ * @param {{ appName?: string|null, forHuman?: boolean }} [options] the app's own
+ *   name, where it has one — and whether a person reads this (`describeNext`)
  * @returns {string}
  */
-export function describeJourney(state, { appName = null } = {}) {
+export function describeJourney(state, { appName = null, forHuman = false } = {}) {
   const rows = state?.rows ?? [];
   const currentPhase = state?.currentPhase ?? null;
   const phases = numberedPhases();
@@ -373,7 +396,7 @@ export function describeJourney(state, { appName = null } = {}) {
     lines.push("");
   }
 
-  lines.push(...wrap(describeNext(state), 72));
+  lines.push(...wrap(describeNext(state, { forHuman }), 72));
   return lines.join("\n");
 }
 

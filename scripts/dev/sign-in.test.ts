@@ -16,8 +16,14 @@
 //    `smoke --url https://lookalike.example` must never POST the prod
 //    password there. If the "matches none of the deployed hosts" assertions
 //    below start failing, that property was traded away, not tidied up.
+//  - noOwnerHint() tells the operator how an app gets its first owner, and
+//    the two answers must not be swapped: in DEV the first sign-in becomes the
+//    owner (lib/users/bootstrap.ts) and no command is needed; outside DEV that
+//    door is shut and `user-create` is the only way. The DEV sentence on a
+//    deployed app would tell somebody to hand user management to whoever
+//    signs in first.
 import { describe, it, expect } from "vitest";
-import { cookieJar, smokeCredentials } from "./sign-in.mjs";
+import { cookieJar, noOwnerHint, smokeCredentials } from "./sign-in.mjs";
 
 /** A Response stand-in carrying only what the jar reads. */
 function withSetCookies(headers: string[]) {
@@ -105,5 +111,35 @@ describe("smokeCredentials", () => {
 
   it("refuses an unusable URL instead of guessing", () => {
     expect(smokeCredentials(env, "not a url")).toHaveProperty("reason");
+  });
+});
+
+describe("noOwnerHint", () => {
+  it("in DEV names the sign-in page instead of a command — the first account makes itself", () => {
+    // The reader is an operator who builds by talking to an AI program; a
+    // `user-create --email … --role owner --apply` sent them looking for a
+    // command the app does not need locally (measured 2026-09-10).
+    const hint = noOwnerHint({ APP_ENV: "development" }, "http://localhost:3007");
+    expect(hint).toContain("no owner account yet");
+    expect(hint).toContain("http://localhost:3007/login");
+    expect(hint).toContain("any address");
+    expect(hint).toContain("first account becomes the owner");
+    expect(hint).not.toContain("user-create");
+  });
+
+  it("uses the same allowlist as lib/users/bootstrap.ts — dev, local and unset all count as DEV", () => {
+    for (const APP_ENV of ["dev", "local", "", undefined]) {
+      expect(noOwnerHint({ APP_ENV }, "http://localhost:3000"), `APP_ENV=${APP_ENV}`).toContain("/login");
+    }
+  });
+
+  it("outside DEV keeps the user-create command — the first sign-in there may be a customer", () => {
+    // The needle for the case above: a hint that always named /login would
+    // pass every DEV assertion and describe an account takeover on a live app.
+    for (const APP_ENV of ["staging", "production", "prod", "typo"]) {
+      const hint = noOwnerHint({ APP_ENV }, "https://app.example.de");
+      expect(hint, `APP_ENV=${APP_ENV}`).toContain("node run.mjs user-create --email … --role owner --apply");
+      expect(hint, `APP_ENV=${APP_ENV}`).not.toContain("/login");
+    }
   });
 });

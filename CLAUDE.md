@@ -1,8 +1,9 @@
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
-<!-- This file exists twice, byte for byte: CLAUDE.md and AGENTS.md. Different
-     programs look for different names — Claude Code reads CLAUDE.md, Codex and
-     Antigravity read AGENTS.md, OpenCode takes either. Editing one and not the
-     other is how the two start disagreeing, so copy it across. -->
+<!-- This file exists twice: CLAUDE.md and AGENTS.md, the same text word for
+     word — AGENTS.md only carries, at its end, the block Next.js manages itself.
+     Different programs look for different names — Claude Code reads CLAUDE.md,
+     Codex and Antigravity read AGENTS.md, OpenCode takes either. Editing one
+     and not the other is how the two start disagreeing, so copy it across. -->
 
 # Guardrails for this app
 
@@ -162,6 +163,7 @@ line flags, raw SQL, dates — are **[`docs/conventions.md`](docs/conventions.md
 - **⚠️ A SKIPPED test is not a passed one.** `⏭ <file>: NOT CHECKED — <reason>` on stderr has exactly five legitimate causes — `node run.mjs agent-setup --apply`; a registry that no longer holds the SHAPE a test needs; a foreign tool this machine does not have; a page this app has REPLACED (the skill **salespage** ran); a logo this app has SET (`brand icons --apply`). Anything else is a question nobody answered — [`docs/conventions.md`](docs/conventions.md) → *And a SKIPPED test is not a passed one*. Needs template 0.25.0
 - **Call up the app yourself before you say "done", then ask the log.** Green tests are no proof that the page loads, and a page that loads is no proof that it rendered. See **Never ship a broken page** below.
 - **"Done" is said in the words of the person who does not read code — what they can now open or do, and what is still open — and the file paths come LAST, under their own line.** Never a function name in the first paragraph. The shape, with an example: [`docs/guidance.md`](docs/guidance.md) → *How a skill works*.
+- **Every line the customer reads is in THEIR language — the plan, the hand-back and every progress line in between — and a progress line says what they get from the step, or is left out.** Measured 2026-09-10: a customer who wrote German got the plan in German and the build narrated in English ("Now re-export it from schema-core.ts"); which file was touched belongs in the commit message, not in front of them.
 - **A question is asked in the words it will be answered in** — what the customer will EXPERIENCE, never the criterion you decide by; the reason travels inside the question; and a choice with no consequence they can see or feel is not put to them: set it, say it in one sentence, record it. The long form, with the sentence that worked: [`docs/guidance.md`](docs/guidance.md) → *How a skill works*.
 - 🚨 **A turn ends with the result, never with an agent still working.** A background subagent dies with the turn in a print session, and an interactive customer reads "I will be notified when it is done" as done. Wait for it inside the turn, or open the hand-back with what is NOT there yet — [`docs/guidance.md`](docs/guidance.md) → *How a skill works*.
 - **A "no" says which of the four it is**: (a) a limit of the platform; (b) a rule of this template — with the test that holds it; (c) a skill's curation; (d) your own taste. Only (a) and (b) are "it cannot"; 🚨 **a (b) you cannot name a test for is a (c) or (d) in (b)'s clothes** — the standing example is the greys (`scripts/design/dials.test.ts` holds four dials, nothing holds the neutral values). The cases: [`docs/guidance.md`](docs/guidance.md) → *How a skill works*.

@@ -42,6 +42,7 @@ import { connectUtc } from "../lib/pg-utc.mjs";
 import "../lib/env.mjs";
 
 import { matchHostScope } from "../lib/host-env.mjs";
+import { syncEnvFromAppEnv } from "../ds24/_env.mjs";
 
 /**
  * A cookie jar that knows no cookie names.
@@ -120,17 +121,48 @@ async function callbackSignIn(baseUrl, providerId, fields) {
 }
 
 /**
+ * The sentence for an app that has no owner yet — and what fixes that depends
+ * on WHERE the app runs, so the two answers must never be swapped.
+ *
+ * In DEV nothing has to be typed: the very first account to sign in becomes
+ * the owner by itself (lib/users/bootstrap.ts), so the hint names the sign-in
+ * page and says so. The person reading `smoke`'s output is an operator who
+ * builds the app by talking to an AI program, and `user-create --email … --role
+ * owner --apply` sent them looking for a command they did not need (measured
+ * 2026-09-10). Outside DEV that bootstrap is deliberately shut — the first
+ * person to sign in may be the first customer — and the operator creates the
+ * account on purpose, with exactly that command.
+ *
+ * Pure, so both sentences are measured (sign-in.test.ts). The environment is
+ * classified by `syncEnvFromAppEnv`, the `.mjs` twin of `appEnv()` in
+ * lib/env-guard.ts — the same allowlist bootstrap.ts asks, so the hint says
+ * what the app would actually do.
+ *
+ * @param {{ APP_ENV?: string }} env
+ * @param {string} baseUrl the app this run is talking to
+ */
+export function noOwnerHint(env, baseUrl) {
+  if (syncEnvFromAppEnv(env.APP_ENV) === "dev") {
+    return (
+      `no owner account yet — sign in once at ${baseUrl}/login with any address, ` +
+      "the first account becomes the owner (DEV only)"
+    );
+  }
+  return "no owner account yet — create one: node run.mjs user-create --email … --role owner --apply";
+}
+
+/**
  * The oldest owner's address — the account the operator made for themselves.
  *
  * The same order as demoLoginSuggestion() in lib/auth/dev-login.ts, and for the
  * same reason. Owners only: signing in as a member would collect a legitimate
  * redirect on every admin page and prove nothing about it.
  *
- * No account is created here. An app with no owner yet gets a named skip and a
- * command to fix it — inventing a user would put a row somebody did not ask for
- * into their database, on a command they ran to look at pages.
+ * No account is created here. An app with no owner yet gets a named skip and
+ * the way to fix it (`noOwnerHint`) — inventing a user would put a row somebody
+ * did not ask for into their database, on a command they ran to look at pages.
  */
-async function oldestOwner() {
+async function oldestOwner(baseUrl) {
   if (!process.env.DATABASE_URL) return { error: "DATABASE_URL is not set" };
   const sql = connectUtc(process.env.DATABASE_URL, { max: 1, idle_timeout: 2, connect_timeout: 5 });
   try {
@@ -144,7 +176,7 @@ async function oldestOwner() {
       limit 1
     `;
     if (rows.length === 0) {
-      return { error: "no owner account yet — create one: node run.mjs user-create --email … --role owner --apply" };
+      return { error: noOwnerHint(process.env, baseUrl) };
     }
     return { email: rows[0].email };
   } catch (error) {
@@ -176,7 +208,7 @@ export async function signInAsOwner(baseUrl) {
     return skip(`the app did not answer on /api/auth/providers (${error.message})`);
   }
 
-  const owner = await oldestOwner();
+  const owner = await oldestOwner(baseUrl);
   if (owner.error) return skip(owner.error);
 
   const result = await callbackSignIn(baseUrl, "dev-login", { email: owner.email });

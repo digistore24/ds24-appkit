@@ -4,7 +4,7 @@
 
 // The command line of this app.
 //
-//   node run.mjs                 show every command
+//   node run.mjs                 the everyday commands (help --all: every command)
 //   node run.mjs start           database + migrations + app
 //   node run.mjs stop            stop everything
 //   node run.mjs test            TypeScript check + tests
@@ -73,17 +73,20 @@ const TASKS = {
   // ── Start / Stop ──────────────────────────────────────────────────────────
   start: {
     group: "Start / Stop",
+    everyday: true,
     help: "Start everything: DB + migrations + app (http://localhost:3000)",
     needs: ["env", "node_modules", "hooks", "db-up", "db-migrate"],
     run: (_args, { port }) => app.start(port),
   },
   stop: {
     group: "Start / Stop",
+    everyday: true,
     help: "Stop everything: tunnel + app + database",
     run: () => app.stop(),
   },
   restart: {
     group: "Start / Stop",
+    everyday: true,
     help: "Restart",
     needs: ["stop"],
     // Through runTask, not TASKS.start.run: `stop` took the database down, so
@@ -92,11 +95,13 @@ const TASKS = {
   },
   status: {
     group: "Start / Stop",
+    everyday: true,
     help: "Is the app running? Is the database running?",
     run: () => app.status(),
   },
   logs: {
     group: "Start / Stop",
+    everyday: true,
     help: "Follow the running app's log (Ctrl-C to stop)",
     run: () => app.logs(),
   },
@@ -110,6 +115,7 @@ const TASKS = {
   // ── Tests & quality ───────────────────────────────────────────────────────
   test: {
     group: "Tests & quality",
+    everyday: true,
     help: "Tests (vitest) + TypeScript check",
     needs: ["node_modules"],
     run: async () => {
@@ -133,6 +139,7 @@ const TASKS = {
   },
   smoke: {
     group: "Tests & quality",
+    everyday: true,
     help: 'Call every page once — finds "Internal Server Error" (the app must be running)',
     // --url explicitly: otherwise the script stubbornly checks localhost:3000 and
     // reports green while another project answers there. The user's own --url
@@ -142,6 +149,7 @@ const TASKS = {
   },
   errors: {
     group: "Tests & quality",
+    everyday: true,
     help:
       "What went wrong in the running app's log — the errors a 200 hides; " +
       "--url https://… asks a DEPLOYED app instead",
@@ -373,9 +381,10 @@ const TASKS = {
     group: "Database",
     help: "Stop everything (tunnel + app + DB) AND delete the database (all data gone)",
     // `stop` first: a running app still holds connections to the database, and
-    // nuking the data out from under it leaves both in a mess.
-    needs: ["stop"],
+    // nuking the data out from under it leaves both in a mess. Called directly
+    // rather than via `needs`, so it can be told the data is NOT kept.
     run: async () => {
+      await app.stop({ dataKept: false });
       if (await usesLocalPostgres()) await localNuke();
       else await docker("compose", ...composeProjectFlag(), "down", "-v");
       console.log("✓ Database deleted — all data gone.");
@@ -525,6 +534,7 @@ const TASKS = {
   // ── Setup helpers ─────────────────────────────────────────────────────────
   journey: {
     group: "Setup",
+    everyday: true,
     help: "Where am I, and what comes next (--json, --next)",
     // No `needs`: it reads files and nothing else, and "where am I" is a
     // question worth answering in a project that is not set up yet — which is
@@ -533,11 +543,13 @@ const TASKS = {
   },
   doctor: {
     group: "Setup",
+    everyday: true,
     help: "What has to be installed — and what is missing on this machine (--json, --deploy)",
     run: (args) => doctor(args),
   },
   setup: {
     group: "Setup",
+    everyday: true,
     help: "Get this project ready to work in: .env, dependencies, database, migrations",
     // The same prerequisites as `start`, without starting the app. One command
     // for the whole preparation, so the setup-machine skill calls one and not
@@ -559,6 +571,7 @@ const TASKS = {
   },
   update: {
     group: "Setup",
+    everyday: true,
     help: "Bring the guidance up to date (CLAUDE.md, docs/, skills) — --apply writes",
     run: (args) => script("scripts/dev/update.mjs", args),
   },
@@ -594,6 +607,7 @@ const TASKS = {
   },
   greet: {
     group: "Setup",
+    everyday: true,
     help: "The session greeting — where this project stands and what to do next",
     // The same thing three of the four programs print when a session starts,
     // available as a command. Three reasons it has to be:
@@ -619,7 +633,8 @@ const TASKS = {
   },
   help: {
     group: "Setup",
-    help: "Show this overview (--json for the machine-readable list)",
+    everyday: true,
+    help: "Show this overview (--all: every command, --json: the machine-readable list)",
     run: (args) => showHelp(args),
   },
 
@@ -688,10 +703,19 @@ function showHelp(args = []) {
     return;
   }
 
-  console.log("Commands for this app — node run.mjs <command> [arguments]\n");
+  // Over seventy commands is a wall to the person this template is for. The
+  // bare call shows the handful they meet every day; `--all` is the wall, and
+  // says so. `--json` above stays complete either way.
+  const all = args.includes("--all");
+  const visible = Object.entries(TASKS).filter(([, task]) => !task.hidden);
+  const shown = all ? visible : visible.filter(([, task]) => task.everyday);
+  console.log(
+    all
+      ? "Every command of this app — node run.mjs <command> [arguments]\n"
+      : "The everyday commands — node run.mjs <command> [arguments]\n",
+  );
   const groups = new Map();
-  for (const [name, task] of Object.entries(TASKS)) {
-    if (task.hidden) continue;
+  for (const [name, task] of shown) {
     if (!groups.has(task.group)) groups.set(task.group, []);
     groups.get(task.group).push([name, task.help]);
   }
@@ -699,6 +723,9 @@ function showHelp(args = []) {
     console.log(`${group}:`);
     for (const [name, help] of entries) console.log(`  ${name.padEnd(18)} ${help}`);
     console.log("");
+  }
+  if (!all) {
+    console.log(`All ${visible.length} commands: node run.mjs help --all`);
   }
   console.log("The npm scripts behind them (npm run dev, npm run db:migrate, …) keep working.");
 }

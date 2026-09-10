@@ -191,7 +191,8 @@ Docker, or without it — see above), apply migrations, bring the app up
 
 Then `node run.mjs restart`.
 
-The most important commands at a glance (`node run.mjs` alone shows them all):
+The most important commands at a glance (`node run.mjs` alone shows the everyday
+ones, `node run.mjs help --all` every one of them):
 
 | Command | What happens |
 |---|---|
@@ -208,7 +209,7 @@ The most important commands at a glance (`node run.mjs` alone shows them all):
 | `node run.mjs doctor` | check that everything needed is installed |
 | `node run.mjs ux-check` | the interface, measured: contrast in both modes, the design system, missing names, pages nothing leads to — see [`docs/ux.md`](docs/ux.md) |
 | `node run.mjs update` | fetch improved guidance for the AI agent (`CLAUDE.md`, `docs/`, skills) — your code is never touched, see [`docs/updates.md`](docs/updates.md) |
-| `node run.mjs` | show all commands |
+| `node run.mjs` | the everyday commands (`help --all`: all of them) |
 
 Is something already running on port 3000 or 15432 (the database port) on your
 machine? Then you don't have to do a thing: `node run.mjs start` takes the next free

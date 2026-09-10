@@ -16,7 +16,7 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { DEPLOY_HOSTS, FIXES, PLATFORMS, fixLine } from "./dev/doctor.mjs";
+import { DEPLOY_HOSTS, FIXES, PLATFORMS, fixLine, render } from "./dev/doctor.mjs";
 import { DB_DRIVERS } from "./db/driver.mjs";
 import { PROFILE_FILE, readAgentProfile } from "./dev/agent-configs.mjs";
 import { notChecked } from "@/lib/test-not-checked";
@@ -272,5 +272,37 @@ describe("both database drivers are handled", () => {
     expect(install, "the npm install call in scripts/db/local.mjs").toBeTruthy();
     expect(install![1]).toContain('"--no-save"');
     expect(install![1]).not.toContain("--save");
+  });
+});
+
+// The closing line of `node run.mjs doctor` is the one sentence a beginner acts
+// on, and "Next: node run.mjs start" over an app that is already up sent one
+// to start it twice (measured 2026-09-10). `render()` is pure and is TOLD
+// whether the app runs, so both closings are measured here rather than hoped.
+describe("doctor's closing line says what to do next", () => {
+  const green = [
+    { id: "node", label: "Node 20+", ok: true, severity: "blocker" },
+    { id: "docker", label: "Docker", ok: true, severity: "optional" },
+  ];
+
+  it("points at start when nothing is missing and the app is not running", () => {
+    const out = render(green);
+    expect(out).toContain("✓ Everything that is needed is there. Next: node run.mjs start");
+    expect(out).not.toContain("The app is running");
+  });
+
+  it("names the running app's address instead of telling the operator to start it again", () => {
+    const out = render(green, { running: { port: 3007 } });
+    expect(out).toContain("✓ Everything that is needed is there. The app is running: http://localhost:3007");
+    expect(out).not.toContain("Next: node run.mjs start");
+  });
+
+  it("a blocker outranks a running app — there is nothing to point at yet", () => {
+    // The needle: a render that only looked at `running` would print a green
+    // closing over a machine that cannot build.
+    const red = [...green, { id: "git", label: "Git", ok: false, severity: "blocker", detail: "not found" }];
+    const out = render(red, { running: { port: 3007 } });
+    expect(out).not.toContain("Everything that is needed is there");
+    expect(out).toContain("✗ 1 thing(s) missing");
   });
 });

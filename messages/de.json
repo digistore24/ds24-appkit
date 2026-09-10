@@ -65,7 +65,7 @@
     "plans": "Tarife ansehen",
     "includedTitle": "Was schon eingebaut ist",
     "dashboard": "Zum Dashboard",
-    "setupHint": "Den Digistore24-Zugang richtest du einmalig im Terminal ein: <code>node run.mjs ds24-connect</code>",
+    "setupHint": "Sag deinem KI-Programm einfach „Digistore24 verbinden“ — oder tippe im Terminal: <code>node run.mjs ds24-connect</code>",
     "features": {
       "authTitle": "Anmeldung per Link oder Kennwort",
       "authBody": "Magic-Link per E-Mail, Kennwort freiwillig, optional Google. Konten und Rollen sind eingebaut.",
@@ -113,7 +113,7 @@
     "welcome": "Willkommen zurück",
     "signedInAs": "Angemeldet als {email}.",
     "ds24Title": "Digistore24 ist noch nicht verbunden",
-    "ds24Body": "Die Verbindung wird im Terminal hergestellt, nicht hier — so landet der Schlüssel direkt in deiner <code>.env</code> und nie in der Datenbank oder im Browser:",
+    "ds24Body": "Sag deinem KI-Programm einfach „Digistore24 verbinden“ — der Schlüssel landet dann direkt in deiner <code>.env</code> und nie in der Datenbank oder im Browser. Wer lieber selbst tippt, nimmt den Befehl im Terminal:",
     "statusTitle": "Abrechnung",
     "statusConnected": "Verbunden",
     "statusDisconnected": "Nicht verbunden",

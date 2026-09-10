@@ -151,6 +151,29 @@ describe("exactly one Next: line", () => {
     }
   });
 
+  it("ends the offer for whoever is reading — asked of the agent, pointed at it for a person", () => {
+    // "Shall I start it?" is right when the AI program relays the line: it can
+    // start the skill. In front of a person who typed `node run.mjs journey`
+    // into a terminal nothing can start anything, so the line says where to
+    // say it instead. The renderer is TOLD (journey-cli.mjs reads isTTY) and
+    // defaults to the agent — the machine shape must never carry the human
+    // ending, because that is what `coach` reads back to the user.
+    for (const [name, s] of [["fresh", FRESH], ["mid", MID], ["live", LIVE]] as const) {
+      const agent = describeNext(s);
+      const human = describeNext(s, { forHuman: true });
+      expect(agent, `${name}: agent`).toMatch(/\. Shall I start it\?$/);
+      expect(human, `${name}: human`).toMatch(/\. Start it: say "next step" to your AI program\.$/);
+      expect(human, `${name}: human`).not.toContain("Shall I");
+      // Only the ending differs — the step, the reason and the skill are the same facts.
+      expect(human.replace(/ Start it: .*$/, "")).toBe(agent.replace(/ Shall I start it\?$/, ""));
+      expect(describeJourney(s, { forHuman: true }), `${name}: the whole view`).toContain(
+        'say "next step" to your AI program.',
+      );
+      expect(describeJourney(s), `${name}: the whole view, agent`).not.toContain("your AI program");
+    }
+    expect(journeyJson(MID).nextSentence).toMatch(/Shall I start it\?$/);
+  });
+
   it("draws the reason from the row's own evidence", () => {
     // Not from a sentence written in advance: a prepared reason can describe a
     // state the app is not in, and this one cannot.

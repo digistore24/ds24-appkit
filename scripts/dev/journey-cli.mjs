@@ -61,10 +61,15 @@ export function journeyCommand(args = []) {
     return;
   }
 
+  // Who is reading: a terminal means a person typed the command and cannot
+  // start anything from here; a pipe means the AI program is relaying it and
+  // can. The renderer is told rather than left to guess — it has no `process`.
+  const forHuman = Boolean(process.stdout.isTTY);
+
   if (args.includes("--next")) {
-    console.log(describeNext(state));
+    console.log(describeNext(state, { forHuman }));
     return;
   }
 
-  console.log(describeJourney(state, { appName: name }));
+  console.log(describeJourney(state, { appName: name, forHuman }));
 }

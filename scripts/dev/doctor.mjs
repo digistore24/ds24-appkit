@@ -51,6 +51,10 @@ import {
 import { readEnvValue } from "../lib/env-write.mjs";
 import { canOpenBrowser, capture, hasCommand, isWindows } from "../lib/proc.mjs";
 import { configuredDriver, dbDriver } from "../db/driver.mjs";
+// `app.mjs` for the two facts about a RUNNING app and nothing else — it reads a
+// pid file and asks the OS, and starts nothing. No cycle: nothing under app.mjs
+// imports this file (app-port, ports, proc, db/*).
+import { appPort, runningPid } from "./app.mjs";
 import { browserWired, chromiumInstalled } from "./browser-tool.mjs";
 import { depsFresh } from "./deps.mjs";
 import { portInUse, urlPort } from "./ports.mjs";
@@ -628,8 +632,19 @@ export function fixLine(fix) {
 /** Everything that genuinely stands in the way. */
 export const blockers = (checks) => checks.filter((c) => !c.ok && c.severity === "blocker");
 
-/** The text a person reads. */
-export function render(checks) {
+/**
+ * The text a person reads.
+ *
+ * `running` is handed in, not looked up: the closing line says what to do
+ * NEXT, and "Next: node run.mjs start" over an app that is already up sent an
+ * operator to start it twice (measured 2026-09-10). Whether it is up is a fact
+ * `doctor()` reads at the edge; this function stays pure so both closings are
+ * measured (scripts/setup.test.ts).
+ *
+ * @param {object[]} checks
+ * @param {{ running?: { port: number } | null }} [options]
+ */
+export function render(checks, { running = null } = {}) {
   const lines = [`This machine: ${process.platform} ${process.arch}, Node ${process.version}`, ""];
   for (const check of checks) {
     // The install hint is only interesting when the thing is missing.
@@ -645,7 +660,17 @@ export function render(checks) {
   const missing = blockers(checks);
   lines.push("");
   if (missing.length === 0) {
-    lines.push("✓ Everything that is needed is there. Next: node run.mjs start");
+    lines.push(
+      running
+        ? `✓ Everything that is needed is there. The app is running: http://localhost:${running.port}`
+        : "✓ Everything that is needed is there. Next: node run.mjs start",
+    );
+  } else if (missing.every((check) => check.fix === RUN_SETUP)) {
+    // `.env` and `node_modules` are not installed, they are created — and one
+    // command does both. "install them" sent a beginner looking for a
+    // download (measured 2026-09-10 on a fresh clone: the two "missing" things
+    // were exactly these two).
+    lines.push(`✗ ${missing.length} thing(s) not ready yet — one command does it: node run.mjs setup`);
   } else {
     lines.push(`✗ ${missing.length} thing(s) missing — install them, then run doctor again.`);
   }
@@ -710,7 +735,10 @@ export async function doctor(args = []) {
       ),
     );
   } else {
-    console.log(render(checks));
+    // Is the app already up? A pid file plus a signal-0 probe — no process is
+    // started and no port is opened for the question.
+    const running = runningPid() ? { port: appPort() } : null;
+    console.log(render(checks, { running }));
   }
   if (blockers(checks).length > 0) process.exit(1);
 }

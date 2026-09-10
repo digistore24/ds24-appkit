@@ -87,6 +87,27 @@ now see has its two readers the wrong way round — measured on a customer's app
 where to look leaves the customer with nothing to open — measured in a field
 run whose closing line was *"fertig gebaut und läuft"* and named no page.
 
+**The name is not optional either.** The first stage writes it where the app
+wears it — `NEXT_PUBLIC_APP_NAME` in `.env` (intake question 4) — chosen by
+the customer, announced by you as a working title, or ASSUMED like every other
+open point when they asked for no more questions. A first hand-back whose
+corner still says "Your App" has delivered no name; measured twice on
+2026-09-10, once with a title the plan had announced and once without any.
+
+**The app is RUNNING when they read the address, and the stage is committed
+before they read anything.** A hand-back that stops the app and ends with
+"run `node run.mjs start`, then open…" hands the customer a command instead
+of a page, and one that ends with "shall I commit?" asks them to decide what
+`CLAUDE.md` → *Rules* already decided — both measured 2026-09-10.
+
+**The stage is built in THIS session, not handed to a subagent as a whole.**
+Measured 2026-09-10: one hand-off was thirty-four minutes without a word to the
+customer, and the session then vouched for checks it had not seen. A subagent
+may take a bounded piece; the session itself runs the tests, `smoke` and
+`errors` before it speaks, and says something the customer can use at least
+every stage — silence reads as "stuck".
+
+
 **The LAST hand-back names what is still a placeholder.** "Alles fertig" with
 the home page still describing the template, the legal pages still saying
 "not filled in" and no Digistore24 product behind the buy button is finished

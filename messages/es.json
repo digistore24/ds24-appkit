@@ -65,7 +65,7 @@
     "plans": "Ver planes",
     "includedTitle": "Lo que ya está integrado",
     "dashboard": "Ir al panel",
-    "setupHint": "El acceso a Digistore24 lo configuras una sola vez en el terminal: <code>node run.mjs ds24-connect</code>",
+    "setupHint": "Dile a tu programa de IA «conecta Digistore24» — o escribe en el terminal: <code>node run.mjs ds24-connect</code>",
     "features": {
       "authTitle": "Acceso por enlace o contraseña",
       "authBody": "Magic link por correo electrónico, contraseña opcional, Google opcional. Las cuentas y los roles vienen integrados.",
@@ -113,7 +113,7 @@
     "welcome": "Bienvenido de nuevo",
     "signedInAs": "Sesión iniciada como {email}.",
     "ds24Title": "Digistore24 aún no está conectado",
-    "ds24Body": "La conexión se establece en el terminal, no aquí — así la clave va directamente a tu <code>.env</code> y nunca a la base de datos ni al navegador:",
+    "ds24Body": "Dile a tu programa de IA «conecta Digistore24» — así la clave va directamente a tu <code>.env</code> y nunca a la base de datos ni al navegador. Si prefieres hacerlo tú mismo, ejecuta el comando en el terminal:",
     "statusTitle": "Facturación",
     "statusConnected": "Conectado",
     "statusDisconnected": "No conectado",

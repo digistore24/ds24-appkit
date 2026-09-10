@@ -138,6 +138,10 @@ async function markRemote() {
 const remoteMark = isLocal ? null : await markRemote();
 
 let failures = 0;
+/** Of those, requests that never got an answer — an app that is not running, not a page that broke. */
+let unreachable = 0;
+/** Requests that got ANY HTTP answer — the proof that something is listening. */
+let answered = 0;
 
 /**
  * Call one page and judge the answer.
@@ -157,6 +161,7 @@ async function callPage(route, cookie = "") {
       redirect: "manual",
       headers: cookie ? { cookie } : undefined,
     });
+    answered++;
     const status = answer.status;
     const location = answer.headers.get("location") ?? "";
     const toLogin = status >= 300 && status < 400 && /\/login(\?|$)/.test(location);
@@ -206,6 +211,7 @@ async function callPage(route, cookie = "") {
     return { toLogin };
   } catch (err) {
     failures++;
+    unreachable++;
     console.log(`  ✗ ---  ${route} — not reachable: ${err.message}`);
     return { toLogin: false };
   }
@@ -236,6 +242,7 @@ async function callManifest() {
   let manifest;
   try {
     const answer = await fetch(url, { redirect: "manual" });
+    answered++;
     if (answer.status !== 200) {
       failures++;
       console.log(
@@ -252,6 +259,7 @@ async function callManifest() {
     manifest = await answer.json();
   } catch (err) {
     failures++;
+    unreachable++;
     console.log(`  ✗ ---  /manifest.webmanifest — ${err.message}`);
     return;
   }
@@ -375,6 +383,17 @@ const dynamicFailures = await runDynamicRoutes({
       "through the upload door. Run it against a local app (node run.mjs start && " +
       "node run.mjs smoke) to exercise this route",
 });
+
+if (unreachable > 0 && answered === 0) {
+  // Nothing answered, so nothing was measured. "21 page(s) with a server
+  // error" for an app that is simply not running sent a reader to the log
+  // (measured 2026-09-10); the log is empty, and the fix is a start.
+  console.error(
+    `\n✗ Nothing answers at ${baseUrl} — the app is not running, so no page was checked.` +
+      "\n  Start it, then run smoke again: node run.mjs start && node run.mjs smoke",
+  );
+  process.exit(1);
+}
 
 if (failures > 0 || dynamicFailures > 0) {
   // Two sentences rather than one sum: a page that 500s and a route that handed

@@ -37,7 +37,7 @@ import { portInUse } from "./ports.mjs";
 import { capture, isWindows, run, runScript, sleep } from "../lib/proc.mjs";
 import { composeProjectFlag } from "../db/compose.mjs";
 import { usesLocalPostgres } from "../db/driver.mjs";
-import { localDown, localStatus } from "../db/local.mjs";
+import { connection, localDown, localStatus } from "../db/local.mjs";
 
 const PID_FILE = `${DEV_DIR}/dev.pid`;
 const TUNNEL_CLI = "scripts/ds24/tunnel.mjs";
@@ -165,7 +165,12 @@ export async function dev(wanted) {
   return run(process.execPath, [nextBin(), "dev", "--port", String(port)]);
 }
 
-export async function stop() {
+/**
+ * `dataKept: false` is what `db-nuke` passes: it stops everything and deletes
+ * the volume right after, so the "(data is kept …)" hint would be a lie two
+ * lines above "✓ Database deleted" — measured 2026-09-10, both on one screen.
+ */
+export async function stop({ dataKept = true } = {}) {
   // First the tunnel: it publishes this machine to the internet, so it is the
   // one thing that must not survive a stop. Silent when there is none, and its
   // errors are deliberately NOT swallowed — a tunnel that refuses to die is the
@@ -196,11 +201,11 @@ export async function stop() {
     console.log("✓ App stopped");
   }
 
-  const kept = "(data is kept — to delete it: node run.mjs db-nuke)";
+  const kept = dataKept ? " (data is kept — to delete it: node run.mjs db-nuke)" : "";
   if (await usesLocalPostgres()) {
-    if (await localDown()) console.log(`✓ Database stopped ${kept}`);
+    if (await localDown()) console.log(`✓ Database stopped${kept}`);
   } else if ((await run("docker", ["compose", ...composeProjectFlag(), "down"])) === 0) {
-    console.log(`✓ Database stopped ${kept}`);
+    console.log(`✓ Database stopped${kept}`);
   }
 }
 
@@ -213,8 +218,34 @@ export async function status() {
       : "App:       stopped",
   );
   await runScript(TUNNEL_CLI, ["status"]);
-  if (await usesLocalPostgres()) await localStatus();
-  else await run("docker", ["compose", ...composeProjectFlag(), "ps"]);
+  if (await usesLocalPostgres()) {
+    await localStatus();
+  } else {
+    const ps = await capture("docker", ["compose", ...composeProjectFlag(), "ps", "-q", "db"]);
+    console.log(await dockerDbLine(ps.stdout.trim()));
+  }
+}
+
+/**
+ * One line, in the shape of `localStatus()` — not `docker compose ps`, whose
+ * answer to "stopped" is a table header with no rows and no verdict
+ * (measured 2026-09-10: a beginner read it and did not know).
+ */
+async function dockerDbLine(containerId) {
+  let running = false;
+  if (containerId) {
+    const state = await capture("docker", ["inspect", "-f", "{{.State.Running}}", containerId]);
+    running = state.stdout.trim() === "true";
+  }
+  let port = "";
+  try {
+    port = String(connection().port);
+  } catch {
+    // No DATABASE_URL yet — the line still answers the question asked.
+  }
+  return running
+    ? `Database:  running (Docker${port ? `, port ${port}` : ""})`
+    : "Database:  stopped";
 }
 
 /** Follow the dev log, like `tail -f` — but with fs.watch, which exists everywhere. */

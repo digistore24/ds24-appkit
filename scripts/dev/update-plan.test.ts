@@ -35,6 +35,21 @@ describe("normalizeText", () => {
     expect(sha("Body\n")).not.toBe(sha("Body!\n"));
   });
 
+  it("ignores the block `next dev` appends to AGENTS.md", () => {
+    // Next 16 writes a managed section into AGENTS.md on the first start —
+    // from the customer's own agent, on a file they never opened. Measured
+    // 2026-09-10: `node run.mjs update` then said "edited in this app" and
+    // never updated AGENTS.md again. The block is Next's, the hash is ours.
+    const shipped = "# Guidance\n\nBody\n";
+    const afterNextDev =
+      shipped +
+      "\n<!-- BEGIN:nextjs-agent-rules -->\n\n# This is NOT the Next.js you know\n\n" +
+      "This block is written and re-added by `next dev`.\n\n<!-- END:nextjs-agent-rules -->\n";
+    expect(sha(afterNextDev)).toBe(sha(shipped));
+    // A real edit next to the block is still an edit.
+    expect(sha(afterNextDev.replace("Body", "Body, changed"))).not.toBe(sha(shipped));
+  });
+
   it("changes nothing about an LF file", () => {
     // Which is why re-stamping on Linux or macOS produces the same values.
     const text = "# Title\n\nBody\n";

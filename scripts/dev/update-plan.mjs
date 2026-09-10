@@ -41,7 +41,26 @@
  * template/.gitattributes stops new clones from getting there in the first
  * place; this keeps the ones that already did from being stuck.
  */
-export const normalizeText = (text) => String(text ?? "").replace(/\r\n/g, "\n");
+export const normalizeText = (text) =>
+  stripNextAgentRules(String(text ?? "").replace(/\r\n/g, "\n"));
+
+/**
+ * The block `next dev` appends to AGENTS.md on its own — a managed section
+ * between `<!-- BEGIN:nextjs-agent-rules -->` and `<!-- END:nextjs-agent-rules -->`
+ * (next 16, `node_modules/next/dist/server/lib/generate-agent-files.js`). It
+ * is written on the customer's FIRST `node run.mjs start`, so without this
+ * every fresh copy reported AGENTS.md as "edited in this app" from that
+ * moment on and never received an update to it again (measured 2026-09-10 on
+ * a clone nobody had touched). The block is Next's text, not ours; the hash
+ * describes the guidance. Blank lines either side go with it so a file that
+ * had the block and one that never did hash the same.
+ */
+const NEXT_AGENT_RULES = /\n*<!-- BEGIN:nextjs-agent-rules -->[\s\S]*?<!-- END:nextjs-agent-rules -->\n*/g;
+export const stripNextAgentRules = (text) => {
+  if (!text.includes("<!-- BEGIN:nextjs-agent-rules -->")) return text;
+  const stripped = text.replace(NEXT_AGENT_RULES, "\n");
+  return stripped.endsWith("\n") ? stripped : `${stripped}\n`;
+};
 
 /** `"1.10.0"` >= `"1.9.3"` — numerically, not as a string. */
 export function versionAtLeast(have, want) {
