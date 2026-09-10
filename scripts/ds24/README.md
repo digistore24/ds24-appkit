@@ -102,13 +102,13 @@ documented:
   them all back. Writing just `ds24-appkit` would delete every tag the vendor
   had put there.
 
-⚠️ **`data[tag]` is newer than this code.** Measured on 2026-09-09 it did not
-exist yet, and `data` is validated against a strict allowlist — an unknown key
-is an ERROR, not something ignored. So `withoutTag()` in `sync-products.mjs`
-sends it, and on a refusal drops it and repeats the same call once, then stops
-sending it for the rest of the run. When the field is live the first attempt
-succeeds and nothing repeats. Delete that function once the field is
-everywhere; nothing else depends on it.
+⚠️ **And `data` is validated against a strict ALLOWLIST**, which is worth
+knowing before you add a field to `productData()`: a key Digistore24 does not
+recognise is a hard ERROR, not something ignored —
+`"ungültiger Array-Schlüssel bei 1. Parameter 'data' (angegeben: … )"`, and the
+whole call fails. Measured on 2026-09-09, when `data[tag]` was one day away from
+existing; it shipped on the 10th and both calls take it. A field newer than the
+account's API is therefore never a harmless addition.
 
 ## localhost and Digistore24 (`_public-url.mjs`)
 

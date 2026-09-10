@@ -93,11 +93,13 @@
  * refusal, so nothing was written to get the answer, and the product used for
  * the probe still carried `tag: ""` and its old `modified_at` afterwards.
  *
- * ⚠️ One account is not every account, so `sync-products.mjs` keeps its
- * `withoutTag` fallback. What it now guards against is a rollback or an account
- * the change has not reached — not an unshipped field. It costs one retry on
- * the first product of a run; being wrong without it costs every product
- * creation the customer makes.
+ * ⚠️ **The sync sends it unconditionally, and that is a decision with a date on
+ * it.** While the field did not exist there was a fallback here: send it, catch
+ * the refusal, repeat the call once without it. It came out on 2026-09-10, the
+ * day the field shipped. If Digistore24 ever rolls this back, product creation
+ * fails outright with "ungültiger Array-Schlüssel" until the tag is taken out
+ * of `productData()` again — noted so that whoever reads that error knows where
+ * it comes from, rather than looking for it in the registry.
  *
  * 🚨 **`maxLength: 127`, and it is OURS to respect.** The spec does not say
  * whether an over-long value is refused or truncated, and both are bad for a

@@ -135,58 +135,6 @@ if (!thankyouTarget) {
 }
 const appUrl = publicUrlFor(thankyouTarget);
 
-// Does THIS account's API know `data[tag]` yet?
-//
-// The field is documented — Digistore24's own OpenAPI spec carries it for
-// `createProduct` and `updateProduct` as of 2026-09-10 (`_own.mjs` quotes it,
-// including the `maxLength: 127` this app respects itself). On 2026-09-09 it
-// did not exist at all, and `data` is validated against a strict allowlist, so
-// an unknown key is a hard ERROR rather than something ignored
-// ("ungültiger Array-Schlüssel bei 1. Parameter 'data' (angegeben: tag …)").
-//
-// Exercised against a live account on 2026-09-10 (`_own.mjs` has the numbers):
-// both calls accept the key, and `listProducts` hands it back as a string.
-//
-// ⚠️ **The fallback stays anyway, and one account is the reason.** What it
-// guards is no longer an unshipped field but a rollback, or an account the
-// change has not reached. It costs one retry on the first product of a run; a
-// sync without it trades every product creation the customer makes for a
-// marker that decides nothing.
-//
-// So: send it, and if the call comes back refused, drop it and try the same
-// call again — ONCE, and then not for the rest of the run. That is the shape
-// `createBuyUrl` already uses twice (the unknown affiliate, the stale payment
-// plan), including its safeguard: the retry is the call we would have made
-// anyway, so if the real problem was something else the retry fails too and
-// the ORIGINAL error is what surfaces. No message matching, in any language.
-let tagsAccepted = true;
-
-/**
- * Runs `call()`; on a failure while the tag was in the payload, says so once,
- * marks the field unsupported for this run and runs `retry()`.
- */
-async function withoutTag(data, call, retry) {
-  try {
-    return await call();
-  } catch (err) {
-    if (!tagsAccepted || !("data[tag]" in data)) throw err;
-    tagsAccepted = false;
-    // 🚨 Says what HAPPENED, not why. The sentence used to read "does not know
-    // data[tag] yet", which was the only possible cause while the field did not
-    // exist — and became a guess the day it shipped. A refusal now has more
-    // than one explanation (an account on an older release, a value this app
-    // failed to keep inside the documented limit), and the line must not pick
-    // one of them for the reader.
-    console.log(`  · Digistore24 refused data[tag] — continuing without it`);
-    delete data["data[tag]"];
-    try {
-      return await retry();
-    } catch {
-      throw err;
-    }
-  }
-}
-
 // data[...] for create/update from a registry definition (without a price —
 // that is on the payment plans, see _plans.mjs).
 //
@@ -229,12 +177,9 @@ function productData(key, def, language, existing = null) {
   if (note !== null) data["data[note]"] = note;
   // The coarse marker, appended to whatever tags the product already has —
   // `tagWith` answers null when ours is in there already, and never drops one
-  // the vendor put there (`_own.mjs`). `tagsAccepted` is what keeps a run from
-  // sending it once per product while the field does not exist yet.
-  if (tagsAccepted) {
-    const tag = tagWith(existing ? tagOf(existing) : null);
-    if (tag !== null) data["data[tag]"] = tag;
-  }
+  // the vendor put there (`_own.mjs`), so the field is simply not sent then.
+  const tag = tagWith(existing ? tagOf(existing) : null);
+  if (tag !== null) data["data[tag]"] = tag;
   if (appUrl) data["data[thankyou_url]"] = appUrl;
   // The app's own product group — sent on create AND update, so a product
   // that predates the group (or a group recreated after deletion) is pulled
@@ -665,11 +610,7 @@ for (const target of rows) {
     if (!apply) {
       console.log(`DRY-RUN — would update: "${label}" (product_id=${existingId}, language=${language})`);
     } else {
-      await withoutTag(
-        data,
-        () => ds24Call("updateProduct", apiKey, { product_id: String(existingId), ...data }),
-        () => ds24Call("updateProduct", apiKey, { product_id: String(existingId), ...data }),
-      );
+      await ds24Call("updateProduct", apiKey, { product_id: String(existingId), ...data });
       console.log(`✓ updated: "${label}" (product_id=${existingId}, language=${language})`);
     }
     if (target.productId !== String(existingId)) {
@@ -687,11 +628,7 @@ for (const target of rows) {
     await syncPlans(null);
     continue;
   }
-  const created = await withoutTag(
-    data,
-    () => ds24Call("createProduct", apiKey, data),
-    () => ds24Call("createProduct", apiKey, data),
-  );
+  const created = await ds24Call("createProduct", apiKey, data);
   const newId = idOf(created);
   if (!newId) {
     console.error(`✗ createProduct returned no product_id for "${label}".`);

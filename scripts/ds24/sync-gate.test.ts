@@ -148,32 +148,6 @@ describe("the warnings read the same shape the writes do", () => {
   });
 });
 
-describe("data[tag] cannot break a sync while the field does not exist", () => {
-  it("both writes go through the fallback, not straight to ds24Call", () => {
-    // Measured on 2026-09-09: `data` is validated against a strict allowlist
-    // and `tag` is not on it — `createProduct` and `updateProduct` both REFUSE
-    // it outright rather than ignoring it. Sending it unconditionally would
-    // break every product creation for every customer on day one.
-    const create = at('ds24Call("createProduct"');
-    const update = at('ds24Call("updateProduct", apiKey, { product_id: String(existingId)');
-    expect(source.lastIndexOf("withoutTag(", create)).toBeGreaterThan(-1);
-    expect(source.lastIndexOf("withoutTag(", update)).toBeGreaterThan(-1);
-  });
-
-  it("gives up on the field for the whole run, not once per product", () => {
-    expect(source).toContain("tagsAccepted = false");
-  });
-
-  it("throws the ORIGINAL error when the retry fails too", () => {
-    // The retry is the call we would have made anyway, so a failure that was
-    // never about the tag must surface as itself — the same safeguard the
-    // affiliate retry in buyUrl.ts carries.
-    const fn = at("async function withoutTag");
-    const end = source.indexOf("\n}", fn);
-    expect(source.slice(fn, end)).toContain("throw err;");
-  });
-});
-
 describe("--prune is as careful as the gate", () => {
   it("acts only on rows _own.mjs graded ours, never on a name that merely matches", () => {
     // The whole safety of a delete is in this call. Ownership is the stamp in
