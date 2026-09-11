@@ -5,20 +5,80 @@
 //
 // `node run.mjs export-core` copies the shared core (config/core-export.json)
 // into a companion repo — typically a mobile app that talks to this app's
-// `/api/v1`. The classification is EXACTLY the one `node run.mjs update` makes
-// for guidance text, applied to code files, and it is deliberately not
-// re-implemented: `planUpdate()` from ../dev/update-plan.mjs decides, this
-// file only supplies the two pieces that are export-shaped — where writing is
-// refused, and what the stamp looks like.
+// `/api/v1`. Re-running it is how the companion follows the core, and the only
+// difficult question about that is: has this file been changed THERE?
+// `.core-version` in the target directory records a hash per file as written:
 //
 //   current === shipped   the consumer never touched it → safe to replace
 //   current !== shipped   somebody edited it there → hands off, say so
 //
-// `.core-version` in the target directory is the deliberate echo of
-// `.template-version` in this app: the same semantics under the same kind of
-// name, so whoever has understood one has understood the other.
+// Getting that wrong in the permissive direction silently overwrites work in
+// somebody else's repo. When in doubt this module refuses.
 //
 // Pure on purpose: no fetch, no fs, no clock. The shell around it is export.mjs.
+
+/**
+ * The text of a file, with the line endings taken out before it is hashed.
+ *
+ * A hash here answers one question — "is this file still the one that was
+ * written?" — and the answer must not depend on how the file happens to sit
+ * on a disk. Git for Windows checks out CRLF by default, and without this
+ * every file in a Windows clone hashes differently from its entry in
+ * `.core-version`; the export would then report the whole tree as edited and
+ * write nothing, for ever. On Linux and macOS it is a no-op.
+ */
+export const normalizeText = (text) => String(text ?? "").replace(/\r\n/g, "\n");
+
+/**
+ * Decide what happens to every file the core offers, plus the ones it no
+ * longer has.
+ *
+ * @param local   {path: {current: sha|null, shipped: sha|null}} — `current` is
+ *                null when the file is not in the target.
+ * @param remote  {path: sha} — the core as it is here.
+ *
+ * @returns entries `{ path, action, reason? }` with action one of:
+ *   `new` | `update` | `unchanged` | `local-change` | `withdrawn`
+ */
+export function planExport({ local, remote }) {
+  const plan = [];
+
+  for (const [path, sha] of Object.entries(remote)) {
+    const here = local[path] ?? { current: null, shipped: null };
+
+    if (here.current === null) {
+      plan.push({ path, action: "new" });
+      continue;
+    }
+    if (here.current === sha) {
+      plan.push({ path, action: "unchanged" });
+      continue;
+    }
+    if (here.shipped === null || here.current !== here.shipped) {
+      plan.push({
+        path,
+        action: "local-change",
+        reason: here.shipped === null ? "not in .core-version" : "edited in the target",
+      });
+      continue;
+    }
+    plan.push({ path, action: "update" });
+  }
+
+  // Files the target has and the core no longer ships. Reported, never
+  // deleted: it may be the one the companion still imports.
+  for (const [path, here] of Object.entries(local)) {
+    if (path in remote || here.current === null) continue;
+    plan.push({ path, action: "withdrawn" });
+  }
+
+  return plan;
+}
+
+/** The paths an `--apply` would actually write. */
+export function writable(plan) {
+  return plan.filter((entry) => entry.action === "new" || entry.action === "update");
+}
 
 /**
  * Why a target directory is refused, or null when it is usable.
@@ -47,8 +107,8 @@ export function refuseTarget(targetAbs, projectRootAbs) {
 /**
  * The `.core-version` stamp for one export.
  *
- * No timestamp, deliberately: same input, same output — the same reasoning as
- * `knowledge-stamp.mjs`. `version` is this app's package.json version, so a
+ * No timestamp, deliberately: same input, same output. `version` is this
+ * app's package.json version, so a
  * consumer (and a support question) can say which template state its core
  * came from.
  */

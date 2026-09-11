@@ -57,9 +57,9 @@
 //
 // The data was proven complete before any of them was written, and the order was
 // deliberate. `scripts/docs-coverage.test.ts` is where that proof lives — every
-// skill folder appears here exactly once, every `requires` mirrors the skill's
-// own frontmatter, every module id resolves to a manifest that names the skill
-// back, and the one row with no skill at all is named there by hand.
+// skill folder appears here exactly once, every module id resolves to a
+// manifest that names the skill back, and the one row with no skill at all is
+// named there by hand.
 //
 // Plain Node, no dependency, ESM — Linux, macOS and Git Bash on Windows
 // (CLAUDE.md → Three systems).
@@ -70,7 +70,6 @@ import { fileURLToPath } from "node:url";
 import { readEnvValue } from "../lib/env-write.mjs";
 import { blankComments } from "../lib/source-text.mjs";
 import { installedModules } from "../modules/installed.mjs";
-import { versionAtLeast } from "./update-plan.mjs";
 
 // Resolved from THIS file, never from the cwd — the mistake
 // `scripts/ds24/_approval.mjs` records. Anything that reads the journey runs
@@ -158,7 +157,6 @@ export const PHASES = [
  * · `stale`                 a recurring row whose report is past its window
  * · `declined`              a recorded "no" — an ANSWER, not an absence
  * · `blocked`               the row needs a module this app does not have
- * · `needs-newer-template`  the row's code is not in this copy at all
  * · `unknown`               nothing recorded anywhere — a `kind: "ask"` row, or a
  *                           `kind: "note"` row whose notebook holds no such line
  * · `open`                  none of the above
@@ -168,7 +166,6 @@ export const JOURNEY_STATES = [
   "stale",
   "declined",
   "blocked",
-  "needs-newer-template",
   "unknown",
   "open",
 ];
@@ -265,11 +262,6 @@ export const JOURNEY_STATES = [
  * WHO performs it, or `next` names a step nobody can start. Read it through
  * `performerOf()` and never by reaching for `skill` directly.
  *
- * `requires` is **mirrored** from each skill's own frontmatter and is never
- * decided here: a skill that needs code this copy does not carry is refused by
- * `node run.mjs update` on exactly that value, and two opinions about it would
- * eventually disagree. Nine of the thirty have no `requires:` at all.
- *
  * `handsTo` is the arrow chain — the DEFAULT next skill, not the only one. It is
  * what the four prose tellings drew with `→`, and having it as a field is what
  * makes "the chain skips a step" a thing a test can notice.
@@ -292,7 +284,6 @@ export const JOURNEY = [
     // this is before anybody has to ask.
     optional: true,
     recurring: false,
-    requires: "0.20.0",
     module: null,
     // The greeting's `[Setup: …]` line is the answer, and it is computed live by
     // `doctor` rather than written down — so there is no file to look at, and
@@ -312,7 +303,6 @@ export const JOURNEY = [
     what: "Interviews the operator and researches the market, then writes the product brief.",
     optional: true,
     recurring: false,
-    requires: null,
     module: null,
     // The minimal brief `build-app` step 0 writes counts as well — presence
     // answers this row, with or without the research labels (coach §1).
@@ -329,7 +319,6 @@ export const JOURNEY = [
     what: "Turns the four dials once — accent, radius, type, elevation — and writes the choice into docs/design.md.",
     optional: true,
     recurring: false,
-    requires: "0.25.0",
     module: null,
     trace: { kind: "file", path: "docs/design.md" },
     declined: { file: "docs/app.md", marker: "No custom identity" },
@@ -344,7 +333,6 @@ export const JOURNEY = [
     what: "Distills existing videos, ebooks and recordings into the corpus the handbook is written from.",
     optional: true,
     recurring: false,
-    requires: "0.10.0",
     module: null,
     // The corpus folder is created by the intake itself and is absent in a fresh
     // app — so its presence, not its size, is the signal. How GOOD the corpus is
@@ -382,7 +370,6 @@ export const JOURNEY = [
     // ← the reason this row exists at all. See the block above.
     optional: false,
     recurring: false,
-    requires: null,
     module: null,
     // Never in the template itself: `.claude/skills/build-app/references/
     // plan-md-template.md` is the shape, and the file appears the moment
@@ -403,7 +390,6 @@ export const JOURNEY = [
     what: "The entry point: archetype, data model, the pages the customer will use.",
     optional: false,
     recurring: false,
-    requires: null,
     module: null,
     // The four shipped areas are `beyond`; a module's parking spot under
     // `app/dashboard/` is excluded by `journeyFacts()` rather than listed here,
@@ -423,7 +409,6 @@ export const JOURNEY = [
     what: "Fetches the API key, creates the products and registers the IPN connection.",
     optional: false,
     recurring: false,
-    requires: "0.30.0",
     module: null,
     // All three, not just the key: a key with no passphrase means purchases
     // arrive nowhere, which is the failure coach routes to this skill.
@@ -443,7 +428,6 @@ export const JOURNEY = [
     what: "Sets up subscriptions, prepaid tokens with auto top-up, and subscription self-service.",
     optional: true,
     recurring: false,
-    requires: "0.14.0",
     module: null,
     // `billingMode` ships filled in as `"both"`, so the pointer alone is TRUE in
     // a fresh app and this row used to read `done` where nobody had decided
@@ -480,7 +464,6 @@ export const JOURNEY = [
     what: "Decides and builds what the customer actually receives: images, video, files behind a purchase.",
     optional: true,
     recurring: false,
-    requires: "0.7.0",
     module: null,
     // 🚨 **The recorded YES and the recorded NO were the SAME STRING, and the yes
     // lost.** This was `{ kind: "ask" }` with
@@ -527,7 +510,6 @@ export const JOURNEY = [
     what: "Produces the media a course still lacks: lesson scripts, video tooling, voiceover, subtitles.",
     optional: true,
     recurring: false,
-    requires: "0.15.0",
     module: null,
     // `content/` ships with three folders in it — `knowledge/` (the assistant's
     // handbook), `knowledge-media/` and `legal/` — so an empty `beyond` read
@@ -551,7 +533,6 @@ export const JOURNEY = [
     what: "The course itself: blocks, lessons, progress and the purchase gate.",
     optional: true,
     recurring: false,
-    requires: "0.24.0",
     module: "courses",
     trace: { kind: "module", id: "courses" },
     declined: null,
@@ -566,7 +547,6 @@ export const JOURNEY = [
     what: "What a course's customer DOES — exercises and checks, judged on the server.",
     optional: true,
     recurring: false,
-    requires: "0.9.0",
     module: "activity",
     trace: { kind: "module", id: "activity" },
     declined: null,
@@ -581,7 +561,6 @@ export const JOURNEY = [
     what: "A place for members: rooms, discussions under the pages they belong to, private messages.",
     optional: true,
     recurring: false,
-    requires: "0.19.0",
     module: "community",
     // Installed is not the same as switched on, and this row asks the first
     // question only — `config/community.json` ships OFF and stays the module's
@@ -599,7 +578,6 @@ export const JOURNEY = [
     what: "The app working alongside its customer while they work, not only delivering to them.",
     optional: true,
     recurring: false,
-    requires: "0.8.0",
     module: "companion",
     trace: { kind: "module", id: "companion" },
     declined: null,
@@ -614,7 +592,6 @@ export const JOURNEY = [
     what: "Asks first whether a native app is wanted at all, then switches the HTTP API on and ships the companion.",
     optional: true,
     recurring: false,
-    requires: "0.11.0",
     module: "api",
     trace: { kind: "module", id: "api" },
     declined: null,
@@ -629,7 +606,6 @@ export const JOURNEY = [
     what: "Picks the AI company, gets the key in, binds tasks to models and sets the prices.",
     optional: true,
     recurring: false,
-    requires: null,
     module: null,
     // 🚨 There is no `config/ai.json` in this template — the file is
     // `config/ai-models.json` and its `default.provider` ships as `"auto"`,
@@ -654,7 +630,6 @@ export const JOURNEY = [
     what: "Switches the in-app assistant on, gives her a name and writes her handbook.",
     optional: true,
     recurring: false,
-    requires: "0.10.0",
     module: null,
     // 🚨 **The switch is the wrong question.** `"enabled"` in
     // `config/ai-chat.json` ships as `true`, so a pointer at it read `done` on
@@ -699,7 +674,6 @@ export const JOURNEY = [
     what: "Designs the END USER's first session on purpose instead of inheriting the blueprint's.",
     optional: true,
     recurring: false,
-    requires: "0.4.0",
     module: null,
     // 🚨 **This was a `note` row on `docs/app.md`'s `Activation:` line, and
     // `build-app` writing that line is exactly what took the question away from
@@ -750,7 +724,6 @@ export const JOURNEY = [
     what: "The onboarding funnel, return by cohort and split tests, counted in this app's own database.",
     optional: true,
     recurring: false,
-    requires: "0.33.0",
     module: "metrics",
     // Deliberately right after 2.3j: this measures what `user-onboarding`
     // built, and its own playbook hands back to that skill. ⚠️ It sits in
@@ -774,7 +747,6 @@ export const JOURNEY = [
     what: "Turns the placeholder home page into a page that sells THIS product.",
     optional: false,
     recurring: false,
-    requires: "0.7.0",
     module: null,
     // 🚨 The marker is `features.authTitle` and not `home.features.` — that
     // string is what is really in `app/page.tsx`, and it is the ONLY marker
@@ -795,7 +767,6 @@ export const JOURNEY = [
     what: "Looks at the app the way a paying customer does, fixes what has to be fixed, writes a dated report.",
     optional: false,
     recurring: false,
-    requires: "0.4.0",
     module: null,
     // The report's NAME is the date — no file is opened. Same contract the
     // greeting's operational line keeps for the operating round.
@@ -815,7 +786,6 @@ export const JOURNEY = [
     // change is worth as much as none, and "the last big change" is not a number
     // of days. The recurring pass is the skill's own §10 (`since`).
     recurring: true,
-    requires: null,
     module: null,
     trace: { kind: "report", prefix: "security" },
     declined: null,
@@ -830,7 +800,6 @@ export const JOURNEY = [
     what: "Measures where the app is slow, fixes it, measures again and writes a dated report.",
     optional: false,
     recurring: false,
-    requires: null,
     module: null,
     trace: { kind: "report", prefix: "performance" },
     declined: null,
@@ -845,7 +814,6 @@ export const JOURNEY = [
     what: "Works out which EU rules reach this app, writes the legal pages and the evidence pack.",
     optional: false,
     recurring: false,
-    requires: null,
     module: null,
     // 🚨 **The ROUTES prove nothing: they ship.** `app/impressum/page.tsx` and
     // `app/datenschutz/page.tsx` are in the template, so a `routes` predicate
@@ -891,7 +859,6 @@ export const JOURNEY = [
     what: "Picks a host, installs its CLI, creates the app and its managed Postgres, sets every secret.",
     optional: false,
     recurring: false,
-    requires: "0.14.0",
     module: null,
     trace: { kind: "ask", why: "node run.mjs doctor --deploy answers this, not a file" },
     // 3.1 cannot be measured directly — no file says "a host was chosen". But 3.2
@@ -912,7 +879,6 @@ export const JOURNEY = [
     what: "Puts the app online and proves that a real purchase really unlocks access.",
     optional: false,
     recurring: false,
-    requires: "0.15.0",
     module: null,
     // `APP_URL` is always SET — it ships as a localhost address — so presence
     // proves nothing here and `notValue` is what carries the question.
@@ -929,7 +895,6 @@ export const JOURNEY = [
     what: "Sets an environment up over the app's own surface — accounts, plans, media, rooms — with no production password in a shell.",
     optional: true,
     recurring: false,
-    requires: "0.20.0",
     module: null,
     trace: { kind: "ask", why: "content-check --env prod answers this" },
     declined: null,
@@ -944,7 +909,6 @@ export const JOURNEY = [
     what: "Decides what tells the operator it broke, instead of a customer — then wires it up.",
     optional: true,
     recurring: false,
-    requires: "0.23.0",
     module: null,
     trace: {
       kind: "ask",
@@ -975,7 +939,6 @@ export const JOURNEY = [
     // restated as data here rather than imported, because the greeting's line
     // and this row are two readers of one habit and neither owns the other.
     recurring: true,
-    requires: "0.23.0",
     module: null,
     trace: { kind: "report", prefix: "operations", maxAgeDays: 30 },
     declined: null,
@@ -990,7 +953,6 @@ export const JOURNEY = [
     what: "Positioning, channels, launch plan, content.",
     optional: true,
     recurring: true,
-    requires: null,
     module: null,
     // 🚨 **This was the last row that could not be answered, and the answer was
     // to give the step an artifact rather than to keep asking.** It used to be a
@@ -1024,7 +986,6 @@ export const JOURNEY = [
     what: "The rules that hold around money, secrets and customer data, whatever else is being built.",
     optional: false,
     recurring: false,
-    requires: null,
     module: null,
     trace: { kind: "ask", why: "rules that apply alongside everything; never done, never open" },
     declined: null,
@@ -1039,10 +1000,6 @@ export const JOURNEY = [
     what: "Works out where the project stands, names the one next step, and routes a symptom to the skill that fixes it.",
     optional: false,
     recurring: false,
-    // Mirrored, not decided here: the skill's own text now opens on
-    // `node run.mjs journey --json` — a command that does not exist in an older
-    // copy — so its frontmatter carries `requires: 0.26.0` and this restates it.
-    requires: "0.26.0",
     module: null,
     trace: { kind: "ask", why: "a router; never done, never open" },
     declined: null,
@@ -1062,7 +1019,6 @@ export const JOURNEY = [
  *
  * @typedef {object} JourneyFacts
  * @property {number} now the clock, always passed in — nothing here reads `Date.now()`
- * @property {string|null} version this app's `package.json` version, `null` when unreadable
  * @property {Record<string, boolean>} exists per path: is it there at all
  * @property {Record<string, string|null>} text per path: the content, comments blanked for source
  * @property {Record<string, unknown>} json per path: the parsed config, `null` when absent or broken
@@ -1155,9 +1111,8 @@ export function newestReportDate(names, prefix, now = Date.now()) {
 /**
  * The states that mean "somebody still has to do this".
  *
- * ⚠️ `needs-newer-template` and `declined` are deliberately NOT in it. One is
- * impossible in this copy and the other has been answered — routing somebody at
- * either is how a path stops being believed.
+ * ⚠️ `declined` is deliberately NOT in it: it has been answered, and routing
+ * somebody at it is how a path stops being believed.
  */
 const OPEN_STATES = new Set(["open", "unknown", "stale", "blocked"]);
 
@@ -1361,23 +1316,18 @@ function traceState(row, facts) {
  * written out because each rung is a decision that reads as arbitrary until the
  * failure behind it is named.**
  *
- *  1. **`needs-newer-template` beats everything.** A row whose code is not in
- *     this copy must NEVER render as "open", or the user is routed at a feature
- *     that cannot exist — they would be told to run a skill, and then find
- *     nothing of it. `node run.mjs update` refuses the TEXT on the same value;
- *     this refuses the STEP.
- *  2. **`declined` beats `open`.** A recorded "no" is an ANSWER, not an absence.
+ *  1. **`declined` beats `open`.** A recorded "no" is an ANSWER, not an absence.
  *     This one distinction is what turns coach's rule — *"a recorded 'no' is an
  *     answer; say so and move on"* — into something a command enforces instead
  *     of a paragraph an agent is asked to remember. Re-proposing the thing
  *     somebody turned down in session one is how a coach becomes something
  *     people skip.
- *  3. **`done` / `stale` from the trace.** The disk is asked before anything is
+ *  2. **`done` / `stale` from the trace.** The disk is asked before anything is
  *     inferred: almost every step leaves a trace, and reading it is cheaper and
  *     truer than asking.
- *  4. **`blocked` when the row needs a module this app has not installed.**
+ *  3. **`blocked` when the row needs a module this app has not installed.**
  *     After the trace, because a module row's trace IS the module question.
- *  5. **otherwise `open`** — or `unknown` for a `kind: "ask"` row, because
+ *  4. **otherwise `open`** — or `unknown` for a `kind: "ask"` row, because
  *     "nobody has recorded this" and "this has not happened" are not the same
  *     claim and must not print as one.
  *
@@ -1426,17 +1376,7 @@ export function journeyState(facts = {}) {
 
 /** One row's state, in the precedence `journeyState()` documents. */
 function stateOf(row, facts) {
-  // 1. The code is not here at all.
-  //
-  // An unreadable `package.json` answers `null`, and then this rung is SKIPPED
-  // rather than applied: refusing every versioned row because one file could not
-  // be read would hide twenty-one of the thirty steps, which is the opposite of
-  // what this rung is for.
-  if (row.requires && facts.version && !versionAtLeast(facts.version, row.requires)) {
-    return "needs-newer-template";
-  }
-
-  // 2. A recorded "no".
+  // 1. A recorded "no".
   if (row.declined) {
     const text = facts.text?.[row.declined.file];
     if (typeof text === "string" && text.includes(row.declined.marker)) return "declined";
@@ -1468,11 +1408,9 @@ function stateOf(row, facts) {
  * Three properties hold it in place, each with the failure it prevents:
  *
  *   · **Only an UNANSWERED row is implied** (`OPEN_STATES`). That one line is
- *     where `needs-newer-template` beats the implication — a row whose code is
- *     not in this copy must never read `done`, or the user is told a step is
- *     behind them that their app cannot even perform — and where `declined`
- *     beats it, because a recorded "no" is an answer of its own. A row whose own
- *     trace already said `done` or `stale` keeps what it measured.
+ *     where `declined` beats the implication, because a recorded "no" is an
+ *     answer of its own. A row whose own trace already said `done` or `stale`
+ *     keeps what it measured.
  *   · **The target's state, never its facts.** This pass reads `rows`, so it
  *     inherits every rung of `stateOf()` for free and cannot grow a second
  *     opinion about what "live" means.
@@ -1508,12 +1446,9 @@ function settleImplied(rows) {
 // ── The evidence: WHY a row is in the state it is in ────────────────────────
 //
 // One short phrase per row, derived from the same facts the state came from.
-// Three of them are not free text and are quoted here so a later edit has to
+// Two of them are not free text and are quoted here so a later edit has to
 // argue with a sentence rather than with a formatting choice:
 //
-//   · `needs-newer-template` says **`needs a newer template — node run.mjs
-//     update`** and NEVER anything that reads like "open". Sending a user at a
-//     feature whose code is absent is the failure that field exists to prevent.
 //   · `blocked` NAMES `node run.mjs module add <id>`. A step that cannot start
 //     is worth one line only if the line says what would let it.
 //   · a module list that could not be read says **"could not look"** and never
@@ -1557,11 +1492,6 @@ function declinedDay(row, facts) {
  */
 function evidenceOf(row, facts, state) {
   const trace = row.trace ?? {};
-
-  // ⚠️ This exact sentence, and short enough to fit one line: the version it
-  // needs is in `row.requires` and in the `--json` shape, and a phrase that wraps
-  // is one whose second line reads `update` on its own.
-  if (state === "needs-newer-template") return "needs a newer template — node run.mjs update";
 
   if (state === "declined") {
     const day = declinedDay(row, facts);
@@ -1875,13 +1805,6 @@ export function journeyFacts(root = PROJECT_ROOT, { now = Date.now() } = {}) {
     .filter((entry) => entry.isFile())
     .map((entry) => entry.name);
 
-  let version = null;
-  try {
-    version = JSON.parse(readFileSync(at("package.json"), "utf8")).version ?? null;
-  } catch {
-    /* then no row is refused for needing newer code — see stateOf() rung 1 */
-  }
-
   let modules = null;
   try {
     modules = installedModules(root);
@@ -1889,5 +1812,5 @@ export function journeyFacts(root = PROJECT_ROOT, { now = Date.now() } = {}) {
     /* a refused list is "I could not look", never "no modules" */
   }
 
-  return { now, version, exists, text, json, dirs, env, reportNames, modules };
+  return { now, exists, text, json, dirs, env, reportNames, modules };
 }

@@ -209,11 +209,9 @@ export interface CreateMediaInput extends MediaSlot {
  * ⚠️ **`namespace` and `category` are required, and this is documented API.**
  * `docs/visuals.md` → *Selling a file* tells a vendor to call this function
  * directly, so a new required field is formally a break. For apps already
- * generated it is not: `node run.mjs update` ships text and never code, so
- * their `lib/media/` stays as it was. What can diverge is fetched text against
- * older code, and `requires:` in a skill's frontmatter is the mechanism for
- * that. Required rather than defaulted on purpose — a default would put an
- * object somewhere nobody looks and nothing would say so.
+ * generated it is not: their `lib/media/` stays as it was, and so does the text
+ * that describes it. Required rather than defaulted on purpose — a default
+ * would put an object somewhere nobody looks and nothing would say so.
  */
 export async function createMedia(input: CreateMediaInput): Promise<MediaRow> {
   // ── Validated HERE, not only in the callers above ────────────────────────

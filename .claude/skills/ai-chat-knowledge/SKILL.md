@@ -1,7 +1,6 @@
 ---
 name: ai-chat-knowledge
 description: Builds the handbook for the app's in-app AI assistant — interviews the user about the questions their customers actually ask, then writes the answers she is allowed to give. Use this when the user wants the AI chat, mentions an assistant/support bot, says "my customers should be able to ask me questions and get MY answer", "how do I know she won't say something I never said", or when the chat is switched on but answers "I do not know". Also the place to switch the chat on and give her a name.
-requires: 0.10.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -293,8 +292,8 @@ cost bug, and `docs/ai-chat.md` says where to look.
   she will pass it along. She is told not to reproduce one, and the window would
   show it to the customer as the literal characters you typed. Where you want to
   send somebody, name the menu entry — she is given the sidebar labels in every
-  language the app speaks. *(On template 0.18.0 and newer there is one more way,
-  and it is still not handbook work: a lesson she found through a registered
+  language the app speaks. *(There is one more way, and it is still not
+  handbook work: a lesson she found through a registered
   content source arrives with a ready-made link marker and becomes clickable in
   her sentence. That comes from the source's `url` + `anchor` —
   `docs/content-source.md` — with nothing to write here and nothing to switch

@@ -418,11 +418,10 @@ async function check() {
       problems.push(`"${id}" holds tables but declares no eraseFor()`);
     }
     // 🚨 The case `add` structurally cannot see: the module was fine when it
-    // went in, and the APP moved. `node run.mjs update` brings guidance
-    // forward and a customer can roll code back, so a floor that held on
-    // Monday is not a floor that holds today. Nothing else asks this — and the
-    // failure without it is not a refusal but a missing export, hours later,
-    // in whichever page happens to reach the newer code first.
+    // went in, and the APP moved. A customer can roll code back, so a floor
+    // that held on Monday is not a floor that holds today. Nothing else asks
+    // this — and the failure without it is not a refusal but a missing export,
+    // hours later, in whichever page happens to reach the newer code first.
     const tooOld = templateTooOld(manifest);
     if (tooOld) {
       problems.push(
@@ -775,8 +774,7 @@ async function remove() {
       // A numbers-only record, the same rule `cron_runs` follows: what was
       // deleted, how much of it, and when — never what was in it. It goes to
       // `docs/reports/`, which is where everything in this app that produces a
-      // verdict already writes, and which the knowledge stamp deliberately
-      // leaves alone because it is the customer's.
+      // verdict already writes, and which is the customer's.
       const written = writeRemovalRecord(id, counted);
       console.log(`·  Dropped ${counted.total} row(s) with --drop-data. Recorded in ${written}.`);
     }

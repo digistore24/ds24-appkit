@@ -33,7 +33,6 @@ type Facts = Parameters<typeof journeyState>[0];
 function state(over: Partial<NonNullable<Facts>> = {}) {
   return journeyState({
     now: NOW,
-    version: "99.0.0",
     exists: {},
     text: {},
     json: {},
@@ -209,22 +208,6 @@ describe("exactly one Next: line", () => {
       "nothing the path asks for is outstanding",
     );
     expect(lines(describeJourney(done)).filter((l) => l.startsWith("Next:"))).toHaveLength(1);
-  });
-
-  it("🚨 never proposes a row whose code is not in this copy — and says why it cannot", () => {
-    // Two halves of one rule. The row PRINTS the refusal and the command that
-    // would lift it, and it is never what `Next:` names: `OPEN_STATES` excludes
-    // `needs-newer-template` one layer down, so being routed at a feature whose
-    // code is absent is impossible rather than merely unlikely.
-    const old = state({ version: "0.1.0", exists: { "docs/plan.md": true } });
-    const out = describeJourney(old);
-    expect(out).toContain("needs a newer template");
-    expect(out).toContain("node run.mjs update");
-    const refused = old.rows.filter((row) => row.state === "needs-newer-template");
-    expect(refused.length).toBeGreaterThan(5);
-    expect(refused.map((row) => row.step)).not.toContain(old.next?.step);
-    // …and no refused row's title ever appears in the Next: sentence.
-    for (const row of refused) expect(describeNext(old)).not.toContain(row.title.en);
   });
 
   it("names the operating round in a phase-4 app", () => {

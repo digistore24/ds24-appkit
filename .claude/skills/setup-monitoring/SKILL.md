@@ -1,7 +1,6 @@
 ---
 name: setup-monitoring
 description: Decides what watches the app once it is live, then sets it up — an error tracker, full APM, an uptime check or a plain OpenTelemetry endpoint, with what each costs at THIS app's size, one recommendation rather than a market survey, and an alarm that actually reaches the operator. Use this when the user says "how would I even know if my app is down", "how do I find out something broke", "do I need Sentry", "something should tell me when it fails", "monitoring", "uptime", "alerts", "a customer saw an error and I never did", "where do I put the Sentry key", or when the app is live and nothing is watching it. Being TOLD without asking is this skill; looking now, on purpose, is `operate`.
-requires: 0.23.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -331,10 +330,8 @@ So, in this order, and **do all four parts or none of them**:
 🚨 **Until that rule exists, say it plainly: the scanner does not know this key.**
 Never *"security-check will catch it"* about a shape nobody taught it.
 
-Two facts that change what to worry about, and both are good news:
+One fact that changes what to worry about, and it is good news:
 
-- **`node run.mjs update` never touches `scripts/`.** A rule added here survives
-  every future update — that command carries text and never code.
 - **A monitoring key appearing in a log line is already redacted** before the
   error window can hand it out (`lib/diagnostics/redact.mjs` carries a DSN shape
   and a long-hex shape). If the rule you add covers a shape that file does not,

@@ -148,8 +148,7 @@ export function isDocumentationHost(host) {
  * The shipped rule set — five rows, every one of them measured above.
  *
  * A customer may extend it: this file is theirs, exactly as
- * `scripts/security/accepted.mjs` is theirs, and `node run.mjs update` carries
- * guidance text and never touches code. Whoever adds a rule re-derives the
+ * `scripts/security/accepted.mjs` is theirs. Whoever adds a rule re-derives the
  * measurement for it — a rule that fires on this tree is a rule its own reader
  * learns to skip past.
  *

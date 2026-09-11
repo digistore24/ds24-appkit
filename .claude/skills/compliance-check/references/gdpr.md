@@ -49,7 +49,7 @@ policy is only as true as the list it was drafted from.
 | Right | Art. | Where | Verify by |
 |---|---|---|---|
 | Information | 15 | member's own download; `node run.mjs data-export --email …` | run the command |
-| — and it covers learning performance | 15 | `activity_results` in BOTH exports (`docs/data-protection.md` §8b) | where `modules/activity/` exists (0.9.0+): the export carries an `activityResults` section. Older clone: not applicable, not a finding |
+| — and it covers learning performance | 15 | `activity_results` in BOTH exports (`docs/data-protection.md` §8b) | where `modules/activity/` exists: the export carries an `activityResults` section. Without it: not applicable, not a finding |
 | Rectification | 16 | `/dashboard/account`, and the Operator's user page | open the page |
 | Erasure | 17 | account deletion, both self-service and Operator | read the dialog text |
 | Restriction | 18 | blocking the account | — |

@@ -35,7 +35,7 @@ Ten checks. You do not have to know which one you want.
 | 7 | **`host`** | environment, headers, the live configuration | 5 min |
 | 8 | **`verdicts`** | judged elements: is the solution where the customer can read it | 5–10 min |
 | 9 | **`fix`** | fix the findings of the last report | depends |
-| 10 | **`since`** | the recurring pass: only what changed since the last report *(needs template 0.24.0)* | 3–10 min |
+| 10 | **`since`** | the recurring pass: only what changed since the last report | 3–10 min |
 
 **How to dispatch:**
 
@@ -117,9 +117,9 @@ every modules/*/routes/*.ts       (the v1 handlers; app/api/v1/**/route.api.ts
                                    only re-exports them)
 ```
 
-The last three joined in template 0.24.0 — all three were customer-data surfaces
-by this skill's own definition already, so naming them makes the full pass
-slightly larger and lets §10 hold its own list against this one.
+The last three are customer-data surfaces by this skill's own definition
+already; naming them makes the full pass slightly larger and lets §10 hold its
+own list against this one.
 
 Plus everything the user has built themselves — their own pages under
 `app/dashboard/`, their own tables in `db/`, their own actions. That is where
@@ -169,7 +169,6 @@ staged blobs, its rules are anchored on credential SHAPES rather than on
 variable names, and there is deliberately no entropy rule. A finding gives you
 `path:line` and never the value. What exactly it reads, and the measurement
 behind that refusal, are in **`references/checks-secrets-and-deps.md`**.
-Needs template 0.23.0.
 
 🚨 **The working tree is always covered; git HISTORY only where `gitleaks` is
 already on the machine.** They are two rungs, deliberately: the working-tree one
@@ -202,15 +201,15 @@ git tracks and reports bidirectional overrides (the Trojan Source trick — a
 host or a condition rendered as its own opposite), Unicode tag characters
 (U+E0000–U+E007F, which mirror ASCII invisibly and which several models decode
 and follow) and runs of zero-width. It matters here rather than in general
-because two doors write somebody else's text into files an agent then reads
-as INSTRUCTION — `node run.mjs update`, and the corpus `knowledge-intake`
-distils into `content/knowledge/` for the model's system block. A review is the
-control on both, and this class of character is what defeats a review. (There
-was a third, `module add --from`; that channel is gone, and the rung is not
-narrowed for it — a character pasted into any tracked file is the same finding.)
+because one door writes somebody else's text into files an agent then reads
+as INSTRUCTION — the corpus `knowledge-intake` distils into
+`content/knowledge/` for the model's system block. A review is the control on
+it, and this class of character is what defeats a review. (There was a second,
+`module add --from`; that channel is gone, and the rung is not narrowed for it
+— a character pasted into any tracked file is the same finding.)
 A finding in `CLAUDE.md`, `docs/`, `.claude/skills/` or
 `content/` is rated one step worse than the same character in code, for that
-reason. Needs template 0.32.0.
+reason.
 
 ⚠️ **Its two blind spots are named on every run, in the rung's own evidence
 line: code COMMENTS and `*.test.*` files** — this template ships three tests
@@ -235,17 +234,17 @@ reporting anything as a leaked secret, and before fixing one.
 node run.mjs security-check
 ```
 
-That is the command, not a bare `npm audit`. Six rungs of the ladder ask about
+That is the command, not a bare `npm audit`. Five rungs of the ladder ask about
 the packages: **two advisory databases** (npm, asked twice — what SHIPS and the
 whole tree — and **OSV.dev** over the versions the lockfile resolved, reporting
 only what npm did not), **`signatures`** and **`registry`** for what no advisory
-database can answer yet, and **`posture`** and **`drift`**, which are about the
-app rather than about its packages. It needs nothing installed (it answers off
+database can answer yet, and **`posture`**, which is about the app rather than
+about its packages. It needs nothing installed (it answers off
 the lockfile and says so) and `--json` gives you the same facts as data. What
 each rung measures, what it deliberately does not, its ratings, the three
-answers `npm ci --dry-run` can give, the two skips that are never findings —
-and how to fix the ones that do ship (updates, `overrides`, framework versions,
-and which eslint-chain findings are already judged and **not yours to fix**) —
+answers `npm ci --dry-run` can give — and how to fix the ones that do ship
+(updates, `overrides`, framework versions, and which eslint-chain findings are
+already judged and **not yours to fix**) —
 are in **`references/checks-secrets-and-deps.md`**. Read it before writing any
 of this up and before touching `package.json` over an audit finding.
 
@@ -271,9 +270,6 @@ Four rules hold whatever the ladder says:
   `host` does before the first deploy. An app whose report says `deps` passed
   when the registry never answered is worse than one with no report.
 
-*(If this command is not in your app, this copy of the template predates it —
-`node run.mjs update` carries text and never code. Run the two `npm audit`
-commands by hand and judge the dev-only findings as described below.)*
 
 ## 6 · `api` — the endpoints that answer without a session
 

@@ -73,9 +73,8 @@ The project ships wired for all four, and `node run.mjs agent-setup` reduces it
 to one. That order is deliberate: a fresh clone works in whichever program it is
 opened in, before anybody has run anything — the command is the tidy-up
 afterwards, never a precondition. It removes the wiring for the three programs
-not in use, records what it removed in `.agent-profile.json` so `node run.mjs
-update` does not put them back, and can restore any of it (`--agent <other>` or
-`--undo`). It never touches `.claude/skills/`, the guidance or the greeting:
+not in use, records what it removed in `.agent-profile.json`, and can restore any of
+it (`--agent <other>` or `--undo`). It never touches `.claude/skills/`, the guidance or the greeting:
 those are shared by all four. `setup-machine` runs it on the first session; the
 person building never has to know it exists.
 
@@ -139,8 +138,7 @@ its own —
 Three things follow from that, and each is deliberate. A MEDIUM or a LOW **in the
 security record** buys no line — meeting one at the start of every session for a
 week is how people learn to skip the whole block. `complete: false` buys no line
-**either**: `live` skips on every laptop for ever, `drift` skips with no network,
-and the two tier-2 rungs skip wherever their tool is not installed, so an
+**either**: `live` skips on every laptop for ever, and the two tier-2 rungs skip wherever their tool is not installed, so an
 incomplete ladder is the ORDINARY state of a developer's machine (see
 *`complete: false` is the ordinary state* above). And whenever the line does
 appear it names how many rungs were **not asked** — because "nothing found" and

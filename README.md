@@ -208,7 +208,6 @@ ones, `node run.mjs help --all` every one of them):
 | `node run.mjs logs` | follow the log of the running app |
 | `node run.mjs doctor` | check that everything needed is installed |
 | `node run.mjs ux-check` | the interface, measured: contrast in both modes, the design system, missing names, pages nothing leads to — see [`docs/ux.md`](docs/ux.md) |
-| `node run.mjs update` | fetch improved guidance for the AI agent (`CLAUDE.md`, `docs/`, skills) — your code is never touched, see [`docs/updates.md`](docs/updates.md) |
 | `node run.mjs` | the everyday commands (`help --all`: all of them) |
 
 Is something already running on port 3000 or 15432 (the database port) on your

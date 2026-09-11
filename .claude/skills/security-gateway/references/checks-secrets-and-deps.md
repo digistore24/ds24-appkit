@@ -107,10 +107,9 @@ know appears once and the tally never double-counts.
 
 Two rungs mean two answers, and that is the point: with no network you get **two**
 `⏭ not asked` blocks with two different reasons, never one skip standing for
-both. (An older copy of this app may have the npm rung only; that is a version,
-not a fault.)
+both.
 
-### The four rungs that no advisory database could answer
+### The three rungs that no advisory database could answer
 
 SKILL.md names them and gives the ratings; this is what each one actually
 measures, and — more usefully — what it deliberately does not.
@@ -171,17 +170,6 @@ nothing about what the rung answered, because the question had already been
 answered offline. 🚨 Do not write that third one up as a skipped rung: read the
 evidence line and repeat what it says.
 
-**`drift`** fetches the template's own `package.json` over the same public
-address `.template-version` carries and names the **direct** dependencies this
-app is behind on — the whole drift as ONE ℹ️ LOW finding carrying both versions,
-never one finding per package. ⚠️ In the report, do not offer `node run.mjs
-update` as the fix: that command carries guidance text and never code, so it
-would bring the paragraph describing the problem forward and leave the
-dependency exactly where it is. Raising a version is a decision somebody makes
-and then tests. `TEMPLATE_UPDATE_CHECK=off` in the `.env` and a private source
-repository (which answers 404) are both **skips with their reason**, never
-findings — and a skip goes in the report's `Checks:` header line as skipped,
-exactly as `host` does before the first deploy.
 
 ### Fixing the ones that do ship
 

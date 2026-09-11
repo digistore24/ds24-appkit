@@ -319,8 +319,6 @@ node run.mjs setup-key                    # dry run: says what it would do
 node run.mjs setup-key --apply            # mints, writes .env, prints nothing
 ```
 
-Needs template 0.27.0.
-
 It mints for an owner who **already exists** and never creates one — creating
 the first owner stays the bootstrap's act, with the bootstrap's guard. Same two
 conditions otherwise: the secret is written with `setEnvValue()` and never

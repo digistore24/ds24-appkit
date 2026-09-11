@@ -424,7 +424,7 @@ way.
 The other job that changes nothing. `node run.mjs security-check` is the command
 somebody runs when they want to know; this is the same question asked while
 nobody is at the keyboard, so that an advisory published on a Saturday is already
-known by the time anybody looks. Needs template 0.24.0.
+known by the time anybody looks.
 
 **What it asks.** The two **advisory** rungs of that command's ladder, and only
 those: `osv` (OSV.dev, over the versions `package-lock.json` resolved) and then
@@ -432,7 +432,7 @@ those: `osv` (OSV.dev, over the versions `package-lock.json` resolved) and then
 construction while `advisories` spawns npm through a runner with no timeout, and
 the rung that can hang must not be able to stop the one that cannot. Everything
 else the ladder asks — signatures, the registry heuristics, the posture checks,
-version drift, the live domain, secrets — is **not asked**, because
+the live domain, secrets — is **not asked**, because
 `npm ci --dry-run` in a temp directory and a deployed app probing its own public
 domain every night are not things to switch on for people without asking them.
 
@@ -496,8 +496,7 @@ word in a file the operator already has.
 
 The third job that changes nothing, and the one the other two are for. It reads
 four operational facts and, when any of them is open, sends **one** mail naming
-all of them, worst first. When nothing is open it sends nothing at all. Needs
-template 0.24.0.
+all of them, worst first. When nothing is open it sends nothing at all.
 
 **A mail that never arrived and a mail there was nothing to send look identical
 from an inbox**, and that is the whole reason this job exists in the shape it

@@ -24,7 +24,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { versionAtLeast } from "../dev/update-plan.mjs";
+import { versionAtLeast } from "../lib/version.mjs";
 import { installedModules } from "./installed.mjs";
 import { manifestProblems } from "./manifest.mjs";
 
@@ -124,8 +124,8 @@ export function missingRequires(manifest, installed) {
 }
 
 /**
- * The version of the CODE in this app — `package.json`, the same number
- * `node run.mjs update` compares a skill's `requires:` against.
+ * The version of the CODE in this app — `package.json`, the number a module
+ * manifest's `requiresTemplate` is held against.
  *
  * @param {string} [root]
  * @returns {string}
@@ -154,7 +154,7 @@ export function templateVersion(root = ROOT) {
  * which teaches people to edit a foreign manifest. `module check` reports the
  * distance after an update instead.
  *
- * The comparison is `versionAtLeast()` from `scripts/dev/update-plan.mjs`,
+ * The comparison is `versionAtLeast()` from `scripts/lib/version.mjs`,
  * imported rather than rewritten: a second opinion about whether a version is
  * new enough is how the two answers drift apart.
  *

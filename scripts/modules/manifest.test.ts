@@ -150,10 +150,9 @@ describe("a coherent manifest passes", () => {
     // This was LEGAL until `module add --from <url>` was removed. It existed
     // because a module this template had never heard of could have no page in
     // `docs/` — and with no way for such a module to arrive, the exception has
-    // no case left. What it costs to allow is the whole point of the rule:
-    // `node run.mjs update` addresses guidance by PATH, so a page under
-    // `modules/` freezes with its code while the rest of the app's guidance
-    // moves on, and no released app could ever bring it forward.
+    // no case left. What it costs to allow is the whole point of the rule: a
+    // page under `modules/` is not there until the module is, so an app that
+    // does not have the module could never read about it.
     expect(manifestProblems(broken({ docs: "modules/community/docs.md" }), WHERE).join(" ")).toMatch(
       /"docs"/,
     );
@@ -181,9 +180,8 @@ describe("a coherent manifest passes", () => {
     // It was a validated key that no module declared, no generator read and no
     // page documented, and it is gone rather than built: guidance has to be
     // readable in an app that does NOT have the module (that is how anybody
-    // learns it exists), and `node run.mjs update` addresses guidance by PATH —
-    // text under `modules/` could never be brought up to date in a released app.
-    // The full reasoning is beside `KNOWN` in manifest.mjs.
+    // learns it exists), and text under `modules/` is not there until the
+    // module is. The full reasoning is beside `KNOWN` in manifest.mjs.
     //
     // Asserted rather than left to the unknown-key check in general, because the
     // cheap way to "fix" a refusal somebody does not expect is to add the key

@@ -35,7 +35,6 @@ import path from "node:path";
 
 import { blankCommentsFor } from "./lib/source-text.mjs";
 import { JOURNEY } from "./dev/journey.mjs";
-import { requiresFrom } from "./dev/update-plan.mjs";
 import { availableModules } from "./modules/registry.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
@@ -49,10 +48,10 @@ const ROOT = path.join(import.meta.dirname, "..");
  * names out of the text, so a comment naming either would move the slice or add
  * a command that does not exist.
  *
- * Measured on 2026-08-15: `run.mjs` loses 247 comment lines this way and
- * `.template-version` — read through the same helper and then `JSON.parse`d —
- * comes back byte-identical, because a version stamp has nothing a comment
- * could look like.
+ * Measured on 2026-08-15: `run.mjs` loses 247 comment lines this way, and a
+ * `module.json` — read through the same helper and then `JSON.parse`d — comes
+ * back byte-identical, because plain data has nothing a comment could look
+ * like.
  */
 const read = (rel: string) => blankCommentsFor(rel, readFileSync(path.join(ROOT, rel), "utf8"));
 const list = (dir: string, ext: string) =>
@@ -81,51 +80,17 @@ function commands(): string[] {
 const COMMANDS = commands();
 
 /**
- * The skills THIS TEMPLATE shipped — never simply what is in the folder.
- *
- * 🚨 An app may hold skills that are not ours. A third party publishes one, the
- * agent drops it into `.claude/skills/`, and from that moment every assertion
- * below that reads the folder is asking our questions about somebody else's
- * file. Measured before this existed, with one throwaway folder planted: `names
- * exactly the skills that exist` and `names each skill folder once` both went
- * RED — and `CLAUDE.md` makes green the commit condition while
- * `.githooks/pre-commit` refuses on red, so installing a skill locked the
- * customer out of committing their own work. There is no way for them to fix it
- * either: the answer the test asks for is a line in `## The path`, and that
- * section is byte-capped below AND editing `CLAUDE.md` makes it `local-change`
- * for ever, which costs them every future update of the file.
- *
- * So the folder is filtered against `.template-version`, which is the record of
- * what shipped and therefore already the answer to "is this ours". A foreign
- * skill is not held to our path, our journey or our size caps — and it also
- * cannot SATISFY any of them, because it never enters `CORPUS` either: a
- * stranger's file may not be the reason a command counts as documented.
- *
- * ⚠️ Unreadable stamp ⇒ every folder counts as ours, which is what this file
- * did before. The fail-safe direction here is STRICTER, never laxer: a missing
- * stamp must not be a way to switch these checks off.
+ * The skills this test holds to the path, the journey and the size caps: every
+ * folder under `.claude/skills/`. In the template that is exactly the shipped
+ * set. ⚠️ In a customer's app a skill folder of their own lands here too — a
+ * stranger's file is then held to our path; the honest fix is a row for it or a
+ * deliberate exemption in this file, never a silent skip.
  */
 function ourSkills(): string[] {
-  const onDisk = readdirSync(path.join(ROOT, ".claude/skills")).sort();
-  let shipped: Record<string, unknown>;
-  try {
-    shipped = JSON.parse(read(".template-version")).files ?? {};
-  } catch {
-    return onDisk;
-  }
-  const ours = onDisk.filter((skill) => `.claude/skills/${skill}/SKILL.md` in shipped);
-  // A stamp that lists none of them is a stamp this code no longer understands,
-  // and answering "then nothing is ours" would turn every check below green by
-  // emptiness — the one outcome a test about omissions may never have. The
-  // count guard in the inventory block is the backstop; this is the reason it
-  // can be trusted to fire.
-  return ours.length === 0 ? onDisk : ours;
+  return readdirSync(path.join(ROOT, ".claude/skills")).sort();
 }
 
 const SKILLS = ourSkills();
-const FOREIGN = readdirSync(path.join(ROOT, ".claude/skills"))
-  .filter((skill) => !SKILLS.includes(skill))
-  .sort();
 const DOCS = list("docs", ".md");
 const CONFIGS = list("config", ".json");
 
@@ -154,26 +119,6 @@ describe("the inventory is readable at all", () => {
     expect(SKILLS.length, "no skills recognised as this template's own").toBeGreaterThan(10);
     expect(DOCS.length).toBeGreaterThan(5);
     expect(CONFIGS.length).toBeGreaterThan(3);
-  });
-
-  // 🚨 The exemption has to be legible, or it becomes a way for one of OUR
-  // skills to fall silently out of every check below — drop its line from
-  // `.template-version` and it would simply stop being asked about.
-  //
-  // What makes that impossible is that our guidance NAMES our skills: a folder
-  // this file treats as a stranger's, while `## The path` or the journey points
-  // at it, is not a stranger's at all — it is ours with a stale stamp, and the
-  // repair is the stamp rather than this list. (The journey's own half of this
-  // is `unknown` in section 6, which fires on the same fault from the other
-  // side; here is where CLAUDE.md's path is held to it.)
-  it("treats no skill of ours as a stranger's", () => {
-    const claimed = FOREIGN.filter((skill) => new RegExp(`\`${skill}\``).test(GUIDE));
-    expect(
-      claimed,
-      `not in .template-version, yet CLAUDE.md names ${claimed.join(", ")} — either ` +
-        `this skill shipped with the template and the stamp is stale (run make sync), ` +
-        `or it came from somewhere else and CLAUDE.md should not be pointing at it`,
-    ).toEqual([]);
   });
 });
 
@@ -435,45 +380,6 @@ describe("the journey covers every skill exactly once", () => {
     ).toEqual([]);
     expect(unknown, `named by JOURNEY but no such skill folder: ${unknown.join(", ")}`).toEqual([]);
     expect(twice, `named twice by JOURNEY: ${twice.join(", ")}`).toEqual([]);
-  });
-
-  it("mirrors each skill's own `requires:` rather than restating it", () => {
-    // `requires` is one claim with two readers: `node run.mjs update` refuses the
-    // TEXT of a skill this copy cannot run, and the path refuses the STEP. The
-    // frontmatter is the original and this list is a mirror — so the parser is
-    // `requiresFrom()` from update-plan.mjs, imported and never re-implemented.
-    // The factory's own `scripts/skill-requires-lint.mjs` sets that precedent
-    // explicitly, for the same reason: a second parser is a second opinion about
-    // whether a customer may read a page.
-    // ⚠️ `row.skill ?? ""` rather than a non-null assertion: the plan row has no
-    // skill and therefore no frontmatter to mirror, so it drops out of this
-    // comparison here rather than being asserted about somewhere it cannot answer.
-    const wrong = JOURNEY.filter((row) => skills.has(row.skill ?? ""))
-      .map((row) => {
-        const frontmatter = requiresFrom(CORPUS.get(`.claude/skills/${row.skill}/SKILL.md`));
-        return { skill: row.skill, row: row.requires, frontmatter };
-      })
-      .filter(({ row, frontmatter }) => (row ?? null) !== (frontmatter ?? null))
-      .map(({ skill, row, frontmatter }) => `${skill}: JOURNEY says ${row}, SKILL.md says ${frontmatter}`);
-
-    expect(
-      wrong,
-      `a mirrored value has drifted from its original — fix the row in ` +
-        `scripts/dev/journey.mjs, never the skill:\n${wrong.join("\n")}`,
-    ).toEqual([]);
-  });
-
-  it("has nine rows with no `requires:` at all, and finds them", () => {
-    // Non-vacuity for the check above. A `requiresFrom()` that answered `null`
-    // for everything — a frontmatter parser is one regex away from that — would
-    // pass the whole comparison the moment somebody "simplified" the rows to
-    // match. Nine is what the tree really holds — eight skills plus the plan row,
-    // which needs no version because `docs/plan.md` is a file rather than a
-    // feature; the number is allowed to move and the assertion is that BOTH sides
-    // move together.
-    const withRequires = JOURNEY.filter((row) => row.requires !== null);
-    expect(withRequires.length).toBe(JOURNEY.length - 9);
-    expect(withRequires.every((row) => /^\d+\.\d+\.\d+$/.test(String(row.requires)))).toBe(true);
   });
 });
 

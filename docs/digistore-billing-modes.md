@@ -124,7 +124,6 @@ Where your registry no longer holds the *shape* a test needs at all — an app
 selling a single one-off product has neither a subscription nor a token package —
 that test **SKIPS with the reason printed**, rather than turning red or, worse,
 passing for a different reason than the one it was written for.
-*(Needs template 0.25.0.)*
 
 ## Products: registry + checkout via createBuyUrl
 
@@ -145,10 +144,6 @@ environment's IPN connection.
 purchases would then unlock nothing.)
 
 ### Where the price lives, and why it is written twice
-
-*(Needs template 0.36.0. An older app has no `paymentOptions` and no
-`payplanIds`: it keeps one entry per interval and sends the price with every
-checkout call, which is what the rest of this file described before.)*
 
 **The registry AUTHORS the price. Digistore24 gets a copy.**
 

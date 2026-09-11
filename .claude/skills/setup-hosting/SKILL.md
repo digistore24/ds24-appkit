@@ -1,7 +1,6 @@
 ---
 name: setup-hosting
 description: Puts the app on a server — picks a host with the user (Railway, Render, Fly.io or DigitalOcean), says what they have to book and what it costs, and sets the whole deploy up including a managed Postgres and a domain. Use this when the user wants to deploy, go online, "put it on a server", asks which host to choose, what hosting costs, mentions Railway/Render/Fly.io/DigitalOcean, an account, a CLI, an API token or the environment variables, or when go-live reaches the hosting step.
-requires: 0.14.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 

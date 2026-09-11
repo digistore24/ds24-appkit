@@ -215,12 +215,10 @@ describe("the tooling runs on Linux, macOS and Windows", () => {
 
 // ── line endings ────────────────────────────────────────────────────────────
 //
-// Git for Windows checks out CRLF by default. Two things break silently on such
-// a clone, and neither of them announces itself:
+// Git for Windows checks out CRLF by default. What breaks on such a clone
+// breaks silently, without announcing itself:
 //
-//   * scripts/lib/env-write.mjs read every .env key back as "not set",
-//   * `node run.mjs update` classified every guidance file as "edited in this
-//     app", because the hashes in .template-version are taken over LF content.
+//   * scripts/lib/env-write.mjs read every .env key back as "not set".
 //
 // .gitattributes is what stops it, and it is one file that a refactor could
 // delete without anybody developing on Linux ever noticing.

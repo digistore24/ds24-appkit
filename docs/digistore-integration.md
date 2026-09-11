@@ -336,10 +336,6 @@ language, which is exactly the moment a purchase gets abandoned.
 }
 ```
 
-*(`paymentOptions` and `payplanIds` need template 0.36.0. Before that an
-offering carried one `priceCents` and one `billingInterval`, and monthly and
-yearly were two entries.)*
-
 **Two products here, and four payment plans — but ONE Product Key.** The
 language axis doubles the products because the order form's language is a
 property of the product. The way to pay does not: it is a payment plan ON that
@@ -460,12 +456,11 @@ Four things follow, and none of them is optional reading:
   Languages): it is your copy, and Digistore24 carries exactly what you wrote.
   The *form* around it is what follows the buyer's language.
 
-> **Since template 0.6.0.** Before that an offering had a single `productId`
-> plus a `language` field, and the order form's language was whatever the API
-> session happened to default to. And before template 0.14.0 every environment
-> shared one `productIdByLanguage` map. Both shapes are still read (as the
-> PROD set), so an older registry keeps selling, and `ds24-sync --env prod`
-> migrates them into `productIds.prod` the next time it runs — updating the
+> **Two older registry shapes are still read** (as the PROD set) — an offering
+> with a single `productId` plus a `language` field, and one
+> `productIdByLanguage` map shared by every environment — so such a registry
+> keeps selling, and `ds24-sync --env prod` migrates them into
+> `productIds.prod` the next time it runs — updating the
 > products you already have, never duplicating them, so sales and approvals
 > survive.
 

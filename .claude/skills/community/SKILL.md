@@ -1,7 +1,6 @@
 ---
 name: community
 description: Gives an app a place where its members meet — this app's own rooms, discussions hanging under its pages, gated on what people actually bought; also whether to have one at all, and an audit. Use this when the user says "my buyers should talk to each other", "I want a forum for my members", "can my customers message each other", "my people sit at home alone", "my people feel alone in the course", "move my Facebook group somewhere of my own", "who moderates this?", "add a community", or when a membership product has nothing in it but content. For WHO pays for what use `setup-digistore`; for the privacy audit of what members write, `security-gateway` and `compliance-check`.
-requires: 0.19.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -19,7 +18,7 @@ under which pages, gated on which product.
 
 ⚠️ **The community is a MODULE, and a fresh app does not have it.** Installing
 it is step 2a below (`node run.mjs module add community`, then `db-migrate`) —
-one command, not a version. Do not read its absence as an old clone.
+one command.
 
 The reference is [`docs/community.md`](../../../docs/community.md) — what the
 core guarantees, which shape fits which archetype, the recipes, and what it
@@ -75,12 +74,9 @@ of them expires because a new session started.
 
 ## 1 · `decide` — should it, and which shape?
 
-⚠️ **Not having a community is the normal state, not a defect and not an old
-clone.** `node run.mjs module list` is what says whether this app has the
-module; if it does not, that is step 2a and nothing here is blocked. The one
-case that genuinely ends the skill is an app whose tree has no
-`modules/community/` at all — cloned before the module existed. Say so then,
-and that `node run.mjs update` brings guidance but never code.
+⚠️ **Not having a community is the normal state, not a defect.**
+`node run.mjs module list` is what says whether this app has the
+module; if it does not, that is step 2a and nothing here is blocked.
 
 Read the app's archetype (`docs/app.md`, or `docs/product-brief.md`), take the
 matching row from
@@ -154,7 +150,6 @@ waits to be judged. Neither is needed to open a community, and switching either
 on is a decision about how the rooms are policed rather than about whether they
 exist. What they do, and the two floors no setting can configure away, is
 [`docs/community.md`](../../../docs/community.md) → *The spam loop*.
-Needs template 0.31.0.
 
 🚨 **The third is `newMember`, and it is the one that is already on.** Those two
 are reactive — somebody has to be bothered and report — and that is enough only
@@ -163,7 +158,7 @@ new **and** holds no purchased access, which in an app selling access to its
 community is nobody, and in one with an `open` room is everybody at the door.
 Leave it alone unless the user asks; if they do, or if this app will have an open
 room, the section is [`docs/community.md`](../../../docs/community.md) → *The
-floor under a free room*. Needs template 0.34.0.
+floor under a free room*.
 
 **c. The rooms — created in the RUNNING app, not in code.** Start the app
 (`node run.mjs start`) and create them at `/dashboard/admin/community` as the
@@ -237,7 +232,7 @@ never a billing table.
   bought something. Before you create the first open room, read
   `docs/community.md` → *The floor under a free room*, and say to the operator in
   one sentence what it does and what it does not (it delays an abusive signup, it
-  does not make one expensive). Needs template 0.34.0.
+  does not make one expensive).
 - **`plan`** — product keys from `config/digistore-products.json`. 🚨 **Never
   invent a key.** They are validated when the group is saved
   (`groupPlanProblems()`) because `hasPlan()` **throws** on a key it does not
@@ -287,7 +282,7 @@ Four hunts, in this order. Each says what it reads.
    be judged"; that page asks "who is silenced right now" — and somebody can be
    silenced with an empty queue, because a block is derived from reports a
    moderator has already stopped looking at. ❌ HIGH on a member silenced longer
-   than a few days that nobody has looked at. Needs template 0.31.0.
+   than a few days that nobody has looked at.
 4. **The dev-only rooms** — the content-in-PROD trap. Rooms are rows and rows
    do not travel with a deploy, so the deployed app can serve a clean 200 over
    an empty community. **Be honest about how this is checked: there is no
@@ -311,7 +306,7 @@ Four hunts, in this order. Each says what it reads.
    copy and the two warnings that go with it.
    ⚠️ Say the limit out loud rather than selling it: this raises the LATENCY of
    an abusive signup, not its cost. Accounts made today and used on Wednesday
-   walk through. Needs template 0.34.0.
+   walk through.
 
 Findings in the house shape (🚨/❌/⚠️/ℹ️ · Where · Why · Fix · Evidence), and
 the verdict goes dated into `docs/reports/` **every time** — a solo `check`

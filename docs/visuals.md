@@ -2,11 +2,6 @@
 
 # Media — pictures, video, recordings, and the files you sell
 
-> **Needs template 0.7.0 or newer.** `lib/media/` and the `image` task arrived
-> with it. If `node run.mjs media-check` is not a command your app has, this
-> document is describing code you do not carry yet — `node run.mjs update`
-> brings the text, not the code, so the way to get both is a newer template.
-
 Everything your app puts in front of a customer that is not text goes through
 one place: `lib/media/`. Four kinds — **image, video, audio, file** — one store,
 and four answers to "who may fetch this".

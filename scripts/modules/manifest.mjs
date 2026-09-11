@@ -135,19 +135,11 @@ const KNOWN = new Set([
 //     out the community exists and is one command away. Guidance that arrived
 //     with the module would only be readable once somebody already knew to
 //     install it.
-//   - **The update channel is addressed by PATH.** `node run.mjs update` and
-//     `.template-version` cover `CLAUDE.md`, `docs/*.md` and
-//     `.claude/skills/**` — text under `modules/` is not in that manifest, so a
-//     module's own guidance would be the one guidance in the app that a released
-//     app could never bring up to date.
-//   - A skill that needs code the app does not have already has its answer, and
-//     it is a version rather than a location: `requires:` in its frontmatter.
 //
-// So the seam that is missing here is missing because it should be. Whoever
-// wants module-local guidance changes the update channel first, and that is a
-// decision about how released apps get text — not a manifest field.
-// `docs/modules.md` → *Where a module's guidance lives* carries this for the
-// customer.
+// So the seam that is missing here is missing because it should be: where a
+// module's guidance lives is a decision about how an agent learns what the app
+// could have — not a manifest field. `docs/modules.md` → *Where a module's
+// guidance lives* carries this for the customer.
 //
 // ── What changed, and what did NOT ──────────────────────────────────────────
 //
@@ -159,12 +151,9 @@ const KNOWN = new Set([
 // removed: no module arrives from outside any more, so the exception has no
 // case left to serve and it is gone with it.
 //
-// What that restores is the plain rule: *"the update channel is addressed by
-// PATH"*. `scripts/dev/update.mjs` plans over
-// `keys(remote.files) ∪ keys(stamp.files)`, and a page under `modules/` is in
-// neither — so it would freeze with its code while every other line of guidance
-// in the app moved on. That is the one failure the update channel exists to
-// prevent, and now nothing can opt out of it.
+// What that restores is the plain rule: a module's page lives in `docs/`, next
+// to every other page, where an app that does not have the module can read it
+// — and now nothing can opt out of it.
 //
 // The `skill` key is untouched and still points at `.claude/skills/`: that path
 // is Claude Code's and OpenCode's, not ours. It stays optional — a module may
@@ -274,9 +263,8 @@ export function manifestProblems(raw, where) {
   // ⚠️ **This is not `guidance` coming back** (removed above, and it should stay
   // removed). A module does not SHIP guidance; these two fields POINT at the
   // core tree's, which is exactly what that note argues guidance is for:
-  // `docs/*.md` and `.claude/skills/**` are addressed by path by
-  // `node run.mjs update`, so a released app can bring them forward, and an app
-  // can read about a module it does NOT have.
+  // `docs/*.md` and `.claude/skills/**` are where an app can read about a
+  // module it does NOT have.
   //
   // What was missing was the pointer. Every one of the four modules has a page
   // and a skill; nothing named them, so `module list` could say what a module is
@@ -290,13 +278,13 @@ export function manifestProblems(raw, where) {
   // second — `modules/<id>/docs.md` — for a module this template did not write,
   // back when `module add --from <url>` could bring one in. That channel is
   // gone, so every module is ours, and the rule beside KNOWN applies without an
-  // exception: `node run.mjs update` addresses guidance by PATH, so a page under
-  // `modules/` is the one guidance a released app could never bring forward.
+  // exception: a page under `modules/` is readable only in an app that already
+  // has the module.
   const docs = m.docs;
   if (typeof docs !== "string" || !/^docs\/[a-z0-9-]+\.md$/.test(docs)) {
     say('"docs" must name this module\'s page in the CORE tree, e.g. ' +
-      '"docs/community.md" — that is where `node run.mjs update` keeps it current. ' +
-      "A page under modules/ freezes with the code and can never be brought forward");
+      '"docs/community.md" — that is where an app reads about a module it does not have. ' +
+      "A page under modules/ is only readable once the module is installed");
   }
   if (m.skill !== undefined && (typeof m.skill !== "string" || !ID.test(m.skill))) {
     say('"skill" must be the name of a skill in .claude/skills/, e.g. "community" — it is the ' +

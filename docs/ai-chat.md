@@ -352,7 +352,7 @@ writes either one herself.
 | | Where the whitelist comes from | What it renders as |
 |---|---|---|
 | `[media:path\|label]` | the loaded **handbook** — static, the same for everybody | a small suggestion card (a video, a worksheet) |
-| `[link:path\|label]` *(template 0.18.0+)* | **this answer's own lookups** — the pages a registered content source returned for this member, this turn | an in-app link *inside the sentence* |
+| `[link:path\|label]` | **this answer's own lookups** — the pages a registered content source returned for this member, this turn | an in-app link *inside the sentence* |
 
 So she can now say *"das Thema wird in **Lektion 3: Knoten binden** erklärt"*
 with the title clickable — but only about content she actually looked up, and

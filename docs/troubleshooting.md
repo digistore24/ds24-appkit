@@ -147,10 +147,7 @@ local     test_pgdata          ← the old app's data, adopted by the new one
 
 The template now derives the project name from the folder's **path** instead and
 records it in `.env` as `COMPOSE_PROJECT_NAME` (`scripts/db/compose.mjs`), so two
-same-named folders are two databases. An app generated before that carries the
-old behaviour — a released app's code is never changed behind its back, and
-`node run.mjs update` brings this text forward, not the fix. Whether yours has
-it is one look: is there a `COMPOSE_PROJECT_NAME` line in your `.env`?
+same-named folders are two databases.
 
 For an app that has already adopted a stranger's volume the way out is one
 command, **as long as the database holds nothing you want to keep**:
@@ -344,7 +341,7 @@ So: a clean audit summary is not worth a crash in somebody's app, and neither
 override buys one honestly. If a finding in that chain is being reported to you,
 report it as known and dev-only, say what `npm audit --omit=dev` answers, and
 leave it. The way out is upstream — `eslint-config-next` moving its plugins off
-`minimatch@3` — and `node run.mjs update` brings this page along when it does.
+`minimatch@3`.
 
 `package.json` is JSON and holds no comments, so the reasoning for every
 `overrides` entry lives in **`scripts/deps.test.ts`** instead, the same way the
@@ -389,8 +386,7 @@ because each ingredient looks harmless alone:
   mails look like* exists to keep this ingredient out entirely — and it is
   **enforced**: STAGING/PROD refuse to start on a foreign or missing sender
   (`lib/env-guard.ts`), so meeting this ingredient today means somebody set
-  `EMAIL_FROM_FOREIGN_DOMAIN` and accepted the risk, or the app predates the
-  guard.
+  `EMAIL_FROM_FOREIGN_DOMAIN` and accepted the risk.
 
 **Getting off the list** is a review request, and only the domain owner can
 file it:
@@ -456,12 +452,10 @@ link. Behind DigitalOcean App Platform's router the container sees itself as
 that is what went into the mail. Every gate stays green: it is a correct 307 to
 a correct path on the wrong origin.
 
-**On template 0.28.0 and newer this cannot happen**: `AUTH_URL` is derived from
-`APP_URL` at startup (`lib/auth/auth-url.mjs`), so everything the app mails out
-carries the address the app says it has, and STAGING/PROD refuse to start with
-no `APP_URL` at all. On an older app, set `AUTH_URL` on the host to the same
-value as `APP_URL` — origin only, no path, no trailing slash — or bring the code
-forward. `AUTH_TRUST_HOST` stays as it is; it answers a different question.
+**This app is guarded against it**: `AUTH_URL` is derived from `APP_URL` at
+startup (`lib/auth/auth-url.mjs`), so everything the app mails out carries the
+address the app says it has, and STAGING/PROD refuse to start with no `APP_URL`
+at all. `AUTH_TRUST_HOST` stays as it is; it answers a different question.
 
 **If you set `AUTH_URL` by hand, it must match `APP_URL`.** Two variables
 naming the app's address and disagreeing is refused at startup rather than
@@ -534,14 +528,6 @@ look at, and a job answers nobody. Its only signal is the line it writes:
 `node run.mjs errors` reads that line now, locally and with `--url` against a
 deployed app — and so does every other line this app writes in the same shape,
 `[media]`, `[ipn]`, `[chat]`, `[ops]` and the rest.
-
-🚨 **It did not always.** The parser anchored on lines that BEGIN with an
-error, and this one begins with `[cron]` — so an app cloned before this
-paragraph existed answers `✓ No errors in the log` over a scheduler that has
-been down for a week. Check your own copy before you trust a green answer:
-`lib/diagnostics/parse.mjs` names `PREFIXED_ERROR` if it has the fix.
-`node run.mjs update` cannot bring it — that command moves guidance, never
-code — so it is a fresh clone or the four lines by hand.
 
 **Two limits worth knowing before you read a green answer as health:**
 

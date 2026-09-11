@@ -1,12 +1,9 @@
 # Alle drei Systeme sehen dieselbe Datei — LF, überall.
 #
 # Git for Windows setzt core.autocrlf=true als Voreinstellung. Ohne diese Datei
-# bekommt ein Windows-Klon jede Textdatei mit CRLF, und zwei Dinge brechen still:
-#
-#   * scripts/lib/env-write.mjs liest die .env nicht mehr (sie entsteht aus
-#     .env.example, und deren Zeilenenden erbt sie),
-#   * `node run.mjs update` hält jede Guidance-Datei für vom Kunden verändert —
-#     die Hashes in .template-version sind über LF-Inhalt gebildet.
+# bekommt ein Windows-Klon jede Textdatei mit CRLF, und scripts/lib/env-write.mjs
+# liest die .env nicht mehr (sie entsteht aus .env.example, und deren
+# Zeilenenden erbt sie).
 #
 # `eol=lf` erzwingt LF im Arbeitsbaum, unabhängig von der lokalen Git-Config.
 # Auf Linux und macOS ändert das nichts: dort liegt ohnehin LF.

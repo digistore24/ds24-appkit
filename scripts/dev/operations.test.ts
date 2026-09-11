@@ -279,9 +279,8 @@ describe("one line, worst first, ending in the worst one's command", () => {
   });
 
   it("says nothing for an empty list, and takes null as readily as an array", () => {
-    // The `describe(null)` trap `scripts/dev/update-check.mjs` records: a default
-    // parameter covers `undefined` only, and the first real run of this file is
-    // inside a session hook.
+    // The `describe(null)` trap: a default parameter covers `undefined` only,
+    // and the first real run of this file is inside a session hook.
     expect(describeOperations([])).toBe("");
     expect(describeOperations(null)).toBe("");
     expect(describeOperations(undefined as never)).toBe("");

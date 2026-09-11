@@ -184,8 +184,6 @@ installed*: an app without the module and an app with it and no lessons both hol
 zero lessons, and reading the second as "all your lessons are new" would propose
 a publish into a database with no `courses_units` table.
 
-Needs template 0.24.0.
-
 ### There is already one under a different slug
 
 A sixth section appears only when there is something in it: **same subject,
@@ -264,8 +262,6 @@ conversation.
 Whichever way it goes, **one line in `docs/app.md`** under the decisions: both
 slugs, which way it went, and why. Three sessions later that line is the only
 thing that says the alternative was considered.
-
-Needs template 0.24.0.
 
 ## Which shape is this vendor's course?
 
@@ -464,8 +460,7 @@ The same rule, on the page that has to keep it: [`docs/salespage.md`](salespage.
 | `docs/visuals.md` → *Selling a file* | the worksheets behind the purchase |
 | `docs/entitlements.md` | what `hasPlan()` answers, and what it does not |
 
-**Interactive elements.** *Needs template 0.9.0 or newer — `node run.mjs
-update` brings the text, not the code.* A game or a self-check per block —
+**Interactive elements.** A game or a self-check per block —
 recipes A and B in [`docs/learning.md`](learning.md), which also maps every
 element back to its shape. The element's `subject` is the **unit's slug**
 (`"wehen-atmung"`), the same string a `<CompanionPanel subject=…>` on that
@@ -488,7 +483,7 @@ when deciding whether it is Fernunterricht
 ([`docs/compliance.md`](compliance.md) §6.5). A vendor who wants one is asking a
 licensing question as well as a design one.
 
-**Expose it to AI.** *Needs template 0.16.0 or newer.* This exact schema is
+**Expose it to AI.** This exact schema is
 the worked example in [`docs/content-source.md`](content-source.md) — one
 registry entry and the AI chat can search the lessons and deep-link
 `/dashboard/course/<slug>#<anchor>`. Render the anchors from day one
@@ -605,8 +600,7 @@ all.
 | `docs/entitlements.md` | reading the grant the start date comes from |
 | `CLAUDE.md` → *Access* | the compare-on-read pattern this rule copies |
 
-**Interactive elements.** *Needs template 0.9.0 or newer.* A self-check
-closing each week — recipe B in [`docs/learning.md`](learning.md); `subject`
+**Interactive elements.** A self-check closing each week — recipe B in [`docs/learning.md`](learning.md); `subject`
 = the week's slug (`"woche-7"`).
 
 **What this shape cannot do.** Moving one learner's start date without an
@@ -801,8 +795,7 @@ unchanged.
 | `lib/digistore/ipn.test.ts`, `buyUrl.test.ts` | the shape of the tests |
 | `modules/courses/cron.ts` | the daily digest — **the module brings it**; it ships OFF, and the section below says how to switch it on |
 
-**Interactive elements.** *Needs template 0.9.0 or newer.* At most an
-optional self-check per week — recipe B in [`docs/learning.md`](learning.md),
+**Interactive elements.** At most an optional self-check per week — recipe B in [`docs/learning.md`](learning.md),
 whose recipe C draws the line this shape lives on: the check judges its own
 questions, **never the submitted text**.
 

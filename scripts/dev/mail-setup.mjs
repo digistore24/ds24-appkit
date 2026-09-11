@@ -32,7 +32,7 @@ const ENV_FILE = ".env";
 // `rl.question` never returns, and `askRequired` below then loops on an empty
 // answer forever: the command does not fail, it hangs until something outside
 // kills it. Refused here, at the top, before a single value is asked for, and
-// with the way through named. Same contract as `node run.mjs update`.
+// with the way through named.
 if (!process.stdin.isTTY) {
   console.error("✗ mail-setup asks questions and needs a terminal to ask them in.");
   console.error("  Nothing changed. Either the user runs it themselves:");

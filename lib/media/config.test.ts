@@ -216,9 +216,9 @@ describe("mediaStoreProblems", () => {
 // Added after a code review measured it. `mediaConfigProblems()` grew a check
 // for image formats `exif.ts` cannot strip, and `isMediaEnabled()` was
 // `enabled && problems.length === 0` — so `image/gif`, which every app
-// generated before that change still carries (because `node run.mjs update`
-// deliberately never touches `config/`), turned the media feature OFF: uploads
-// 503 and every already-stored item 404, photographs and GIFs alike.
+// generated before that change still carries in its own `config/`, turned the
+// media feature OFF: uploads 503 and every already-stored item 404,
+// photographs and GIFs alike.
 //
 // The rule these tests hold in place: a configuration mistake refuses what it
 // is about, and never stops delivery of what is already in the bucket.

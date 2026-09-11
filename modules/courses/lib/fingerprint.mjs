@@ -43,8 +43,8 @@
 // SHA-256, lowercase hex, all 64 characters, never truncated. `node:crypto` is
 // what `template/CLAUDE.md` → *Three systems* prescribes in place of `openssl`,
 // and it behaves identically on Linux, macOS and Git Bash. Nothing in this
-// template truncates an identity hash — `.template-version`, `media.sha256`, the
-// API and setup key hashes are all full 64-char hex, and
+// template truncates an identity hash — `media.sha256`, the API and setup key
+// hashes are all full 64-char hex, and
 // `scripts/content/_manifest.mjs` validates a stored content hash as
 // `/^[0-9a-f]{64}$/`. Sixty lessons × 64 chars is under four kilobytes, so there
 // is no payload reason to depart from the house shape.
@@ -210,16 +210,15 @@ export const FINGERPRINT_VERSION = "courses-unit-v2";
  * Line endings out, and **`null` survives as `null`**.
  *
  * Not tidiness. `docs/portability.md` → *Line endings* carries the measured failure: Git
- * for Windows checks text out as CRLF, and because the `.template-version`
- * hashes are taken over LF content, every guidance file looked "edited in this
- * app" and `node run.mjs update` did nothing, for ever. The rule that came out
- * of it is an instruction — *normalise before hashing* — and this is a hash over
- * text that travels between a Windows checkout and a Linux server.
+ * for Windows checks text out as CRLF, so a hash taken over LF content says
+ * "changed" about a file nobody touched. The rule that came out of it is an
+ * instruction — *normalise before hashing* — and this is a hash over text that
+ * travels between a Windows checkout and a Linux server.
  * `.gitattributes` makes the REPO side LF; the fingerprint is computed over what
  * the DATABASE holds, which is whatever the applier was handed on whatever
  * machine ran it. Normalising here is what makes those two agree.
  *
- * 🚨 `normalizeText()` from `scripts/dev/update-plan.mjs` is the precedent and
+ * 🚨 `normalizeText()` from `scripts/core/export-plan.mjs` is the precedent and
  * is deliberately NOT imported. Two reasons, both silent: its `String(text ?? "")`
  * turns `null` into `""`, collapsing the one distinction the fingerprint must
  * keep (no body vs. an empty body) — and no test that only feeds it strings

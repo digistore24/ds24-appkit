@@ -1,15 +1,7 @@
 ---
 name: setup-machine
 description: Gets this machine ready to develop the app — checks what is missing (Node, git, optionally Docker and cloudflared), installs it after asking, and prepares the project — Linux, macOS and Windows alike. Use this on the first run in a fresh clone, whenever the session start reports `setup=blocked`, and whenever a command fails with something like "node: command not found", "docker: not found", "npm not found", "the database does not answer" or "cannot connect". Also use it when there is NO session greeting at all, or a startup hook error mentioning `node` — that is a machine without Node, and this skill installs it.
-requires: 0.20.0
 ---
-<!-- requires: raised from 0.2.0 when Gemini CLI was replaced by Antigravity CLI.
-     Step 5b names `--agent antigravity`, and that value lives in
-     scripts/dev/agent-configs.mjs — which is CODE, and `node run.mjs update`
-     ships text only. Without this line an app from before the change would take
-     the new instructions and run a flag its own copy does not have, failing with
-     "Unknown program". Refused is the right answer there: it keeps the old text,
-     which matches the old code. -->
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
 # Getting this machine ready

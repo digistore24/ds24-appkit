@@ -2,9 +2,7 @@
 
 # Interactive elements — games, checks, and work that gets judged
 
-> Needs template 0.9.0 or newer — `node run.mjs update` brings the text, not
-> the code. `modules/activity/` and `<ActivityPanel>` are what this file builds
-> on; an older clone reads a description of code it does not carry.
+> `modules/activity/` and `<ActivityPanel>` are what this file builds on.
 >
 > **And it is a MODULE.** A fresh app does not have it — `node run.mjs module
 > add activity`, then `node run.mjs db-migrate`. Until then its code is in the

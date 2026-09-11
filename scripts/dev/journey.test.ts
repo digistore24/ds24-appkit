@@ -18,9 +18,8 @@
 // `scripts/lib/source-text.test.ts` records after a guard shipped for months
 // with a needle no file could contain.
 //
-// The complementary half — is the DATA complete, does every skill appear, does
-// every `requires` mirror its frontmatter — is in `scripts/docs-coverage.test.ts`,
-// where the rest of the inventory checks live.
+// The complementary half — is the DATA complete, does every skill appear — is
+// in `scripts/docs-coverage.test.ts`, where the rest of the inventory checks live.
 import { describe, expect, it } from "vitest";
 
 import {
@@ -44,16 +43,10 @@ type Facts = Parameters<typeof journeyState>[0];
  * The DEFAULTS are the fresh-clone state, so every fixture below is written as
  * "a fresh app, except…" — which is how the fixtures stay readable and how a new
  * row added to `JOURNEY` lands in every one of them at once.
- *
- * ⚠️ `version` is a version the whole path fits inside on purpose. The rows'
- * `requires` values are mirrored from the skills and the newest of them moves
- * with the template; a fixture pinned to today's number would start refusing
- * rows the day somebody ships a skill needing more.
  */
 function facts(over: Partial<NonNullable<Facts>> = {}): Facts {
   return {
     now: NOW,
-    version: "99.0.0",
     exists: {},
     text: {},
     json: {},
@@ -484,25 +477,6 @@ describe("a live app", () => {
     expect(state.next?.step).toBe("3.1");
   });
 
-  it("🚨 never reads done on a copy whose code is not there", () => {
-    // Precedence: `needs-newer-template` beats the implication, because telling
-    // somebody a step is behind them on an app that cannot perform it at all is
-    // worse than the `unknown` this replaced — it looks like an achievement.
-    //
-    // ⚠️ What this fixture can and cannot prove, said rather than implied: on an
-    // old copy BOTH rows are refused (`go-live` needs 0.15.0, `setup-hosting`
-    // 0.14.0 — the target's bar is the higher one, so no real version refuses the
-    // row while the target is done). So this measures that a refused row reads
-    // the refusal and never `done`; the guard itself is one line in
-    // `settleImplied()` — only an OPEN state is implied — and it is argued there
-    // rather than reachable from here.
-    const old = journeyState(facts({ ...live, version: "0.13.0" }));
-    const hosting = old.rows.find((row) => row.skill === "setup-hosting")!;
-    expect(hosting.state).toBe("needs-newer-template");
-    expect(hosting.state).not.toBe("done");
-    expect(hosting.evidence).toContain("node run.mjs update");
-  });
-
   it("🚨 puts no .env value into the implied row's evidence", () => {
     // The implication's proof is `APP_URL`, and the journey prints the KEYS of the
     // .env and never their contents. A sentence quoting the domain would be that
@@ -578,7 +552,7 @@ describe("an app halfway through phase 2", () => {
   });
 });
 
-// ── 2. declined beats open ─────────────────────────────────────────────────
+// ── 1. declined beats open ─────────────────────────────────────────────────
 
 describe("a recorded no is an answer, not an absence", () => {
   const noIdentity = { text: { "docs/app.md": "## Decisions\n\nNo custom identity — the shipped look is fine.\n" } };
@@ -658,49 +632,7 @@ describe("a recorded no is an answer, not an absence", () => {
   });
 });
 
-// ── 1. needs-newer-template beats everything ───────────────────────────────
-
-describe("a row whose code is not in this copy", () => {
-  it("says so rather than reading as open", () => {
-    // 🚨 The load-bearing case. Rendering this as "open" would route somebody at
-    // a skill whose code is not there — they would be told to do a thing and then
-    // find nothing of it. `node run.mjs update` refuses the TEXT on exactly this
-    // value; this refuses the STEP.
-    expect(stateOf({ version: "0.9.0" }, "design")).toBe("needs-newer-template");
-    expect(stateOf({ version: "0.9.0" }, "design")).not.toBe("open");
-    expect(stateOf({ version: "0.9.0" }, "operate")).toBe("needs-newer-template");
-  });
-
-  it("beats a recorded no, and beats a trace that says done", () => {
-    // Precedence 1 over 2 and over 3. A refusal recorded in an app that cannot
-    // run the feature is still a refusal about something that is not there, and
-    // saying "declined" would imply the choice was available.
-    const old = {
-      version: "0.9.0",
-      text: { "docs/app.md": "No custom identity", "docs/design.md": "chosen" },
-      exists: { "docs/design.md": true },
-    };
-    expect(stateOf(old, "design")).toBe("needs-newer-template");
-  });
-
-  it("leaves a row alone whose requires this copy satisfies exactly", () => {
-    // The needle for the version comparison: `>=`, not `>`. An off-by-one here
-    // would refuse every row on the version that introduced it.
-    expect(stateOf({ version: "0.25.0" }, "design")).toBe("open");
-    expect(stateOf({ version: "0.4.0" }, "ux-gateway")).toBe("open");
-  });
-
-  it("refuses nothing at all when the version could not be read", () => {
-    // "I could not look" is not "your app is too old". Refusing twenty-one of the
-    // thirty rows because `package.json` was unreadable would hide the path
-    // rather than protect it.
-    const state = journeyState(facts({ version: null }));
-    expect(state.rows.filter((row) => row.state === "needs-newer-template")).toEqual([]);
-    expect(state.next?.step).toBe("1.4");
-  });
-});
-
-// ── 3. done and stale from the trace ───────────────────────────────────────
+// ── 2. done and stale from the trace ───────────────────────────────────────
 
 describe("a recurring row expires", () => {
   it("is done inside its window and stale past it", () => {
@@ -766,7 +698,7 @@ describe("newestReportDate", () => {
   });
 });
 
-// ── 4. blocked, and the difference between two kinds of no ─────────────────
+// ── 3. blocked, and the difference between two kinds of no ─────────────────
 
 describe("a row that needs a module", () => {
   it("is blocked while the module is absent", () => {
@@ -942,20 +874,10 @@ describe("every row says why it is in the state it is in", () => {
   it("gives every row a non-empty phrase, in every fixture", () => {
     // A blank evidence column reads as "nothing was looked at", which is the one
     // thing this whole file exists to stop a command saying by accident.
-    for (const over of [{}, SHIPPED_DEFAULTS, { version: "0.9.0" }, { modules: null }]) {
+    for (const over of [{}, SHIPPED_DEFAULTS, { modules: null }]) {
       const blank = journeyState(facts(over)).rows.filter((row) => !String(row.evidence ?? "").trim());
       expect(blank.map((row) => row.skill ?? row.step)).toEqual([]);
     }
-  });
-
-  it("🚨 never says a version-refused row is open — it names the update", () => {
-    // The load-bearing sentence. Sending somebody at a feature whose code is not
-    // in their copy is exactly what this state exists to prevent, and the
-    // evidence is where that reaches the user.
-    const row = journeyState(facts({ version: "0.9.0" })).rows.find((r) => r.skill === "design")!;
-    expect(row.state).toBe("needs-newer-template");
-    expect(row.evidence).toContain("node run.mjs update");
-    expect(row.evidence).not.toContain("open");
   });
 
   it("🚨 tells a missing module apart from a module list nobody could read", () => {

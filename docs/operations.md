@@ -38,7 +38,6 @@ no gate either.
 | Data that ages out | the pruning jobs · `node run.mjs db-prune-ipn` / `db-prune-ai` | the jobs do it; you check once that they are |
 | Backups | **this app makes none** — the managed Postgres you booked does | when you book it, and before a risky migration |
 | Being told instead of asking | skill `setup-monitoring` · the `ops-watchdog` job · the greeting | once, at go-live |
-| Keeping this guidance current | `node run.mjs update` | when the greeting says something is new |
 | A message nobody recognises | [`docs/troubleshooting.md`](troubleshooting.md) | when it happens |
 
 ## Where am I, and what comes next
@@ -49,8 +48,8 @@ node run.mjs journey --next   # the two sentences alone
 node run.mjs journey --json   # the same facts, for an agent
 ```
 
-Needs template 0.26.0. The four phases, every step in them, what state each one is
-in and **why** — read off this app's own files on every call. It measures nothing, asks no network and
+The four phases, every step in them, what state each one is in and **why** —
+read off this app's own files on every call. It measures nothing, asks no network and
 **writes nothing at all**: there is no cache, no stamp, no "last seen" file. What
 proves a step done is a file that is already there, so a derived answer can never
 be stale, and a cache of a cache would be a second truth with its own TTL.
@@ -64,10 +63,8 @@ command exists rather than a paragraph somewhere:
   template"* — never a sentence written in advance.
 - **A recorded "no" stays visible** (`you said no, 2026-08-09`) and is never
   proposed again. A refusal nobody can see is a refusal nobody can revoke.
-- **A step whose code is not in this copy says so** and names
-  `node run.mjs update`, rather than sending you at a feature that is not there.
-  Same for a step that needs a module: it names the `module add` that would
-  install it — and a module list it could not READ says *could not look*, never
+- **A step that needs a module names the `module add` that would
+  install it** — and a module list it could not READ says *could not look*, never
   *not installed*.
 - **The ten optional extras are a count and a question**, not ten rows. A shelf
   offered in order is a checklist, and a checklist is how somebody ends up
@@ -92,7 +89,7 @@ failing or stalled, what its pages are hiding behind a 200, whether its media
 store answers, and when the last payment notification arrived. Each of those has
 a finer command further down this page; this is the one that asks them together,
 and it is the right first move when the question is *"is something wrong?"*
-rather than *"is this particular thing wrong?"*. Needs template 0.24.0.
+rather than *"is this particular thing wrong?"*.
 
 **How the answer is misread.** Exit **2** means *there was no address to ask* —
 it prints `✗ Could not look — …` on stderr and never a `✓`. An unreachable app
@@ -116,7 +113,7 @@ node run.mjs security-check --url https://your-app.example   # and the live doma
 A ladder of independent checks — the advisory databases, package signatures, the
 public registry, this app's own defences, the files git is about to publish, and
 what a stranger receives from the real domain — with one verdict and one exit
-code. Needs template 0.21.0; the rung that asks the live domain needs 0.23.0.
+code.
 Every rung is described in `CLAUDE.md` → *Local commands*, and the judgement
 half — severities, what to fix, what to accept in writing — is the skill
 [`security-gateway`](../.claude/skills/security-gateway/SKILL.md), which writes
@@ -188,8 +185,7 @@ Work with no request behind it: deleting what has aged out, closing what nobody
 closed, asking the advisory databases, mailing you when something has quietly
 stopped. `--list` says which jobs this app has, when each last finished and
 which are failing; an enabled job that has never run and a non-zero failure
-count are marked as findings and counted in one closing line. Needs template
-0.22.0 for `--url`.
+count are marked as findings and counted in one closing line.
 
 ⚠️ **`--list` exits 0 whatever it finds, deliberately** — on a freshly deployed
 app every enabled job reports *never run*, and an exit code there would fail a
@@ -203,7 +199,7 @@ with, and which of them mail you, is `CLAUDE.md` → *Scheduled jobs*.
 
 ```bash
 node run.mjs content-check --env prod
-node run.mjs content-publish --env prod --apply    # needs template 0.24.0
+node run.mjs content-publish --env prod --apply
 node run.mjs kb-check
 ```
 
@@ -255,7 +251,7 @@ newest dated report, and — the line it exists for — what it would **not**:
 run that finds nothing prints the same report as a full run that finds nothing.
 Where there is no dated report, no git, or no commit at or before that day, it answers
 `mode: full` with that as its reason, because a diff against nothing is not a
-review. It judges nothing and exits 0 whatever it finds. Needs template 0.24.0.
+review. It judges nothing and exits 0 whatever it finds.
 
 ## Data that ages out
 
@@ -304,31 +300,12 @@ without you:
   stopped working — the security record, failing or stalled jobs, the media
   store, a payment webhook gone silent. One mail naming all of them, counts
   only, nobody named. It runs because `config/cron.json` says so, and
-  `"enabled": false` there is what stops it. Needs template 0.24.0.
+  `"enabled": false` there is what stops it.
 - the **session greeting** reads the last security record and prints one
   `[Operations: …]` line — only when something is open at HIGH or above, or the
   record is missing, damaged, stale or measured nothing at all. 🚨 Its absence
   is a state, not an omission. Every sentence it can say:
-  [`greeting.md`](greeting.md) → *every sentence it can say*. Needs template 0.24.0.
-
-## Keeping this guidance current
-
-```bash
-node run.mjs update           # what would change — writes nothing
-node run.mjs update --apply   # write it
-```
-
-The code in this app belongs to its operator and nobody changes it behind their
-back. `CLAUDE.md`, the rest of `docs/` and `.claude/skills/` are a different
-matter: they are how an agent knows what this app can already do, and a
-six-month-old copy of them is how a feature that shipped long ago gets rebuilt
-by hand, worse, next to the one that was already there. What the update touches,
-what it refuses, and what it never deletes are
-[`docs/updates.md`](updates.md).
-
-⚠️ It carries **text and never code**. A dependency this app has fallen behind
-on is reported by `security-check`'s drift rung, and `update` will not fix it —
-that is a different act with a different risk.
+  [`greeting.md`](greeting.md) → *every sentence it can say*.
 
 ## When the message is unfamiliar
 

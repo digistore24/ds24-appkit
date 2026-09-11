@@ -12,11 +12,6 @@
 > vocabulary (the reasoning is in `modules/boundary.test.ts`, under the five
 > refusals), so seeing it there says nothing about whether the code is wired up.
 > The command that answers it is `node run.mjs module list`.
->
-> **Needs template 0.8.0 or newer** for the code, 0.19.0 for the module seam. If
-> there is no `modules/` directory at all, this document is describing a newer
-> template than the one this app was built from — `node run.mjs update` brings
-> the text, never the code, so the way to get both is a newer template.
 
 Your app can do more than deliver things. It can **read what your customer
 wrote, judge it, walk them through the work, or produce the thing with them** —

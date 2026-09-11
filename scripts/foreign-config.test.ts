@@ -113,8 +113,8 @@ interface Entry {
 // ── the inventory ───────────────────────────────────────────────────────────
 //
 // 🚨 A file belongs here when its READER is foreign. `config/*.json`,
-// `modules/*/module.json`, `messages/*.json` and `.template-version` are read by
-// this app's own code and are not in scope — they fail loudly when they break.
+// `modules/*/module.json` and `messages/*.json` are read by this app's own
+// code and are not in scope — they fail loudly when they break.
 
 const INVENTORY: Entry[] = [
   // ── loaded: a path somebody walks already hands it over ───────────────────
@@ -310,9 +310,8 @@ const NOT_FOREIGN_CONFIG = new Set([
   "proxy.ts",
   "run.mjs",
   ".env.example",
-  ".template-version",
-  // Written by `node run.mjs agent-setup --apply`, read by `node run.mjs update`
-  // and by three tests in this tree (this one included) — ours, not foreign.
+  // Written by `node run.mjs agent-setup --apply` and read by three tests in
+  // this tree (this one included) — ours, not foreign.
   PROFILE_FILE,
 ]);
 
@@ -600,7 +599,7 @@ describe("git really applies .gitattributes", () => {
   // The file that keeps a Windows clone on LF. `portability.test.ts` reads its
   // TEXT and asserts the line is present; this hands the file to git and asks
   // what git DOES with it — not the same claim, and it is git's answer that
-  // decides whether `.env` parsing and `node run.mjs update` survive on Windows.
+  // decides whether `.env` parsing survives on Windows.
   //
   // 🚨 It is asked in a THROWAWAY repository, and that is the whole design.
   // Measured on 2026-08-12: asked in place, `git check-attr` answered `eol: lf`
@@ -629,7 +628,7 @@ describe("git really applies .gitattributes", () => {
       expect(
         asked.stdout,
         "git does not turn this app's .gitattributes into eol=lf — a Windows clone would get CRLF, " +
-          "which silently breaks .env parsing and makes `node run.mjs update` refuse every file",
+          "which silently breaks .env parsing",
       ).toMatch(/eol:\s*lf/);
       expect(asked.stdout).toMatch(/text:\s*auto/);
 

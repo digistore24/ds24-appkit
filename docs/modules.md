@@ -197,23 +197,13 @@ works, for two reasons:
   table naming the six modules is how an agent finds out the community
   exists and is one command away. Guidance that arrived *with* the module would
   only be readable by somebody who already knew to install it.
-- **`node run.mjs update` addresses guidance by PATH.** The manifest it reads
-  covers `CLAUDE.md`, `README.md`, `docs/*.md` and `.claude/skills/**`; text
-  under `modules/` is not in it. A module's own guidance would be the one piece of
-  guidance in the app that a released app could never bring up to date — which is
-  exactly the failure the update channel exists to prevent.
-
-A skill that describes a feature whose code this app is too old for already has
-its answer, and it is a version rather than a location: `requires:` in the
-skill's frontmatter.
 
 > There used to be a `guidance` field in the manifest for this. It was validated,
 > declared by no module and read by nothing, and it is **gone** — a manifest key
 > that promises a mechanism nobody built is worse than no key, because the next
-> person to find it assumes the mechanism. Whoever wants module-local guidance
-> changes the update channel first; `scripts/modules/manifest.mjs` carries the
-> reasoning beside the list of legal keys, and `manifest.test.ts` fails if the key
-> comes back.
+> person to find it assumes the mechanism. `scripts/modules/manifest.mjs` carries
+> the reasoning beside the list of legal keys, and `manifest.test.ts` fails if the
+> key comes back.
 
 ## The list, and why it is refused rather than guessed
 
@@ -278,7 +268,7 @@ migrated, switched on and still shows nothing until one of your own pages render
 its panel. Reported 2026-08-12 by somebody who did every printed step and
 reasonably concluded the module system was broken. It is derived from the
 manifest (`components`, with no `app`, `nav` or `slots`), so a fifth module of
-that shape is covered the day it lands. Needs template 0.27.0.
+that shape is covered the day it lands.
 
 **The sentence after the id is the module's own `summary`**, and the manifest
 requires it — one English line, at most 110 characters so it does not wrap into

@@ -145,8 +145,6 @@ describe("every registered rung keeps the shape the aggregator was written again
  *
  * Each is an advisory database a tier-1 rung declares in its own header, and
  * each was measured into this list off the shipped source rather than chosen.
- * `rungs/drift.mjs` is deliberately absent: it takes its base from the app's own
- * `.template-version`, so it names no host at all.
  */
 const DECLARED_HOSTS = ["api.osv.dev", "registry.npmjs.org", "api.deps.dev"];
 

@@ -302,15 +302,14 @@ describe("the OpenCode plugin", () => {
 describe("what agent-setup removes", () => {
   it.each(names)("%s never prunes a path that carries the skills", (agent) => {
     // `.claude` instead of `.claude/settings.json` would swallow
-    // `.claude/skills/**`. Those are in the knowledge stamp, `node run.mjs
-    // update` skips anything the profile calls pruned — and every skill would
-    // stop being updated, in every app, with no message anywhere.
+    // `.claude/skills/**` — and every reader of the profile skips anything it
+    // calls pruned, so every skill would count as gone, in every app, with no
+    // message anywhere.
     const shared = [
       ".claude/skills/build-app/SKILL.md",
       "CLAUDE.md",
       "AGENTS.md",
       "README.md",
-      "docs/updates.md",
       GREETER.replace(/^node\s+/, ""),
     ];
     for (const file of prunedPathsFor(agent)) {

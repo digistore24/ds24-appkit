@@ -110,7 +110,7 @@ change, and a mode only ever hides an *empty* card, so nobody loses sight of
 something they paid for. Take the sample products you do not sell out of the
 offer in the same file — delete the entry, or park it with `"sell": false`,
 which keeps it as a shape to copy from while no Digistore24 product is created
-for it and `/plans` leaves it out (needs template 0.30.0).
+for it and `/plans` leaves it out.
 `lib/billing-mode.test.ts` fails the build if the mode and the products still on
 sale contradict each other; a parked one is not counted.
 Reference: `lib/billing-mode.ts`.

@@ -569,20 +569,6 @@ const TASKS = {
     help: "Ensure .env exists (create it + generate AUTH_SECRET)",
     run: () => ensureEnv(),
   },
-  update: {
-    group: "Setup",
-    everyday: true,
-    help: "Bring the guidance up to date (CLAUDE.md, docs/, skills) — --apply writes",
-    run: (args) => script("scripts/dev/update.mjs", args),
-  },
-  "update-agents": {
-    group: "Setup",
-    help: "The same update, guided: show what would change, ask, then write it",
-    // `update` with the safety question built in — for a person at the terminal.
-    // An agent keeps using `update` / `update --apply`: the question needs a TTY,
-    // and without one this refuses rather than applying on its own.
-    run: (args) => script("scripts/dev/update.mjs", ["--confirm", ...args]),
-  },
   "export-core": {
     group: "Setup",
     help: "Copy the shared core into a companion repo (plan; --apply writes; re-run to update)",

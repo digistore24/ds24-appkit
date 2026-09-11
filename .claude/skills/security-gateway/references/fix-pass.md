@@ -232,7 +232,6 @@ part of the diff you show in step 5.
 
 | Finding | The fix that is not the fix |
 |---|---|
-| `drift` (dependencies behind the template) | `node run.mjs update` — it carries guidance text and never code, so it would bring the paragraph describing the problem forward and leave the dependency where it is |
 | a missing security header on the live domain | editing `next.config.ts`, which already sends it — something in FRONT of the app stripped it, and that is where to look |
 | the missing CSP | pasting an `unsafe-inline` policy. The template ships none deliberately; the `live` rung reports it without rating it, and rating it here would be inventing a finding |
 

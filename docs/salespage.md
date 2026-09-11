@@ -2,9 +2,6 @@
 
 # The salespage — the home page that sells
 
-> **Needs template 0.7.0 or newer** for the imagery half (`components/ui/figure.tsx`,
-> `lib/media/`). Everything else in here runs on any copy of this template.
-
 The home page (`app/page.tsx`, the route `/`) is not a brochure next to your
 product — it **is** your product's salespage. It is the page a stranger lands
 on, the page an ad or a social post links to, and the page that decides whether

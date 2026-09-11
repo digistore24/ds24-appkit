@@ -197,12 +197,8 @@ it on the page.
 
 ## From a hit to a link the customer can click
 
-> Needs template 0.18.0 or newer — `node run.mjs update` brings the text, not
-> the code. Everything above this heading works on any version;
 > `lib/content-source/link-marker.ts` and `lib/ai/content-links.ts` are what
-> this section builds on, and an older clone reads a description of code it
-> does not carry. On one of those, keep returning `url` + `anchor`: the model
-> still uses them to say WHERE something is, it just cannot make it clickable.
+> this section builds on.
 
 A `url` is not only something the model reads — the assistant can put it in
 front of the member as a **link inside her sentence**:

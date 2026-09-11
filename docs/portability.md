@@ -138,13 +138,9 @@ Both are written out at the top of `run.mjs`:
 ## Line endings — LF, on all three systems
 
 Git for Windows defaults to `core.autocrlf=true` and checks text files out with
-**CRLF**, which used to break two things silently:
-
-- **Every `.env` key read back "not set"** — a `$`-anchored pattern never matches
-  a line ending in `\r` — so a fresh `AUTH_SECRET` was minted on every run,
-  signing everybody out.
-- **`node run.mjs update` did nothing, for ever**: the `.template-version` hashes
-  are taken over LF content, so every guidance file looked "edited in this app".
+**CRLF**, which used to break `.env` silently: **every key read back "not set"**
+— a `$`-anchored pattern never matches a line ending in `\r` — so a fresh
+`AUTH_SECRET` was minted on every run, signing everybody out.
 
 **`.gitattributes` decides this, not the machine's git config** — one line,
 `* text=auto eol=lf`, and all three systems see the same bytes.
@@ -158,5 +154,5 @@ Two rules follow for anything you write:
   `readEnvValue()` (`scripts/lib/env-write.mjs`, `scripts/lib/env.mjs`) rather
   than parsing `.env` again somewhere else.
 - 🚨 **Normalise before hashing** — `normalizeText()` from
-  `scripts/dev/update-plan.mjs`; on Windows it is the difference between an
-  update that works and one that silently refuses.
+  `scripts/core/export-plan.mjs`; on Windows it is the difference between a
+  re-export that works and one that silently keeps every file as "edited".

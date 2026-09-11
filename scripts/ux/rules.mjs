@@ -769,10 +769,9 @@ export function findNumberInputsWithoutStep(source) {
  *
  * 🚨 **Today's names only, never a history.** The factory holds this list
  * against the registry beside it and demands they are EQUAL, and that is right
- * because this file freezes with the app: `node run.mjs update` refreshes
- * guidance, never `scripts/`. So every copy checks its own era's examples, and
- * an older app carries its own older list. Adding a retired name here would
- * make this copy warn about a product this template never shipped.
+ * because this file freezes with the app. So every copy checks its own era's
+ * examples, and an older app carries its own older list. Adding a retired name
+ * here would make this copy warn about a product this template never shipped.
  *
  * Hand-kept on purpose: the customer's tree has no other record of what the
  * examples were called. The factory checks this list against the shipped

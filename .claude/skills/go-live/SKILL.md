@@ -1,7 +1,6 @@
 ---
 name: go-live
 description: Brings the app online and proves that a purchase really unlocks access — pre-flight, the hosting handed to `setup-hosting`, then Digistore products and approval, the IPN on the real domain, a real test purchase and a re-check of security and performance live. Use this when the app is built, secured and scaled — before marketing — and when the user says "let's go live", "put it online for real", "launch it", "the whole launch", or asks whether a purchase will really work in production.
-requires: 0.15.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -85,15 +84,13 @@ one, and only **after the app is deployed and answers**: registering the IPN nee
    `productIds.prod`, and the prod IPN connection scoped to exactly those products.
    Never `node scripts/ds24/sync-products.mjs`: it skips the IPN, and purchases then
    unlock nothing. Three stops here:
-   - **The run WILL stop the first time and list what it would create**
-     *(needs template 0.30.0; before that it creates them straight away — so on an
-     older app, read the `--dry-run` output first instead)*. This is the
+   - **The run WILL stop the first time and list what it would create.** This is the
      one place that list matters most: it is the live account, and creating cannot
      be undone from here. Read every line out to the user by name, wait for their
      yes, then repeat the command with `--create-new`. Anything on that list they do
      not sell gets `"sell": false` in `config/digistore-products.json` first.
-   - 🚨 **It adopts; it must never recreate.** An older app's products have no set,
-     and the first `--env prod` run updates them in place so sales and approvals
+   - 🚨 **It adopts; it must never recreate.** Products that have no set yet are
+     updated in place by the first `--env prod` run, so sales and approvals
      survive. **A product that already sells appearing in that create list: stop and
      look before you pass `--create-new`.** That is now a refusal you have to
      override rather than a line scrolling past in a dry run.
@@ -102,10 +99,7 @@ one, and only **after the app is deployed and answers**: registering the IPN nee
      form in the wrong language, and fixing it later means new products, new
      approvals and dead links you already handed out.
 3. **Prices are already there — as payment plans the sync wrote**, one per way to
-   pay, copied from `config/digistore-products.json`. *(Needs template 0.36.0.
-   An older app writes no plans, so every product still has only Digistore24's
-   own default and the paragraph below is the whole story rather than the
-   exception.)* Never edit them over there:
+   pay, copied from `config/digistore-products.json`. Never edit them over there:
    the next sync overwrites them. Say that to the user in one sentence now, or
    they will edit the copy and conclude the app forgets prices.
 

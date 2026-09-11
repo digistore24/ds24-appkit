@@ -1,7 +1,6 @@
 ---
 name: setup-environments
 description: Sets an environment up from here — creates accounts, hands out plans, uploads media and creates community rooms in DEV, STAGING or PROD through the app's own setup surface rather than a shell holding a production connection string. Use this when the user says "create an owner account on production", "the live app is empty", "my rooms only exist locally", "give this customer access", "put this file on staging", or when go-live needs the live database filled. Not for code, config files or the .env — those travel with git.
-requires: 0.20.0
 ---
 
 # Setting an environment up
@@ -86,7 +85,7 @@ bootstrap's job), writes it into `.env` and prints nothing. `--email` picks the
 owner when there is more than one; it refuses to guess. It hands you no
 privilege you did not have: whoever holds the connection string can already do
 everything this surface does. On a deployed environment you do not hold it, and
-the admin page is still the way. (Needs template 0.27.0.)
+the admin page is still the way.
 
 ## Step 3 — do the work
 
@@ -102,10 +101,10 @@ not a listed tool, it cannot be done here.
 | end a manual grant | `grant_revoke` — **irreversible**, needs a reason |
 | put a file in the media store | `media_upload` — give a **path**, not the bytes, and it lands **private to its owner** unless you say `visibility: "public"` |
 | ask whether the content is there | `content_presence` — each owner answers for its own rows |
-| see what publishing would do | `content_publish`, mode `plan` — writes nothing *(needs template 0.24.0)* |
-| publish this repo's content there | `content_publish`, mode `apply` *(needs template 0.24.0)* |
-| publish it **including the big media** | `node run.mjs content-publish --env <env> --apply` — the COMMAND, not a tool *(needs template 0.24.0)* |
-| place ONE declared media file there | `content_media_url`, then `content_media_confirm` — the command above drives them in the right order; you do not call them by hand. ⚠️ The one place where a `plan` is not inert: `content_media_confirm` removes a failed landing from the store, at the key the manifest derives and nowhere else (`docs/setup-mcp.md`) *(needs template 0.24.0)* |
+| see what publishing would do | `content_publish`, mode `plan` — writes nothing |
+| publish this repo's content there | `content_publish`, mode `apply` |
+| publish it **including the big media** | `node run.mjs content-publish --env <env> --apply` — the COMMAND, not a tool |
+| place ONE declared media file there | `content_media_url`, then `content_media_confirm` — the command above drives them in the right order; you do not call them by hand. ⚠️ The one place where a `plan` is not inert: `content_media_confirm` removes a failed landing from the store, at the key the manifest derives and nowhere else (`docs/setup-mcp.md`) |
 | see what this surface has done there | `list_acts` |
 | see the course an environment holds | `courses_outline` *(the module contributes it)* |
 | create a community room | `community_group_upsert` *(the module contributes it)* |
@@ -254,7 +253,7 @@ a change the second one will not make.
 | Symptom | What it is |
 |---|---|
 | the tools do not appear at all | your program's trust gate — Claude Code asks for approval, Codex ignores `.codex/` until the project is trusted, Antigravity asks once for the workspace and then per tool (an unruled MCP tool defaults to *Ask*). OpenCode has no gate. |
-| `404`, empty body | the surface is off *there*, or that app predates it. Switching it on is a deploy. |
+| `404`, empty body | the surface is off *there*. Switching it on is a deploy. |
 | `envMismatch` | you addressed one environment and the app says it is another. Believe the app; check its `APP_ENV`. |
 | `401` | unknown, revoked or expired key, or its owner is no longer an owner. All four answer the same 401 on purpose. |
 | `confirmationRequired` | outside DEV: ask for a plan first. |

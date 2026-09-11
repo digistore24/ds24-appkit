@@ -1,7 +1,6 @@
 ---
 name: coach
 description: The guide through the project — works out where this app stands and which skill comes next, and routes a concrete problem to the place that solves it. Use this when the user asks "what is the next step?", "how do I solve XY?", "where am I?", "which skill do I need?", "I am stuck", or when they describe a symptom (an error page, a purchase that never arrived, the assistant answering "I do not know") without naming a skill.
-requires: 0.26.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -26,12 +25,10 @@ telling of it answers to — `CLAUDE.md`, `README.md`, the greeting's
 walking the disk. **A list kept in four places is a list that is wrong in three
 of them** — this skill was the fourth copy, and now it is not a copy at all.
 
-Per row: `state` (`done`, `open`, `declined`, `stale`, `blocked`,
-`needs-newer-template`, `unknown`), `evidence` — what was looked at — and
-`performedBy`. `next` is the ONE row to name; `nextSentence` is already written.
-Two of those states are answers rather than absences: **`declined`** is a
-recorded "no" — say so and move on — and **`needs-newer-template`** is code
-this copy does not have, so the step is `node run.mjs update`, never the skill.
+Per row: `state` (`done`, `open`, `declined`, `stale`, `blocked`, `unknown`),
+`evidence` — what was looked at — and `performedBy`. `next` is the ONE row to
+name; `nextSentence` is already written. One of those states is an answer
+rather than an absence: **`declined`** is a recorded "no" — say so and move on.
 
 **The user does not always know where they are; the project does.** What the
 command cannot read is judgement — a thin brief, a placeholder page with swapped

@@ -550,10 +550,10 @@ export const STUB_TREE = ".agents/skills";
  * What an app set up for `agent` should NOT have.
  *
  * Config files by their exact path, never by their folder. `.claude` as a
- * prefix would swallow `.claude/skills/**` — which is in the knowledge stamp and
- * belongs to every program — and `node run.mjs update` would silently stop
- * updating all seventeen skills. The stub tree is the one folder entry, because
- * a later release adds stubs that do not exist here yet.
+ * prefix would swallow `.claude/skills/**`, which belongs to every program —
+ * and the profile would then call all seventeen skills pruned. The stub tree
+ * is the one folder entry, because a later release adds stubs that do not
+ * exist here yet.
  */
 export function prunedPathsFor(agent) {
   const paths = new Set();
@@ -584,7 +584,6 @@ export function detectAgent(env = process.env) {
 // reported ten failures for files it had itself been told were gone.
 //
 // The record is `.agent-profile.json`, written by agent-setup and read by
-// `node run.mjs update` (so an update does not put the wiring back) and by
 // those two tests — and, since 2026-09-07, by `scripts/foreign-config.test.ts`,
 // which lists six of the pruned files in its inventory and was the third
 // checker that assumed four (two of its tests red in a customer's app after

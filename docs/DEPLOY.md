@@ -42,8 +42,7 @@ never copies — `.next/static` and `public/` go into the image beside
 `drizzle-orm`, a runtime dependency, so it still works in an image that dropped
 its devDependencies — which every one of these hosts does. (It used to be
 `drizzle-kit migrate`, and that one is gone from the image by the time you need
-it. If you read that instruction in an older copy of this file, this is what
-changed and why.)
+it.)
 
 ## The four hosts
 

@@ -145,7 +145,7 @@ describe("blankCommentsFor", () => {
   it("leaves the data files a mixed corpus also carries", () => {
     // Read through the same `read()` as the source above: `setup.test.ts` reads
     // `.env.example` and `package.json`, `docs-coverage.test.ts` reads
-    // `module.json` and `.template-version`.
+    // `module.json`.
     expect(blankCommentsFor("package.json", BYTES)).toBe(BYTES);
     expect(blankCommentsFor(".env.example", BYTES)).toBe(BYTES);
     expect(blankCommentsFor("config/cron.yaml", BYTES)).toBe(BYTES);
@@ -155,8 +155,7 @@ describe("blankCommentsFor", () => {
     // A code extension nobody added to the list would silently stop being
     // blanked — the exact hole this module closes. An unlisted DATA format gets
     // blanked instead, and a damaged assertion is visible where a silent guard
-    // is not. `.template-version` has no extension at all and is JSON; it is
-    // read for a version number, which no comment can contain.
+    // is not.
     expect(blankCommentsFor("something.cjs", BYTES)).not.toContain("gone");
     expect(blankCommentsFor("no-extension-at-all", BYTES)).not.toContain("gone");
   });

@@ -1,7 +1,6 @@
 ---
 name: salespage
 description: Builds the app's own salespage — replaces the placeholder home page with one that actually sells THIS product — headline, a real visual, honest proof, ONE offer block with a working checkout, an FAQ. Use this when the user says "build my salespage", "my homepage is weak", "the start page still shows the template", "the landing page looks empty", "make the home page sell", or when build-app, `setup-digistore` or `go-to-market` hands over. "Visitors do not buy" has two answers — no traffic is `go-to-market`, a page that does not convert the traffic it gets is this skill.
-requires: 0.7.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 

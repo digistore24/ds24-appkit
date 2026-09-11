@@ -15,8 +15,7 @@
 // and finds none. The lesson routes (`/api/v1/courses/units/<slug>` and its two
 // children) are deliberately untouched — the slug is unique app-wide, so the
 // lesson names its own course and no segment was needed. `docs/api.md` carries
-// the note; `requires:` in the mobile skill's frontmatter is the mechanism that
-// keeps an older app from being told about a shape its code does not serve.
+// the note.
 //
 // ── What it says about a course the caller has NOT bought ──────────────────
 // Its title, its summary, and `entitled: false`. Nothing about what is inside

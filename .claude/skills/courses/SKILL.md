@@ -1,7 +1,6 @@
 ---
 name: courses
 description: Builds this app's course — picks which of the three shapes the vendor is really selling, then the lessons, the environment that serves them and the switch-on. Use this when the user says "build my course", "my customers should work through lessons", "sell a course", "a protected area with my lessons in it", "a week-by-week programme", "I deliver my course by e-mail and it is too much work", "they hand something in and I read it", or when build-app's Content-Access archetype hands over. For the media a lesson still lacks use `content-production`; for a quiz inside a lesson, `learning-activities`.
-requires: 0.24.0
 ---
 
 # Build this app's course
@@ -86,8 +85,7 @@ A clean 200 over a course they paid for.
 
 **"Monthly or yearly" is not two entries.** Those are two `paymentOptions` of
 one offering, so both buyers hold the same Product Key and the list names it
-once. *(Needs template 0.36.0. On an older app they ARE two entries, and then
-both keys go in the list.)*
+once.
 
 The same list gates the lesson media (`planKeys` on the manifest entry), so buying
 the course is buying its files, whichever product you bought it under.
@@ -152,8 +150,7 @@ tool would be overwritten by the next apply.
   ASCII, digits, single hyphens. Unique across the whole app.
 - **`body` is the lesson's text, and it takes a small markdown subset** —
   `#` headings, `- ` bullet lists, `**bold**`, `*italic*` and links. Write it
-  that way: prose typed as one wall renders as one wall. (Needs template 0.27.0.
-  Before that the characters appeared on screen verbatim.) A `body` may be
+  that way: prose typed as one wall renders as one wall. A `body` may be
   omitted entirely — a lesson that is only a video is a lesson.
 - **`releaseAfterDays`** is shape 2's whole mechanism: days after the learner's
   access started. `0` everywhere is a self-study course.

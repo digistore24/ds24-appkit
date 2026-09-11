@@ -31,8 +31,7 @@
 // different question and has its own function (`approvalStatusOf`), used by
 // the write side, where the marketplace being written to is the whole point.
 //
-// The properties are the ones update-check.mjs already argues for, and its
-// `isDue()` is imported rather than copied:
+// Four properties, all deliberate:
 //
 //   **Never fatal.** This sits in front of every session; every failure path
 //   resolves to "say nothing". That is also why `_client.mjs` is imported
@@ -45,9 +44,9 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isDue } from "../dev/update-check.mjs";
 import { extractProducts, idOf, productTargets, readProducts } from "./_products.mjs";
 import { isReseller } from "./_resellers.mjs";
+
 
 // Resolved from this file, not from the cwd — `_products.mjs` resolves the
 // registry the same way, and the two must agree. A cwd-relative path let
@@ -58,6 +57,16 @@ export const CACHE_PATH = join(PROJECT_ROOT, ".dev", "approval-check.json");
 
 const DAY = 24 * 60 * 60 * 1000;
 const WEEK = 7 * DAY;
+
+/** Time to ask again? An unreadable or malformed cache counts as yes. */
+export function isDue(cache, now, ttl = DAY) {
+  const checkedAt = Number(cache?.checkedAt);
+  if (!Number.isFinite(checkedAt)) return true;
+  // A clock that moved backwards (a restored machine, a different timezone
+  // written into the file) would otherwise park the check in the future for ever.
+  if (checkedAt > now) return true;
+  return now - checkedAt >= ttl;
+}
 
 /** Beyond this a cached answer is too old to report as if it were current. */
 export const MAX_CACHE_AGE = 30 * DAY;
@@ -284,9 +293,8 @@ function nameSome(keys) {
  * that costs sales: rejected > never requested > pending. All approved — or
  * nothing readable — is silence.
  *
- * Takes `null` as readily as an object, for the same reason describe() in
- * update-check.mjs does: that is what approvalReport() answers whenever it
- * cannot answer.
+ * Takes `null` as readily as an object: that is what approvalReport() answers
+ * whenever it cannot answer.
  */
 export function describeApproval(result) {
   const grouped = classifyStatuses(result?.statuses);

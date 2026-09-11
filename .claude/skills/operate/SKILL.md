@@ -1,7 +1,6 @@
 ---
 name: operate
 description: The recurring round for an app that is already live — asked in one sitting: what is known to be wrong with what it runs, the errors a 200 hides, whether the scheduled jobs still run, and what a stranger reaches. Use this when the user says "is my app still ok", "is everything running", "check my live app", "did anything break overnight", "a job seems dead", "the nightly cleanup has stopped", "nothing has been checked in months", "has anybody looked at this in a while", "what do I have to do now that it is live", or asks for a routine, weekly or monthly check. Being TOLD when it breaks, without asking, is `setup-monitoring` instead.
-requires: 0.23.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -79,13 +78,12 @@ run at all.
 | When did this app last change? | `git log -1 --format=%cd` | what every report's date is measured against |
 | Which jobs exist and which are switched on? | `config/cron.json`, then `node run.mjs cron --list` | the file says switched on; the command says whether they actually ran |
 | Is anything watching it? | `docs/app.md` → *Decisions worth remembering*; `package.json` for a provider package; `instrumentation.ts` | a recorded **"no"** is an answer — say so and do not re-open it |
-| Which template version is this app on? | `package.json` → `version` | two checks below name a refinement that needs 0.24.0 |
 
 Then **say what you found in one short paragraph, before the menu** — the shape
 `coach` §1 and `setup-monitoring` §0 already use:
 
-> *"This app is live at `https://app.example.com` (production), on template
-> 0.24.0. Its safety was last measured four days ago with three rungs not asked;
+> *"This app is live at `https://app.example.com` (production). Its safety was
+> last measured four days ago with three rungs not asked;
 > `docs/reports/` holds a `security-` report from 12 July and nothing else, and
 > the last change here was yesterday."*
 
@@ -248,16 +246,14 @@ not configured exits 2 with the key it wants (`SETUP_KEY`, `SETUP_KEY_PROD`) —
 ## 6 · `reach` — what a stranger gets
 
 ```bash
-node run.mjs health --url https://your-app    # six probes, one verdict — needs template 0.24.0
+node run.mjs health --url https://your-app    # six probes, one verdict
 node run.mjs smoke  --url https://your-app    # every page, called once
 ```
 
 `health --url` is the one that asks together: is it answering at all
 (`/api/healthz`), does its database answer (`/api/readyz`), is anything scheduled
 failing or stalled, what are its pages hiding behind a 200, does the media store
-answer, and when did the last payment notification arrive. On an app below
-template 0.24.0 that command does not exist — compose the same answer from
-`smoke --url` and `errors --url` and say in the report that you did.
+answer, and when did the last payment notification arrive.
 
 **`/api/healthz` and `/api/readyz` are what an uptime checker is pointed at** —
 that is the skill `setup-monitoring`, and it is something OUTSIDE the app, since
@@ -281,7 +277,7 @@ No command of its own. Two readings, together:
 ```bash
 ls docs/reports/
 git log -1 --format=%cd
-node run.mjs security-scope    # what a recurring pass would NOT look at — needs template 0.24.0
+node run.mjs security-scope    # what a recurring pass would NOT look at
 ```
 
 Take the newest file per kind — `security-`, `ux-`, `performance-`,
@@ -390,7 +386,7 @@ a pass:
 ```markdown
 # Operating round — 2026-08-11
 
-App:      https://app.example.com (production) · template 0.24.0 · commit a1b2c3d
+App:      https://app.example.com (production) · commit a1b2c3d
 Checked:  safety, errors, jobs, gates
 Not checked: 2 — content (no SETUP_KEY_PROD in the .env),
                 reach (no deployed address: APP_URL_PROD is not set)

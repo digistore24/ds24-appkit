@@ -42,7 +42,6 @@ import {
   moduleNavAreas,
   moduleTablePrefixes,
 } from "../modules/inventory.mjs";
-import { describe as describeUpdate, updateAvailable } from "./update-check.mjs";
 
 const hasEnv = existsSync(".env");
 const hasBrief = existsSync("docs/product-brief.md");
@@ -370,25 +369,13 @@ const phaseNames = (separator) =>
     .map((phase) => `${phase.num} ${phase.title.en}`)
     .join(separator);
 
-// Two questions that may cost a request, and neither depends on the other:
-//
-//   Has the template been improved since this app was copied out of it? Asked
-//   at most once a day — scripts/dev/update-check.mjs, including how to switch
-//   it off.
-//   Are the synced Digistore24 products approved for sale yet? Same shape, one
-//   listProducts call a day at most — scripts/ds24/_approval.mjs.
-//
-// **Together, not one after the other.** Awaited in sequence they add up to
-// 5.5 s of dead air in front of every session on a network that blackholes
-// instead of refusing — in the file whose own header says to keep it short.
-// The `.catch` on each is belt and braces: both are written never to reject,
-// and if that ever stops being true a rejected promise here would take the
-// whole greeting with it, which is the one thing this file must not do.
-const [updateResult, approvalResult] = await Promise.all([
-  updateAvailable().catch(() => null),
-  approvalReport().catch(() => null),
-]);
-const updateLine = describeUpdate(updateResult);
+// One question that may cost a request: are the synced Digistore24 products
+// approved for sale yet? One listProducts call a day at most —
+// scripts/ds24/_approval.mjs. The `.catch` is belt and braces: it is written
+// never to reject, and if that ever stops being true a rejected promise here
+// would take the whole greeting with it, which is the one thing this file must
+// not do.
+const approvalResult = await approvalReport().catch(() => null);
 const approvalLine = describeApproval(approvalResult);
 
 const line = "──────────────────────────────────────────────────────────────────";
@@ -438,7 +425,6 @@ console.log(line);
 // Context for Claude (the user sees these lines as well, so keep them neutral
 // and terse):
 console.log(`[Project state: .env=${hasEnv}, product-brief=${hasBrief}, own pages=${customPages}]`);
-if (updateLine) console.log(updateLine);
 if (approvalLine) console.log(approvalLine);
 // Every time, unlike its two neighbours below — the reasoning is beside the
 // derivation above. It is only silent when the whole read threw, and then there

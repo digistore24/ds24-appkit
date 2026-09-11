@@ -122,12 +122,6 @@ the module is installed — the same door `askCompanion()` comes through
 ([`docs/modules.md`](modules.md) → *What a module joins by declaring itself*). It is
 **server-side only**: nothing that imports from it may be a client component.
 
-⚠️ **If `track` is not in that barrel, this app's copy of the module predates
-template 0.34.0** — it shipped with no `serverExports` at all, which is what made
-the module installable and not usable, and `node run.mjs update` brings text and
-never `modules/`, so it cannot repair the manifest for you. Add
-`"serverExports": { "track": "lib/track.ts" }` to `modules/metrics/module.json`
-and run `node run.mjs module sync`.
 
 - Call it **where the thing happens**, once. The funnel counts distinct
   members, so a duplicate does not bend a percentage — it widens the gap

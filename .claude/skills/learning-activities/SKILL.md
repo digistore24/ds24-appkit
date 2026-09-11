@@ -1,7 +1,6 @@
 ---
 name: learning-activities
 description: Gives an app the elements its customer DOES — a learning game, a check with a pass mark, an exercise that answers back, graded on the server; also whether a course needs one at all, and an audit. Use this when the user says "my people never finish the course", "they watch the videos and drift away", "I want a quiz in lesson three", "can the course have a game", "how do I test whether they understood it", "I need somewhere people really PRACTISE", "free practice by topic and mock exams", "I want to see who passes and where they are weak", or when a course hands out videos and asks nothing back. For the course's overall shape use `courses`; for a companion that talks, `ai-companion`.
-requires: 0.9.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -199,10 +198,10 @@ already done that?" needs an answer next month.
 - **Shape 3's submission is not an element.** A person reads it; the line is
   recipe C.
 - **Put the page's access check in ONE function and call it from everywhere** —
-  the page, and later the content source that makes the page findable. On
-  template 0.18.0 and newer the assistant can LINK to a page she looked up, and
-  then a source more permissive than its page hands a non-buyer a link that
-  bounces them back — an existence oracle no gate here can catch. Two
+  the page, and later the content source that makes the page findable. The
+  assistant can LINK to a page she looked up, and then a source more
+  permissive than its page hands a non-buyer a link that bounces them back —
+  an existence oracle no gate here can catch. Two
   `hasPlan()` calls that agree today are two that can drift. The checklist is
   [`docs/content-source.md`](../../../docs/content-source.md) → *The five
   things that make a link work*.

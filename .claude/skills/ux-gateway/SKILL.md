@@ -1,7 +1,6 @@
 ---
 name: ux-gateway
 description: The experience check for this app. Looks at it the way a paying customer does — the first five minutes after a purchase, dead ends in the flows, actions that report nothing back, hand-built elements, unreadable text in dark mode, wording nobody understands, keyboard and screen reader, small screens, work the customer hands over that nothing comes back from — then fixes and reports. Use it after the app has pages and billing, before the security gateway, and whenever somebody says "my customers do not find their way around", "nobody uses it after they buy", "this looks unfinished", "is this understandable?".
-requires: 0.4.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -72,11 +71,11 @@ no name, images with no `alt`, number inputs with no `step` (the browser then
 refuses every decimal in ITS language), and pages under `/dashboard` that nothing
 leads to — in no menu AND with no page linking to them. It also WARNS, never
 fails, while a product is still on sale under one of the template's example
-names ("Basic (monthly)") — a name nobody chose is a name the buyer reads. ⚠️ Since template 0.27.0 that
+names ("Basic (monthly)") — a name nobody chose is a name the buyer reads. ⚠️ That
 includes `[param]` pages: a lesson or a group page is reached by a link and
 never by a menu entry, so for those the only sensible answer to a finding is the
-link, never a `NAVIGATION` line. Before 0.27.0 they were skipped, and that is how
-a finished course shipped with no way into any lesson.
+link, never a `NAVIGATION` line. Skipping them is how a finished course once
+shipped with no way into any lesson.
 **Run it first and fold its findings in** — they are already measured, so they
 go straight into the report with a file and a line. One exception: its
 **images with no `alt`** belong under check 8 with the rest of what goes wrong
@@ -151,11 +150,10 @@ time, all documented, none of them findings:
   The template's own four such places are named in `RAW_ELEMENT_EXCEPTIONS`
   (`scripts/ux/rules.mjs`), each with its reason, so `ux-check` counts them in
   its green line instead of warning about them for ever. **Yours go in the same
-  list** — it is code, so `node run.mjs update` never touches it. Do that only
+  list.** Do that only
   for a place you have judged: an entry with no reason is an exemption nobody
   can review, and the list is keyed on the element as well as the file, so a
   different hand-built control in the same file is still reported.
-  (Needs template 0.27.0; before that the four were reported on every run.)
 - **The shipped default look on an app with no `docs/design.md`.** Keeping it
   is the `0` from `build-app` step 1e, recorded in `docs/app.md` — an answer,
   not an unfinished job. The way to a look of its own is the skill `design`,

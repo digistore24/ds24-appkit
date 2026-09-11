@@ -12,16 +12,14 @@
 //
 // ── Why this is a question for THIS app ────────────────────────────────────
 //
-// Two doors in this template carry text from a stranger into the tree an
+// One door in this template carries text from a stranger into the tree an
 // agent reads as instruction:
 //
-//   `node run.mjs update`                       fetches guidance text and
-//        writes it over `CLAUDE.md`, `docs/*.md` and `.claude/skills/**`.
 //   the skill `knowledge-intake`                distils third-party ebooks,
 //        webinars and transcripts into `content/knowledge/`, which
 //        `lib/ai/retriever.ts` then puts in the model's CACHEABLE system block.
 //
-// A payload made of invisible codepoints survives all three, reads as nothing
+// A payload made of invisible codepoints survives that door, reads as nothing
 // at all in a diff, and is the one class of text where "somebody reviewed it"
 // is not evidence. That is the whole subject: not what an attacker sends at
 // runtime — no static scan can see that — but what is sitting in the files
@@ -234,8 +232,8 @@ export const invisibleRuleFor = (ruleId) =>
  * The files this app's agent reads as INSTRUCTION, and the corpus a model reads
  * as knowledge.
  *
- * Deliberately the same set `node run.mjs update` addresses by path, plus
- * `content/` — because those are exactly the files that arrive from somewhere
+ * `CLAUDE.md`, `README.md`, `docs/`, `.claude/` and `.agents/`, plus
+ * `content/` — because that is exactly where text arrives from somewhere
  * else. `AGENTS.md` is generated from `CLAUDE.md` and is in the list anyway:
  * it is what Codex and Antigravity read, and a check that covers only the
  * Claude Code half covers half the customers.

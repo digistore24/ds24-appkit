@@ -37,10 +37,6 @@
 // ways: it is never re-proposed, and it is never hidden either — a refusal
 // nobody can see is a refusal nobody can revoke.
 //
-// **A row whose code is absent says so.** `needs-newer-template` renders the
-// update command and never anything that reads like "open". Sending somebody at
-// a feature that is not in their copy is the failure that state exists for.
-//
 // **Unreached phases collapse to one line each**, so the whole picture fits one
 // screen. A picture that scrolls is one nobody reads to the end of, and the end
 // is where the next step is.
@@ -99,7 +95,6 @@ const GLYPH = {
   stale: "↻",
   declined: "–",
   blocked: "⊘",
-  "needs-newer-template": "⇧",
   unknown: "?",
   open: " ",
 };
@@ -320,11 +315,10 @@ export function describeNext(state, { forHuman = false } = {}) {
   const step = next.step ? `${next.step} — ` : "";
   const skill = performerOf(next);
   // ⚠️ **One offer, and no branch on the state** — because `journeyState()`'s
-  // `OPEN_STATES` cannot hand this function a row that is `needs-newer-template`
-  // or `declined` at all. Those two are excluded from being "next" one layer
-  // down, deliberately, so an offer to update or to un-refuse would be a branch
-  // no fixture can reach. Such a row still PRINTS its own evidence in the table
-  // above, which is where the user meets it.
+  // `OPEN_STATES` cannot hand this function a row that is `declined` at all.
+  // It is excluded from being "next" one layer down, deliberately, so an offer
+  // to un-refuse would be a branch no fixture can reach. Such a row still
+  // PRINTS its own evidence in the table above, which is where the user meets it.
   //
   // The REASON is the row's own evidence and nothing written here, so it is a
   // fact about this app rather than a sentence prepared in advance — and it
@@ -423,7 +417,6 @@ export function journeyJson(state, { appName = null } = {}) {
       what: row.what,
       optional: row.optional,
       recurring: row.recurring,
-      requires: row.requires,
       module: row.module,
       state: row.state,
       evidence: row.evidence,

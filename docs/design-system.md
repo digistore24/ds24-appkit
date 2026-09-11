@@ -163,11 +163,7 @@ Four things that are not preferences:
   placeholder is what makes `--primary` read as decoration rather than as *this is
   interactive*. It is deliberately a SQUARE too — the user avatar beside it is a
   round badge of initials, and two round badges of initials in one header row is
-  one object twice. ⚠️ If this app's mark shows only the first letter of a two-word
-  name, this copy of the template predates the monogram: `node run.mjs update`
-  carries text and never code, so this paragraph reached you without the component
-  it describes. Nothing is broken, and [`updates.md`](updates.md) says what
-  retrofitting takes.
+  one object twice.
 - **`config/brand.json` is the only thing that says a logo exists.** Empty means
   the letter tile, which is the shipped state and a perfectly good answer. A
   path there must live under `public/brand/`, carry its `logoWidth` and
@@ -180,11 +176,6 @@ Four things that are not preferences:
 - **`lib/pwa/manifest.test.ts` reads the PNG headers** and fails the build on a
   size that disagrees with its declaration. You cannot ship a 256 px file named
   `icon-512.png`.
-
-⚠️ The logo slot and `node run.mjs brand` arrived in template 0.20.0. If
-`config/brand.json` is not in this app, this copy predates them — everything
-else on this page still holds, the letter tile is what you have, and
-[`updates.md`](updates.md) says what retrofitting takes.
 
 ## 5. The one SVG, and the boundary that keeps it safe
 
@@ -315,10 +306,6 @@ un-hinted `var()` under box-shadow rather than box-shadow colour, and reads
 Tailwind v4's TRAILING important marker (`shadow-lg!`) as the same thing as the
 v3 leading one (`!shadow-lg`), which is the only spelling 2.6.1 knows.
 `lib/utils.test.ts` is the needle that keeps all three.
-🚨 `node run.mjs update` carries text and never code
-([`updates.md`](updates.md)), so if `lib/utils.ts` in YOUR app is still the
-three-line shadcn helper, this paragraph arrived ahead of the fix — there the
-old rule holds and the class needs a trailing `!`.
 
 🚨 **Do not add the `!` "to be safe" once `cn()` is fixed, and the third clause
 is not a licence to.** It makes a trailing `!` MERGEABLE against another
@@ -383,14 +370,6 @@ once for every app — never a decision an app makes about itself.** An app that
 needs a look the four cannot express is telling you something about the template,
 and the answer is a story here rather than a variable there; anything past them
 is composition — which components, in which order, with how much space.
-
-⚠️ **The elevation tokens and the heading variable arrived in template 0.25.0.**
-If `--elevation-raised` and `--font-app-heading` are not in this app's
-`app/globals.css`, this copy predates them: `node run.mjs update` carries text
-and never code, so this section can reach an app whose slots are still missing,
-and [`updates.md`](updates.md) says what retrofitting takes. That paragraph is a
-**convention rather than a gate** — a document has no `requires:` and nothing
-compares its prose against a version, so only a reader can catch it.
 
 ### What stays refused
 

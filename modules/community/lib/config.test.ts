@@ -461,8 +461,8 @@ describe("posting.imagesMax", () => {
   it("is absent from an app that predates it, without complaint", async () => {
     // An app that ran a community before 26.2 has `posting: { maxPer10Min: 20 }`
     // and no `imagesMax` at all. That must be the default and NOT a problem — a
-    // silent outage on the next `node run.mjs update` is exactly what this file's
-    // fail-closed ruling would otherwise produce for every existing installation.
+    // silent outage is exactly what this file's fail-closed ruling would
+    // otherwise produce for every existing installation.
     vi.resetModules();
     vi.doMock("@/config/community.json", () => ({
       default: { enabled: true, posting: { maxPer10Min: 20 } },

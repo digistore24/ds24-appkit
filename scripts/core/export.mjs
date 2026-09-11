@@ -9,7 +9,7 @@
 //
 // The manifest is config/core-export.json; what makes a file eligible is
 // scripts/core/purity.test.ts; the full story is docs/mobile.md. Three rules
-// hold, and they are `node run.mjs update`'s rules applied to code:
+// hold:
 //
 //  1. **Only the manifest.** Nothing else in this app is ever copied.
 //  2. **A file you edited in the target repo is yours.** `.core-version` in
@@ -18,14 +18,13 @@
 //  3. **Nothing is written without `--apply`**, and what is written shows up
 //     in the target repo's `git diff` — readable, keepable, revertible.
 //
-// The decisions live in export-plan.mjs (and, reused, in dev/update-plan.mjs)
-// and are unit-tested; this file is the shell: read, resolve, print, write.
+// The decisions live in export-plan.mjs and are unit-tested; this file is the
+// shell: read, resolve, print, write.
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { normalizeText, planUpdate, writable } from "../dev/update-plan.mjs";
-import { exportStamp, refuseTarget } from "./export-plan.mjs";
+import { exportStamp, normalizeText, planExport, refuseTarget, writable } from "./export-plan.mjs";
 
 const ROOT = path.resolve(fileURLToPath(new URL("../../", import.meta.url)));
 const STAMP = ".core-version";
@@ -35,8 +34,7 @@ const apply = args.includes("--apply");
 const target = args.find((a) => !a.startsWith("--"));
 
 // normalizeText before hashing: the hash describes the CONTENT, not the line
-// endings either machine stores it with — the exact lesson .template-version
-// learned on Windows (see dev/update-plan.mjs).
+// endings either machine stores it with (see export-plan.mjs).
 const sha256 = (text) => createHash("sha256").update(normalizeText(text), "utf8").digest("hex");
 
 function fail(message) {
@@ -91,9 +89,7 @@ for (const file of new Set([...manifest.files, ...Object.keys(shippedByPath)])) 
   };
 }
 
-// `content: {}` on purpose: `requires:` frontmatter is a skill concept; code
-// files have none, and passing their text would only invite one to match.
-const plan = planUpdate({ local, remote, content: {}, codeVersion: version });
+const plan = planExport({ local, remote });
 
 const LABELS = {
   new: "new      ",

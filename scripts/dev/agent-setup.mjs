@@ -122,8 +122,8 @@ function stubFiles() {
  * Removal is per FILE and only when the file still holds what we put there.
  * Deleting a directory wholesale would take a `.codex/skills/` somebody added,
  * or the `permissions` block they wrote into `.claude/settings.json`, and it
- * would do it without a word. Same rule the guidance update lives by: a file you
- * changed is yours, and this reports it instead of touching it.
+ * would do it without a word. A file you changed is yours, and this reports it
+ * instead of touching it.
  */
 function planFor(agent) {
   const keep = [];
@@ -268,8 +268,8 @@ if (undo) {
 
 // ── which program? ──────────────────────────────────────────────────────────
 
-// One reader for this file, `node run.mjs update` and the two tests that walk
-// the tree — see `readAgentProfile()` in agent-configs.mjs. A profile that is
+// One reader for this file and the two tests that walk the tree — see
+// `readAgentProfile()` in agent-configs.mjs. A profile that is
 // there and unusable is not "no profile": it is said out loud, and then the
 // last-run fallback simply has nothing to offer.
 const previous = readAgentProfile(ROOT);
@@ -357,7 +357,7 @@ writeFileSync(
 );
 
 console.log(`\n✓ Set up for ${label}. ${toWrite.length} written, ${toRemove.length} removed.`);
-console.log(`  Recorded in ${PROFILE}, so \`node run.mjs update\` will not put them back.`);
+console.log(`  Recorded in ${PROFILE} — \`--undo\` restores all four.`);
 
 console.log("");
 for (const line of gateNotice(agent)) console.log(line);

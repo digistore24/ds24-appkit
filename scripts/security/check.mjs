@@ -45,7 +45,6 @@ import { fileURLToPath } from "node:url";
 
 import { advisories } from "./rungs/advisories.mjs";
 import { container } from "./rungs/container.mjs";
-import { drift } from "./rungs/drift.mjs";
 import { history } from "./rungs/history.mjs";
 import { invisible } from "./rungs/invisible.mjs";
 import { live } from "./rungs/live.mjs";
@@ -77,7 +76,6 @@ export const RUNGS = [
   signatures,
   registry,
   posture,
-  drift,
   live,
   secrets,
   invisible,

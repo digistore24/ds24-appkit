@@ -1,7 +1,6 @@
 ---
 name: visuals
 description: Makes an app something to look at rather than something to read — what the customer should SEE, the patterns available, image generation, customer uploads, and a check of what is already there. Use this when the user says "my app is only text", "there is nothing to look at", "I want pictures in it", "can it make images?", "customers should be able to upload a photo", "where do I put the PDF my buyers get?", "where do my videos go", "my video is too big to upload", or when they are about to build a page whose whole output is a block of text. For "this looks unfinished" ask which they mean — hand-built-looking pages are `ux-gateway`, pages that hand out only paragraphs are this one.
-requires: 0.7.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 

@@ -1,7 +1,6 @@
 ---
 name: mobile-companion
 description: Sets up a native mobile app on this app's backend — and first asks whether one is needed at all, because the app already installs to a phone's home screen for nothing, which makes a native build a companion and a viewer rather than a sales channel. Then the HTTP API, and an Expo/React Native companion shipped through EAS on the same accounts, entitlements and balances. Use this when the user says "I want an app for my phone", "eine App fürs Handy", "a mobile app for my customers", "a real app, like from the app store", "an icon on the home screen", "publish to the app store", mentions Expo, React Native, EAS, push notifications or signing certificates, or asks how another program can talk to this app on a member's behalf — an API, an interface, an endpoint, a token.
-requires: 0.11.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -39,8 +38,7 @@ so in three sentences and let them choose:
    the icon is the answer and this skill stops here.
 
 ⚠️ **If they choose the icon, there is nothing for you to build** — check that
-`app/manifest.ts` and `public/icons/` exist (an older copy of the template may
-predate them) and read [`docs/mobile.md`](../../../docs/mobile.md) →
+`app/manifest.ts` and `public/icons/` exist and read [`docs/mobile.md`](../../../docs/mobile.md) →
 *First: an icon, or an app?* to them. One thing there is worth saying out loud
 even when they did not ask: **on iPhone the installed app has its own sign-in**,
 so an app offering only magic links cannot be used from its own icon. That is a
@@ -94,8 +92,7 @@ companion needs something to accompany.
 2. Set `"enabled": true` in `config/api.json`. Ask TWO questions first, and ask
    them together — they are different questions and one flag cannot answer both
    ([`docs/api.md`](../../../docs/api.md) → *Three questions, not one switch*;
-   the second one is `"selfService"` *(needs template 0.35.0)* — in an older app
-   only the first question exists):
+   the second one is `"selfService"`):
 
    - **Is the API for every member, or a paid feature?** A paid feature sets
      `"requiresPlan"` to a Product Key from `config/digistore-products.json`

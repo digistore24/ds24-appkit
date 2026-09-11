@@ -355,7 +355,7 @@ three signatures.
 
 **In an app built on the template**, this file describes the template until
 \`node run.mjs api-map\` has been run here; then it describes this app, your own
-exports included, and \`node run.mjs update\` leaves it alone.
+exports included.
 
 ${PAGE_SHAPE}
 ${sections.join("\n")}

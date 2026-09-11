@@ -51,10 +51,9 @@ check in ONE function. What follows is what each of them means._
 - **And if that content is ever going to be searchable by the assistant, put
   its access check in ONE function from the start** — `mayReadUnit(memberId,
   slug)` in `lib/<area>/rules.ts`, called by the page now and by the content
-  source later. On template 0.18.0 and newer she can also LINK to a page she
-  looked up, so a source that is more permissive than its page would tell a
-  non-buyer that "Lektion 7" exists and hand them a link that bounces them
-  back — and on any version it tells them the lesson exists. Splitting the check into two
+  source later. She can also LINK to a page she looked up, so a source that is
+  more permissive than its page tells a non-buyer that "Lektion 7" exists and
+  hands them a link that bounces them back. Splitting the check into two
   `hasPlan()` calls that agree today is how that happens; there is no test that
   catches it, because both halves live in your app. The full checklist is
   [`docs/content-source.md`](../../../../docs/content-source.md) → *The five

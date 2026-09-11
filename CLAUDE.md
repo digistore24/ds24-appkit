@@ -160,7 +160,7 @@ line flags, raw SQL, dates — are **[`docs/conventions.md`](docs/conventions.md
 - **Messages always as a `Callout`** with one of its four intents, never with hand-picked colour classes. What must stay on screen is a `Callout`, what may drift past is a toast — three mechanisms, never a fourth. See **UI**.
 - **Light and dark both count.** Every new piece of UI MUST be readable in both, which follows by itself as long as colours come from the tokens.
 - **Tests are mandatory, and green is the commit condition rather than a courtesy** — nothing runs them for you after a push, so a red test that gets committed stays red until somebody looks. `.githooks/pre-commit` refuses on red, and a shipped test that fails is a finding about your change, never an obstacle to weaken or delete.
-- **⚠️ A SKIPPED test is not a passed one.** `⏭ <file>: NOT CHECKED — <reason>` on stderr has exactly five legitimate causes — `node run.mjs agent-setup --apply`; a registry that no longer holds the SHAPE a test needs; a foreign tool this machine does not have; a page this app has REPLACED (the skill **salespage** ran); a logo this app has SET (`brand icons --apply`). Anything else is a question nobody answered — [`docs/conventions.md`](docs/conventions.md) → *And a SKIPPED test is not a passed one*. Needs template 0.25.0
+- **⚠️ A SKIPPED test is not a passed one.** `⏭ <file>: NOT CHECKED — <reason>` on stderr has exactly five legitimate causes — `node run.mjs agent-setup --apply`; a registry that no longer holds the SHAPE a test needs; a foreign tool this machine does not have; a page this app has REPLACED (the skill **salespage** ran); a logo this app has SET (`brand icons --apply`). Anything else is a question nobody answered — [`docs/conventions.md`](docs/conventions.md) → *And a SKIPPED test is not a passed one*.
 - **Call up the app yourself before you say "done", then ask the log.** Green tests are no proof that the page loads, and a page that loads is no proof that it rendered. See **Never ship a broken page** below.
 - **"Done" is said in the words of the person who does not read code — what they can now open or do, and what is still open — and the file paths come LAST, under their own line.** Never a function name in the first paragraph. The shape, with an example: [`docs/guidance.md`](docs/guidance.md) → *How a skill works*.
 - **Every line the customer reads is in THEIR language — the plan, the hand-back and every progress line in between — and a progress line says what they get from the step, or is left out.** Measured 2026-09-10: a customer who wrote German got the plan in German and the build narrated in English ("Now re-export it from schema-core.ts"); which file was touched belongs in the commit message, not in front of them.
@@ -482,9 +482,9 @@ app has. It **ships empty**.
 - **`node run.mjs module list` is the one command that answers "what is this app
   made of"**, and nothing else does.
 - 🚨 **A module's guidance lives in the CORE tree, never under `modules/`.**
-  `node run.mjs update` addresses `CLAUDE.md`, `docs/*.md` and
-  `.claude/skills/**` **by path**, so text under a module is the one guidance a
-  released app could never bring forward.
+  An agent must be able to learn about a module this app does NOT have — that
+  it exists and is one command away — and text under `modules/<name>/` is not
+  there until the module is.
 
 | module | to install | the full story | the playbook |
 |---|---|---|---|
@@ -614,8 +614,8 @@ page *and* the sync script. **One price, one place: the registry AUTHORS it** an
 survives, in the code or in the DS24 interface. One offering is one product **per
 language**, one **plan per way to pay**, one product SET **per environment**.
 
-🚨 **Monthly and yearly are two `paymentOptions` of ONE offering** (needs
-template 0.36.0) — not two products, not two Product Keys; both hold one key.
+🚨 **Monthly and yearly are two `paymentOptions` of ONE offering** — not two
+products, not two Product Keys; both hold one key.
 And 🚨 **a product with no plan of ours has Digistore24's own (~27 €), whose
 order form charges it and whose orders GRANT** — on a subscription for ever.
 
@@ -666,36 +666,6 @@ greeting's `[Operations: …]` line reads back. What npm says on a customer's fi
 install, and which of it is real:
 **[`docs/troubleshooting.md`](docs/troubleshooting.md)**.
 
-## This app is a copy — keep its guidance current
-
-The template this app came out of keeps being worked on. The code here is the
-customer's and nobody changes it behind their back; **this file, `docs/` and
-`.claude/skills/` are a different matter** — they are how you know what the app
-can already do, and a six-month-old copy of them is how a shipped feature gets
-rebuilt by hand, worse, beside the one that was already there.
-
-```bash
-node run.mjs update           # what would change — writes nothing
-node run.mjs update --apply   # write it
-```
-
-Five properties, and knowing them is enough to use it correctly: **text only**,
-and as an ALLOWLIST — `.md` under `docs/`, `.claude/skills/`, `.agents/skills/`
-plus `AGENTS.md`, `CLAUDE.md`, `README.md`, and nothing else, because a doc
-cannot collide with a page somebody built and a `lib/` file can; 🚨 **a manifest
-naming anything outside it aborts the whole run before a byte is written** — the
-remote list decides what gets written, so one refused path is not skipped, it
-stops everything; **a file that was edited here is left alone** and reported as
-`keep`, so house rules written into this file survive — 🚨 do not "fix" that by
-overwriting them anyway; **a skill declaring `requires:` above this app's version
-is refused**, because knowledge without its code is worse than none; and
-**nothing is ever deleted**.
-
-**Do not run `--apply` on your own initiative.** Show the user what would change,
-say in a sentence what it is about, let them decide. The whole reasoning,
-including what the update refuses and why, is in
-**[`docs/updates.md`](docs/updates.md)**.
-
 ## Three systems
 
 **This app has to run on Linux, macOS and Windows**, because Claude Code, Codex,
@@ -714,7 +684,7 @@ Four refusals hold for anything you write here:
 - 🚨 **Split a file on `/\r?\n/`, never on `"\n"`.** Go through `setEnvValue()` /
   `readEnvValue()` rather than parsing `.env` again somewhere else.
 - 🚨 **Normalise before hashing** — `normalizeText()` from
-  `scripts/dev/update-plan.mjs`.
+  `scripts/core/export-plan.mjs`.
 
 ## What the app stores about people
 

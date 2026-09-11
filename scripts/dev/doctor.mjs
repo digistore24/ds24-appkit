@@ -328,30 +328,6 @@ export async function inspect({ quick = false } = {}) {
     });
   }
 
-  // ── how this checkout sits on disk ────────────────────────────────────────
-  //
-  // A working tree with CRLF endings. `.gitattributes` keeps new clones out of
-  // this, but a copy made before it existed — or one whose git was told
-  // otherwise — still has it, and then `node run.mjs update` silently does
-  // nothing: the hashes in `.template-version` are taken over LF content, so
-  // every guidance file looks "edited in this app" and is left alone. Nothing
-  // else reports that, which is the only reason this check is here.
-  //
-  // CLAUDE.md stands in for the tree: it is always present and always ours.
-  if (existsSync("CLAUDE.md") && readFileSync("CLAUDE.md", "utf8").includes("\r\n")) {
-    add({
-      id: "line-endings",
-      label: "Line endings in the working tree",
-      ok: false,
-      detail: "CRLF — `node run.mjs update` will report every file as edited and write nothing",
-      severity: "info",
-      fix: everywhere({
-        command: "git config core.autocrlf false && git rm --cached -r . && git reset --hard",
-        note: "checks the files out again with LF; commit or stash your own changes first",
-      }),
-    });
-  }
-
   // ── the tools ─────────────────────────────────────────────────────────────
   add({ id: "npm", label: "npm", ok: await hasCommand("npm"), detail: "comes with Node.js", fix: await withPlatformFix("node") });
   add({ id: "git", label: "git", ok: await hasCommand("git"), fix: await withPlatformFix("git") });

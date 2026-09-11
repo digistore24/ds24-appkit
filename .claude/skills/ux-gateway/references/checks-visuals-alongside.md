@@ -18,9 +18,7 @@ Then walk the app's **result surfaces**: the places where a customer is handed
 something. Not every page — a settings form is a settings form.
 
 *(This check audits against [`docs/visuals.md`](../../../../docs/visuals.md) rather
-than `docs/ux.md`, which has nothing to say about pictures. And `Figure`,
-`generateImage()` and the catalogue all arrived with template 0.7.0 — on an
-older copy the rows that name them never fire, and the rest applies unchanged.)*
+than `docs/ux.md`, which has nothing to say about pictures.)*
 
 | Severity | What | Why |
 |---|---|---|
@@ -104,14 +102,6 @@ something over — a submission, an answer, a photo, a plan. **Not every form.**
 settings page, an address, a payment method, a support message: the customer is
 not handing over their *work* there, and a confirmation is the right answer.
 
-*(`askCompanion()`, `<CompanionPanel>`, `config/ai-companion.json` and the
-catalogue all arrived with template **0.8.0** — on an older copy the three rows
-that name them never fire, and the work-surface row applies unchanged, back to
-0.4.0. That row is also the one that matters most on an old app: it needs no
-companion code at all, only a page and a `docs/app.md`. Which is why the
-`requires:` on this skill stays at 0.4.0 — bumping it would withhold all nine
-other checks from an app on 0.6.0 over one row it could not use anyway, and
-withhold precisely the row it could.)*
 
 | | Severity | What |
 |---|---|---|

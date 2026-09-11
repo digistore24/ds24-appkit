@@ -18,8 +18,7 @@
 //
 // No network is never a crash. A DNS failure, a timeout, a 500 or a page that
 // parses to nothing produce one line naming the host and the reason, and the
-// run carries on with whatever else it was given — the posture
-// `scripts/dev/update-check.mjs` already takes.
+// run carries on with whatever else it was given.
 
 import { isLocalhostUrl } from "../ds24/_public-url.mjs";
 

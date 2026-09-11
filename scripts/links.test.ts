@@ -15,8 +15,7 @@
 // not: the wrong number of `../` is invisible unless somebody counts.
 //
 // It checks relative links only. An `https://` link goes stale in a way no
-// local test can see, and `docs/updates.md` is about a repository this test
-// cannot reach.
+// local test can see.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, normalize, resolve } from "node:path";

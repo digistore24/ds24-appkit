@@ -109,9 +109,7 @@ shorter.
 | Proof it works in a deployment | `node run.mjs smoke` calls the manifest and every icon in it |
 
 **If those files are not in your app, your copy of the template predates them.**
-`node run.mjs update` brings this text forward but never code — it deliberately
-never touches `app/`, `lib/` or `public/`. Retrofitting is four files, and two
-numbers decide whether it works at all: the icons **must** include a 192×192 and
+Retrofitting is four files, and two numbers decide whether it works at all: the icons **must** include a 192×192 and
 a 512×512, or Chrome refuses to install and says nothing useful about why.
 Pointing the manifest at the existing `app/icon.png` (256×256) is the mistake
 that gets made — it looks right and installs nowhere. The current files are in
@@ -147,8 +145,8 @@ up in the companion repo's `git diff` — readable, keepable, revertible. The
 target must be OUTSIDE this app; exporting into the app's own tree is
 refused.
 
-Re-running is the update mechanism. The rules are `node run.mjs update`'s
-rules (see [`docs/updates.md`](updates.md)), applied to code:
+Re-running is how the companion follows the core. Three rules hold, and
+knowing them is enough to use it correctly:
 
 - **A file you changed in the companion repo is yours.** `.core-version`
   records the hash each file had when it was exported. Only files that still
@@ -159,12 +157,6 @@ rules (see [`docs/updates.md`](updates.md)), applied to code:
   `withdrawn` and stays — deleting it is your decision.
 - **No timestamp in the stamp.** Same input, same output; the stamp diffs
   only when content did.
-
-One thing `node run.mjs update` does that this deliberately does not:
-`update` reaches every existing clone, because it refreshes text from the
-public repo. `export-core` is CODE and lives in this repo — an app cloned
-before it existed updates its tooling by taking the template's new code, not
-via `update` (which never touches code).
 
 ## Wiring the companion repo
 

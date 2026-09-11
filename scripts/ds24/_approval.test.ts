@@ -18,6 +18,7 @@ import {
   allApproved,
   approvalApplies,
   approvalStatusOf,
+  isDue,
   classifyStatuses,
   describeApproval,
   dropApprovalCache,
@@ -509,5 +510,36 @@ suite("statusesFrom", () => {
       { ...product({ "1": "new" }), id: "715507" },
     ]);
     expect(statuses.fokus.status).toBe("new");
+  });
+});
+
+suite("isDue", () => {
+  const HOUR = 60 * 60 * 1000;
+  const DAY = 24 * HOUR;
+
+  it("asks on the first run", () => {
+    expect(isDue(null, 1_000_000)).toBe(true);
+  });
+
+  it("asks again when a malformed cache is found", () => {
+    expect(isDue({}, 1_000_000)).toBe(true);
+    expect(isDue({ checkedAt: "yesterday" }, 1_000_000)).toBe(true);
+  });
+
+  it("stays quiet inside the day", () => {
+    const now = 10 * DAY;
+    expect(isDue({ checkedAt: now - HOUR }, now)).toBe(false);
+  });
+
+  it("asks once the day is up", () => {
+    const now = 10 * DAY;
+    expect(isDue({ checkedAt: now - DAY }, now)).toBe(true);
+  });
+
+  it("asks again when the stamp lies in the future", () => {
+    // A restored machine or a clock correction would otherwise park the check
+    // beyond any reachable date and switch it off silently.
+    const now = 10 * DAY;
+    expect(isDue({ checkedAt: now + 5 * DAY }, now)).toBe(true);
   });
 });

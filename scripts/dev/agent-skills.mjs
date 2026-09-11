@@ -15,10 +15,6 @@
 //   scripts/agent-skills-stamp.mjs   in the factory, writes the stubs that ship
 //   scripts/dev/agent-setup.mjs      in a customer's app, puts them back after
 //                                    they were pruned for another program
-//
-// `requires:` travels along. update-plan.mjs uses it to refuse a skill whose
-// code is newer than the app it would land in, and a stub that slipped past
-// that check would be a signpost to a file the update just declined to write.
 
 /**
  * The frontmatter fields a stub carries over.
@@ -38,15 +34,14 @@ export function skillFrontmatter(text, skill) {
   if (!name || !description) throw new Error(`${skill}: name and description are required`);
   if (name !== skill) throw new Error(`${skill}: frontmatter says name: ${name}`);
 
-  return { name, description, requires: field("requires") };
+  return { name, description };
 }
 
 /** The complete text of `.agents/skills/<skill>/SKILL.md`. */
 export function stubFor(text, skill) {
-  const { name, description, requires } = skillFrontmatter(text, skill);
+  const { name, description } = skillFrontmatter(text, skill);
 
   const head = ["---", `name: ${name}`, `description: ${description}`];
-  if (requires) head.push(`requires: ${requires}`);
   head.push("---");
 
   return `${head.join("\n")}

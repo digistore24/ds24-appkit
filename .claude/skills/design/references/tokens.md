@@ -107,8 +107,8 @@ saturation); then `OG_FOREGROUND` and `PWA_THEME_COLOR_DARK` in
 `lib/pwa/manifest.ts`, because `lib/pwa/manifest.test.ts` pins both to the
 tokens and stays red until they match; then `node run.mjs ux-check`, whose 36
 pairs are the floor; then the values and the reason in `docs/design.md`. It
-is some twenty values against the accent's three, and it is theirs to keep —
-`node run.mjs update` carries text, never CSS. Say the count and the cost,
+is some twenty values against the accent's three, and it is theirs to keep.
+Say the count and the cost,
 then let them decide; a brand owner who hears a number decides in one turn.
 
 | Pairing | Carries | Elevation | The one package it adds | The file `next/font/local` points at |
@@ -250,10 +250,8 @@ as it does for `shadow-lg`.
 ⚠️ That holds because `cn()` is an `extendTailwindMerge` here. Stock
 tailwind-merge 2.6.1 does not know this shorthand — it kept both classes and the
 base shadow won, so the line changed nothing at all while compiling, answering
-200 and going red nowhere. `node run.mjs update` carries text and never code, so
-in an app whose `lib/utils.ts` is still the three-line shadcn helper the old
-rule holds and such a class needs a trailing `!`. 🚨 Everywhere else, do not add
-one: `!important` beats every later override too, and the marker takes the class
+200 and going red nowhere. 🚨 Do not add a trailing `!` to
+it: `!important` beats every later override too, and the marker takes the class
 out of the merge — a marked class and a plain one deliberately never conflict,
 in either spelling — so it leaves the dead base class in the DOM.
 

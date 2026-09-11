@@ -55,8 +55,7 @@ node run.mjs errors --url https://your-app.example    # what its log picked up
 A page that answers 200 and renders the wrong date, drops a translation or
 mismatches its hydration is a broken page with a green status code, and nothing
 about the status code will tell you. `errors --url` asks the deployed app for a
-bounded, redacted window of its own stderr over `DIAGNOSTICS_SECRET`; needs
-template 0.22.0.
+bounded, redacted window of its own stderr over `DIAGNOSTICS_SECRET`.
 
 The routine, and how each answer is rated, is `CLAUDE.md` → *Never ship a broken
 page*. Getting the app onto a host so that there is something to ask at all is

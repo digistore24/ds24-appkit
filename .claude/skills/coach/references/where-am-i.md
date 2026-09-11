@@ -67,8 +67,7 @@ becomes something people skip.
   and no ids is not a finding at all — nothing was meant to be created for it.
   One parked WITH ids is just as legitimate: it was synced while it was on
   sale, and the sync itself warns that it stays buyable at Digistore24 —
-  removing the ENTRY, then `ds24-sync --prune` *(needs template 0.36.0; before
-  that, by hand in the Digistore24 backend)*, is what takes it down.
+  removing the ENTRY, then `ds24-sync --prune`, is what takes it down.
   No passphrase → no IPN,
   so purchases arrive nowhere; both → **`setup-digistore`**.
   A product id for only *some* of the app's languages → the missing ones get an

@@ -1,7 +1,6 @@
 ---
 name: design
 description: Gives this app a look of its own — either FROM THE USER'S OWN BRAND (a logo file, a CSS file, their website, a hex code) or, when there is none yet, from a mood and two or three references. It owns the four dials — accent, corner radius, type, elevation — plus the header logo and the app icons. Use this when the user says "hier ist mein Logo", "übernimm mein Branding", "das sind meine Farben", "use my brand colours", "make it match my website", "here is our style guide", "it looks generic", "it looks like every other app", "give it its own look", "I want a custom design", "change the colours", "change the font", or when build-app step 1e hands over.
-requires: 0.25.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 

@@ -6,7 +6,7 @@
 // This is your file. Extend it when `node run.mjs security-check` reports
 // something that does not ship and that you have decided to live with, and take
 // an entry out when it stops mattering. Nothing here is maintained on your
-// behalf; `node run.mjs update` carries guidance text and never touches code.
+// behalf.
 //
 // ── Why a set of ids with prose, and not a number ──────────────────────────
 //

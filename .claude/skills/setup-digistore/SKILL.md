@@ -1,7 +1,6 @@
 ---
 name: setup-digistore
 description: Sets up Digistore24 billing — the API key, the products, the IPN connection (webhook + SHA512 passphrase) and the checkout links; the agent runs the commands itself (`ds24-connect`, `ds24-sync`). Use this as soon as the app is meant to receive sales or process completed purchases, and when the user says "somebody paid and the app knows nothing about it", "a test purchase never arrives", "connect Digistore24", or asks for a checkout link.
-requires: 0.30.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -127,8 +126,7 @@ two example plans. Which of these do you actually sell?"* Then, per entry:
 - **Never need it** → delete the entry.
 
 One entry per OFFERING — monthly and yearly are two `paymentOptions` inside it,
-not two entries and not two Product Keys. *(Needs template 0.36.0; before that
-they were two entries, and every access gate had to name both.)* Never a second price list in the code,
+not two entries and not two Product Keys. Never a second price list in the code,
 and never a price edited on the Digistore24 side: the registry authors it and
 the sync copies it onto the product's payment plans, one per way to pay.
 

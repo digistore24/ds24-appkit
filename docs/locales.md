@@ -136,9 +136,7 @@ and 6. The same list is the header of `i18n/config.ts`.
 5. Remove the entry from `NAMES_A_MACHINE` (`lib/ai/disclosure.mjs`).
 6. Delete `content/legal/<slug>.<code>.md`.
 7. Remove `<code>` from `productIds` **and `payplanIds`** in
-   `config/digistore-products.json`, then `node run.mjs ds24-sync --prune`
-   *(needs template 0.36.0; before that the product is deactivated by hand in
-   the Digistore24 backend)* —
+   `config/digistore-products.json`, then `node run.mjs ds24-sync --prune` —
    that language's product is then an orphan this app created, and the prune
    deletes it, or deactivates it if it ever sold. Removing the id alone does
    not unpublish anything.

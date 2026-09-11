@@ -4,8 +4,7 @@
 
 > **A MODULE, and a fresh app does not have it.** `node run.mjs module add
 > community`, then `node run.mjs db-migrate` — it brings its own tables on its
-> own migration chain (`node run.mjs module list` counts them). Then the switch below, which ships OFF. Needs template
-> 0.19.0 or newer; `node run.mjs update` brings this text, not the code.
+> own migration chain (`node run.mjs module list` counts them). Then the switch below, which ships OFF.
 >
 > ⚠️ **A missing community is not evidence of an old clone.** Every generated
 > app starts without it. `node run.mjs module list` is the command that answers
@@ -1021,15 +1020,10 @@ the recipe is posts in open rooms, full stop.
 
 ## An app that already exists
 
-**First: which "already exists" is this?** An app on template 0.19.0 or newer
-simply does not have the module yet, and that is one command —
-`node run.mjs module add community`, then `db-migrate`. Nothing below applies to
-it. This section is about an app cloned **before** the module existed at all.
-
-`node run.mjs update` moves **text**, never code. So such an app gets this file,
-gets the skill — and the skill refuses itself via its `requires:` line rather
-than describing code that is not there. That refusal is the honest answer, and
-this section is the rest of it.
+**First: which "already exists" is this?** An app that simply does not have the
+module yet is one command — `node run.mjs module add community`, then
+`db-migrate`. Nothing below applies to it. This section is about an app cloned
+**before** the module existed at all.
 
 **What a hand-retrofit would actually involve**, so the size of it is visible
 before somebody starts:

@@ -156,8 +156,7 @@ async function manualRoute() {
   // The question needs a person on the other end. Without a terminal — an agent
   // running this through a tool, a pipe, a CI step — `rl.question` never
   // returns: it waits on a stdin nobody is typing into, and the command hangs
-  // until something outside kills it. Refusing with the way through is the same
-  // contract `node run.mjs update` keeps.
+  // until something outside kills it. Refused here, with the way through named.
   if (!process.stdin.isTTY) {
     console.error("\n✗ No terminal here to ask on — nothing saved.");
     console.error("  Have the user create the key at the address above, then pass it in:");

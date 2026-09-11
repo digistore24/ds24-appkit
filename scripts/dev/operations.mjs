@@ -401,10 +401,10 @@ const oneLine = (text) => String(text ?? "").replace(/\s+/g, " ").trim();
 /**
  * The greeting's operational line, or `""` when there is nothing to say.
  *
- * Takes `null` as readily as an array — `update-check.mjs` records what the
- * other shape cost: destructuring in the signature threw on the first real run,
- * in the hook, the one place in this project where an exception is printed
- * instead of a greeting.
+ * Takes `null` as readily as an array — the other shape was measured once:
+ * destructuring in the signature threw on the first real run, in the hook, the
+ * one place in this project where an exception is printed instead of a
+ * greeting.
  *
  * Ordered worst-first by `SEVERITIES.indexOf()`, so a severe finding is never
  * softened by being listed beside a routine one, and the line ends with the

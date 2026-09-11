@@ -9,12 +9,11 @@
 // says the chat *"can LINK only to what she really looked up, enforced
 // mechanically rather than by a prompt wish"*. This file is that mechanism.
 //
-// It is a top-level script with internal functions — the same shape as
-// `scripts/dev/update.mjs` — so what is asserted is what source text can answer
-// exactly: **that every way this command can find something wrong ends the
-// process non-zero.** A gate that prints `✗` and exits 0 is not a gate, and it
-// is the one defect in a release check that no run of the check can reveal:
-// the output looks identical.
+// It is a top-level script with internal functions, so what is asserted is
+// what source text can answer exactly: **that every way this command can find
+// something wrong ends the process non-zero.** A gate that prints `✗` and
+// exits 0 is not a gate, and it is the one defect in a release check that no
+// run of the check can reveal: the output looks identical.
 //
 // ⚠️ What this does NOT claim: that the rules it applies are the right ones, or
 // that they catch a real broken reference. That is the script's own subject and

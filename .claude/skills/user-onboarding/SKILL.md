@@ -1,7 +1,6 @@
 ---
 name: user-onboarding
 description: Gives an app a real first session for its END USER — the person who paid: the activation event, this app's own first steps instead of the shipped blueprint, a welcome survey or a comeback nudge, and a check of what exists. Use this when the user says "my customers sign up and never come back", "nobody finishes the setup", "how do I explain my app to new users", "people buy and then do nothing", "nobody uses it after they buy", "I want a welcome tour / first steps", or when the dashboard still shows the two shipped blueprint steps. The audit twin is `ux-gateway` (check first-run); building what it found is this skill.
-requires: 0.4.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -61,9 +60,7 @@ so that most cells can say "skip it".
 - `docs/app.md` → the `Activation:` and `Return:` lines in the product block,
   and any recorded "no" under the decisions (no survey, no gamification).
   **A recorded no is an answer** — say you found it and move on; do not propose
-  it again as if it were new. On an older app the `Activation:` line may sit
-  under *Decisions worth remembering* instead; that is the same answer, read it
-  there and do not move it for its own sake.
+  it again as if it were new.
 - `app/dashboard/page.tsx` → are the checklist steps still the two shipped
   blueprint ones? That single glance separates "was never designed" from "was
   designed and may need revisiting".

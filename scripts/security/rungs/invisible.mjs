@@ -17,13 +17,12 @@
 //
 // ── Why it is worth a rung of its own ──────────────────────────────────────
 //
-// Two doors in this template write somebody else's text into files an agent
-// then reads as instruction — `node run.mjs update`, and the corpus the skill
-// `knowledge-intake` distils into `content/knowledge/`, which
-// `lib/ai/retriever.ts` puts into the model's cacheable system block.
-// A review is the control on both, and a review is exactly what this class
-// of character defeats. The reasoning in full, and what was measured and left
-// off, is in `../invisible.mjs`.
+// One door in this template writes somebody else's text into files an agent
+// then reads as instruction — the corpus the skill `knowledge-intake` distils
+// into `content/knowledge/`, which `lib/ai/retriever.ts` puts into the model's
+// cacheable system block. A review is the control on it, and a review is
+// exactly what this class of character defeats. The reasoning in full, and
+// what was measured and left off, is in `../invisible.mjs`.
 //
 // ── 🚨 No fallback to walking the tree ─────────────────────────────────────
 //

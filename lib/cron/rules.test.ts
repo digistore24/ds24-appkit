@@ -468,8 +468,8 @@ describe("the shipped config/cron.json", () => {
 //
 // ⚠️ **The hatch is `cron-doc-ok`, on the id's line in `./ids.mjs`.** A job you
 // add for your own app belongs in `./jobs.ts` and in that list, and it has no
-// business in a document this template maintains and `node run.mjs update`
-// replaces — so mark it and this check leaves it alone.
+// business in a document this template maintains — so mark it and this check
+// leaves it alone.
 const DOC = join(process.cwd(), "docs", "cron.md");
 const IDS_FILE = join(process.cwd(), "lib", "cron", "ids.mjs");
 const DOC_EXEMPT = "cron-doc-ok";

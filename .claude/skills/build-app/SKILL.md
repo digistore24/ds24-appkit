@@ -226,9 +226,6 @@ server**, never in the browser.
 rows, and a check per block changes what a "block" table carries. Once, at
 this point — later units inherit the decision.
 
-**On an older clone** (before 0.9.0) the `learning-activities` skill is
-refused by `node run.mjs update` because its code is not there — then skip
-1d and say so in one sentence, rather than improvising an unmaintained menu.
 
 ## Step 1e — The look: a check, not a menu
 

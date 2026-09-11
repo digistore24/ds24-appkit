@@ -1,7 +1,6 @@
 ---
 name: metrics
 description: Sets up the `metrics` module — the onboarding funnel, return by cohort and split tests. Use this when the user says "where do people drop out", "how many come back", "does my onboarding work", "I want to A/B test my welcome screen", "measure my funnel", "did that change help", or after `module add metrics`.
-requires: 0.33.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -103,11 +102,9 @@ action, with a green typecheck. The barrel is generated from this module's
 manifest, so `track` is in it as soon as `node run.mjs module add metrics` has
 run.
 
-⚠️ **If `track` is not in `lib/modules/server-exports.ts`, this app's copy of the
-module predates template 0.34.0** — the manifest shipped without the declaration,
-which is what made the module installable and not usable. `node run.mjs update`
-brings text and never `modules/`, so it cannot repair this for you. Add the line
-yourself and re-generate:
+⚠️ **If `track` is not in `lib/modules/server-exports.ts`, the module's manifest
+lacks the declaration** — which is what makes a module installable and not
+usable. Add the line yourself and re-generate:
 
 ```json
 "serverExports": { "track": "lib/track.ts" },

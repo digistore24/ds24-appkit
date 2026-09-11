@@ -1,7 +1,6 @@
 ---
 name: billing-modes
 description: Sets up the billing models beyond the one-off purchase — fixed subscriptions, usage-based prepaid tokens with auto top-up, and subscription self-service. Use this after setup-digistore, when the app is meant to bill recurring or by usage, and when the user says "a monthly membership", "cancellable at any time", "paid by use, not a flat fee", "a balance they top up and work through", or asks about tokens, auto top-up, cancellation, payment details or invoices.
-requires: 0.14.0
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -56,7 +55,6 @@ Two things to know before you set it:
   `ds24-sync` would create it at Digistore24 and it would be buyable while the
   app renders nothing that credits it. A parked one is skipped by that check, so
   you no longer have to delete a package to set `"subscriptions"`.
-  *(`"sell"` needs template 0.30.0.)*
 
 Reference: `lib/billing-mode.ts`.
 
@@ -81,7 +79,7 @@ what they do not sell with `"sell": false`, and confirm what remains with
 `node run.mjs ds24-sync --create-new` — parking alone only gets through when
 nothing NEW is left on the list, so a run that still creates anything needs the
 flag. Once every offering carries an id nothing is being created and later runs
-pass straight through without it. *(Needs template 0.30.0.)*
+pass straight through without it.
 
 That writes the id(s) back into `productIds.<env>` (one Digistore24 product
 per offer, language **and environment** — a DS24 product carries exactly one
@@ -137,10 +135,6 @@ three feedback mechanisms is in `CLAUDE.md`, under **UI**.
 
 ## Step 3 — Fixed subscription (if chosen)
 
-*(Needs template 0.36.0 for `paymentOptions`. On an older app a plan is one
-entry with one `priceCents` and one `billingInterval`, so monthly and yearly are
-two entries and two Product Keys — and every gate has to name both.)*
-
 One entry with `kind: "subscription"`, and its **ways to pay** under
 `paymentOptions` — each with `priceCents` and `billingInterval` (`"1_month"` /
 `"12_month"`). 🚨 Monthly and yearly are two of those, **not two entries**: both
@@ -157,8 +151,7 @@ Build the **subscription self-service** into the customer dashboard:
   entitlement ends on `last_paid_day`, not on the cancellation.
 - **Change payment details** → link to the DS24 `renewUrl` (no API of your own).
 - **Change the billing interval** → link to `subscriptions.switchIntervalUrl`,
-  which Digistore24 sends on the IPN. *(Needs template 0.36.0 — the column and
-  the payment plans it depends on both arrived there.)* It leads somewhere only because the
+  which Digistore24 sends on the IPN. It leads somewhere only because the
   product carries several payment plans, and it saves building an upgrade flow
   for the commonest change a subscriber makes.
 - **Invoices** → `invoiceUrl` per payment; history via `listPurchases`.
