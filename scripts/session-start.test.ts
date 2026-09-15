@@ -116,6 +116,25 @@ describe("the greeting after a compaction", () => {
     expect(run.stdout).not.toContain("[Project state:");
     expect(run.stdout).not.toContain("[Journey:");
   });
+
+  it("🚨 restates nothing that is not still written where it says it is", async () => {
+    // Every line the hook prints is a copy of a rule in CLAUDE.md, stages.md or
+    // guidance.md, and a copy ages silently. So each carries an anchor — a
+    // phrase from its source — and this is where the anchor is held against
+    // the file: change or delete the rule, and its line here goes red until it
+    // follows. Whitespace-insensitive, because the sources wrap at 80 columns.
+    const { AFTER_COMPACT_RULES } = await import("./dev/after-compact-rules.mjs");
+    expect(AFTER_COMPACT_RULES.length).toBeGreaterThan(0);
+    const squash = (text: string) => text.replace(/\s+/g, " ");
+    for (const rule of AFTER_COMPACT_RULES) {
+      const source = squash(readFileSync(path.join(ROOT, rule.source), "utf8"));
+      expect(
+        source,
+        `the hook says "${rule.line}" but ${rule.source} no longer contains "${rule.anchor}"`,
+      ).toContain(squash(rule.anchor));
+      expect(run.stdout).toContain(rule.line);
+    }
+  });
 });
 
 describe("the greeting derives the path instead of restating it", () => {

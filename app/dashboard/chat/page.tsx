@@ -53,6 +53,9 @@ export default async function ChatPage() {
   );
 
   const offReason = chatOffReason();
+  // Decided once; the body, the callout's colour and the command block below
+  // all read this one answer rather than asking the role three times.
+  const operator = isOwner(session.user.role);
   if (!isChatEnabled() && offReason) {
     // WHO is asking decides what they are told. The second place that makes
     // the same distinction is the dashboard's Digistore24 pair (the status
@@ -66,7 +69,7 @@ export default async function ChatPage() {
     // further — the name of a missing key is the shape of somebody else's
     // infrastructure, and a customer can act on none of it. They reach this
     // page only by typing the URL; the navigation never offers it to them.
-    const body = isOwner(session.user.role)
+    const body = operator
       ? // The reason is a code from lib/ai/chat-config.ts, translated here —
         // the module has no language, the page does.
         {
@@ -93,7 +96,7 @@ export default async function ChatPage() {
         {header}
         <Callout
           // For the Operator this is a to-do, for the Member a fact.
-          variant={isOwner(session.user.role) ? "warning" : "info"}
+          variant={operator ? "warning" : "info"}
           title={t("offTitle", { name: config.name })}
         >
           {body}
@@ -105,7 +108,7 @@ export default async function ChatPage() {
             running text reads as a sentence rather than as something to run.
             Only on the missing-key reason; the other two name no command.
           */}
-          {isOwner(session.user.role) && offReason === "noApiKey" && (
+          {operator && offReason === "noApiKey" && (
             <pre className="bg-background mt-2 overflow-x-auto rounded-md border p-2 font-mono text-xs">
               node run.mjs ai-check
             </pre>

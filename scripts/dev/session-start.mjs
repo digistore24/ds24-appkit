@@ -29,6 +29,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { approvalReport, describeApproval } from "../ds24/_approval.mjs";
 import { blockers, inspect } from "./doctor.mjs";
+import { afterCompactText } from "./after-compact-rules.mjs";
 import { describeUnwritten, readNotes, unwrittenItems } from "./app-notes.mjs";
 import { JOB_IDS } from "../../lib/cron/ids.mjs";
 import { canOpenBrowser } from "../lib/proc.mjs";
@@ -66,16 +67,9 @@ import {
 // helper answers "what value follows --flag", which is a different question
 // (CLAUDE.md → Rules; scripts/lib/args.mjs says why it is strict about it).
 if (process.argv.includes("--after-compact")) {
-  console.log("[After compaction — these rules still apply]");
-  console.log("- Every line the customer reads is in THEIR language — the plan, every progress line in between, and the hand-back.");
-  console.log("- \"Done\" is said in the words of somebody who reads no code: what they can now open or do, and what is still open.");
-  console.log("- File paths and function names come LAST, under their own line — never in the first paragraph.");
-  console.log("- A step that will take more than about two minutes is announced BEFORE it starts: what, roughly how long, what will be true afterwards.");
-  console.log("- A stage hand-back names the address, the app is RUNNING, the app's name is set, and the stage is committed AND pushed.");
-  console.log("- Every function the app sells was opened once AS THE OWNER before the hand-back names it.");
-  console.log("- No secret travels through the chat — never ask for a key, a token or a password here.");
-  console.log("- No technical word unexplained: the plain meaning goes into the sentence, in their language (docs/glossary.md).");
-  console.log("- Questions come as ONE numbered bundle per turn, and \"you choose\" is a valid answer to each of them.");
+  // The lines live in after-compact-rules.mjs, each pinned to the file its
+  // rule comes from — see the header there for why a copy has to be pinned.
+  console.log(afterCompactText());
   process.exit(0);
 }
 
