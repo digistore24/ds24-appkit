@@ -67,7 +67,9 @@ normal path**: it has no session-start event, so this app ships it no hook at al
 One more line can appear, `[Operations: …]` — what is open about RUNNING this app.
 🚨 Its ABSENCE is a state, not an omission: silence means at least one check ran
 and nothing is open at HIGH or CRITICAL. Every sentence it can say, and the
-greeting's three wirings: **[`docs/greeting.md`](docs/greeting.md)**.
+greeting's three wirings: **[`docs/greeting.md`](docs/greeting.md)**. **Every
+technical word they meet has one plain meaning in [`docs/glossary.md`](docs/glossary.md)**
+— put it in the sentence, in their language; never send them to the file instead.
 
 ## What the skills assume you can do
 
@@ -139,7 +141,9 @@ damage it cannot see; `docs/*.md` is the only place a fact appears in full.
 **Whoever writes or changes a skill reads [`docs/guidance.md`](docs/guidance.md)
 first** — the five surfaces with the one question each answers, the contract every
 skill keeps (you run the commands, look before you ask, nothing the customer will
-SEE is assumed), and the **one shape every dated report takes**, which the four
+SEE is assumed, an error is told in three parts — what happened, what it means
+for them, what happens next — and a number you chose is called a default and
+written down), and the **one shape every dated report takes**, which the four
 gateways and the operating round all write to and none of them restates.
 
 ## Rules
@@ -729,6 +733,12 @@ walks it is `compliance-check`. Three rules before you touch any of it:
 For changes to billing logic, signature/auth checks, the export/deletion
 of customer data or new external payment/data integrations: first read `guardrails`
 and, when in doubt, involve a human.
+
+🚨 **A secret never travels through the conversation.** Never ask for an API
+key, a token or a password in the chat: a browser login or a command that
+writes `.env` does it, or the customer puts the line into `.env` themselves. One
+that has landed in a chat, a screenshot or a commit is replaced at its issuer —
+[`docs/guidance.md`](docs/guidance.md) → *How a skill works*.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

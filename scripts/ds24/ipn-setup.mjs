@@ -170,7 +170,10 @@ if (!url && auto) {
       // Say it before doing it: this makes the machine reachable from the
       // internet, and nobody should discover that from a log line afterwards.
       console.log("• No public address yet — opening a Cloudflare Quick Tunnel for the IPN.");
-      console.log("  Your app becomes reachable from the internet while it runs (`node run.mjs stop` ends it).");
+      console.log("  What that means: while it runs, this app has a temporary public address, so");
+      console.log("  Digistore24 can send test purchases to it. Anyone with that address reaches the");
+      console.log("  app — the app, nothing else on this computer. `node run.mjs stop` closes it,");
+      console.log("  `node run.mjs status` shows whether it is open.");
       const opened = await openTunnel({ port: appPort(), log: (m) => console.log(`  ${m}`) });
       if (opened.ok) {
         tunnel = opened.url;

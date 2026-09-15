@@ -159,8 +159,11 @@ async function manualRoute() {
   // until something outside kills it. Refused here, with the way through named.
   if (!process.stdin.isTTY) {
     console.error("\n✗ No terminal here to ask on — nothing saved.");
-    console.error("  Have the user create the key at the address above, then pass it in:");
-    console.error("    node run.mjs ds24-connect --manual --key <the key>");
+    console.error("  Have the user create the key at the address above and write it into .env");
+    console.error("  themselves, as one line:   DIGISTORE_API_KEY=<the key>");
+    console.error("  Then `node run.mjs ds24-sync` proves it. Do not ask for the key in the chat —");
+    console.error("  a transcript is a place. Only where nobody is at this machine at all:");
+    console.error("    node run.mjs ds24-connect --manual --key <the key>   (and rotate it after)");
     process.exit(2);
   }
 

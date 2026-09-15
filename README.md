@@ -141,6 +141,24 @@ Git for Windows brings Git Bash with it, and these programs need it there anyway
 **No Homebrew is needed on macOS either.** Where you have it, it gets used;
 where you do not, nothing here asks you to install it first.
 
+### What you will need an account for
+
+Nothing below is needed to build the app on your computer. Each one comes up
+at the step that needs it, and the skill for that step says what it costs
+before anything is booked — but it helps to know the list in advance:
+
+| | When | What it costs you |
+|---|---|---|
+| **a Digistore24 vendor account** | as soon as the app should sell — step 2.2 | a fee per sale (the current rate is on their site); nothing up front |
+| **a host** (Railway, Render, Fly.io or DigitalOcean) plus its database | at go-live — step 3.1 | a monthly price; the skill looks it up and says it |
+| **mail delivery** (Postmark or SMTP) and a **domain** | at go-live | the providers' prices; the skill names them at that step |
+| **an AI company's key** (OpenAI, Anthropic, Gemini, Mistral or OpenRouter) | only if your app uses AI — step 2.3h | per use; `node run.mjs ai-check` shows what one call costs |
+
+Your AI program's own usage is the other cost, and it depends on your plan
+with that provider, not on this template. The words above — host, domain,
+key, deploy — and every other term you will meet are explained in
+[`docs/glossary.md`](docs/glossary.md), written for you.
+
 Want to look for yourself?
 
 ```bash
@@ -184,9 +202,10 @@ install dependencies, create `.env` from `.env.example`, start Postgres (in
 Docker, or without it — see above), apply migrations, bring the app up
 (→ http://localhost:3000).
 
-`AUTH_SECRET` is generated for you on the first start. One thing you enter into
-`.env` yourself afterwards: mail delivery for sign-in (Postmark **or** SMTP —
-`node run.mjs mail-setup` walks you through it, details in
+`AUTH_SECRET` is generated for you on the first start. One thing is left for
+later: mail delivery for sign-in (Postmark **or** SMTP) — `node run.mjs
+mail-setup` asks you for the details and writes them into `.env` itself, so
+nothing has to be edited by hand (details in
 [`docs/auth-setup.md`](docs/auth-setup.md)).
 
 Then `node run.mjs restart`.

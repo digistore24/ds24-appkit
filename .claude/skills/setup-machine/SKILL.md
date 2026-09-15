@@ -106,8 +106,11 @@ Say it in one sentence, run `node run.mjs setup`, and hand over to **`build-app`
 ### 3. Something missing — one at a time
 
 Work through the `blocker` checks in the order they arrive. For each one, tell
-the user in one sentence *what* is missing and *why it matters*, then act by the
-flags:
+the user in one sentence *what* is missing, *why this app needs it*, *where it
+goes* (a program on their computer, like any other) and *how it comes off again*
+(uninstalled like any other program — nothing about their app lives in it), then
+act by the flags. "I am installing X quickly" is the shape to avoid: somebody who
+cannot judge X is left choosing between a blind yes and blocking:
 
 - **Neither `admin` nor `gui`** → ask "shall I install it?", and on a yes run
   `fix.command` yourself with your Bash tool.

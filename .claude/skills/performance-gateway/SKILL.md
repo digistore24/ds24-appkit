@@ -1,14 +1,26 @@
 ---
 name: performance-gateway
-description: The performance check for this app. Measures where it is slow and fixes it — response times per route, database queries and missing indexes, N+1 patterns, the connection pool, behaviour under ~100 parallel users, memory leaks, a blocked event loop, bundle size and Core Web Vitals — then reports. Use it after the security gateway and before the launch, and whenever somebody says "it is slow", "it times out", "the live app feels slow", "will it hold under load?".
+description: The performance check for this app. Measures where it is slow and fixes it — response times per route, database queries and missing indexes, N+1 patterns, the connection pool, behaviour under launch-day load, memory leaks, a blocked event loop, bundle size and Core Web Vitals — then reports. Use it after the security gateway and before the launch, and whenever somebody says "it is slow", "it times out", "the live app feels slow", "will it hold under load?".
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
 # Performance gateway — measure, fix, measure again
 
-The goal for the first version is plain and testable: **~100 concurrent users,
-no errors, page and API responses fast enough that nobody notices them.** Not
-"make it fast".
+The goal for the first version is plain and testable: **the number of people the
+launch will bring at once — 100 by default — with no errors, and page and API
+responses fast enough that nobody notices them.** Not "make it fast".
+
+**The 100 is an acceptance target, not a limit, and the customer is told so in
+those words.** Nothing in the app caps users at any number; an app that passes
+at 100 carries more, and the number exists so that "fast enough" is something
+this skill can measure and the next run can compare against. It is the
+template's default — kind (d) in [`docs/guidance.md`](../../../docs/guidance.md)
+→ *A number you chose is a default* — so before `load` runs, ask once, in
+their words: *"How many people will be in the app at the same moment on your
+busiest day — a launch mail to how many, a webinar that sends everyone at
+once? If you don't know, I test with 100, which is the usual starting point."*
+Their number replaces the 100 everywhere below, and the report says which was
+used and where it came from.
 
 The method is the whole point: **measure → find the bottleneck → fix → measure
 again.** Do not guess. Almost every slow app in this shape is slow for one of
@@ -28,7 +40,7 @@ Eight checks. You do not have to know which one you want.
 | 1 | **`all`** | everything below, in the right order | 30–50 min |
 | 2 | **`response`** | how long each route takes, one user at a time | 5 min |
 | 3 | **`db`** | queries, indexes, N+1, the connection pool | 10–15 min |
-| 4 | **`load`** | ~100 parallel users: errors, latency, throughput | 10 min |
+| 4 | **`load`** | launch-day load (100 parallel users by default): errors, latency, throughput | 10 min |
 | 5 | **`memory`** | server heap and browser heap — does it grow and never fall | 10 min |
 | 6 | **`cpu`** | hot functions, a blocked event loop | 10 min |
 | 7 | **`frontend`** | Lighthouse, Core Web Vitals, bundle size | 5–10 min |
@@ -101,7 +113,7 @@ next, and the database is the answer far more often than anything else.
 
 1. **`response`** — the map. Which routes are slow at all.
 2. **`db`** — the cause, in most cases.
-3. **`load`** — does it survive 100 people. Run it after the database is fixed,
+3. **`load`** — does it survive the launch's crowd (100 by default). Run it after the database is fixed,
    or you spend the run measuring the same bottleneck a hundred times.
 4. **`memory`** — leaks only show under sustained load, so straight after.
 5. **`cpu`** — only if `response` or `load` pointed at it. Usually skippable.
@@ -133,11 +145,13 @@ queries to catch N+1 with its per-page thresholds, and the smaller habits:
 column selection, pagination, the checkout-URL cache, pruning the append-only
 tables. Read it in full when you run this check.
 
-## 4 · `load` — ~100 parallel users
+## 4 · `load` — the launch's crowd, 100 parallel users by default
 
-The proof. Against the production build, on the routes a real visitor hits.
+The proof. Against the production build, on the routes a real visitor hits,
+at the number agreed at the top of this file (`-c 100` unless the customer
+named theirs).
 
-The recipe — the autocannon commands, the thresholds at `-c 100`, the target
+The recipe — the autocannon commands, the thresholds at `-c N`, the target
 for the first version, and what to fix first when it breaks — is in
 **`references/checks-server.md`**; read that section before firing the load.
 It also names the two routes that must never be load-tested (`/api/ipn`, and
@@ -213,6 +227,7 @@ are this skill's own:
 
   ```markdown
   ## Numbers
+  Load target: 100 parallel users (template default — the customer named no number)
   | Route | p50 | p95 | p95 @ -c 100 | errors |
   |---|---|---|---|---|
   | /            | 40 ms | 70 ms  | 210 ms | 0 |
@@ -221,7 +236,10 @@ are this skill's own:
   ```
 
 The spoken summary says what is slow, what was fixed and what the app now does at
-100 parallel users; its straight yes or no is whether it is ready to launch.
+the load target, named with its source ("at 100 people at once, the usual
+starting point" or "at the 400 you expect from the launch mail"); its straight
+yes or no is whether it is ready to launch — and one sentence says that a pass
+is a floor, not a ceiling: the app is not capped at that number.
 
 ## Accepted baselines
 

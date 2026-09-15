@@ -114,6 +114,8 @@ async function restore(argPort) {
   if (!may) return 0;
 
   console.log("→ Restoring the IPN tunnel (this app receives Digistore24 events) …");
+  console.log("  While it runs the app has a public address — the app, nothing else on this");
+  console.log("  computer. `node run.mjs stop` closes it.");
   const opened = await openTunnel({ port: appPort(argPort), log: () => {} });
   if (!opened.ok) {
     console.log(`  • not restored: ${shortExcuse(opened.reason)}`);
@@ -237,7 +239,7 @@ async function stop({ quiet = false } = {}) {
 async function status() {
   const active = activeTunnelUrl();
   if (!active) {
-    console.log("Tunnel:    none (node run.mjs ds24-tunnel)");
+    console.log("Tunnel:    none — the app is reachable from this computer only");
     return 0;
   }
   // Running is one thing, reachable from *here* is another — and the second is
@@ -245,6 +247,8 @@ async function status() {
   // machine's resolver knows it, while Digistore24 already reaches it.
   const reachable = await probe(active);
   console.log(`Tunnel:    running — ${active}`);
+  console.log("           (public while it runs: anyone with this address reaches the app;");
+  console.log("            node run.mjs stop closes it)");
   if (!reachable) {
     console.log("           (not resolvable from this machine yet — normal for a few");
     console.log("            minutes after opening; Digistore24 reaches it regardless)");

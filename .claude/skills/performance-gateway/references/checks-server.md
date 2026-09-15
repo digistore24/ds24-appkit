@@ -38,7 +38,7 @@ The third row is the one people forget. A route whose p50 is 80 ms and whose p95
 is 1.4 s is not a fast route with noise — something intermittent is happening,
 usually a cache miss or a connection wait, and it will get worse under load.
 
-## 4 · `load` — ~100 parallel users
+## 4 · `load` — the launch's crowd, 100 parallel users by default
 
 ```bash
 npx autocannon -c 100 -d 20 http://localhost:3100/
@@ -46,8 +46,14 @@ npx autocannon -c 100 -d 20 http://localhost:3100/plans
 npx autocannon -c 100 -d 20 http://localhost:3100/api/healthz
 ```
 
-`-c 100 -d 20` is 100 open connections for 20 seconds. Compare each result with
-the same route's single-user number from `response`: the gap *is* the finding.
+`-c 100 -d 20` is 100 open connections for 20 seconds. **The 100 is the
+template's default target, not a property of the app** — nothing caps users at
+it, and an app that passes carries more. If the customer named their own number
+at the top of `SKILL.md` (a launch mail to 4,000, a webinar that sends everyone
+at once), that number goes in place of the 100 in every command and every
+table header below, and the report's `Load target:` line says which it was and
+where it came from. Compare each result with the same route's single-user
+number from `response`: the gap *is* the finding.
 
 **Do not load-test `/api/ipn`.** It writes orders and grants. If you want to
 know it holds, test it with invalid signatures — the rejection path is the
@@ -71,6 +77,11 @@ When it breaks: the pool first (a p95 that is a clean multiple of the single-use
 time is queueing, near enough always the pool or the database), then indexes,
 then the instance size. Fix one thing, measure again. Two changes at once and
 you have learned nothing.
+
+**When the app outgrows the number it was tested at**, the same three knobs
+apply in the same order, and the host's own graphs are where the queueing shows
+first. Rerunning this check at the new number is the whole procedure — there is
+no switch in the app that was set to 100.
 
 ## 5 · `memory` — does it grow and never fall
 

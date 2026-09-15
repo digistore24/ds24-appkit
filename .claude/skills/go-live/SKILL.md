@@ -160,7 +160,8 @@ filling — is [`references/smoke-live.md`](references/smoke-live.md).
 
 - Run **`ux-gateway`**, **`security-gateway`** and **`performance-gateway`** once more
   against the live instance — the full pass in each, and this time the `host` check
-  has something to look at and the load test runs against the live URL at `-c 100`.
+  has something to look at and the load test runs against the live URL at the
+  number the last performance report's `Load target:` line names (100 by default).
   All three write a dated report into `docs/reports/`, and those reports are the
   record that the launch was checked. Only when they are green is "live" finished.
 - **`ux-gateway` has something here it cannot have locally: a real purchase on the

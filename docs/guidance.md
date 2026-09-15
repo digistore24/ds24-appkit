@@ -96,6 +96,11 @@ their way around one skill has then found their way around all of them:
   meeting for the first time. Use it where it is the right word, and put its
   plain meaning in the same sentence, once. A question nobody can parse gets
   answered at random, and that answer then travels on as if it were a decision.
+  The plain meanings have one home, [`glossary.md`](glossary.md) — one entry
+  per word, with whether it touches only their computer and whether it can be
+  undone, written for the customer and read by you. Take the meaning from
+  there rather than improvising a new one each time; never answer a word with
+  a link to the file.
 - **A question is asked in the words it will be answered in — the same rule as
   the hand-back below, applied where the damage starts, because the questions
   come first.** Three parts. It names what the customer will EXPERIENCE, not
@@ -157,7 +162,69 @@ their way around one skill has then found their way around all of them:
   file, a function, a table — and 12 put them last (the field report reads it
   off every run, in its Turns table). Where a stage ends on the question
   whether to go on, the files line goes before that question, and nothing else
-  follows it.
+  follows it. **A test count is not a hand-back either.** "8,465 tests green"
+  impresses and proves nothing the customer can judge — a tester said so in
+  those words (2026-09-14). The count goes in the files block; the first
+  paragraph names the page to open and what they will see there, which is the
+  one check they can make themselves.
+- **An error is told in three parts: what happened, what it means for them,
+  what happens next — and who does it.** *"The app could not send the sign-in
+  mail. For you: nobody can sign in until it can. I am checking the mail
+  settings now; you do not have to do anything."* The pasted error text, if it
+  helps at all, comes after those three sentences, never instead of them. A
+  setup error ("docker: not found") is told the same way, with the third part
+  being `setup-machine`. A tester asked for exactly this shape (2026-09-14):
+  a message they could neither read nor act on is, from their chair, the
+  agent going wrong.
+- **A number you chose is a default, and it says so where it is said.** A cap,
+  a quota, a threshold, a price, a limit that no doc, no test and no customer
+  set is kind (d) of the four below — your own taste, however reasonable — and
+  it is introduced as one: *"I have set a starting value of 50 a day; nothing
+  fixes that number, and it rests on nothing but a guess we can change."* Then
+  it goes into `docs/app.md` under the decisions, marked as a default. A tester
+  watched an agent set an upper limit on a usage measure and admit only when
+  asked that it had invented it (2026-09-14) — the invention was fine, the
+  silence about its source was the defect. **Numbers the template ships are
+  the same case** — the ~100 users of the performance gateway are a default
+  target, and a skill that carries a number says what kind it is.
+- **A secret never travels through the conversation.** An API key, a token,
+  a password: never ask for one in the chat — a beginner will paste it, not
+  knowing the transcript is a place. The paths that exist: a browser login
+  (`ds24-connect`, the host CLIs), a command that asks in the terminal and
+  writes `.env` itself (`mail-setup`, `ds24-connect --manual`), or the customer
+  writing the line into `.env` themselves — you tell them the file, the exact
+  line and that the file is theirs alone, then you check with the command that
+  verifies it (`ai-check`, `ds24-sync`). One that has landed in a chat, a
+  screenshot or a commit is replaced at its issuer, said plainly and without
+  blame. The one exception is a person who is not at the machine at all, and
+  then the sentence about replacing it afterwards travels with the request.
+- **Installing something on their machine is announced in four parts, and
+  waits.** What it is, why this app needs it now, where it goes, and how it
+  comes off again — then the question. *"Node.js, the program the app runs
+  on; it installs like any other program and uninstalls the same way; nothing
+  about your app is decided by it. Shall I?"* `setup-machine` and `agent-browser` say it this
+  way; the project's own building blocks (`npm install`, a `shadcn` component)
+  are inside the project folder and covered by the one sentence at the start
+  of the setup — they are not an install on the machine and not re-asked. A
+  tester named the alternative: *"I am installing X quickly"* leaves somebody
+  who cannot judge it choosing between blind yes and blocking (2026-09-14).
+- **What is final is said as final, in one fixed shape; everything else is
+  said to be saved.** Once, early — at the first hand-back — the customer
+  hears that every finished step is a commit and can be returned to, so
+  "will this break something?" has an answer before it is asked. The short
+  list of acts that cannot be undone from here is in
+  [`glossary.md`](glossary.md) → *What is final*, and each of them is
+  announced with the same words — *"This cannot be undone from here: <what>.
+  Shall I?"* — and waits for the yes. The severity ladder below (🚨 ❌ ⚠️ ℹ️)
+  grades findings in reports; it is not this sentence, and a 🚨 in a doc never
+  means "irreversible" on its own.
+- **Questions come in one announced bundle per turn, numbered, and "you
+  choose" is a valid answer to each of them** — not only inside a menu. A
+  customer who cannot see the consequences of a question answers "just do it"
+  by the third one, and from then on nothing is decided by anybody; the
+  bundle, the reason inside each question and the offered default are what
+  keep a decision a decision. `build-app` → `references/intake.md` has the
+  shape; where a skill does not prescribe one, this is it.
 - **A turn ends with the result, never with an agent still working.** A
   subagent sent into the background lives exactly as long as the turn in a
   print session (`claude -p`, and every harness built on it — the field-test

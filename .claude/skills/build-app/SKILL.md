@@ -243,6 +243,9 @@ Before Step 2 touches the data model: the pages, what a buyer does, what they
 pay, what is not in it — plain words, no file paths — then **wait for a yes**
 (not for an experiment). [`references/intake.md`](references/intake.md).
 
+**Propose the smallest version that can be sold, and say so** — the one thing a buyer pays for, the page they
+use it on, the purchase that unlocks it. Everything beyond that goes into *Not in the first version* of `docs/plan.md` on your initiative, dated "after the first sale" — not a refusal; one sentence moves it back up.
+
 **One question belongs in that picture: what has a customer done when you would
 bet they stay?** A sentence to confirm, not a menu; per archetype it is [`references/archetypes.md`](references/archetypes.md). **Then
 write the agreed picture into `docs/plan.md`** — the shape is

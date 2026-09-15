@@ -161,10 +161,19 @@ Five more things to do while it runs, and only the first is a command:
   like: *The order form's language* in that reference. The same goes for a
   `"sell": false` entry the sync says is still buyable at Digistore24 — that one
   needs a hand in the vendor backend, and nothing else will ever raise it.
-- **Say that their machine is reachable from the internet** if the sync opened a
+- **Say that their app has a public address for now** if the sync opened a
   Cloudflare Quick Tunnel for the IPN — it does that by itself while `APP_URL` is
-  local, and they must not learn it from a log line later
-  ([`docs/environments.md`](../../../docs/environments.md)).
+  local, and they must not learn it from a log line later. Three parts, not a
+  warning: what (a temporary address that leads to the app on their computer —
+  the app, nothing else on the machine), why (so Digistore24 can deliver test
+  purchases), and how it ends (`node run.mjs stop`; `node run.mjs status` shows
+  whether it is open). "Your computer is on the internet" on its own is either
+  ignored or frightening ([`docs/environments.md`](../../../docs/environments.md)).
+- **The API key never goes through the chat.** `ds24-connect` fetches it in the
+  browser; `--manual` asks in the terminal and writes `.env` itself. Where neither
+  works, the customer puts the line `DIGISTORE_API_KEY=…` into `.env` themselves
+  — tell them the file and the line — and you run `ds24-sync`, which proves the
+  key. Never ask them to paste it to you.
 - **A skipped IPN is not a failed sync** — the products are done. It skips only when
   it truly cannot (app not running, `cloudflared` missing) and names which; fix that
   and run it again.

@@ -62,9 +62,13 @@ which invoice they want, not which model is smartest.
 
 Then get the key in:
 
-> "Create a key at [their console] and put `OPENAI_API_KEY=…` in your `.env`.
-> That is the only place it goes — there is no field in the app for it, and
-> there never will be. A key in a database is a key somebody can read back."
+> "Create a key at [their console] and put `OPENAI_API_KEY=…` in your `.env`
+> — the settings file next to `run.mjs`, yours alone, never published. That is
+> the only place it goes — there is no field in the app for it, and there never
+> will be, and please do not paste it here: a conversation is a place too. Say
+> when it is in, and I check it."
+
+Then `node run.mjs ai-check` proves the key without anybody reading it out.
 
 ## Step 2 — Bind the tasks
 

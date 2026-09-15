@@ -214,7 +214,7 @@ export async function status() {
   const port = appPort();
   console.log(
     pid
-      ? `App:       running (PID ${pid}) — http://localhost:${port}`
+      ? `App:       running (PID ${pid}) — http://localhost:${port} (this computer only)`
       : "App:       stopped",
   );
   await runScript(TUNNEL_CLI, ["status"]);
