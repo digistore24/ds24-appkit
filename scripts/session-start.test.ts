@@ -117,6 +117,17 @@ describe("the greeting after a compaction", () => {
     expect(run.stdout).not.toContain("[Journey:");
   });
 
+  it("names the customer's language when docs/app.md records it, and stays silent when not", async () => {
+    const { afterCompactText, customerLanguage } = await import("./dev/after-compact-rules.mjs");
+    expect(customerLanguage("- **Sells:** x\n- **Language:** German — every line\n- **For:** y")).toBe("German");
+    expect(customerLanguage("- **Language:** <the language the customer writes in>")).toBeNull();
+    expect(customerLanguage(null)).toBeNull();
+    expect(afterCompactText({ language: "German" })).toContain("Here that language is German");
+    expect(afterCompactText()).not.toContain("Here that language is");
+    // The template ships no docs/app.md, so the real hook run above says nothing about it.
+    expect(run.stdout).not.toContain("Here that language is");
+  });
+
   it("🚨 restates nothing that is not still written where it says it is", async () => {
     // Every line the hook prints is a copy of a rule in CLAUDE.md, stages.md or
     // guidance.md, and a copy ages silently. So each carries an anchor — a

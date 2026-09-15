@@ -86,7 +86,10 @@ document is a name the app does not wear.
   `CLAUDE.md`. Five questions in front of a two-liner drives away exactly the
   people who are still working out what this is.
 - **Not a gate you argue with.** Somebody who says "just build it, I'll look
-  after" gets that — write down in `docs/app.md` what went undecided, and carry
+  after" gets that — write down in `docs/app.md` what went undecided (and, always,
+  the `Language:` line: the language they write in, read back by the greeting
+  and after every compaction — measured 2026-09-15, three English progress
+  lines to a German customer in a session that had never lost its context), and carry
   on.
 
 ## The end picture — before the first file, not after the last

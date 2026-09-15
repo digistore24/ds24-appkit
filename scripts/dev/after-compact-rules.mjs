@@ -74,10 +74,37 @@ export const AFTER_COMPACT_RULES = Object.freeze([
   },
 ]);
 
-/** The hook's whole stdout after a compaction — nothing else is said. */
-export function afterCompactText() {
+/**
+ * The customer's language, as `docs/app.md` records it (`- **Language:** German`)
+ * — or null when the file or the line is missing (a fresh app, an app built
+ * before the line existed). The template ships no app.md; the intake writes it.
+ *
+ * @param {string | null | undefined} appMd the file's text
+ * @returns {string | null}
+ */
+export function customerLanguage(appMd) {
+  const match = String(appMd ?? "").match(/^\s*-\s*\*\*Language:\*\*\s*([^\n<]+?)\s*$/m);
+  if (!match) return null;
+  const value = match[1].replace(/\s*—.*$/, "").trim();
+  return value === "" ? null : value;
+}
+
+/**
+ * The hook's whole stdout after a compaction — nothing else is said.
+ *
+ * The first line is the language rule; when `docs/app.md` names the language,
+ * the line says it: "THEIR language" is a rule, "German" is a fact the model
+ * cannot get wrong after its context was summarised away.
+ *
+ * @param {{ language?: string | null }} [options]
+ */
+export function afterCompactText({ language = null } = {}) {
   return [
     "[After compaction — these rules still apply]",
-    ...AFTER_COMPACT_RULES.map((rule) => `- ${rule.line}`),
+    ...AFTER_COMPACT_RULES.map((rule, i) =>
+      i === 0 && language
+        ? `- ${rule.line} Here that language is ${language} (docs/app.md → Language).`
+        : `- ${rule.line}`,
+    ),
   ].join("\n");
 }

@@ -17,6 +17,9 @@ moment the feature works. Written down by your assistant, from the conversation
 
 - **Sells:** <what a customer buys>
 - **For:** <who>
+- **Language:** <the language the customer writes in, e.g. German — every line
+  they read is in it; the greeting and the after-compaction hook read this
+  line back, so a session that lost its context still knows>
 - **Archetype:** <from step 1>
 - **Content authority:** <developer | agent-drafted | separate-author | platform
   — who edits the content after launch; decides code vs. tables,
