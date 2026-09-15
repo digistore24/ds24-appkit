@@ -111,6 +111,30 @@ describe("the pieces", () => {
     expect(countLines(dir)).toBeNull();
   });
 
+  it("🚨 refuses an Agent call that hands over a whole stage, and names stages.md", () => {
+    // The 2026-09-15 measurement: a 4,000-character "FIRST BUILD STAGE" prompt,
+    // 23 minutes of silence, a hand-back that knew none of the rules.
+    const whole = decide({
+      tool_name: "Agent",
+      tool_input: { subagent_type: "general-purpose", prompt: "You are implementing the FIRST BUILD STAGE of a new SAAS app …" },
+    });
+    expect(whole).toMatch(/THIS session/);
+    expect(whole).toMatch(/references\/stages\.md/);
+    // Long build order with no word "stage" — still a stage.
+    const long = decide({
+      tool_name: "Agent",
+      tool_input: { prompt: `Implement the weekly goals feature: ${"x".repeat(1600)}` },
+    });
+    expect(long).toMatch(/THIS session/);
+  });
+
+  it("lets a bounded piece and a read-only agent through", () => {
+    expect(decide({ tool_name: "Agent", tool_input: { prompt: "Run the tests and paste the failures." } })).toBeNull();
+    expect(decide({ tool_name: "Agent", tool_input: { subagent_type: "Explore", prompt: `Report on the first build stage files: ${"x".repeat(3000)}` } })).toBeNull();
+    // A long prompt that only asks for a report, never to build.
+    expect(decide({ tool_name: "Agent", tool_input: { prompt: `Summarise what these files do: ${"y".repeat(2000)}` } })).toBeNull();
+  });
+
   it("an unknown tool is nobody's business", () => {
     expect(decide({ tool_name: "Grep", tool_input: { pattern: "x", path: long } }, { cwd: dir })).toBeNull();
     expect(decide({ tool_name: "Write", tool_input: { file_path: long, content: "" } }, { cwd: dir })).toBeNull();

@@ -109,7 +109,7 @@ const claudeSettings = `{
     ],
     "PreToolUse": [
       {
-        "matcher": "Read|Bash",
+        "matcher": "Read|Bash|Agent",
         "hooks": [
           {
             "type": "command",

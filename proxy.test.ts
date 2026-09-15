@@ -12,7 +12,7 @@
 // string can prove a call exists but not that a Set-Cookie deletion comes out.
 import { readFileSync } from "node:fs";
 import type { NextFetchEvent } from "next/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { blankComments } from "@/scripts/lib/source-text.mjs";
 
 const source = readFileSync(new URL("./proxy.ts", import.meta.url), "utf8");
@@ -120,3 +120,91 @@ describe("the cookie sweep, executed", () => {
 // list in the manifest rather than typed out a second time. That is what fixed
 // the original defect: the hand-written version covered `/dashboard/community`
 // and missed `/dashboard/admin/community`.
+
+// ── /dashboard, executed — the redirect every protected page hangs on ──────
+//
+// Measured 2026-09-15: nothing in the suite had ever sent an anonymous request
+// for a `/dashboard/*` path through `proxy()`. The string test above proves the
+// matcher entry and the `startsWith` are in the file; `app/route-protection.test.ts`
+// deliberately skips `/dashboard/**` and delegates to that string. So the one
+// behaviour the whole sign-in rests on — no session, no page — was a regex.
+//
+// These run the REAL wiring: `NextAuth(authConfig)` with the real `authorized()`
+// callback, a real JWT minted with the same secret and salt the app uses. What
+// they cannot prove is that Next's router honours the redirect; `deploy-test`
+// makes that GET against a real boot, signed in and out.
+describe("/dashboard, executed", () => {
+  async function wired() {
+    process.env.APP_ENV = "development";
+    process.env.APP_URL = "http://localhost:3000";
+    process.env.AUTH_SECRET = "proxy-runtime-test-secret";
+
+    const { default: proxy } = await import("./proxy");
+    const { NextRequest } = await import("next/server");
+    const { devCookies } = await import("./lib/auth/cookie-names");
+    const { encode } = await import("next-auth/jwt");
+    const own = devCookies({
+      APP_ENV: process.env.APP_ENV,
+      APP_URL: process.env.APP_URL,
+      AUTH_SECRET: process.env.AUTH_SECRET,
+    })!;
+    const run = (path: string, cookie?: string) =>
+      proxy(
+        new NextRequest(`http://localhost:3000${path}`, cookie ? { headers: { cookie } } : undefined),
+        undefined as unknown as NextFetchEvent,
+      );
+    /** A session the app itself would accept: same secret, salt = cookie name. */
+    const session = async (maxAge = 60) =>
+      `${own.sessionToken.name}=${await encode({
+        token: { sub: "user-1", email: "m@example.com", role: "member" },
+        secret: process.env.AUTH_SECRET!,
+        salt: own.sessionToken.name,
+        maxAge,
+      })}`;
+    return { run, session, cookieName: own.sessionToken.name };
+  }
+
+  it("🚨 anonymous → redirected to /login, for the root and for a nested page", async () => {
+    const { run } = await wired();
+    for (const path of ["/dashboard", "/dashboard/admin/users", "/dashboard/billing?tab=tokens"]) {
+      const response = await run(path);
+      expect(response.status, path).toBeGreaterThanOrEqual(300);
+      expect(response.status, path).toBeLessThan(400);
+      const location = response.headers.get("location") ?? "";
+      expect(location, path).toContain("/login");
+      expect(decodeURIComponent(location), "the way back is carried").toContain(path.split("?")[0]!);
+    }
+  });
+
+  it("a forged or expired session cookie is anonymous", async () => {
+    const { run, session, cookieName } = await wired();
+    // Auth.js reports the undecryptable token through its logger; that line is
+    // the expected outcome here, not noise worth reading.
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const garbage = await run("/dashboard", `${cookieName}=eyJhbGciOiJkaXIifQ.not.a.real.token`);
+      expect(garbage.headers.get("location") ?? "").toContain("/login");
+
+      // Minted by the app's own arithmetic, with a lifetime that is already over.
+      const expired = await run("/dashboard", await session(-60));
+      expect(expired.headers.get("location") ?? "").toContain("/login");
+    } finally {
+      quiet.mockRestore();
+    }
+  });
+
+  it("a real session passes through — the proxy answers next(), not a page of its own", async () => {
+    const { run, session } = await wired();
+    const response = await run("/dashboard/account", await session());
+    expect(response.status).toBe(200);
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("public paths in the matcher are not protected — the sweep is the only reason they are listed", async () => {
+    const { run } = await wired();
+    for (const path of ["/", "/plans", "/login"]) {
+      const response = await run(path);
+      expect(response.headers.get("location"), path).toBeNull();
+    }
+  });
+});
