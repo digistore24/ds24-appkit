@@ -281,8 +281,8 @@
     "moderatorRemove": "Quitar",
     "moderatorRemoved": "Moderador quitado.",
     "emptyTitle": "Aún ningún grupo",
-    "emptyBody": "Crea el primero. Atención: los grupos son filas en la base de datos y NO viajan con un despliegue — créalos donde se ejecuta la app.",
-    "hintRowsDoNotTravel": "Los grupos están en la base de datos de este entorno. Un despliegue lleva código, no filas: lo que creas aquí en local no existe en la app en vivo.",
+    "emptyBody": "Crea el primero. Los grupos solo existen en la copia de la app donde los creas — para la app en producción, créalos allí.",
+    "hintRowsDoNotTravel": "Los grupos solo existen en la copia de la app donde se crearon: lo que creas aquí en tu ordenador no está en la app en producción — allí los creas otra vez.",
     "moderatorsAllAssigned": "Todos los moderadores de esta app ya se ocupan de esta sala.",
     "listed": "Añadido a la lista.",
     "unlisted": "Quitado de la lista."

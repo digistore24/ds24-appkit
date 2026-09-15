@@ -46,9 +46,13 @@ Every item, every time — a stage that skips one is not done, it is abandoned:
    2026-09-03: skipped before the owner existed, then `/dashboard` 200 with the
    cookie and 307 without. Sessions used to read the 200-line script 22 times
    to find this.
-5. **Committed**, on green, with the migration in the commit. Not at the end of
-   the build — at the end of THIS stage, because the commit is what makes the
-   stage survive whatever ends the next turn.
+5. **Committed AND pushed**, on green, with the migration in the commit. Not at
+   the end of the build — at the end of THIS stage: the commit survives whatever
+   ends the next turn, the push survives the machine, and `start.md` A2 created
+   the remote for exactly this. Measured 2026-09-15: seventeen commits, none
+   pushed, and the customer's GitHub repository still held the bare template
+   when she asked whether her work was safe. No remote (they declined GitHub):
+   say so in the hand-back, once.
 6. Its entry in `docs/app.md` (Step 4b), and its line in `docs/plan.md` ticked
    with the date.
 
@@ -95,10 +99,13 @@ corner still says "Your App" has delivered no name; measured twice on
 2026-09-10, once with a title the plan had announced and once without any.
 
 **The app is RUNNING when they read the address, and the stage is committed
-before they read anything.** A hand-back that stops the app and ends with
-"run `node run.mjs start`, then open…" hands the customer a command instead
-of a page, and one that ends with "shall I commit?" asks them to decide what
-`CLAUDE.md` → *Rules* already decided — both measured 2026-09-10.
+and pushed before they read anything.** A hand-back that stops the app and
+ends with "run `node run.mjs start`, then open…" hands the customer a command
+instead of a page, and one that ends with "shall I commit?" asks them to
+decide what `CLAUDE.md` → *Rules* already decided — both measured 2026-09-10.
+And "not pushed yet — I'll do it next time" to a customer who just asked
+whether her work is safe (2026-09-15) withholds the one command that would
+have made it so.
 
 **Every line between the yes and the hand-back is in the customer's language
 too, and says what they get.** `CLAUDE.md` → *Rules* says so; measured
@@ -107,12 +114,44 @@ the twenty progress lines between them were English developer talk ("Now wire
 the two export paths"). The customer reads those lines. Say what the step
 gives them, in their words, or say nothing until the next thing they can use.
 
+**A step that will take more than about two minutes is announced BEFORE it
+starts — what, roughly how long, and what will be true afterwards — then a
+line per landed piece.** `docs/guidance.md` → *How a skill works* has the
+rule; it did not reach the build. Measured 2026-09-15: 565 seconds of silence
+while eight lessons were written in one script, 223 seconds inside a
+`smoke`/sign-in chain, 165 seconds waiting for a subagent — every one a
+spinner from the customer's chair, and "Ich schreibe jetzt acht Lektionen,
+etwa acht Minuten" would have cost one line.
+
 **The stage is built in THIS session, not handed to a subagent as a whole.**
 Measured 2026-09-10: one hand-off was thirty-four minutes without a word to the
 customer, and the session then vouched for checks it had not seen. A subagent
 may take a bounded piece; the session itself runs the tests, `smoke` and
 `errors` before it speaks, and says something the customer can use at least
 every stage — silence reads as "stuck".
+
+**Every function the app sells was opened once AS THE OWNER before the
+hand-back names it.** Chat, self-check, hand-in, room — opened in the browser
+or fetched with the owner's cookie (item 4), not verified with a member's
+`curl`. Measured 2026-09-15, four times in one run: the hand-back promised
+"sign in with any address, that account is the admin" while `smoke` had
+already created an owner; the self-check said "belongs to a product you don't
+have"; the chat said "Kein Zugang"; the chat knew nothing of the course —
+each found by the customer, each a turn. In DEV the owner holds every product
+on sale (`owner-account.md`); what the hand-back names, you have seen as her.
+
+**A hand-back names the owner account and leaves no test rows behind.** If an
+owner exists (`smoke` needs one, and you may have created it), the hand-back
+says which address that is; "sign in with any address" is true only while
+none exists. Accounts, hand-ins and rooms you created to verify are deleted
+before the hand-back or named in it — a customer who finds `owner@example.com`
+in her queue asks who that is (2026-09-15).
+
+**A path through the app is read from `messages/*.json` and the navigation,
+never from memory.** "Betreiber → Benutzer → Aktionen → Als Benutzer
+einloggen" is copied from the strings the app renders; measured 2026-09-15,
+one hand-back invented three labels ("Verwaltung → Nutzer", "Als dieses Konto
+anmelden", "on the account page") and the customer searched.
 
 
 **The LAST hand-back names what is still a placeholder.** "Alles fertig" with

@@ -115,6 +115,13 @@ gh repo create my-app --template digistore24/ds24-appkit --private --clone
 cd my-app
 ```
 
+Two things about that command, both measured (2026-09-15): **clone into a
+folder named like the repository, not into the folder you happen to be in** —
+the person will look for that name on their disk. And **GitHub copies the
+template a few seconds AFTER creating the repository, so the clone can arrive
+empty** ("You appear to have cloned an empty repository"). That is not a broken
+template: wait ten seconds, `git pull origin main`, and carry on.
+
 **Otherwise the person does it in the browser.** It is three clicks and no
 install — do not install `gh` for this, and do not run `gh auth login` for them
 (it opens a browser and wants a code typed in; they are the one at the screen).
@@ -151,7 +158,11 @@ their repository. Started one level up, you will not find the project's guidance
 or its skills, and everything after this will feel oddly empty.
 
 So: end this session, and start again in that folder — `claude`, `codex`,
-`agy` or `opencode`, whichever you are.
+`agy` or `opencode`, whichever you are. Say HOW, because they have never done
+it: *"type `/exit` (Claude Code) or press Ctrl+C twice, then `cd <folder>` and
+start me again with `claude`"* — with their folder name filled in. "Restart
+in the folder" without the keys is a sentence a beginner cannot act on
+(measured 2026-09-15).
 
 ### A4. Hand over
 

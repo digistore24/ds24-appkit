@@ -18,8 +18,9 @@ moment the feature works. Written down by your assistant, from the conversation
 - **Sells:** <what a customer buys>
 - **For:** <who>
 - **Archetype:** <from step 1>
-- **Content authority:** <developer | separate-author | platform — who edits
-  the content after launch; decides code vs. tables, docs/content-authority.md>
+- **Content authority:** <developer | agent-drafted | separate-author | platform
+  — who edits the content after launch; decides code vs. tables,
+  docs/content-authority.md; agent-drafted = files you wrote, changed by asking>
 - **Output artifact:** <what the customer ends up holding — the line from the
   product brief, or the answer from step 1b. "a finished sales page with a hero
   image", not "sales copy">

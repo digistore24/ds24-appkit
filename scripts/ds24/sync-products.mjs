@@ -97,6 +97,11 @@ import { classifyTargets } from "./_match.mjs";
 import { isKnownLanguage } from "./_resellers.mjs";
 import { publicUrlFor } from "./_public-url.mjs";
 import { DIGISTORE_REDIR_URL } from "../../lib/digistore/config.mjs";
+import { connect } from "../users/_db.mjs";
+import { isLocalDatabaseUrl } from "../lib/media-env.mjs";
+import {
+  ensureOperatorPreviewGrants,
+} from "../../lib/entitlements/preview.mjs";
 
 const args = parseArgs(process.argv.slice(2));
 // --dry-run wins over --apply: run.mjs hands --apply in by default, and
@@ -722,6 +727,57 @@ if (warnings > 0) {
   console.log(
     `\nCheck the ${warnings} note(s) above — otherwise they only surface at checkout.`,
   );
+}
+
+// --- DEV: the operator can open what she sells -----------------------------
+//
+// This is the command that decides WHAT is on sale, so it is also the moment
+// the operator's own access can go stale: a product added to the registry today
+// is a page she cannot open tomorrow. Measured 2026-09-15 — the owner's chat
+// said "Kein Zugang" and a self-check in her own course said the item belongs
+// to a product she does not have, because entitlements are role-blind by
+// design (lib/entitlements/preview.mjs says why they stay that way).
+//
+// DEV only, never a dry run, and never fatal: a sync that created products at
+// Digistore24 has already done the irreversible part, and a comp that could not
+// be written must not make it look as if it had failed.
+// `env` is THIS run's environment (`--env`, else APP_ENV), and the database
+// must be a local one: a sync aimed at a live database from a laptop must not
+// write comps into it (reviewed 2026-09-15).
+if (
+  apply &&
+  env === "dev" &&
+  process.env.DATABASE_URL &&
+  isLocalDatabaseUrl(process.env.DATABASE_URL)
+) {
+  let dbSql = null;
+  try {
+    dbSql = connect();
+    const owners = await dbSql`select id, email from users where role = 'owner'`;
+    let touched = 0;
+    for (const owner of owners) {
+      // The registry as this run left it — not a second read off disk, so the
+      // product created thirty lines above is covered by the same command.
+      const preview = await ensureOperatorPreviewGrants({
+        memberId: owner.id,
+        dev: true,
+        sql: dbSql,
+        registry: config,
+      });
+      if (preview.granted?.length) {
+        touched += 1;
+        console.log(
+          `• DEV preview: owner ${owner.email} holds every product on sale ` +
+            `(revoke under Users → that account)`,
+        );
+      }
+    }
+    if (touched === 0) console.log("• DEV preview: nothing to add");
+  } catch (e) {
+    console.log(`• DEV preview: skipped — ${e.message}`);
+  } finally {
+    if (dbSql) await dbSql.end();
+  }
 }
 
 console.log(

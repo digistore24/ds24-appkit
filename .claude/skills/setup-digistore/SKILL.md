@@ -213,6 +213,12 @@ happened"* in that reference. Where no IPN ever arrived,
 **In DEV that works by itself, approved or not:** every checkout link the app
 builds carries the Digistore24 test-payment parameter, so clicking a plan card
 opens the checkout in test-payment mode — nothing to set up, no cookie to set.
+**But the "Testzahlung" option only shows for the vendor who is signed in at
+Digistore24 in that same browser** — say so before they click: *"log in at
+digistore24.com in this browser first, then buy"*. Measured 2026-09-15: the
+checkout answered *"nur bei Ihren eigenen Produkten — und nur wenn Sie
+eingeloggt sind"* to a customer who was signed in elsewhere, after a hand-back
+that had promised "in test mode, recognised automatically".
 `node run.mjs ds24-testpay` shows the key, `--recreate` rotates it. It **never
 activates outside DEV**, and the key is **account-level — treat it like a
 secret**; outside DEV, on a STAGING domain, the vendor sets the test-purchase

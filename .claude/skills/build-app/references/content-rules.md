@@ -19,7 +19,10 @@ check in ONE function. What follows is what each of them means._
   customer's terms** — whether they want to change these things themselves, on
   their phone, or tell you; the wording is at the top of that file. "Code or
   tables" is your criterion, not their question, and "both" is one answer, not
-  a fork.
+  a fork. **"Write it for me" is case 1 (agent-drafted): files, `content-apply`,
+  changes by telling you** — and the customer hears, before the first lesson,
+  that what you write travels with the app and what she types on the admin
+  page stays where she typed it (`docs/content-authority.md`, 2026-09-15).
 
 ## Step 2 — how that content reaches PROD
 

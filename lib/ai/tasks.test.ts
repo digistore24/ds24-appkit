@@ -40,8 +40,14 @@ describe("the two copies of each list agree", () => {
   });
 });
 
+// The three the TEMPLATE declares. Every assertion below about "the shipped
+// tasks" walks this list, never `TASKS` itself — `TASKS` is the customer's list
+// once they add one (reviewed 2026-09-15: a loop over `TASKS` demanding "auto"
+// went red the moment a customer bound their own task to a named company).
+const SHIPPED_TASKS = ["chat", "image", "companion"] as const;
+
 describe("the shipped registry", () => {
-  it("declares the three tasks that exist, and no more", () => {
+  it("carries the three tasks the template ships", () => {
     // `chat` is the assistant and `image` is a picture — both have code in this
     // template that calls them. `companion` is the shape a product-side call
     // takes (`lib/ai/companion.ts`); what calls it is the app somebody builds
@@ -49,7 +55,22 @@ describe("the shipped registry", () => {
     // the cost page. Moderation and your own jobs are what the layer MAKES
     // POSSIBLE and live as worked examples in the docs — not here, because a
     // bound task nobody calls is a line `ai-check` complains about for ever.
-    expect([...TASKS]).toEqual(["chat", "image", "companion"]);
+    //
+    // ⚠️ CONTAINS, never equals, and that is the whole shape of this test. It
+    // SHIPS inside the customer's app, where a FOURTH task is the normal state
+    // rather than a fault: declaring one is the documented way to use this layer
+    // (CLAUDE.md → *Talking to a language model* — "A task MUST be declared in
+    // code"). Measured 2026-09-15: a session that registered its app's own task
+    // had to rewrite this assertion and one in `scripts/ai/live.test.ts` before
+    // the suite it had just been told was the commit condition went green — a
+    // shipped test going red over the product working as sold.
+    //
+    // The "and no more" claim is about the TEMPLATE, so it lives in the factory,
+    // where `template/` is pristine by construction and nothing under it is a
+    // customer's own work.
+    for (const task of SHIPPED_TASKS) {
+      expect([...TASKS], `the task "${task}" the template ships`).toContain(task);
+    }
   });
 
   it("knows which kind of provider each task needs", () => {
@@ -94,7 +115,9 @@ describe("config/ai-models.json", () => {
     // different one their whole AI layer.
     const raw = models as { default?: { provider?: string }; tasks?: Record<string, { provider?: string }> };
     expect(raw.default?.provider).toBe(AUTO);
-    for (const task of TASKS) {
+    // The SHIPPED tasks only: a task this app declared and bound to a named
+    // company is the ai-providers skill doing its job, not a regression.
+    for (const task of SHIPPED_TASKS) {
       expect(raw.tasks?.[task]?.provider ?? AUTO, `task ${task}`).toBe(AUTO);
     }
   });

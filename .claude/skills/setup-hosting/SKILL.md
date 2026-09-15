@@ -15,6 +15,12 @@ The reference behind this skill is [`docs/DEPLOY.md`](../../../docs/DEPLOY.md) â
 what each host costs, what each one traps you with, and the exact commands. Do
 not repeat it back to the user; read it and act.
 
+**Before anything else: `git status -sb`.** An `ahead` count means the
+customer's repository at GitHub does not hold the app you are about to deploy
+â€” push first; every host below deploys from that repository, not from this
+disk. Measured 2026-09-15: seventeen commits ahead at the moment the customer
+asked what was left before going live.
+
 ## What you do, and what genuinely stays with them
 
 You run every command yourself, through your Bash tool. Do not hand somebody a

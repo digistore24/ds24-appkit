@@ -76,9 +76,13 @@ export default async function ChatPage() {
           // to, and a sentence naming one company would be wrong for every app
           // that chose another. Same bug the leak guard found inside
           // chat-config.ts.
-          noApiKey: t("offNoApiKey", {
+          // `t.rich` and not `t`, because the sentence names the file the key
+          // goes into as <code>.env</code> — the same shape the dashboard's
+          // Digistore24 callout uses (`app/dashboard/page.tsx`).
+          noApiKey: t.rich("offNoApiKey", {
             envVar: chatProviderEnvVar(),
             provider: chatProviderId(),
+            code: (chunks) => <code>{chunks}</code>,
           }),
           brokenConfig: t("offBrokenConfig"),
         }[offReason]
@@ -93,6 +97,19 @@ export default async function ChatPage() {
           title={t("offTitle", { name: config.name })}
         >
           {body}
+          {/*
+            The command, out of the prose and into a block that can be copied —
+            the shape `app/dashboard/page.tsx` uses for `node run.mjs
+            ds24-connect`, and the reason is the same: the sentence above leads
+            with what to say to the AI program, and a terminal line buried in
+            running text reads as a sentence rather than as something to run.
+            Only on the missing-key reason; the other two name no command.
+          */}
+          {isOwner(session.user.role) && offReason === "noApiKey" && (
+            <pre className="bg-background mt-2 overflow-x-auto rounded-md border p-2 font-mono text-xs">
+              node run.mjs ai-check
+            </pre>
+          )}
         </Callout>
       </>
     );

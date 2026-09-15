@@ -16,6 +16,7 @@
 // symptom is a greeting nobody who works here ever sees, because their own
 // project is under way. That happened once already, with app/dashboard/chat.
 import { describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
@@ -82,6 +83,41 @@ describe("the session greeting knows which pages ship with the template", () => 
 // The fix was DELETION plus an import, not a fifth copy. So what this file can
 // check is the property that fix bought: **there is no list of steps in the hook
 // that anybody CAN forget to update.**
+// After a compaction, Claude Code fires SessionStart again and the hook says the
+// rules back — the summary keeps the work and drops them (measured 2026-09-15:
+// twelve English lines in the first turn after one, at a customer who had
+// written German throughout).
+//
+// ⚠️ The only test in this file that RUNS the hook, and it has to be: everything
+// `--after-compact` is worth is what lands on stdout, and reading the source as
+// text would assert that the strings exist — not that the flag reaches them
+// ahead of the doctor run, the journey read and the greeting the file opens
+// with. The second half is the sharper one: this hook fires mid-work, and a
+// "Build my app" greeting there invites a session to start over.
+describe("the greeting after a compaction", () => {
+  const run = spawnSync(
+    process.execPath,
+    [path.join(ROOT, "scripts/dev/session-start.mjs"), "--after-compact"],
+    { cwd: ROOT, encoding: "utf8" },
+  );
+
+  it("says the rules the summary dropped", () => {
+    expect(run.status, `the hook exited ${run.status}: ${run.stderr}`).toBe(0);
+    expect(run.stdout).toContain("[After compaction");
+    // The line the 2026-09-15 measurement was about, and the one a hand-back
+    // loses first.
+    expect(run.stdout).toContain("in THEIR language");
+    expect(run.stdout).toContain("committed AND pushed");
+  });
+
+  it("says nothing else — the session is in the middle of something", () => {
+    expect(run.stdout).not.toContain("Build my app");
+    expect(run.stdout).not.toContain("[Setup:");
+    expect(run.stdout).not.toContain("[Project state:");
+    expect(run.stdout).not.toContain("[Journey:");
+  });
+});
+
 describe("the greeting derives the path instead of restating it", () => {
   const hook = readFileSync(path.join(ROOT, "scripts/dev/session-start.mjs"), "utf8");
   // ⚠️ Two readings of one file, deliberately. Anything asking *does the CODE

@@ -145,7 +145,17 @@ export function buildDevLoginProvider(): Provider | null {
         .select({ id: users.id, email: users.email, name: users.name, role: users.role })
         .from(users)
         .where(eq(users.email, email));
-      if (existing) return existing;
+      if (existing) {
+        // An owner who already existed before the preview grants did, or whose
+        // registry gained a product since — same function, same idempotence.
+        if (existing.role === "owner") {
+          const { grantDevPreviewGrants } = await import(
+            "@/lib/entitlements/dev-preview"
+          );
+          await grantDevPreviewGrants(existing.id);
+        }
+        return existing;
+      }
 
       // The first account on a fresh installation becomes the owner —
       // otherwise whoever creates the app could not reach their own admin
@@ -156,6 +166,21 @@ export function buildDevLoginProvider(): Provider | null {
         .insert(users)
         .values({ email, emailVerified: new Date(), role: await roleForNewUser() })
         .returning({ id: users.id, email: users.email, name: users.name, role: users.role });
+
+      // Nobody sells themselves their own product, so the owner holds no plan
+      // and every gate in the app she just built closes in her face — the chat,
+      // an activity with `requiresPlan`, a gated room, a self-check in her own
+      // course (measured 2026-09-15). She gets a real, revocable grant instead
+      // of a role bypass; why, and why DEV only, is in
+      // lib/entitlements/preview.mjs. Awaited: this is the sign-in itself, and
+      // the dashboard renders immediately after it.
+      if (created?.role === "owner") {
+        const { grantDevPreviewGrants } = await import(
+          "@/lib/entitlements/dev-preview"
+        );
+        await grantDevPreviewGrants(created.id);
+      }
+
       return created;
     },
   });

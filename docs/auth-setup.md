@@ -310,6 +310,12 @@ away. The rule and its boundary live in `lib/users/bootstrap.ts`, wired into
 comes into being, not afterwards, because the session is a JWT and carries the
 role from the moment of sign-in.
 
+**That first owner also gets a grant for everything the app sells**, note
+`dev-preview`, written by `lib/entitlements/preview.mjs` — without one she is
+locked out of her own product, because `hasPlan()` reads grants and never a
+role. The rows are ordinary manual grants: visible and revocable under
+**Users → that account**, not handed back once revoked, and DEV only.
+
 **That bootstrap applies in DEV only, deliberately.** In STAGING and PROD the
 first person to sign in is not necessarily you — a freshly deployed instance
 has an empty user table too, and the first visitor may be a customer. Handing

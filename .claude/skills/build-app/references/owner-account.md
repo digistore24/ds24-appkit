@@ -12,6 +12,15 @@ every account is, including the first — a freshly deployed instance has an
 empty user table too, and the first person to sign in there may be a customer.
 Handing them user management would be an account takeover.
 
+**What the owner sees in DEV.** The same moment also hands that account a
+manual grant for every product the registry has on sale, note `dev-preview` —
+otherwise the operator is locked out of the app she just built: the chat, an
+activity with `requiresPlan`, a gated room and a self-check in her own course
+all check `hasPlan()`, and she has bought nothing. They are ordinary grants,
+listed and revocable under **Users → that account**, and a revoked one is not
+handed back; `node run.mjs ds24-sync` tops them up when a product is added. To
+see the app WITHOUT a grant, use **Sign in as this user** on a test account.
+
 **Two cases still need the CLI**, and neither is step 3b:
 
 ```bash
@@ -25,7 +34,13 @@ node run.mjs user-create --email <address> --role owner --apply
   `scripts/dev/sign-in.mjs` looks an existing owner up and skips with a named
   reason if there is none, rather than putting a row into somebody's database on
   a command they ran to look at pages. If you need `smoke`'s second pass before
-  the user has signed in once, run the command above and say that you did.
+  the user has signed in once, run the command above — with the customer's own
+  address if the intake gave you one, else `owner@example.com` — and **the
+  hand-back names that address**: "sign in with any address, that account is
+  the admin" is true only while no owner exists. Measured 2026-09-15: the
+  session had created `owner@example.com` for `smoke`, said "any address", and
+  the customer signed in as a member with no admin area and a buy button on
+  her own course.
 
 Sign-in is by email magic link, and in DEV without mail delivery by the
 development login (`lib/auth/dev-login.ts`) — nothing to configure either way.

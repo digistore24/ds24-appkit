@@ -383,10 +383,10 @@ reasoning, and the two references it points at, are in
 
 **Do not ask the user for an email address here, and do not create an account.**
 Locally the first one makes itself: whoever signs in first at `/login` — with
-any address, no password, no mail — comes into being as `owner`, and the admin
-area plus the "Users" entry are in the navigation on that first page load. So
-the whole step is one sentence to the user: *open http://localhost:3000/login
-and sign in with whatever address you like; that account is the admin.*
+any address, no password, no mail — comes into being as `owner`. So the step is
+one sentence: *open http://localhost:3000/login and sign in with whatever
+address you like; that account is the admin* — UNLESS an owner already exists
+(`smoke` needs one, you may have made it): then name THAT address, never "any".
 
 The rule is `lib/users/bootstrap.ts`, and it is narrow on purpose: **the very
 first account, in DEV only** — outside DEV the first person to sign in may be a

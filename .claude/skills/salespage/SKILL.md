@@ -148,6 +148,16 @@ form is a finding, not a detail. If a browser tool is available use it;
 otherwise ask the user to open the page and say what they see
 (`CLAUDE.md` → *What the skills assume you can do*).
 
+**Every claim in the offer block and the benefit tiles maps to what the plan
+on THAT button grants.** Read `config/digistore-products.json` and the gates —
+`requiresPlan` in `config/ai-chat.json`, `requiresPlan` in
+`modules/activity/activities.ts`, the courses' `planKeys`, a room's plan — and
+strike every benefit the button's plan does not unlock. Nothing checks this
+for you (`legal-check` scans forbidden words, not coverage). Measured
+2026-09-15: *"jede Lektion hat einen KI-Helfer"* and *"Geschäftsidee
+einreichen und sofort KI-Feedback"* on a page selling the course, while both
+were gated on the membership — the customer caught it, the page had not.
+
 ## Step 6 — Write it down, hand over
 
 One entry in `docs/app.md`: the sections built, where the copy came from, and

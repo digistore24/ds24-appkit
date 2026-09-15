@@ -57,7 +57,25 @@ const adapter: typeof drizzleAdapter = {
     // `role` is our own column, not part of Auth.js's AdapterUser — hence the
     // cast. The adapter passes fields it does not know straight into the
     // INSERT and returns the written row, which is precisely what we need.
-    return drizzleAdapter.createUser!({ ...data, role } as typeof data);
+    const created = await drizzleAdapter.createUser!({
+      ...data,
+      role,
+    } as typeof data);
+
+    // The owner has bought nothing, so without this she is locked out of her
+    // own product: chat gated on a plan, activities with `requiresPlan`,
+    // community rooms and courses all answered "no access" for the person who
+    // built them (measured 2026-09-15). She gets a REAL grant rather than a
+    // role exception — the reasoning is in lib/entitlements/preview.mjs.
+    // AWAITED: the very next thing that happens is her first page load.
+    if (role === "owner") {
+      const { grantDevPreviewGrants } = await import(
+        "@/lib/entitlements/dev-preview"
+      );
+      await grantDevPreviewGrants(created.id);
+    }
+
+    return created;
   },
 };
 

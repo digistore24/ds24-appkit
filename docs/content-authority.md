@@ -38,6 +38,7 @@ wins:
 | The vendor says | Case |
 |---|---|
 | "I write and record it myself; it changes when I change it" | **1 — content in code** |
+| "YOU write the lessons, I'll go over them" / "write it for me" | **1 — content in code, agent-drafted** (below) |
 | "a colleague / an editor maintains it, without me" | **2 — content in the database** |
 | "hundreds of entries, they go stale all the time, I keep them up myself" | **2 — content in the database** |
 | "my users publish their own content" | **2 — the app is a platform** |
@@ -46,6 +47,23 @@ The tie-break: **when in doubt, case 1.** Moving up later is a migration;
 moving down is deleting an admin surface nobody used. One is planned work, the
 other is regret. Volume and frequency are not doubt: hundreds of rows that
 change week by week are case 2, whoever types them.
+
+**"Write it for me" is case 1, and it is the common case in every course
+build — say what it means BEFORE the first lesson is written.** What you
+draft goes into files (`content/course/*.json`, `content/knowledge/*.md`),
+committed, and `content-apply` carries it into every environment; a change is
+one sentence to you. Measured 2026-09-15: a session built the lessons the
+customer had asked it to write as admin-surface rows because she had also said
+"I want to edit them myself" — 24 lessons that lived only in the development
+database, a Markdown snapshot as "backup", and at the end "type them into the
+live app yourself, one to two hours". The sentence for the customer, in her
+words: *"What I write, I keep as files — they travel with your app wherever it
+runs. What you create yourself on the admin page stays in the copy you created
+it in."* And the consequence of the two origins (`docs/courses.md` → *Two
+origins, one column*), once, plainly: the same lesson cannot be both, because
+the applier re-asserts its rows on every run — so a lesson she wants to edit
+by hand on the live site is one she creates THERE, and a lesson you wrote is
+one she changes by telling you.
 
 ## Case 1 — the developer is the author: Git is the CMS
 

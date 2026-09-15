@@ -281,8 +281,8 @@
     "moderatorRemove": "Retirer",
     "moderatorRemoved": "Modérateur retiré.",
     "emptyTitle": "Encore aucun groupe",
-    "emptyBody": "Crée le premier. Attention : les groupes sont des lignes dans la base de données et ne voyagent PAS avec un déploiement — crée-les là où l'app tourne.",
-    "hintRowsDoNotTravel": "Les groupes se trouvent dans la base de données de cet environnement. Un déploiement emporte du code, pas des lignes : ce que tu crées ici en local n'existe pas dans l'app en ligne.",
+    "emptyBody": "Crée le premier. Les groupes n'existent que dans la copie de l'app où tu les crées — pour l'app en ligne, crée-les là-bas.",
+    "hintRowsDoNotTravel": "Les groupes n'existent que dans la copie de l'app où ils ont été créés : ce que tu crées ici sur ton ordinateur n'est pas dans l'app en ligne — là-bas, tu les crées une fois de plus.",
     "moderatorsAllAssigned": "Tous les modérateurs de cette app s'occupent déjà de ce salon.",
     "listed": "Ajouté à la liste.",
     "unlisted": "Retiré de la liste."

@@ -52,6 +52,26 @@ export const NODE_PROBE =
 export const GREETER = "node scripts/dev/session-start.mjs";
 
 /**
+ * The same greeting once more, after a compaction — Claude Code only.
+ *
+ * A compaction replaces the session's context with a summary, and the summary
+ * keeps the WORK while dropping the RULES the session was following. Measured
+ * 2026-09-15: twelve English lines in the first turn after one, at a customer
+ * who had written German throughout. Claude Code fires `SessionStart` again once
+ * the summary is in place (matcher `compact`, and `resume` when a session is
+ * picked back up) and adds whatever the hook prints to the context — so the
+ * rules are simply said again.
+ *
+ * ⚠️ `--after-compact` prints those lines and NOTHING else: the session is in
+ * the middle of something, and a doctor run, a journey line or "Build my app"
+ * there answers a question nobody asked.
+ *
+ * The other three programs have no compaction event, so this entry is Claude
+ * Code's alone — the same asymmetry the read guard below records.
+ */
+export const COMPACT_GREETER = `${GREETER} --after-compact`;
+
+/**
  * The read guard — Claude Code only, because only Claude Code runs a
  * `PreToolUse` hook. It refuses a whole-file `Read` (no offset/limit) and an
  * unpiped `cat` on a file over 200 lines, with the line count and the two
@@ -74,6 +94,15 @@ const claudeSettings = `{
           {
             "type": "command",
             "command": ${JSON.stringify(GREETER)}
+          }
+        ]
+      },
+      {
+        "matcher": "compact|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ${JSON.stringify(COMPACT_GREETER)}
           }
         ]
       }

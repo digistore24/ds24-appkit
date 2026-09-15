@@ -19,6 +19,9 @@
 // Dry run is the default. To execute: --apply
 import { randomUUID } from "node:crypto";
 import { parseArgs, resolveRole, connect, CANONICAL_ROLES } from "./_db.mjs";
+import { ensureOperatorPreviewGrants } from "../../lib/entitlements/preview.mjs";
+import { syncEnvFromAppEnv } from "../ds24/_env.mjs";
+import { isLocalDatabaseUrl } from "../lib/media-env.mjs";
 
 const args = parseArgs(process.argv.slice(2));
 const apply = Boolean(args.apply);
@@ -58,7 +61,7 @@ try {
     on conflict (email) do update set
       role = excluded.role,
       name = coalesce(excluded.name, users.name)
-    returning email, role, name
+    returning id, email, role, name
   `;
   console.log(
     `✓ User set: ${row.email} (role: ${row.role}` +
@@ -69,6 +72,32 @@ try {
     console.log(
       "  → owner = admin/operator. Sign in now via the email magic link at /login.",
     );
+    // An owner created here has bought nothing, so in DEV she is locked out of
+    // the very things she sells — chat, gated activities, rooms, courses
+    // (measured 2026-09-15). ensureOperatorPreviewGrants is a no-op outside
+    // development and on a second run. Its own try/catch: a comp that could not
+    // be written must not turn a created account into an error.
+    // `dev` is decided HERE, not from APP_ENV alone: docs/DEPLOY.md creates the
+    // first PROD owner with this very command and a production DATABASE_URL in
+    // the shell of a laptop whose APP_ENV is unset. A comp must never land in
+    // that database (reviewed 2026-09-15).
+    try {
+      const preview = await ensureOperatorPreviewGrants({
+        memberId: row.id,
+        dev:
+          syncEnvFromAppEnv(process.env.APP_ENV) === "dev" &&
+          isLocalDatabaseUrl(process.env.DATABASE_URL),
+        sql,
+      });
+      if (preview.granted?.length) {
+        console.log(
+          `  → DEV preview: this owner now holds every product on sale ` +
+            `(${preview.granted.join(", ")}) — revoke under Users → that account.`,
+        );
+      }
+    } catch (e) {
+      console.log(`  → DEV preview: not added (${e.message}).`);
+    }
   }
 } catch (e) {
   console.error("ERROR while writing to the database:", e.message);

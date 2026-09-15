@@ -130,6 +130,17 @@ into whichever environment is asked for. The module's `courses_outline` setup
 tool reads a remote environment and never writes; a lesson typed in through a
 tool would be overwritten by the next apply.
 
+**When the customer has YOU write the lessons, they are files — never rows,
+even if she also wants to "edit them herself".** Measured 2026-09-15: 24
+AI-written lessons went into the admin surface as `operator` rows, so they
+lived in one development database, were "backed up" as a Markdown file under
+`backups/`, and the go-live plan ended with "type them into the live app, one
+to two hours". The files ARE the backup (they are committed), `content-apply`
+carries them into every environment, and a change is one sentence to you.
+Say that before the first lesson, in her words
+(`docs/content-authority.md` → *The question, and the two answers*); a lesson she
+wants to change by hand on the live site is one she creates there.
+
 
 
 ```json

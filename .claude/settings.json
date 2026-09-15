@@ -14,6 +14,15 @@
             "command": "node scripts/dev/session-start.mjs"
           }
         ]
+      },
+      {
+        "matcher": "compact|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node scripts/dev/session-start.mjs --after-compact"
+          }
+        ]
       }
     ],
     "PreToolUse": [

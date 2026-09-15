@@ -205,6 +205,12 @@ go — are the ones that matter:
   Somebody chasing an undecorated link should not be sent to look at `.dev/`
   permissions, which is what the old sentence did.
 
+In DEV and outside it alike, the test-payment option on the checkout appears
+only for the vendor who is **signed in at Digistore24 in that browser** — the
+parameter proves the product is theirs, the login proves they are the vendor;
+without the login the page says *"nur bei Ihren eigenen Produkten — und nur
+wenn Sie eingeloggt sind"* (measured 2026-09-15).
+
 Outside DEV — a STAGING domain, or the live one before approval — the way to a
 test purchase is the vendor's
 [test-purchase cookie](https://help.digistore24.com/hc/de/articles/23901169396241),

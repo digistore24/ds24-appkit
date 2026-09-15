@@ -16,6 +16,9 @@
 import { randomUUID } from "node:crypto";
 import "../lib/env.mjs";
 import { connectUtc } from "../lib/pg-utc.mjs";
+import { ensureOperatorPreviewGrants } from "../../lib/entitlements/preview.mjs";
+import { syncEnvFromAppEnv } from "../ds24/_env.mjs";
+import { isLocalDatabaseUrl } from "../lib/media-env.mjs";
 
 const url = process.env.DATABASE_URL;
 if (!url) {
@@ -38,12 +41,28 @@ try {
     [ownerEmail, "owner"],
     [memberEmail, "member"],
   ]) {
-    await sql`
+    const [row] = await sql`
       insert into users (id, email, role)
       values (${randomUUID()}, ${email}, ${role})
       on conflict (email) do update set role = excluded.role
+      returning id
     `;
     console.log(`✓ User: ${email} (${role})`);
+    // A seeded owner has bought nothing either — the same comps `user-create`
+    // and the development login hand out, so the seeded admin can open what
+    // the app sells (2026-09-15). DEV against a local database only.
+    if (role === "owner") {
+      const preview = await ensureOperatorPreviewGrants({
+        memberId: row.id,
+        dev:
+          syncEnvFromAppEnv(process.env.APP_ENV) === "dev" &&
+          isLocalDatabaseUrl(process.env.DATABASE_URL),
+        sql,
+      });
+      if (preview.granted?.length) {
+        console.log(`  → DEV preview: holds every product on sale (${preview.granted.join(", ")})`);
+      }
+    }
   }
   console.log(
     "\nSign in: http://localhost:3000/login — magic link to the address above.",

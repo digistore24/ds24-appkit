@@ -281,8 +281,8 @@
     "moderatorRemove": "Entfernen",
     "moderatorRemoved": "Moderator entfernt.",
     "emptyTitle": "Noch keine Gruppe",
-    "emptyBody": "Leg die erste an. Achtung: Gruppen sind Zeilen in der Datenbank und reisen NICHT mit einem Deploy mit — leg sie dort an, wo die App läuft.",
-    "hintRowsDoNotTravel": "Gruppen liegen in der Datenbank dieser Umgebung. Ein Deploy nimmt Code mit, keine Zeilen: was du hier lokal anlegst, ist in der Live-App nicht vorhanden.",
+    "emptyBody": "Leg die erste an. Gruppen gibt es nur in der Kopie der App, in der du sie anlegst — für die Live-App legst du sie dort an.",
+    "hintRowsDoNotTravel": "Gruppen gibt es nur in der Kopie der App, in der du sie anlegst: Was du hier auf deinem Rechner anlegst, ist in der Live-App nicht da — dort legst du sie noch einmal an.",
     "moderatorsAllAssigned": "Alle Moderatoren dieser App betreuen diesen Raum bereits.",
     "listed": "Auf die Liste gesetzt.",
     "unlisted": "Von der Liste genommen."

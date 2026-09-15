@@ -32,6 +32,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { OUTCOMES, askApp, describeOutcome, describeSkip, planCost, probePlan } from "./live.mjs";
 import { LIVE_PATH } from "../../lib/ai/probe.mjs";
 import { PROVIDER_ENV_VARS, PROVIDER_IDS } from "../../lib/ai/providers/ids.mjs";
+import { TASKS, kindOfTask } from "../../lib/ai/task-rules.mjs";
 
 // ── a real server on a real socket ──────────────────────────────────────────
 //
@@ -91,6 +92,26 @@ const MODELS = {
   },
 };
 
+/**
+ * The text tasks that ride along on the first call, in registry order.
+ *
+ * Derived and not written out, because this file SHIPS inside the customer's
+ * app, where declaring a fourth task is the documented way to use the layer
+ * rather than a fault. Measured 2026-09-15: a session that registered its app's
+ * own task had to rewrite `toEqual(["companion"])` twice below before its own
+ * suite went green.
+ *
+ * `slice(1)` and not `!== "chat"`, although they name the same list today: the
+ * FIRST text task in registry order is the one `probePlan` makes the call's own,
+ * and every later one sharing its binding is folded in behind it. Every task in
+ * the fixture below is on `"auto"`, so they all share it — which is the property
+ * the two assertions are actually about.
+ */
+const ALSO_FOR = TASKS.filter((task) => kindOfTask(task) === "text").slice(1);
+// Every image-kind task is left unprobed, not only the shipped `image` — a
+// customer's `thumbnail` task lands here too (same reason as ALSO_FOR).
+const NOT_PROBED = TASKS.filter((task) => kindOfTask(task) === "image");
+
 describe("what a live run would call", () => {
   it("calls one binding once, however many tasks share it", () => {
     // The shipped app: chat and companion both on "auto", so both land on the
@@ -99,11 +120,14 @@ describe("what a live run would call", () => {
     // having been skipped.
     const plan = probePlan(MODELS, ["openai"]);
 
+    // Non-vacuity: with no second text task in the registry, `ALSO_FOR` is
+    // empty and both assertions below would pass on a plan that folded nothing.
+    expect(ALSO_FOR.length).toBeGreaterThan(0);
     expect(plan.problem).toBeNull();
     expect(plan.skip).toBeNull();
     expect(plan.calls).toHaveLength(1);
     expect(plan.calls[0].provider).toBe("openai");
-    expect(plan.calls[0].alsoFor).toEqual(["companion"]);
+    expect(plan.calls[0].alsoFor).toEqual(ALSO_FOR);
   });
 
   it("calls each binding when the tasks are on different companies", () => {
@@ -128,7 +152,8 @@ describe("what a live run would call", () => {
     const plan = probePlan(MODELS, ["openai"]);
 
     expect(plan.calls.some((call) => call.task === "image")).toBe(false);
-    expect(plan.notProbed.map((entry) => entry.task)).toEqual(["image"]);
+    expect(NOT_PROBED).toContain("image");
+    expect(plan.notProbed.map((entry) => entry.task)).toEqual(NOT_PROBED);
     expect(plan.notProbed[0].why).toMatch(/per picture/);
   });
 
@@ -157,7 +182,7 @@ describe("what a live run would call", () => {
     expect(plan.skip).toBeNull();
     expect(plan.calls).toHaveLength(1);
     expect(plan.calls[0].provider).toBe("auto");
-    expect(plan.calls[0].alsoFor).toEqual(["companion"]);
+    expect(plan.calls[0].alsoFor).toEqual(ALSO_FOR);
   });
 });
 

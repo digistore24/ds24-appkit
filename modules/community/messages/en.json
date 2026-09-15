@@ -281,8 +281,8 @@
     "moderatorRemove": "Remove",
     "moderatorRemoved": "Moderator removed.",
     "emptyTitle": "No groups yet",
-    "emptyBody": "Create the first one. Careful: groups are rows in the database and do NOT travel with a deploy — create them where the app runs.",
-    "hintRowsDoNotTravel": "Groups live in this environment's database. A deploy carries code, not rows: what you create here locally does not exist in the live app.",
+    "emptyBody": "Create the first one. Groups exist only in the copy of the app you create them in — for the live app, create them there.",
+    "hintRowsDoNotTravel": "Groups exist only in the copy of the app they were created in: what you create here on your computer is not in the live app — create it there once more.",
     "moderatorsAllAssigned": "Every moderator in this app already looks after this room.",
     "listed": "Added to the list.",
     "unlisted": "Taken off the list."
