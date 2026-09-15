@@ -4,14 +4,29 @@
 // State of the local IPN tunnel — shared by `tunnel.mjs` (which manages it) and
 // `ipn-setup.mjs` (which wants to know whether one is running).
 //
-// Three small files under .dev/ hold everything:
-//   tunnel.url   the public https address
-//   tunnel.pid   the cloudflared process, so `node run.mjs stop` can end it
-//   tunnel.log   cloudflared's output (that is where the address comes from)
+// A tunnel of ours is TWO processes, and cloudflared never sees the app:
+//
+//   Digistore24 ──► trycloudflare.com ──► cloudflared ──► gate ──► app
+//                                          (tunnel.pid)   (tunnel.gate.pid,
+//                                                          tunnel.gate.port)
+//
+// The gate (`_ipn-gate.mjs`) is a loopback server that forwards `/api/ipn`
+// and answers everything else 404. A quick tunnel forwards every path of the
+// address it is given and cannot be told otherwise, so pointed at the app it
+// published the sign-in page — which in DEV signs anyone in without a
+// password. Pointed at the gate it publishes one route.
+//
+// Five small files under .dev/ hold everything:
+//   tunnel.url        the public https address
+//   tunnel.pid        the cloudflared process, so `node run.mjs stop` can end it
+//   tunnel.gate.pid   the gate process — ended together with cloudflared
+//   tunnel.gate.port  the loopback port cloudflared forwards to
+//   tunnel.log        cloudflared's and the gate's output (that is where the
+//                     address comes from, and where refusals show up)
 //
 // **Two different questions, two different answers — do not mix them up.**
 //
-//   "Is a tunnel of ours running?"   → the PID (`process.kill(pid, 0)`)
+//   "Is a tunnel of ours running?"   → the PIDs (`process.kill(pid, 0)`)
 //   "Does it forward right now?"     → a GET on the address
 //
 // The first governs stopping and cleanup, the second governs *using* the
@@ -26,20 +41,32 @@
 // A failed probe means "I could not reach it from here", never "it is not
 // there". Only `process.kill(pid, 0)` is allowed to declare a tunnel gone, and
 // that call behaves the same on Linux, macOS and Windows.
+//
+// And a tunnel is running only while BOTH processes are. Half of one — the gate
+// gone, cloudflared forwarding onto a closed port, or the other way round — is
+// not "running" (nothing arrives) and not "gone" (a process is still there to
+// end): `activeTunnelUrl()` answers null, asks the survivor to end, and keeps
+// the state so that `stop` and the next `openTunnel()` can make sure of it.
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createServer as createNetServer } from "node:net";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { FIXES, fixFor, fixLine } from "../dev/doctor.mjs";
 
 export const DEV_DIR = ".dev";
 export const URL_FILE = join(DEV_DIR, "tunnel.url");
 export const PID_FILE = join(DEV_DIR, "tunnel.pid");
+export const GATE_PID_FILE = join(DEV_DIR, "tunnel.gate.pid");
+export const GATE_PORT_FILE = join(DEV_DIR, "tunnel.gate.port");
 export const LOG_FILE = join(DEV_DIR, "tunnel.log");
+
+const GATE_SCRIPT = fileURLToPath(new URL("./_ipn-gate.mjs", import.meta.url));
 
 // The IPN route answers a GET with "OK" — the very question Digistore24 asks
 // before it accepts an address. Probing that path therefore tests the whole
-// chain (tunnel forwards → app runs → route works), not merely "something
-// listens".
+// chain (tunnel forwards → gate forwards → app runs → route works), not merely
+// "something listens".
 export const PROBE_PATH = "/api/ipn";
 
 function readFile(path) {
@@ -50,23 +77,35 @@ function readFile(path) {
   }
 }
 
+function readPid(path) {
+  const pid = Number.parseInt(readFile(path), 10);
+  return Number.isInteger(pid) && pid > 0 ? pid : null;
+}
+
 /** The remembered tunnel — no check whether it still runs. */
 export function readTunnel() {
   const url = readFile(URL_FILE);
   if (!url) return null;
-  const pid = Number.parseInt(readFile(PID_FILE), 10);
-  return { url, pid: Number.isInteger(pid) && pid > 0 ? pid : null };
+  return {
+    url,
+    pid: readPid(PID_FILE),
+    gatePid: readPid(GATE_PID_FILE),
+    gatePort: readPid(GATE_PORT_FILE),
+  };
 }
 
-export function writeTunnel({ url, pid }) {
+/** @param {{ url: string, pid?: number | null, gatePid?: number | null, gatePort?: number | null }} state */
+export function writeTunnel({ url, pid, gatePid, gatePort }) {
   mkdirSync(DEV_DIR, { recursive: true });
   writeFileSync(URL_FILE, `${url}\n`);
   if (pid) writeFileSync(PID_FILE, `${pid}\n`);
+  if (gatePid) writeFileSync(GATE_PID_FILE, `${gatePid}\n`);
+  if (gatePort) writeFileSync(GATE_PORT_FILE, `${gatePort}\n`);
 }
 
 /** Forget the tunnel. The log stays — it is what you read after a failure. */
 export function clearTunnel() {
-  for (const f of [URL_FILE, PID_FILE]) {
+  for (const f of [URL_FILE, PID_FILE, GATE_PID_FILE, GATE_PORT_FILE]) {
     if (existsSync(f)) rmSync(f, { force: true });
   }
 }
@@ -140,34 +179,119 @@ export function appPort(argPort) {
   return 3000;
 }
 
+/** A port the OS has just handed out on the loopback interface — free right now. */
+export function ephemeralPort() {
+  return new Promise((resolve, reject) => {
+    const server = createNetServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address();
+      server.close(() => resolve(port));
+    });
+  });
+}
+
+/** Detached, output into the log, running on after we return. */
+function spawnDetached(command, args, fd, extra = {}) {
+  return spawn(command, args, { detached: true, stdio: ["ignore", fd, fd], ...extra });
+}
+
 /**
- * Open a Cloudflare Quick Tunnel onto the local app and remember it.
+ * End whatever the state files remember — both processes — and verify it.
+ *
+ * @returns {{ ok: true } | { ok: false, stubborn: number[] }}
+ */
+export async function stopTunnel(opts = {}) {
+  const state = readTunnel();
+  if (!state) return { ok: true };
+  const stubborn = [];
+  for (const pid of [state.pid, state.gatePid]) {
+    if ((await stopPid(pid, opts)) === "stubborn") stubborn.push(pid);
+  }
+  // A process we could not end keeps its record: it is still there, and the
+  // PID is the only handle anyone has left on it. Forgetting it here is
+  // exactly how a tunnel gets stranded.
+  if (stubborn.length > 0) return { ok: false, stubborn };
+  clearTunnel();
+  return { ok: true };
+}
+
+/**
+ * Open a Cloudflare Quick Tunnel onto the local app's IPN route and remember it.
  *
  * Shared by `tunnel.mjs start` and by `ipn-setup.mjs --auto`, which opens one
  * when it needs a public address and none is there. Registering the IPN is
  * NOT done here — both callers do that themselves, which is what keeps the two
  * from calling each other in a circle.
  *
- * @param {{port?: number, log?: (msg: string) => void}} [opts]
- * @returns {Promise<{ok: true, url: string, pid: number} | {ok: false, reason: "no-app"|"no-cloudflared"|"no-url", detail?: string}>}
+ * Two processes, in this order, and the order is the point: first the gate on
+ * a loopback port, probed through to the app; only then cloudflared, and onto
+ * the gate — so there is no moment at which the tunnel forwards to anything
+ * but the gate. Whatever the state files still remember is ended first: a
+ * fresh tunnel never sits next to an old one, and an old one that was opened
+ * straight onto the app (no gate recorded) is exactly the thing to end.
+ *
+ * @param {{port?: number, log?: (msg: string) => void, gateScript?: string}} [opts]
+ * @returns {Promise<{ok: true, url: string, pid: number, gatePid: number, gatePort: number}
+ *   | {ok: false, reason: "no-app"|"no-gate"|"no-cloudflared"|"no-url"|"stuck", detail?: string}>}
  */
-export async function openTunnel({ port = appPort(), log = () => {} } = {}) {
+export async function openTunnel({ port = appPort(), log = () => {}, gateScript = GATE_SCRIPT } = {}) {
   // Without a running app there is nothing to forward, and Digistore24's check
   // would fail on an address that answers with nothing.
   if (!(await probe(`http://localhost:${port}`))) return { ok: false, reason: "no-app" };
 
+  const closed = await stopTunnel();
+  if (!closed.ok) {
+    return {
+      ok: false,
+      reason: "stuck",
+      detail: `an earlier tunnel process will not end (PID ${closed.stubborn.join(", ")})`,
+    };
+  }
+
   mkdirSync(DEV_DIR, { recursive: true });
   writeFileSync(LOG_FILE, "");
-
-  log(`>> Cloudflare Quick Tunnel to http://localhost:${port}`);
   const fd = openSync(LOG_FILE, "a");
+
+  // ── 1. the gate ───────────────────────────────────────────────────────────
+  const gatePort = await ephemeralPort();
+  log(`>> IPN gate on 127.0.0.1:${gatePort} — lets ${PROBE_PATH} through to http://localhost:${port}, nothing else`);
+  const gate = spawnDetached(
+    process.execPath,
+    [gateScript, "--app-port", String(port), "--port", String(gatePort)],
+    fd,
+    { windowsHide: true },
+  );
+  let gateGone = false;
+  gate.on("error", () => {
+    gateGone = true;
+  });
+  gate.on("exit", () => {
+    gateGone = true;
+  });
+  gate.unref();
+
+  // Through the gate to the app — proves the chain the tunnel will use.
+  let gateUp = false;
+  for (let i = 0; i < 20 && !gateGone; i++) {
+    if (await probe(`http://127.0.0.1:${gatePort}`, { timeoutMs: 1000 })) {
+      gateUp = true;
+      break;
+    }
+    await sleep(250);
+  }
+  if (!gateUp) {
+    await stopPid(gate.pid);
+    return { ok: false, reason: "no-gate", detail: tailOfLog() };
+  }
+
+  // ── 2. cloudflared, onto the gate — never onto the app ────────────────────
+  log(`>> Cloudflare Quick Tunnel to http://127.0.0.1:${gatePort}`);
   let child;
   try {
-    child = spawn("cloudflared", ["tunnel", "--url", `http://localhost:${port}`], {
-      detached: true,
-      stdio: ["ignore", fd, fd],
-    });
+    child = spawnDetached("cloudflared", ["tunnel", "--url", `http://127.0.0.1:${gatePort}`], fd);
   } catch {
+    await stopPid(gate.pid);
     return { ok: false, reason: "no-cloudflared" };
   }
 
@@ -190,17 +314,23 @@ export async function openTunnel({ port = appPort(), log = () => {} } = {}) {
   }
 
   if (spawnError) {
+    await stopPid(gate.pid);
     return spawnError.code === "ENOENT"
       ? { ok: false, reason: "no-cloudflared" }
       : { ok: false, reason: "no-url", detail: spawnError.message };
   }
   if (!url) {
     await stopPid(child.pid);
-    return { ok: false, reason: "no-url", detail: readFile(LOG_FILE).split("\n").slice(-20).join("\n") };
+    await stopPid(gate.pid);
+    return { ok: false, reason: "no-url", detail: tailOfLog() };
   }
 
-  writeTunnel({ url, pid: child.pid });
-  return { ok: true, url, pid: child.pid };
+  writeTunnel({ url, pid: child.pid, gatePid: gate.pid, gatePort });
+  return { ok: true, url, pid: child.pid, gatePid: gate.pid, gatePort };
+}
+
+function tailOfLog() {
+  return readFile(LOG_FILE).split("\n").slice(-20).join("\n");
 }
 
 /**
@@ -276,25 +406,64 @@ export async function stopPid(pid, { graceMs = 5000, killMs = 2000, stepMs = 250
 }
 
 /**
+ * What the state files describe, checked against the processes — and nothing
+ * else (see the header: the network has no vote here).
+ *
+ *   "none"       nothing recorded
+ *   "foreign"    an address with no PID — written by hand, not ours to judge,
+ *                and not guarded by our gate either
+ *   "up"         cloudflared AND the gate are running
+ *   "half"       one of them is gone (or no gate was ever recorded) — the
+ *                address forwards nowhere, or straight at the app
+ *   "gone"       both are gone
+ */
+export function tunnelHealth(state = readTunnel()) {
+  if (!state) return "none";
+  if (state.pid === null) return "foreign";
+  const cloudflared = processAlive(state.pid);
+  const gate = processAlive(state.gatePid);
+  if (cloudflared && gate) return "up";
+  if (!cloudflared && !gate) return "gone";
+  return "half";
+}
+
+/**
  * The address of a tunnel of ours that is still running, or null.
  *
- * Deliberately decided by the PID and not by a probe — see the header. A
+ * Deliberately decided by the PIDs and not by a probe — see the header. A
  * tunnel that runs but cannot be reached *from this machine* is still a
  * perfectly good IPN address, because Digistore24 calls it from somewhere
  * else. Handing it over and letting Digistore24 judge (it performs its own GET
  * and insists on HTTP 200) beats refusing it here on worse evidence.
  *
- * State is cleared only when the process is provably gone — never on a failed
- * probe, which would strand a running cloudflared with nothing to stop it.
+ * State is cleared only when both processes are provably gone — never on a
+ * failed probe, which would strand a running cloudflared with nothing to stop
+ * it. Half a tunnel gets a polite SIGTERM for the survivor and KEEPS its state:
+ * `stopTunnel()` is what verifies the end, and it needs the PIDs to do so.
  */
 export function activeTunnelUrl() {
   const state = readTunnel();
-  if (!state) return null;
-  // No PID recorded (hand-written file, or a crash between the two writes):
-  // keep the address rather than throw it away — a probe elsewhere can still
-  // vouch for it, and there is no process for us to leak.
-  if (state.pid === null) return state.url;
-  if (processAlive(state.pid)) return state.url;
-  clearTunnel();
-  return null;
+  switch (tunnelHealth(state)) {
+    case "none":
+      return null;
+    // No PID recorded (hand-written file, or a crash between the writes):
+    // keep the address rather than throw it away — a probe elsewhere can still
+    // vouch for it, and there is no process for us to leak.
+    case "foreign":
+    case "up":
+      return state.url;
+    case "gone":
+      clearTunnel();
+      return null;
+    default:
+      for (const pid of [state.pid, state.gatePid]) {
+        if (!processAlive(pid)) continue;
+        try {
+          process.kill(pid);
+        } catch {
+          /* raced with its own exit */
+        }
+      }
+      return null;
+  }
 }

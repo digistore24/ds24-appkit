@@ -98,6 +98,7 @@ export const RUNG_STATES = ["clean", "found", "skipped"];
  * @property {Finding[]} findings   [] unless state === "found"
  * @property {Finding[]} [accepted] recognised as known; never counted, always printed
  * @property {string} [evidence]    one line naming what the rung actually ran
+ * @property {string} [covers]      what lay unread, more precisely than the rung's own sentence
  *
  * @typedef {object} Rung
  * @property {string} id       stable and machine-readable — it goes into the record
@@ -355,7 +356,9 @@ export function outcomeFrom(rung, result) {
     id: rung?.id,
     label: rung?.label,
     tier: rung?.tier,
-    covers: rung?.covers,
+    // A result may say more precisely what lies unread — the container rung
+    // names the files it found — and the rung's own sentence is the fallback.
+    covers: String(result?.covers ?? "").trim() || rung?.covers,
     state,
     reason: result?.reason ?? "",
     evidence: result?.evidence ?? "",

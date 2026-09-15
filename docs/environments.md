@@ -58,7 +58,10 @@ environment — **hard rules** hang off it:
   without a password, so you can get going right away. Four conditions have to
   hold at the same time for that: `APP_ENV`=development, `NODE_ENV`≠production,
   `APP_URL` on localhost, and no mail delivery. As soon as you run
-  `node run.mjs mail-setup`, it disappears.
+  `node run.mjs mail-setup`, it disappears. And one condition on the request
+  itself: a sign-in that arrived through Cloudflare's edge — that is, through
+  a tunnel — is refused whatever the environment says (see *Receiving IPNs
+  locally* below).
 - **Unknown `APP_ENV` values count as `production`.** So a typo leads to the
   strictest environment, not to the loosest.
 
@@ -98,11 +101,21 @@ node run.mjs ds24-sync  # products + IPN — opens the tunnel by itself if it ne
 ```
 
 `node run.mjs ds24-sync` notices that `APP_URL` is local, opens the public address onto
-your running app and registers it at Digistore24 as the IPN endpoint (path
-always `/api/ipn`). It announces that plainly: while the tunnel runs, your
-machine is reachable from the internet. It runs in the **background** and
-returns — no terminal of its own, no Ctrl-C. `node run.mjs status` shows it, `node run.mjs stop`
-ends it along with the app and the database.
+your running app's IPN route and registers it at Digistore24 as the IPN
+endpoint (path always `/api/ipn`). It announces that plainly: while the tunnel
+runs, that one route is reachable from the internet. It runs in the
+**background** and returns — no terminal of its own, no Ctrl-C. `node run.mjs status`
+shows it, `node run.mjs stop` ends it along with the app and the database.
+
+**Only `/api/ipn` passes through the tunnel.** A quick tunnel forwards every
+path of the address it is given, so it is never given the app: cloudflared is
+pointed at a small gate on this machine (`scripts/ds24/_ipn-gate.mjs`) that
+forwards `/api/ipn` and answers everything else 404 — the sign-in page, the
+dashboard, the auth callbacks never leave your computer. That matters here
+because the development sign-in needs no password: a tunnel onto the app
+itself would have let anyone with the address in. The sign-in refuses a request
+that carries Cloudflare's stamp on top (`lib/auth/dev-login.ts`), in case a
+`cloudflared` is ever pointed at the app by hand.
 
 `node run.mjs ds24-tunnel` does the same on its own, without touching the products. An
 already-running tunnel is reused by both, so the order never matters.

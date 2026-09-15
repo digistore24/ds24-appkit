@@ -276,7 +276,7 @@ drizzle/            database migrations (checked in, run the same everywhere)
 scripts/db/         reset.mjs (rebuild the local DB) + seed.mjs (initial data)
 scripts/ds24/       setup: sync products, approval, set up IPN
 scripts/users/      create accounts/roles via CLI
-scripts/ds24/       tunnel.mjs (Cloudflare Quick Tunnel for local IPNs)
+scripts/ds24/       tunnel.mjs (Cloudflare Quick Tunnel for local IPNs — onto _ipn-gate.mjs, which forwards /api/ipn only)
 .claude/skills/     guided skills for extending the app (all four programs)
 run.mjs             all commands for everyday work (node run.mjs = overview)
 ```

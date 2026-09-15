@@ -4,7 +4,7 @@
      scripts/api-map.test.ts compares this file with what the generator
      produces, and a hand edit is undone by the next run. -->
 
-_50 files, 223 exported functions, 46 tables. Regenerate
+_50 files, 224 exported functions, 46 tables. Regenerate
 with `node run.mjs api-map` after adding an export or a table; the suite says so
 when it is behind._
 
@@ -190,6 +190,7 @@ tests — `docs/ux.md` owns each, this is where they are needed:
 ## lib/auth/dev-login.ts
 
 - `isDevLoginAllowed(env: DevLoginEnv): boolean` — The one place that decides whether the development login exists at all.
+- `arrivedViaCloudflare(headers: { get(name: string): string | null }): boolean` — Did this request come in through Cloudflare's edge — that is, through a tunnel — rather than from this machine or its network?
 - `isDevLoginActive(): boolean` — Reads the conditions from the actual environment.
 - `demoLoginSuggestion(): Promise<string | null>` — The address offered as a suggestion on the sign-in page: preferably the oldest admin, otherwise the oldest user.
 - `buildDevLoginProvider(): Provider | null` — Builds the provider — or null if it is not allowed.

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { describe, it, expect } from "vitest";
-import { isDevLoginAllowed, isLocalUrl, type DevLoginEnv } from "./dev-login";
+import { arrivedViaCloudflare, isDevLoginAllowed, isLocalUrl, type DevLoginEnv } from "./dev-login";
 
 // Der Entwicklungs-Login ist ein Auth-Bypass. Diese Tests sind die Wache davor:
 // Each individual condition must be able to switch it off on its own.
@@ -92,5 +92,27 @@ describe("isLocalUrl", () => {
 
   it("sperrt bei unparsebarer URL", () => {
     expect(isLocalUrl("kaputt")).toBe(false);
+  });
+});
+
+describe("arrivedViaCloudflare", () => {
+  // The IPN tunnel never forwards the sign-in route (scripts/ds24/_ipn-gate.mjs).
+  // This is the belt under that suspender: a tunnel somebody points at the app
+  // by hand still must not sign anyone in without a password.
+  it("recognises what Cloudflare's edge stamps on every forwarded request", () => {
+    expect(arrivedViaCloudflare(new Headers({ "cf-ray": "8a1b2c3d4e5f6789-FRA" }))).toBe(true);
+    expect(arrivedViaCloudflare(new Headers({ "cf-connecting-ip": "203.0.113.7" }))).toBe(true);
+    expect(arrivedViaCloudflare(new Headers({ "cdn-loop": "cloudflare" }))).toBe(true);
+    expect(arrivedViaCloudflare(new Headers({ "cdn-loop": "other, cloudflare; loops=1" }))).toBe(true);
+  });
+
+  it("lets a request from this machine or its network through", () => {
+    expect(arrivedViaCloudflare(new Headers())).toBe(false);
+    expect(arrivedViaCloudflare(new Headers({ host: "localhost:3000" }))).toBe(false);
+    // A phone on the same Wi-Fi: no edge in between, no stamp.
+    expect(arrivedViaCloudflare(new Headers({ host: "192.168.1.5:3000", "x-forwarded-for": "192.168.1.9" }))).toBe(false);
+    // Some other CDN in the loop is not Cloudflare.
+    expect(arrivedViaCloudflare(new Headers({ "cdn-loop": "fastly" }))).toBe(false);
+    expect(arrivedViaCloudflare(new Headers({ "cdn-loop": "notcloudflare" }))).toBe(false);
   });
 });

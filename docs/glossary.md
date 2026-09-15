@@ -83,11 +83,12 @@ touches only your computer or the outside world, and whether it can be undone.
 - **localhost / local** — only on your computer. `http://localhost:3000` is
   your app, reachable from your machine and from nowhere else. Nobody can
   buy anything there; purchases are test purchases.
-- **Tunnel** — a temporary public address that leads to the app on your
-  computer, opened so Digistore24 can send a test purchase to it. **While it
-  runs, anyone with that address reaches your app — the app, nothing else on
-  your machine.** `node run.mjs stop` closes it; `node run.mjs status` shows
-  whether one is open.
+- **Tunnel** — a temporary public address that leads to ONE door of the app
+  on your computer, the one Digistore24 delivers purchase notifications to.
+  **While it runs, anyone with that address reaches that door and nothing
+  else** — not the sign-in page, not the dashboard, nothing else on your
+  machine. `node run.mjs stop` closes it; `node run.mjs status` shows whether
+  one is open.
 - **DEV · STAGING · PROD** — the three environments. DEV is your computer.
   PROD is the live app your customers pay for. STAGING is an optional live
   copy for trying things out with test purchases. Products and the database

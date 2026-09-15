@@ -23,6 +23,13 @@
 // In STAGING/PROD mail sending is mandatory; without it the app does not even
 // start (instrumentation.ts → checkEnvironment).
 //
+// And ONE condition on the request rather than the environment: a sign-in that
+// arrived through Cloudflare's edge is refused (`arrivedViaCloudflare`). The
+// four above describe a laptop; a request wearing `cf-ray` on that laptop came
+// in through a tunnel — the IPN tunnel (`scripts/ds24/tunnel.mjs`) never
+// forwards this route, so this is the belt under that suspender for a tunnel
+// somebody pointed at the app by hand.
+//
 // You can always turn it off hard: DEV_LOGIN=off in .env.
 // ============================================================================
 import Credentials from "next-auth/providers/credentials";
@@ -65,6 +72,24 @@ export function isDevLoginAllowed(env: DevLoginEnv): boolean {
   if (env.emailConfigured) return false;
   if (!isLocalUrl(env.APP_URL)) return false;
   return true;
+}
+
+/**
+ * Did this request come in through Cloudflare's edge — that is, through a
+ * tunnel — rather than from this machine or its network?
+ *
+ * Cloudflare stamps every request it forwards with `cf-ray` and
+ * `cf-connecting-ip`, and appends itself to `cdn-loop` (RFC 8586). Any one of
+ * them is enough: a client cannot REMOVE what the edge adds after it, and a
+ * client that ADDS one on the LAN only locks itself out. A phone on the same
+ * Wi-Fi carries none of them and signs in as before.
+ *
+ * Pure — the caller hands the headers in — so it is tested on its own.
+ */
+export function arrivedViaCloudflare(headers: { get(name: string): string | null }): boolean {
+  if (headers.get("cf-ray")) return true;
+  if (headers.get("cf-connecting-ip")) return true;
+  return /(^|,)\s*cloudflare\b/i.test(headers.get("cdn-loop") ?? "");
 }
 
 /** Reads the conditions from the actual environment. */
@@ -128,10 +153,13 @@ export function buildDevLoginProvider(): Provider | null {
     id: "dev-login",
     name: "Development login",
     credentials: { email: { label: "Email", type: "email" } },
-    async authorize(credentials) {
+    async authorize(credentials, request) {
       // Second check at runtime: if the provider is still called despite a
       // changed environment, this is where it stops.
       if (!isDevLoginActive()) return null;
+      // A request that came through a tunnel is not "somebody at this
+      // machine", whatever the environment says.
+      if (arrivedViaCloudflare(request.headers)) return null;
 
       const email = String(credentials?.email ?? "").trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;

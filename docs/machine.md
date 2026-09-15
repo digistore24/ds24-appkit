@@ -81,9 +81,10 @@ you from here yet"* — followed by the plan to put it somewhere they can reach,
 which is the skill `setup-hosting`.
 
 The one that is not a matter of wording: **`node run.mjs ds24-tunnel` publishes
-the machine it runs on.** Where that is not the machine the person is at, the
-tunnel is still correct — the IPN reaches the running app — but it is worth
-knowing what has just been put on the public internet.
+the IPN route of the machine it runs on** — that route and nothing else, a gate
+on the machine refuses every other path. Where that is not the machine the
+person is at, the tunnel is still correct — the IPN reaches the running app —
+but it is worth knowing what has just been put on the public internet.
 
 ### 3. Their work is somewhere else, and it has to travel
 

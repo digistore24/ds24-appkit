@@ -260,6 +260,34 @@ describe("a skip is never a pass", () => {
 
 // ── the verdict ─────────────────────────────────────────────────────────────
 
+describe("a result may say more precisely what lay unread", () => {
+  // The container rung walks the tree before it asks for its tool, and when the
+  // tree holds a Dockerfile its skip names it instead of a category. The static
+  // `covers` on the rung stays the fallback — and stays REQUIRED (the shape test
+  // below), because a result carrying no `covers` must still print a Blind to:.
+  it("prefers the result's covers over the rung's", () => {
+    const skipped = outcome("container-scan", {
+      state: "skipped",
+      reason: "the daemon did not answer",
+      findings: [],
+      covers: "Dockerfile, infra/main.tf — 2 container/infrastructure file(s) in this tree, unread",
+    });
+    expect(skipped.covers).toBe(
+      "Dockerfile, infra/main.tf — 2 container/infrastructure file(s) in this tree, unread",
+    );
+    expect(formatSkip(skipped)).toContain("Blind to: Dockerfile, infra/main.tf");
+  });
+
+  it("falls back to the rung's sentence when the result carries none, or a blank one", () => {
+    expect(outcome("x", { state: "skipped", reason: "r", findings: [] }).covers).toBe(
+      "what the x rung would have checked",
+    );
+    expect(outcome("x", { state: "skipped", reason: "r", findings: [], covers: "   " }).covers).toBe(
+      "what the x rung would have checked",
+    );
+  });
+});
+
 describe("what turns the verdict red", () => {
   it("counts by severity, worst first", () => {
     expect(countBySeverity([finding("high"), finding("low"), finding("high")])).toEqual({

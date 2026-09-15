@@ -5,6 +5,13 @@
 // Receive Digistore24 IPNs on your own machine — via a free Cloudflare Quick
 // Tunnel. No Cloudflare account, no domain, no cost.
 //
+// **The tunnel publishes ONE route, not the app.** A quick tunnel forwards every
+// path of the address it is given, so it is never given the app: it is given
+// the IPN gate (`_ipn-gate.mjs`), a loopback server that forwards `/api/ipn`
+// and answers everything else 404. Without that, the address published the
+// sign-in page — which in DEV signs anyone in without a password. Both
+// processes are started, recorded and stopped together (`_tunnel.mjs`).
+//
 // Why a tunnel at all: Digistore24 only accepts an IPN address that is publicly
 // reachable over https, and it checks that itself — `ipnSetup` performs a GET
 // and insists on HTTP 200 (it even refuses a 301/302, so the `/redir/` bridge
@@ -49,12 +56,12 @@ import {
   LOG_FILE,
   activeTunnelUrl,
   appPort,
-  clearTunnel,
   openTunnel,
   probe,
   readTunnel,
   shouldRestoreTunnel,
-  stopPid,
+  stopTunnel,
+  tunnelHealth,
   waitReachable,
 } from "./_tunnel.mjs";
 
@@ -75,6 +82,9 @@ async function start(argPort) {
     console.log("  (a fresh address: node run.mjs stop, then node run.mjs ds24-tunnel)");
     return 0;
   }
+  // Half a tunnel (one of the two processes gone) is ended by openTunnel()
+  // before it opens the new one — say so, or the reader sees two addresses.
+  if (tunnelHealth() === "half") console.log("• Closing the remains of an earlier tunnel first.");
 
   const opened = await openTunnel({ port, log: (m) => console.log(m) });
   if (!opened.ok) return explainFailure(opened, port);
@@ -114,8 +124,8 @@ async function restore(argPort) {
   if (!may) return 0;
 
   console.log("→ Restoring the IPN tunnel (this app receives Digistore24 events) …");
-  console.log("  While it runs the app has a public address — the app, nothing else on this");
-  console.log("  computer. `node run.mjs stop` closes it.");
+  console.log("  While it runs, /api/ipn has a public address — that one route, nothing else");
+  console.log("  of the app or this computer. `node run.mjs stop` closes it.");
   const opened = await openTunnel({ port: appPort(argPort), log: () => {} });
   if (!opened.ok) {
     console.log(`  • not restored: ${shortExcuse(opened.reason)}`);
@@ -140,6 +150,8 @@ async function restore(argPort) {
 function shortExcuse(reason) {
   if (reason === "no-cloudflared") return "cloudflared is not installed";
   if (reason === "no-app") return "the app is not answering yet";
+  if (reason === "no-gate") return "the IPN gate did not come up (see .dev/tunnel.log)";
+  if (reason === "stuck") return "an earlier tunnel process will not end (node run.mjs stop)";
   return "cloudflared reported no address";
 }
 
@@ -153,6 +165,14 @@ function explainFailure(result, port) {
       break;
     case "no-cloudflared":
       console.error(`${CLOUDFLARED_MISSING}\n\nThen run 'node run.mjs ds24-tunnel' again.`);
+      break;
+    case "no-gate":
+      console.error("✗ The IPN gate did not come up — nothing was published. Last lines of the log:");
+      console.error(result.detail || `(see ${LOG_FILE})`);
+      break;
+    case "stuck":
+      console.error(`✗ ${result.detail}.`);
+      console.error("  Nothing new was opened. `node run.mjs stop` says how to end it by hand.");
       break;
     default:
       console.error("✗ cloudflared did not report an address. Last lines of the log:");
@@ -213,30 +233,39 @@ async function stop({ quiet = false } = {}) {
     return 0;
   }
 
-  const outcome = await stopPid(state.pid);
+  const wasRunning = tunnelHealth(state) !== "gone";
+  const outcome = await stopTunnel();
 
   // A process we could not end keeps its record: it is still forwarding, and
   // the PID is the only handle anyone has left on it. Forgetting it here is
   // exactly how a tunnel gets stranded.
-  if (outcome === "stubborn") {
-    console.error(`✗ The tunnel process (PID ${state.pid}) will not stop.`);
+  if (!outcome.ok) {
+    const pids = outcome.stubborn;
+    console.error(`✗ The tunnel process${pids.length > 1 ? "es" : ""} (PID ${pids.join(", ")}) will not stop.`);
     console.error(`  Your machine is still reachable at ${state.url} — end it by hand:`);
-    console.error(`    kill -9 ${state.pid}      (Windows: taskkill /PID ${state.pid} /F)`);
+    for (const pid of pids) {
+      console.error(`    kill -9 ${pid}      (Windows: taskkill /PID ${pid} /F)`);
+    }
     return 1;
   }
 
-  clearTunnel();
   // There WAS one, so say so even when asked to be quiet — `node run.mjs stop` should
   // report that it took the public address down. Only "nothing to do" is silent.
-  console.log(
-    outcome === "gone"
-      ? "• Tunnel was no longer running — state cleared"
-      : "✓ Tunnel closed",
-  );
+  console.log(wasRunning ? "✓ Tunnel closed" : "• Tunnel was no longer running — state cleared");
   return 0;
 }
 
 async function status() {
+  const state = readTunnel();
+  const health = tunnelHealth(state);
+  if (health === "half") {
+    // `activeTunnelUrl()` has already asked the survivor to end; the state
+    // stays until a stop verifies it. Say what happened rather than "none".
+    activeTunnelUrl();
+    console.log(`Tunnel:    broken — ${state.url} (one of its two processes is gone)`);
+    console.log("           node run.mjs stop, then node run.mjs ds24-tunnel for a fresh one");
+    return 0;
+  }
   const active = activeTunnelUrl();
   if (!active) {
     console.log("Tunnel:    none — the app is reachable from this computer only");
@@ -247,8 +276,14 @@ async function status() {
   // machine's resolver knows it, while Digistore24 already reaches it.
   const reachable = await probe(active);
   console.log(`Tunnel:    running — ${active}`);
-  console.log("           (public while it runs: anyone with this address reaches the app;");
-  console.log("            node run.mjs stop closes it)");
+  if (health === "foreign") {
+    console.log("           (recorded by hand, not opened by this app — NOT behind its IPN gate;");
+    console.log("            whatever it points at is public while it runs)");
+  } else {
+    console.log("           (public while it runs: only /api/ipn passes through — every other");
+    console.log("            path is refused on this machine before it reaches the app;");
+    console.log("            node run.mjs stop closes it)");
+  }
   if (!reachable) {
     console.log("           (not resolvable from this machine yet — normal for a few");
     console.log("            minutes after opening; Digistore24 reaches it regardless)");

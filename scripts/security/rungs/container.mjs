@@ -22,11 +22,45 @@
 // (`../rules.mjs:110-124`) — not as an eleventh rung.
 //
 // What is left is the thing nothing else on this ladder looks at: the
-// repository's **own** configuration — the shipped `docker-compose.yml`, any
-// `Dockerfile` an operator added, any infrastructure file that came with their
-// host's tooling. Small on a fresh app, real on a grown-up one, and **disjoint by
-// construction** from every other rung, which is what makes it safe to add to a
-// tally nobody can de-duplicate.
+// repository's **own** infrastructure files — the `Dockerfile` that `fly launch`
+// writes, a Terraform module, a Helm chart, a Kubernetes or CloudFormation
+// manifest that came with an operator's host tooling. Empty on a fresh app, real
+// on a grown-up one, and **disjoint by construction** from every other rung,
+// which is what makes it safe to add to a tally nobody can de-duplicate.
+//
+// ── 🚨 The shipped `docker-compose.yml` is NOT one of those files ──────────
+//
+// Measured 2026-09-15 with `aquasec/trivy:latest fs --scanners misconfig` over
+// the template tree: **0 configuration files in scope**. Trivy's misconfig
+// scanner reads Dockerfiles, Terraform, Helm, Kubernetes, CloudFormation, Azure
+// ARM and Bicep — a Compose file is not on that list. So a fresh app has nothing
+// here for the scanner to read, and until that measurement this rung asked for
+// Docker AND the image only to find that out, and printed `⏭ NOT ASKED — Blind
+// to: the repository's own container and infrastructure files` on every machine
+// without them. A tester read that skip as a gap. It was not a gap; it was a rung
+// that had not looked in the tree before asking for its tool.
+//
+// ── So the tree is read FIRST, and Docker is asked only when it matters ────
+//
+// `scopeFiles()` walks the tree with nothing but `node:fs` and collects the
+// files Trivy would read (by name for Dockerfiles, Terraform, Bicep and Helm; by
+// a look at the first few kilobytes for the YAML and JSON that is a Kubernetes or
+// CloudFormation manifest, because `k8s/deploy.yaml` and `package.json` look the
+// same from the outside). Three answers follow:
+//
+//   nothing in scope     `✓` with an evidence line saying what was looked for and
+//                        that Docker was not asked — the answer this rung already
+//                        gave WITH Trivy present (`0 configuration file(s) in
+//                        scope`), reached without the detour.
+//   files, no tool       `⏭ NOT ASKED` as before, but `Blind to:` now names the
+//                        files that lie unread, so the skip is exactly as big as
+//                        the tree makes it.
+//   files, tool          the scan, with the same names in its evidence.
+//
+// The list has to track Trivy's targets by hand, and a file it misses is a `✓`
+// that should have been a `⏭`. That is why the sniff errs towards inclusion (any
+// document with `apiVersion` and `kind`, any with `AWSTemplateFormatVersion`)
+// and why `container.test.ts` plants one of each and asserts the set.
 //
 // ── 🚨 It never pulls the image ───────────────────────────────────────────
 //
@@ -64,8 +98,9 @@
 // is a skip with the first non-empty line of stderr.
 //
 // And a run that found no configuration files at all says so in its evidence
-// (`0 configuration file(s) in scope`) — the reader must not be able to read
-// "the hardening pass happened" out of an empty answer.
+// (`0 configuration file(s) in scope`, or the walk's own sentence when Docker was
+// never asked) — the reader must not be able to read "the hardening pass
+// happened" out of an empty answer.
 //
 // Plain Node, no dependency — Linux, macOS and Git Bash on Windows. `docker` is a
 // real executable on all three and is started through `capture()` with an args
@@ -74,7 +109,8 @@
 // Windows path, cannot occur here. The host side of the mount is `resolve(root)`,
 // so Windows passes `C:\Users\…\app:/repo:ro`, which is what Docker Desktop
 // expects.
-import { resolve } from "node:path";
+import { readdirSync, openSync, readSync, closeSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 
 import { dockerUsable } from "../../db/driver.mjs";
 import { capture } from "../../lib/proc.mjs";
@@ -90,6 +126,157 @@ const SOURCE = "Trivy";
 
 /** The wall clock this rung is bounded by. A first run on a big tree is not fast. */
 export const TIMEOUT_MS = 90_000;
+
+// ── The files Trivy's misconfig scanner reads ────────────────────────────────
+
+/** Folders the walk never enters — a dependency's Dockerfile is not this repository's. */
+const SKIPPED_DIRS = new Set(["node_modules", ".git", ".next", ".dev"]);
+
+/** How much of a YAML or JSON file is read to tell a manifest from a config. */
+const SNIFF_BYTES = 4096;
+
+/** How many names a sentence carries before it says "and N more". */
+const NAMED_FILES = 5;
+
+/** The one-line summary of what the walk looks for — the same words in every sentence that names it. */
+const LOOKED_FOR =
+  "Dockerfile*, *.tf, *.bicep, Helm charts and Kubernetes or CloudFormation manifests";
+
+/**
+ * Is this file name one Trivy reads on sight?
+ *
+ * Dockerfiles in their three spellings, Terraform, Bicep and a Helm chart's
+ * `Chart.yaml`. Compose files are deliberately NOT here — see the header.
+ *
+ * @param {string} name  the base name, no directory
+ * @returns {boolean}
+ */
+export function isScopeName(name) {
+  const base = String(name ?? "");
+  if (base === "Dockerfile" || base.startsWith("Dockerfile.") || base.endsWith(".Dockerfile")) {
+    return true;
+  }
+  if (base.endsWith(".tf") || base.endsWith(".tf.json") || base.endsWith(".bicep")) return true;
+  return base === "Chart.yaml";
+}
+
+/** A YAML or JSON file whose content has to be looked at before it can be placed. */
+export function needsSniff(name) {
+  return /\.(ya?ml|json)$/i.test(String(name ?? ""));
+}
+
+/**
+ * Does the head of a YAML or JSON document read as a Kubernetes or CloudFormation manifest?
+ *
+ * Kubernetes: `apiVersion` AND `kind` as top-level keys. CloudFormation:
+ * `AWSTemplateFormatVersion`. Both spellings — bare YAML keys and quoted JSON
+ * keys — because Trivy reads both. A Compose file has neither
+ * (`services:`), and neither does `package.json`.
+ *
+ * @param {string} head
+ * @returns {boolean}
+ */
+export function sniffsAsManifest(head) {
+  const text = String(head ?? "");
+  if (/^\s*"?AWSTemplateFormatVersion"?\s*:/m.test(text)) return true;
+  return /^\s*"?apiVersion"?\s*:/m.test(text) && /^\s*"?kind"?\s*:/m.test(text);
+}
+
+/** The first `SNIFF_BYTES` of a file, or "" when it cannot be read. */
+function headOf(file) {
+  let fd = null;
+  try {
+    fd = openSync(file, "r");
+    const buffer = Buffer.alloc(SNIFF_BYTES);
+    const read = readSync(fd, buffer, 0, SNIFF_BYTES, 0);
+    return buffer.toString("utf8", 0, read);
+  } catch {
+    return "";
+  } finally {
+    if (fd !== null) closeSync(fd);
+  }
+}
+
+/**
+ * Every file in this tree that Trivy's misconfig scanner would read — relative
+ * paths, forward slashes, sorted.
+ *
+ * Plain `node:fs`, no dependency, and symlinks are not followed: a link out of
+ * the tree is not a file of this repository, and following it is how a walk
+ * stops terminating.
+ *
+ * @param {string} root
+ * @returns {string[]}
+ */
+export function scopeFiles(root) {
+  const base = resolve(root ?? process.cwd());
+  const found = [];
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (!SKIPPED_DIRS.has(entry.name)) walk(full);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      if (isScopeName(entry.name) || (needsSniff(entry.name) && sniffsAsManifest(headOf(full)))) {
+        found.push(relative(base, full).split("\\").join("/"));
+      }
+    }
+  };
+  walk(base);
+  return found.sort();
+}
+
+/**
+ * A handful of names, then a count — never the whole tree in one line.
+ *
+ * @param {string[]} files
+ * @returns {string}
+ */
+export function nameList(files) {
+  const list = Array.isArray(files) ? files : [];
+  const shown = list.slice(0, NAMED_FILES).join(", ");
+  const rest = list.length - NAMED_FILES;
+  return rest > 0 ? `${shown} and ${rest} more` : shown;
+}
+
+/**
+ * What a skip is blind to when the tree DOES hold files — the names, not the category.
+ *
+ * Handed back on the rung's result as `covers`, which `outcomeFrom()` prefers
+ * over the rung's static sentence. The static one stays for the tree-less case
+ * and for the shape test in `rungs.test.ts`.
+ *
+ * @param {string[]} files
+ * @returns {string}
+ */
+export function blindTo(files) {
+  return `${nameList(files)} — ${files.length} container/infrastructure file(s) in this tree, unread`;
+}
+
+/**
+ * The `✓` a tree without any such file gets — without Docker having been asked.
+ *
+ * @returns {import("../rules.mjs").RungResult}
+ */
+export function nothingInScope() {
+  return {
+    state: "clean",
+    findings: [],
+    evidence:
+      `No container or infrastructure file in this tree — looked for ${LOOKED_FOR}. ` +
+      "docker-compose.yml is the development database and not a scanner target " +
+      `(measured: Trivy reads no Compose file). Nothing here for ${SCANNER_IMAGE_REPO} ` +
+      "to read, so Docker was not asked.",
+  };
+}
 
 /**
  * Which tag of the scanner is on this machine — whichever one is, not a pinned one.
@@ -212,15 +399,25 @@ export const container = {
   // Tier 2: Docker may not answer and the image may not be here — two different
   // facts, two different sentences, and neither of them is a failure.
   tier: 2,
+  // The sentence for a tree that holds no such file. When the tree does, the
+  // result carries its own `covers` naming them (`blindTo()`).
   covers:
-    "the repository's own container and infrastructure files, checked by a scanner nothing else here runs",
+    "any Dockerfile, Terraform, Helm, Kubernetes or CloudFormation file in this repository — " +
+    "the shipped docker-compose.yml is not one of them",
 
   async run({ root } = {}) {
     // `resolve()` so the host side of the mount is absolute on all three systems.
     const cwd = resolve(root ?? process.cwd());
 
+    // 🚨 The tree first. A fresh app holds nothing this scanner reads, and a rung
+    // that asks for a tool before it knows whether there is anything for the
+    // tool to do prints a skip that reads as a gap (header).
+    const files = scopeFiles(cwd);
+    if (files.length === 0) return nothingInScope();
+    const covers = blindTo(files);
+
     // 🚨 The daemon, not the PATH — and the app's own test for it, not a second one.
-    if (!(await dockerUsable())) return dockerMissing();
+    if (!(await dockerUsable())) return { ...dockerMissing(), covers };
 
     // The repository name is a FILTER here, not a pull: `docker images` never
     // reaches a registry. An absent image is an empty stdout and exit 0.
@@ -231,12 +428,15 @@ export const container = {
       SCANNER_IMAGE_REPO,
     ]);
     if (Number(listed.code) !== 0) {
-      return unanswered(
-        `docker could not list images: ${firstLine(listed.stderr) || "no reason given"}`,
-      );
+      return {
+        ...unanswered(
+          `docker could not list images: ${firstLine(listed.stderr) || "no reason given"}`,
+        ),
+        covers,
+      };
     }
     const image = firstImage(listed.stdout);
-    if (!image) return imageMissing(SCANNER_IMAGE_REPO);
+    if (!image) return { ...imageMissing(SCANNER_IMAGE_REPO), covers };
 
     const args = scanArgs(image, cwd);
     // ⚠️ One attempt, so 90 s IS the rung's wall clock. Two things about that
@@ -252,11 +452,14 @@ export const container = {
     const report = readReport(result.stdout);
     if (!report) {
       const said = firstLine(result.stderr);
-      return unanswered(
-        said
-          ? `${image} wrote no report Trivy would recognise: ${said}`
-          : `${image} wrote no report Trivy would recognise (exit ${result.code})`,
-      );
+      return {
+        ...unanswered(
+          said
+            ? `${image} wrote no report Trivy would recognise: ${said}`
+            : `${image} wrote no report Trivy would recognise (exit ${result.code})`,
+        ),
+        covers,
+      };
     }
 
     const results = configResults(report);
@@ -269,7 +472,8 @@ export const container = {
       findings,
       evidence:
         `${image} fs --scanners misconfig --skip-check-update, offline (--network none) ` +
-        `over a read-only mount — ${results.length} configuration file(s) in scope.`,
+        `over a read-only mount — ${results.length} configuration file(s) in scope; ` +
+        `this tree holds ${files.length}: ${nameList(files)}.`,
     };
   },
 };

@@ -136,7 +136,9 @@ itself is in `lib/digistore/config.mjs`.
 
 **The IPN endpoint is the exception.** That URL is called by the *Digistore24
 server*, and its localhost is not yours — the redirect cannot help, which is why
-`ipn-setup.mjs --auto` skips the IPN locally instead. Use `node run.mjs ds24-tunnel`.
+`ipn-setup.mjs --auto` skips the IPN locally instead. Use `node run.mjs ds24-tunnel`
+— it publishes that one route and nothing else (see *The tunnel publishes one
+route* below).
 
 Request approval (go-live) — sets `approval_status=pending` per product. The
 marketplace follows the **product's own** `language` in
@@ -292,6 +294,38 @@ The tunnel runs in the **background** (`tunnel.mjs`, state in `.dev/tunnel.*`);
 replaced. Never opened: on `--dry-run` (a preview must not publish the machine)
 and with `--no-tunnel`. A public `APP_URL` (STAGING/PROD) wins over any
 tunnel and never reaches this path.
+
+### The tunnel publishes one route, not the app (`_ipn-gate.mjs`)
+
+A quick tunnel forwards **every** path of the address it is given, and it
+cannot be told otherwise — ingress rules need a named tunnel, an account and a
+domain. Pointed straight at the app it published the whole thing, the sign-in
+page included, and in DEV that page signs anyone in without a password
+(`lib/auth/dev-login.ts`). So cloudflared is never given the app:
+
+```
+Digistore24 ──► trycloudflare.com ──► cloudflared ──► gate (127.0.0.1) ──► app
+                                                        │
+                                          GET | HEAD | POST /api/ipn  → forwarded
+                                          anything else               → 404
+```
+
+The gate is a loopback `node:http` server (`_ipn-gate.mjs`) that forwards the
+constant path `/api/ipn` — literally compared, no trailing slash, no
+`%69pn`, no query string — and answers everything else 404 before the app sees
+it. `openTunnel()` starts it first, probes the app *through* it, and only then
+starts cloudflared onto the gate's port, so there is no moment at which the
+tunnel forwards to anything but the gate. Both PIDs are recorded
+(`.dev/tunnel.pid`, `.dev/tunnel.gate.pid`), `node run.mjs stop` ends both, and
+a tunnel with one of the two gone is neither "running" nor "gone": it is
+refused as an IPN address, the survivor is asked to end, and the state stays
+until a stop has verified it. Refusals show up in `.dev/tunnel.log`
+(`gate: refused GET "/login" from …`) — the first twenty, then a summary line.
+
+Under it, one more belt: the development sign-in itself refuses any request
+that carries Cloudflare's `cf-ray` / `cf-connecting-ip` / `cdn-loop` stamp
+(`arrivedViaCloudflare()` in `lib/auth/dev-login.ts`), so a `cloudflared`
+somebody starts by hand onto port 3000 still signs nobody in.
 
 By hand (a special case, fixed values instead of derivation):
 

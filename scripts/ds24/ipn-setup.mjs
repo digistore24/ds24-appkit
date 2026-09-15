@@ -170,10 +170,10 @@ if (!url && auto) {
       // Say it before doing it: this makes the machine reachable from the
       // internet, and nobody should discover that from a log line afterwards.
       console.log("• No public address yet — opening a Cloudflare Quick Tunnel for the IPN.");
-      console.log("  What that means: while it runs, this app has a temporary public address, so");
-      console.log("  Digistore24 can send test purchases to it. Anyone with that address reaches the");
-      console.log("  app — the app, nothing else on this computer. `node run.mjs stop` closes it,");
-      console.log("  `node run.mjs status` shows whether it is open.");
+      console.log("  What that means: while it runs, this app's IPN route has a temporary public");
+      console.log("  address, so Digistore24 can send test purchases to it. Only /api/ipn passes");
+      console.log("  through — every other path is refused on this machine before it reaches the");
+      console.log("  app. `node run.mjs stop` closes it, `node run.mjs status` shows whether it is open.");
       const opened = await openTunnel({ port: appPort(), log: (m) => console.log(`  ${m}`) });
       if (opened.ok) {
         tunnel = opened.url;
@@ -198,6 +198,8 @@ if (!url && auto) {
 function tunnelExcuse(reason) {
   if (reason === "no-app") return "the app is not running (node run.mjs start).";
   if (reason === "no-cloudflared") return `cloudflared is not installed.\n${CLOUDFLARED_MISSING}`;
+  if (reason === "no-gate") return "the IPN gate did not come up (see .dev/tunnel.log).";
+  if (reason === "stuck") return "an earlier tunnel process will not end (node run.mjs stop).";
   return "cloudflared reported no address (see .dev/tunnel.log).";
 }
 

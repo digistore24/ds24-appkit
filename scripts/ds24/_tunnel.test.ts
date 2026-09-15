@@ -3,7 +3,9 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { spawn } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -12,12 +14,15 @@ import {
   activeTunnelUrl,
   appPort,
   clearTunnel,
+  ephemeralPort,
   openTunnel,
   probe,
   processAlive,
   readTunnel,
   shouldRestoreTunnel,
   stopPid,
+  stopTunnel,
+  tunnelHealth,
   writeTunnel,
 } from "./_tunnel.mjs";
 
@@ -33,6 +38,30 @@ function fakeFetch(answer: unknown) {
 }
 
 const ok = { status: 200, text: async () => "OK" };
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Real children for the process tests, ended after each test whatever happened.
+const spawned: ReturnType<typeof spawn>[] = [];
+
+afterEach(() => {
+  for (const c of spawned.splice(0)) {
+    try {
+      if (c.pid) process.kill(c.pid, "SIGKILL");
+    } catch {
+      /* already gone */
+    }
+  }
+});
+
+/** A real child that does nothing but stay alive. */
+function longRunning() {
+  const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+    stdio: "ignore",
+  });
+  spawned.push(child);
+  return child;
+}
 
 describe("probe", () => {
   it("accepts only the answer our own IPN route gives", async () => {
@@ -86,10 +115,15 @@ describe("tunnel state", () => {
     vi.restoreAllMocks();
   });
 
-  it("remembers an address and its process across a round trip", () => {
+  it("remembers an address and BOTH its processes across a round trip", () => {
     inTempDir();
-    writeTunnel({ url: "https://a.trycloudflare.com", pid: 4242 });
-    expect(readTunnel()).toEqual({ url: "https://a.trycloudflare.com", pid: 4242 });
+    writeTunnel({ url: "https://a.trycloudflare.com", pid: 4242, gatePid: 4243, gatePort: 41234 });
+    expect(readTunnel()).toEqual({
+      url: "https://a.trycloudflare.com",
+      pid: 4242,
+      gatePid: 4243,
+      gatePort: 41234,
+    });
   });
 
   it("knows nothing when nothing was written", () => {
@@ -100,29 +134,100 @@ describe("tunnel state", () => {
   it("survives a pid file that is missing or unusable", () => {
     inTempDir();
     writeFileSync(join(".dev", "tunnel.url"), "https://a.trycloudflare.com\n");
-    expect(readTunnel()).toEqual({ url: "https://a.trycloudflare.com", pid: null });
+    expect(readTunnel()).toEqual({
+      url: "https://a.trycloudflare.com",
+      pid: null,
+      gatePid: null,
+      gatePort: null,
+    });
 
     writeFileSync(join(".dev", "tunnel.pid"), "not-a-number\n");
     expect(readTunnel()?.pid).toBeNull();
   });
 
-  it("forgets everything on clear", () => {
+  it("forgets everything on clear — the gate's files included", () => {
     inTempDir();
-    writeTunnel({ url: "https://a.trycloudflare.com", pid: 1 });
+    writeTunnel({ url: "https://a.trycloudflare.com", pid: 1, gatePid: 2, gatePort: 3 });
     clearTunnel();
     expect(readTunnel()).toBeNull();
+    expect(existsSync(join(".dev", "tunnel.gate.pid"))).toBe(false);
+    expect(existsSync(join(".dev", "tunnel.gate.port"))).toBe(false);
   });
 
-  it("hands out the address while our process is alive", () => {
+  it("hands out the address while BOTH our processes are alive", () => {
     inTempDir();
-    writeTunnel({ url: "https://a.trycloudflare.com", pid: process.pid });
+    writeTunnel({ url: "https://a.trycloudflare.com", pid: process.pid, gatePid: process.ppid });
+    expect(tunnelHealth()).toBe("up");
     expect(activeTunnelUrl()).toBe("https://a.trycloudflare.com");
   });
 
-  it("forgets the address once the process is gone", () => {
+  it("forgets the address once both processes are gone", () => {
     inTempDir();
-    writeTunnel({ url: "https://dead.trycloudflare.com", pid: unusedPid() });
+    writeTunnel({ url: "https://dead.trycloudflare.com", pid: unusedPid(), gatePid: unusedPid() });
+    expect(tunnelHealth()).toBe("gone");
     expect(activeTunnelUrl()).toBeNull();
+    expect(readTunnel()).toBeNull();
+  });
+
+  it("does NOT hand out a tunnel whose gate is gone — and keeps the state to end it", async () => {
+    // cloudflared still running, the gate not: the address forwards onto a
+    // closed port. Nothing arrives, so it is no IPN address — and nothing is
+    // published either, which is the safe direction. But the process is still
+    // there, and its PID must survive until `stop` has verified the end.
+    inTempDir();
+    const survivor = longRunning();
+    writeTunnel({ url: "https://half.trycloudflare.com", pid: survivor.pid, gatePid: unusedPid() });
+
+    expect(tunnelHealth()).toBe("half");
+    expect(activeTunnelUrl()).toBeNull();
+    expect(readTunnel()?.pid).toBe(survivor.pid);
+
+    // The survivor was asked to end (SIGTERM) — a plain node child obliges.
+    for (let i = 0; i < 20 && processAlive(survivor.pid); i++) await sleep(100);
+    expect(processAlive(survivor.pid)).toBe(false);
+  });
+
+  it("does NOT hand out a tunnel that was opened straight onto the app (no gate recorded)", () => {
+    // The state an older version of these scripts wrote: cloudflared onto the
+    // app, no gate. That is exactly the tunnel that published the sign-in page,
+    // so it is treated as half a tunnel — refused, and ended.
+    inTempDir();
+    writeTunnel({ url: "https://old.trycloudflare.com", pid: unusedPid() });
+    expect(tunnelHealth()).toBe("gone");
+    writeTunnel({ url: "https://old.trycloudflare.com", pid: process.pid });
+    expect(tunnelHealth()).toBe("half");
+  });
+
+  it("stopTunnel ends both processes and only then forgets them", async () => {
+    inTempDir();
+    const cloudflared = longRunning();
+    const gate = longRunning();
+    writeTunnel({ url: "https://a.trycloudflare.com", pid: cloudflared.pid, gatePid: gate.pid, gatePort: 1 });
+
+    expect(await stopTunnel()).toEqual({ ok: true });
+    expect(processAlive(cloudflared.pid)).toBe(false);
+    expect(processAlive(gate.pid)).toBe(false);
+    expect(readTunnel()).toBeNull();
+  });
+
+  it("stopTunnel insists on a process that ignores the polite request", async () => {
+    // One half swallows SIGTERM. `stopPid` follows up with SIGKILL, so the
+    // tunnel still ends and the state is still cleared — a wedged cloudflared
+    // must not leave the address published.
+    inTempDir();
+    const stubborn = spawn(
+      process.execPath,
+      ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"],
+      { stdio: "ignore" },
+    );
+    spawned.push(stubborn);
+    await sleep(300); // let the handler register
+    const gate = longRunning();
+    writeTunnel({ url: "https://a.trycloudflare.com", pid: stubborn.pid, gatePid: gate.pid });
+
+    expect(await stopTunnel({ graceMs: 300 })).toEqual({ ok: true });
+    expect(processAlive(stubborn.pid)).toBe(false);
+    expect(processAlive(gate.pid)).toBe(false);
     expect(readTunnel()).toBeNull();
   });
 
@@ -141,7 +246,7 @@ describe("tunnel state", () => {
     //
     // Hence: the network says nothing about whether the process exists.
     inTempDir();
-    writeTunnel({ url: "https://unresolvable.trycloudflare.com", pid: process.pid });
+    writeTunnel({ url: "https://unresolvable.trycloudflare.com", pid: process.pid, gatePid: process.ppid });
 
     expect(activeTunnelUrl()).toBe("https://unresolvable.trycloudflare.com");
     expect(readTunnel()?.pid).toBe(process.pid);
@@ -226,30 +331,25 @@ describe("openTunnel", () => {
     const result = await openTunnel({ port: 1 });
     expect(result).toEqual({ ok: false, reason: "no-app" });
   });
+
+  it("points cloudflared at the gate, never at the app", () => {
+    // The whole reason the gate exists. Read as text: the `--url` cloudflared
+    // is spawned with is the gate's port, and the app port appears in the
+    // gate's own arguments only.
+    const source = readFileSync(fileURLToPath(new URL("./_tunnel.mjs", import.meta.url)), "utf8");
+    const spawnLine = source.match(/spawnDetached\("cloudflared", \[[^\]]*\]/)?.[0] ?? "";
+    expect(spawnLine).toContain("http://127.0.0.1:${gatePort}");
+    expect(spawnLine).not.toContain("${port}");
+  });
+
+  it("hands out a loopback port that is free right now", async () => {
+    const port = await ephemeralPort();
+    expect(port).toBeGreaterThan(0);
+    expect(port).toBeLessThan(65536);
+  });
 });
 
 describe("stopPid", () => {
-  const spawned: ReturnType<typeof spawn>[] = [];
-
-  afterEach(() => {
-    for (const c of spawned.splice(0)) {
-      try {
-        if (c.pid) process.kill(c.pid, "SIGKILL");
-      } catch {
-        /* already gone */
-      }
-    }
-  });
-
-  /** A real child that does nothing but stay alive. */
-  function longRunning() {
-    const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
-      stdio: "ignore",
-    });
-    spawned.push(child);
-    return child;
-  }
-
   it("ends a running process and reports it only once it is truly gone", async () => {
     const child = longRunning();
     expect(processAlive(child.pid)).toBe(true);

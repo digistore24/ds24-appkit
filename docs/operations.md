@@ -143,6 +143,16 @@ enough for the registry's current signing keys, and the highest rungs want a too
 that nothing here will ever download for you. On a machine that HAS the network,
 the address and the tools, the same `false` is worth asking about.
 
+The container rung is the one exception, and it is worth knowing so its `✓` is
+not read as "Docker was here": it looks in the tree **before** it asks for Docker,
+and asks only when the tree holds something its scanner reads — a `Dockerfile`
+(the one `fly launch` writes), Terraform, a Helm chart, a Kubernetes or
+CloudFormation manifest. A fresh app holds none of those. Its `docker-compose.yml`
+is the development database and no scanner target (measured: Trivy reads no
+Compose file), so on a fresh app the rung is a `✓` whose evidence line says
+exactly that and that Docker was not asked. Once a `Dockerfile` lies in the tree
+and the tool does not, the `⏭` block's `Blind to:` names the file.
+
 🚨 **Which is why the `Reason:` line is the one to read, not the count of skips.**
 Every skip in this ladder names the act that clears it — `brew install gitleaks`,
 `docker pull aquasec/trivy`, "no `--url` was given" — and the three that look
