@@ -382,14 +382,14 @@ reasoning, and the two references it points at, are in
 ## Step 3b — The operator/admin account: locally there is nothing to create
 
 **Do not ask the user for an email address here, and do not create an account.**
-Locally the first one makes itself: whoever signs in first at `/login` — with
-any address, no password, no mail — comes into being as `owner`. So the step is
-one sentence: *open http://localhost:3000/login and sign in with whatever
-address you like; that account is the admin* — UNLESS an owner already exists
-(`smoke` needs one, you may have made it): then name THAT address, never "any".
+Locally the first one makes itself: the first PERSON to sign in at `/login` —
+any address, no password, no mail — comes into being as `owner`, even when a
+test owner for `smoke` already exists (nobody signed in to that one). So the
+step is one sentence: *open http://localhost:3000/login and sign in with your
+own address; that account is the admin.*
 
-The rule is `lib/users/bootstrap.ts`, and it is narrow on purpose: **the very
-first account, in DEV only** — outside DEV the first person to sign in may be a
+The rule is `lib/users/bootstrap.ts`, and it is narrow on purpose: **the first
+person, in DEV only** — outside DEV the first person to sign in may be a
 customer, and handing them user management would be an account takeover.
 **Two cases still need the CLI** (STAGING/PROD, and `smoke`'s signed-in pass
 before anybody has signed in), and both, with the sign-in details, are in

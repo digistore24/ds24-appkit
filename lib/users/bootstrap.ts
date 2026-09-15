@@ -25,9 +25,24 @@
 // as production. A typo in APP_ENV therefore closes this door, it does not
 // open it.
 // ============================================================================
+//
+// ── "First" means the first PERSON, not the first row (2026-09-15) ─────────
+// The rule used to be "the users table is empty". It never is by the time the
+// customer signs in: an agent that builds a stage runs `node run.mjs smoke`,
+// and smoke's signed-in pass needs an owner, so the agent creates one with
+// `user-create` first. The customer then followed the hand-back — "sign in
+// with any address, that account is the admin" — and landed as a member with
+// no admin area and a buy button on her own course. Measured in three runs in
+// a row; twice the agent had read the rule that said to name the test account
+// instead, and wrote "any address" anyway. So the sentence is made TRUE rather
+// than forbidden: an owner row counts only once somebody has actually signed
+// in to it — a verified address, a linked sign-in provider or a password of
+// its own. An owner a command created for a check has none of those, and the
+// customer's own first sign-in still becomes the admin. Two owners on a
+// developer's machine are not a security problem (see `roleForNewUser`).
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { count } from "drizzle-orm";
+import { and, count, eq, isNotNull, or, sql } from "drizzle-orm";
 import { appEnv } from "@/lib/env-guard";
 import type { Role } from "@/lib/roles";
 
@@ -42,16 +57,43 @@ export function isFirstUserOwnerAllowed(env: { APP_ENV?: string }): boolean {
  */
 export function decideRoleForNewUser(input: {
   APP_ENV?: string;
-  /** Does the users table already hold at least one row? */
-  usersExist: boolean;
+  /**
+   * Is there an owner somebody has really signed in to? A row a command
+   * created for a check does not count — see the header.
+   */
+  ownerClaimed: boolean;
 }): Role {
   if (!isFirstUserOwnerAllowed(input)) return "member";
-  return input.usersExist ? "member" : "owner";
+  return input.ownerClaimed ? "member" : "owner";
 }
 
-/** Does the app already have users? */
-export async function usersExist(): Promise<boolean> {
-  const [row] = await db.select({ n: count() }).from(users);
+/**
+ * Has a person ever signed in to an owner account on this installation?
+ *
+ * Three traces a real sign-in leaves, any one is enough: `emailVerified` (the
+ * magic link and the development login write it), a row in `accounts` (Google),
+ * a `passwordHash` (only the account's own holder sets one). `user-create`,
+ * `db-seed` and `setup-bootstrap` write none of them.
+ *
+ * ⚠️ The `accounts` test is written as literal SQL with explicit aliases, not
+ * as a drizzle `exists(db.select()…)`: a correlated subquery built that way can
+ * render its columns unqualified, and `"userId" = "id"` would then compare
+ * `accounts` with itself and answer true for everyone.
+ */
+export async function ownerClaimed(): Promise<boolean> {
+  const [row] = await db
+    .select({ n: count() })
+    .from(users)
+    .where(
+      and(
+        eq(users.role, "owner"),
+        or(
+          isNotNull(users.emailVerified),
+          isNotNull(users.passwordHash),
+          sql`exists (select 1 from "accounts" a where a."userId" = "users"."id")`,
+        ),
+      ),
+    );
   return Number(row?.n ?? 0) > 0;
 }
 
@@ -74,8 +116,8 @@ export async function roleForNewUser(): Promise<Role> {
     APP_ENV: process.env.APP_ENV,
     // Only asked when the answer can still change anything — outside of DEV
     // the query would be a pointless round trip on every sign-up.
-    usersExist: isFirstUserOwnerAllowed({ APP_ENV: process.env.APP_ENV })
-      ? await usersExist()
+    ownerClaimed: isFirstUserOwnerAllowed({ APP_ENV: process.env.APP_ENV })
+      ? await ownerClaimed()
       : true,
   });
 }

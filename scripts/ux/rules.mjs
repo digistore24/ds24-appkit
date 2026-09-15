@@ -786,6 +786,48 @@ export const SHIPPED_EXAMPLE_PRODUCT_NAMES = ["Basic", "Starter Tokens"];
  * Reported as a WARNING by the caller: a test app keeps the examples
  * legitimately, and so does an app before its products exist.
  */
+/**
+ * A badge is one line by design — `components/ui/badge.tsx` sets
+ * `whitespace-nowrap` and `w-fit` — so a long badge text does not wrap, it
+ * pushes the page wider than a phone. Measured 2026-09-15 on a customer's
+ * sales page: the hero badge "Für Coaches, Trainerinnen & Selbständige ohne
+ * Technikwissen" (58 characters) gave the whole page a horizontal scrollbar at
+ * 375 px, and nothing here said a word. Forty characters is where the shipped
+ * badge ("Mit Digistore24-Abrechnung", 26) and a subtitle part ways.
+ */
+export const MAX_BADGE_CHARS = 40;
+
+/**
+ * Badge texts over the limit, out of one messages catalogue: every string whose
+ * key is `badge` or ends in `Badge`, at any depth.
+ *
+ * @param {string} messagesSource the JSON text of a `messages/<locale>.json`
+ * @returns {{ key: string, chars: number, text: string }[]}
+ */
+export function findLongBadges(messagesSource, { max = MAX_BADGE_CHARS } = {}) {
+  let parsed;
+  try {
+    parsed = JSON.parse(messagesSource);
+  } catch {
+    return [];
+  }
+  const hits = [];
+  const walk = (node, path) => {
+    if (typeof node === "string") {
+      const key = path[path.length - 1] ?? "";
+      if ((key === "badge" || /Badge$/.test(key)) && node.length > max) {
+        hits.push({ key: path.join("."), chars: node.length, text: node });
+      }
+      return;
+    }
+    if (node && typeof node === "object") {
+      for (const [k, v] of Object.entries(node)) walk(v, [...path, k]);
+    }
+  };
+  walk(parsed, []);
+  return hits;
+}
+
 export function findExampleProducts(registrySource) {
   let registry;
   try {

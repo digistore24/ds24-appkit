@@ -351,6 +351,18 @@ if (gated.length > 0 && wantSignedIn) {
     // puts it in the module it belongs to — a core sweep that names one optional
     // feature is a core sweep that breaks when that feature moves.
     failures += await runModuleSmoke({ baseUrl, cookie: session.cookie, isLocal });
+
+    // Which account this pass borrowed, and what it does NOT change: a test
+    // owner nobody has signed in to in a browser does not take the customer's
+    // place — their own first sign-in still becomes the admin
+    // (lib/users/bootstrap.ts, since 2026-09-15). Said here because the
+    // hand-back is written right after this output is read.
+    if (isLocal && session.role === "owner") {
+      console.log(
+        `\n·  Checked as ${session.as} — a test owner. The customer's own first sign-in ` +
+          `still becomes the admin, so "sign in with your own address" is right.`,
+      );
+    }
   }
 } else if (gated.length > 0) {
   console.log(

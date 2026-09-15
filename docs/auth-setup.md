@@ -302,10 +302,12 @@ merely unlikely — an id nobody accepts is an id nobody can tamper with.
 
 ## Creating the operator/admin account
 
-**Locally you do not have to do anything.** The very first account in a fresh
-app becomes `owner` by itself — sign in at `/login` with any address you like,
-and the admin area plus the "Users" entry in the navigation are there right
-away. The rule and its boundary live in `lib/users/bootstrap.ts`, wired into
+**Locally you do not have to do anything.** The first person to sign in
+becomes `owner` by itself — sign in at `/login` with any address you like, and
+the admin area plus the "Users" entry in the navigation are there right away.
+"First person", not "first row": an owner account counts only once somebody has
+signed in to it (a verified address, Google, or a password of its own), so a
+test owner created with `user-create` for `smoke` does not take your place. The rule and its boundary live in `lib/users/bootstrap.ts`, wired into
 `auth.ts` and `lib/auth/dev-login.ts` — the role is assigned while the account
 comes into being, not afterwards, because the session is a JWT and carries the
 role from the moment of sign-in.

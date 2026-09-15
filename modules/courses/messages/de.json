@@ -128,6 +128,7 @@
     "fieldReleaseAfterDays": "Öffnet nach … Tagen",
     "fieldReleaseAfterDaysHint": "Gerechnet ab dem Kauf des jeweiligen Mitglieds, nicht ab einem Datum. 0 heißt: von Anfang an offen.",
     "fieldBody": "Text der Lektion",
+    "fieldBodyHint": "Absätze durch eine Leerzeile, **fett** mit zwei Sternchen, eine Liste mit „- “ am Zeilenanfang — die Sternchen sind Formatierung, nicht Text.",
     "fieldTaskPrompt": "Aufgabe (optional)",
     "fieldTaskPromptHint": "Steht hier etwas, bittet die Lektion um eine Abgabe.",
     "fieldOptional": "optional",

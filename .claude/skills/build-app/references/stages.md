@@ -63,8 +63,9 @@ the customer decides whether the next stage starts, and the decision is only
 real if the turn is over when they read this.
 
 > "Stage 2 of 5 is done: **you can now buy the monthly plan and reach the
-> members' area.** Open http://localhost:3000, sign in with any address, and
-> you'll see the plans page and, after a test purchase, the area behind it.
+> members' area.** Open http://localhost:3000, sign in with your own address —
+> you are the admin — and you'll see the plans page and, after a test purchase,
+> the area behind it.
 >
 > Next would be stage 3, *hand in a photo and get a written assessment back* —
 > about ten minutes. Say **go**, tell me what to change first, or say **run
@@ -86,6 +87,12 @@ reads the last; the example above names none. A hand-back that opens with
 now see has its two readers the wrong way round — measured on a customer's app,
 2026-09-04, and the rule is `CLAUDE.md` → *Rules*, the shape with an example
 `docs/guidance.md` → *How a skill works*.
+
+The sentence is true even after `smoke` signed in with a test owner: an owner
+row counts only once a person has signed in to it (`lib/users/bootstrap.ts`).
+Measured 2026-09-15 in three runs: "sign in with any address" while a test
+owner existed sent the customer in as a member — the rule was changed to make
+the sentence right rather than to forbid it.
 
 **The address is not optional.** A hand-back that says "done" without saying
 where to look leaves the customer with nothing to open — measured in a field
@@ -140,12 +147,11 @@ have"; the chat said "Kein Zugang"; the chat knew nothing of the course —
 each found by the customer, each a turn. In DEV the owner holds every product
 on sale (`owner-account.md`); what the hand-back names, you have seen as her.
 
-**A hand-back names the owner account and leaves no test rows behind.** If an
-owner exists (`smoke` needs one, and you may have created it), the hand-back
-says which address that is; "sign in with any address" is true only while
-none exists. Accounts, hand-ins and rooms you created to verify are deleted
-before the hand-back or named in it — a customer who finds `owner@example.com`
-in her queue asks who that is (2026-09-15).
+**A hand-back leaves no test rows behind.** Accounts, hand-ins and rooms you
+created to verify are deleted before the hand-back or named in it — a customer
+who finds `owner@example.com` in her queue asks who that is (2026-09-15). A
+test owner you keep for the next `smoke` stays out of her way: her own first
+sign-in is still the admin.
 
 **A path through the app is read from `messages/*.json` and the navigation,
 never from memory.** "Betreiber → Benutzer → Aktionen → Als Benutzer

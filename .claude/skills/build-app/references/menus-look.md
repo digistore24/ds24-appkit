@@ -68,6 +68,13 @@ consulted: it lives in the transcript rather than in a file, and a shortcut that
 cannot be reproduced from the app itself behaves differently for the next agent
 who opens it. It is not thrown away either — see the conflicting find below.
 
+**And the look has ONE accent colour** (`design/references/tokens.md`). When
+the customer named two — *"Petrol und Orange"* — the menu says which one
+becomes the accent and that the other gets no place in the system, so the
+`design` skill does not have to ask again: measured 2026-09-15, the customer
+answered "Petrol/Orange passt" in step 1b and was asked the same thing a turn
+later, as the fourth question round before the first stage.
+
 Three outcomes, and 🚨 **the second and the third are different sentences**:
 
 - **A find** → do not show the menu. Confirm row 1 instead, naming the file or

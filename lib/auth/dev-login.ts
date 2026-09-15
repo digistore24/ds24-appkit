@@ -118,11 +118,16 @@ export async function demoLoginSuggestion(): Promise<string | null> {
     const { users } = await import("@/db/schema");
     const { asc, sql } = await import("drizzle-orm");
 
+    const { isNotNull } = await import("drizzle-orm");
     const [match] = await db
       .select({ email: users.email })
       .from(users)
-      // Admins first, then by age — as a rule that is the account the operator
-      // created for themselves with `node run.mjs user-create`.
+      // Only an account somebody has signed in to. A test owner `smoke` needed
+      // (created by `user-create`, never used in a browser) is not suggested:
+      // the first person's own address still becomes the admin
+      // (lib/users/bootstrap.ts), and the page then says exactly that.
+      .where(isNotNull(users.emailVerified))
+      // Admins first, then by age.
       .orderBy(sql`case when ${users.role} = 'owner' then 0 else 1 end`, asc(users.createdAt))
       .limit(1);
     return match?.email ?? null;

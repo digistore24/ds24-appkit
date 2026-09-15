@@ -26,15 +26,18 @@ describe("isFirstUserOwnerAllowed", () => {
 });
 
 describe("decideRoleForNewUser", () => {
-  it("makes the very first account on a fresh DEV installation the owner", () => {
+  it("makes the first PERSON on a DEV installation the owner", () => {
+    // Also when `smoke`'s test owner already exists: nobody has signed in to
+    // it, so `ownerClaimed` is false and the customer's own first sign-in
+    // becomes the admin (measured 2026-09-15, three runs).
     expect(
-      decideRoleForNewUser({ APP_ENV: "development", usersExist: false }),
+      decideRoleForNewUser({ APP_ENV: "development", ownerClaimed: false }),
     ).toBe("owner");
   });
 
-  it("makes every following account a member", () => {
+  it("makes every account after a claimed owner a member", () => {
     expect(
-      decideRoleForNewUser({ APP_ENV: "development", usersExist: true }),
+      decideRoleForNewUser({ APP_ENV: "development", ownerClaimed: true }),
     ).toBe("member");
   });
 
@@ -42,10 +45,10 @@ describe("decideRoleForNewUser", () => {
     // This is the case that matters: a freshly deployed PROD instance has no
     // users either, and the first person to sign in there may be a customer.
     expect(
-      decideRoleForNewUser({ APP_ENV: "production", usersExist: false }),
+      decideRoleForNewUser({ APP_ENV: "production", ownerClaimed: false }),
     ).toBe("member");
     expect(
-      decideRoleForNewUser({ APP_ENV: "staging", usersExist: false }),
+      decideRoleForNewUser({ APP_ENV: "staging", ownerClaimed: false }),
     ).toBe("member");
   });
 });

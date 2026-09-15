@@ -120,6 +120,9 @@ describe("the greeting after a compaction", () => {
   it("names the customer's language when docs/app.md records it, and stays silent when not", async () => {
     const { afterCompactText, customerLanguage } = await import("./dev/after-compact-rules.mjs");
     expect(customerLanguage("- **Sells:** x\n- **Language:** German — every line\n- **For:** y")).toBe("German");
+    expect(customerLanguage("- **Sprache:** Deutsch")).toBe("Deutsch");
+    expect(customerLanguage("- **Langue :** x")).toBeNull();
+    expect(customerLanguage("- **Idioma:** Español")).toBe("Español");
     expect(customerLanguage("- **Language:** <the language the customer writes in>")).toBeNull();
     expect(customerLanguage(null)).toBeNull();
     expect(afterCompactText({ language: "German" })).toContain("Here that language is German");

@@ -292,7 +292,11 @@ export function CreateUnitDialog({
                 defaultValue={nextPosition}
               />
             </Field>
-            <Field id="unit-body" label={`${t("fieldBody")} (${t("fieldOptional")})`}>
+            <Field
+              id="unit-body"
+              label={`${t("fieldBody")} (${t("fieldOptional")})`}
+              hint={t("fieldBodyHint")}
+            >
               <Textarea id="unit-body" name="body" rows={6} />
             </Field>
             <Field
@@ -545,6 +549,7 @@ export function UnitMenu({ unit }: { unit: UnitRef }) {
               <Field
                 id={`unit-edit-body-${unit.id}`}
                 label={`${t("fieldBody")} (${t("fieldOptional")})`}
+                hint={t("fieldBodyHint")}
               >
                 <Textarea
                   id={`unit-edit-body-${unit.id}`}

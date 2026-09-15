@@ -36,6 +36,8 @@ import {
   findPlaceholderHome,
   findNumberInputsWithoutStep,
   findExampleProducts,
+  findLongBadges,
+  MAX_BADGE_CHARS,
   SHIPPED_EXAMPLE_PRODUCT_NAMES,
   navHrefs,
   routeShape,
@@ -1046,6 +1048,36 @@ describe("findNumberInputsWithoutStep", () => {
 
   it("is not fooled by a comment or by a text input", () => {
     expect(findNumberInputsWithoutStep('// `type="number"` is convenience\n<Input type="text" />')).toEqual([]);
+  });
+});
+
+describe("findLongBadges", () => {
+  const catalogue = (home: Record<string, string>) => JSON.stringify({ home, other: { x: "y" } });
+
+  it("flags the measured hero badge, with its length", () => {
+    const text = "Für Coaches, Trainerinnen & Selbständige ohne Technikwissen";
+    expect(findLongBadges(catalogue({ badge: text }))).toEqual([
+      { key: "home.badge", chars: text.length, text },
+    ]);
+    expect(text.length).toBeGreaterThan(MAX_BADGE_CHARS);
+  });
+
+  it("the shipped badge and a long non-badge string are not findings", () => {
+    expect(findLongBadges(catalogue({ badge: "Mit Digistore24-Abrechnung" }))).toEqual([]);
+    expect(findLongBadges(catalogue({ subtitle: "x".repeat(200) }))).toEqual([]);
+  });
+
+  it("finds a badge key at any depth, and survives a file that is not JSON", () => {
+    const deep = JSON.stringify({ a: { b: { heroBadge: "y".repeat(41) } } });
+    expect(findLongBadges(deep).map((h) => h.key)).toEqual(["a.b.heroBadge"]);
+    expect(findLongBadges("{ not json")).toEqual([]);
+  });
+
+  it("🚨 the shipped catalogues carry no badge over the limit — the rule starts at zero", () => {
+    for (const locale of ["de", "en", "es", "fr"]) {
+      const file = join(ROOT, "messages", `${locale}.json`);
+      expect(findLongBadges(readFileSync(file, "utf8")), locale).toEqual([]);
+    }
   });
 });
 

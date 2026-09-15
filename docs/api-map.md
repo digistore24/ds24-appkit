@@ -424,8 +424,8 @@ tests — `docs/ux.md` owns each, this is where they are needed:
 ## lib/users/bootstrap.ts
 
 - `isFirstUserOwnerAllowed(env: { APP_ENV?: string }): boolean` — true if a first account may be promoted to owner in this environment.
-- `decideRoleForNewUser(input: { APP_ENV?: string; usersExist: boolean }): Role` — The decision itself, as a pure function — it hands out user management, and that is worth a test of its own (lib/users/bootstrap.test.ts).
-- `usersExist(): Promise<boolean>` — Does the app already have users?
+- `decideRoleForNewUser(input: { APP_ENV?: string; ownerClaimed: boolean }): Role` — The decision itself, as a pure function — it hands out user management, and that is worth a test of its own (lib/users/bootstrap.test.ts).
+- `ownerClaimed(): Promise<boolean>` — Has a person ever signed in to an owner account on this installation?
 - `roleForNewUser(): Promise<Role>` — The role an account that is being created RIGHT NOW gets — "member" as the normal case, "owner" for the very first one on a fresh DEV ins…
 
 ## lib/users/rules.ts

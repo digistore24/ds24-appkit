@@ -23,6 +23,8 @@ import { fileURLToPath } from "node:url";
 import { join, relative, resolve, sep } from "node:path";
 
 import {
+  MAX_BADGE_CHARS,
+  findLongBadges,
   TEXT_PAIRS,
   RING_PAIRS,
   parseHsl,
@@ -553,6 +555,34 @@ function checkHomePage() {
       "(docs/salespage.md).",
   );
   if (!found) ok("app/page.tsx is no longer the shipped placeholder");
+
+  // Badge texts that cannot fit a phone. Static, like everything here: the
+  // badge kit is one line by design, so the length of the string IS the
+  // measurement (rules.mjs → MAX_BADGE_CHARS says where the number comes from).
+  const messagesDir = join(ROOT, "messages");
+  if (existsSync(messagesDir)) {
+    const badges = readdirSync(messagesDir)
+      .filter((f) => f.endsWith(".json"))
+      .flatMap((f) =>
+        findLongBadges(readFileSync(join(messagesDir, f), "utf8")).map((h) => ({
+          file: `messages/${f}`,
+          line: 0,
+          found: `${h.key} (${h.chars} characters): "${h.text}"`,
+        })),
+      );
+    if (
+      !reportWarning(
+        badges,
+        `A badge text longer than ${MAX_BADGE_CHARS} characters`,
+        "A badge is one line by design (components/ui/badge.tsx: whitespace-nowrap), " +
+          "so it does not wrap — at 375 px the page scrolls sideways instead. " +
+          "Shorten it to the label; the rest of the sentence belongs in the paragraph " +
+          "below the headline.",
+      )
+    ) {
+      ok(`No badge text over ${MAX_BADGE_CHARS} characters`);
+    }
+  }
 }
 
   // The registry: is the app still SELLING the template's examples? A warning

@@ -128,6 +128,7 @@
     "fieldReleaseAfterDays": "S'ouvre après … jours",
     "fieldReleaseAfterDaysHint": "Compté à partir de l'achat de chaque membre, pas à partir d'une date. 0 signifie : ouvert dès le début.",
     "fieldBody": "Texte de la leçon",
+    "fieldBodyHint": "Les paragraphes sont séparés par une ligne vide, **gras** prend deux astérisques, une liste commence chaque ligne par « - » — les astérisques sont de la mise en forme, pas du texte.",
     "fieldTaskPrompt": "Consigne (facultatif)",
     "fieldTaskPromptHint": "S'il y a quelque chose ici, la leçon demande un rendu.",
     "fieldOptional": "facultatif",

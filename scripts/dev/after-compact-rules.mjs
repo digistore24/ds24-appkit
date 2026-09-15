@@ -83,7 +83,12 @@ export const AFTER_COMPACT_RULES = Object.freeze([
  * @returns {string | null}
  */
 export function customerLanguage(appMd) {
-  const match = String(appMd ?? "").match(/^\s*-\s*\*\*Language:\*\*\s*([^\n<]+?)\s*$/m);
+  // The label is whatever language the session wrote app.md in — measured
+  // 2026-09-15: "- **Sprache:** Deutsch", and a parser that only knew
+  // "Language" said nothing.
+  const match = String(appMd ?? "").match(
+    /^\s*-\s*\*\*(?:Language|Sprache|Idioma|Langue):\*\*\s*([^\n<]+?)\s*$/m,
+  );
   if (!match) return null;
   const value = match[1].replace(/\s*—.*$/, "").trim();
   return value === "" ? null : value;

@@ -128,6 +128,7 @@
     "fieldReleaseAfterDays": "Opens after … days",
     "fieldReleaseAfterDaysHint": "Counted from each member's own purchase, never from a date. 0 means open from the start.",
     "fieldBody": "The lesson's text",
+    "fieldBodyHint": "Paragraphs are separated by an empty line, **bold** takes two asterisks, a list starts each line with \"- \" — the asterisks are formatting, not text.",
     "fieldTaskPrompt": "Hand-in prompt (optional)",
     "fieldTaskPromptHint": "Anything here makes the lesson ask for a hand-in.",
     "fieldOptional": "optional",

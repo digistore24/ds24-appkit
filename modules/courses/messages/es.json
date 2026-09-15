@@ -128,6 +128,7 @@
     "fieldReleaseAfterDays": "Se abre al cabo de … días",
     "fieldReleaseAfterDaysHint": "Contado desde la compra de cada miembro, no desde una fecha. 0 significa: abierto desde el principio.",
     "fieldBody": "Texto de la lección",
+    "fieldBodyHint": "Los párrafos se separan con una línea vacía, **negrita** lleva dos asteriscos, una lista empieza cada línea con «- » — los asteriscos son formato, no texto.",
     "fieldTaskPrompt": "Tarea (opcional)",
     "fieldTaskPromptHint": "Si aquí hay algo, la lección pide una entrega.",
     "fieldOptional": "opcional",

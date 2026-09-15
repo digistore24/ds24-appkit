@@ -335,7 +335,7 @@ and impersonation stays operator → member.
   be revoked**, and that refusal lives in the `UPDATE` itself: purchased access
   ends by Digistore24 event only.
 
-The first account becomes `owner` by itself **in DEV only**; in STAGING and PROD
+The first person to sign in becomes `owner` **in DEV only**; in STAGING and PROD
 the operator creates theirs with `node run.mjs user-create --email … --role owner
 --apply`. All of it: **[`docs/auth-setup.md`](docs/auth-setup.md)**; what a
 moderator may actually do: **[`docs/community.md`](docs/community.md)**.
