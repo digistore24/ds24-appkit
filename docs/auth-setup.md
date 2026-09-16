@@ -4,7 +4,7 @@
 
 By default the app uses **email token sign-in (magic link)**. The user enters
 their email, gets a sign-in link sent to them and is signed in after clicking
-it. For that the app needs **mail delivery**: either **Postmark** or **SMTP**.
+it. For that the app needs **mail delivery**: **Brevo**, **Postmark** or **SMTP**.
 **Google sign-in is optional** on top of that.
 
 **`/login` asks for the address first, and only then for whatever that address
@@ -115,10 +115,49 @@ gate green, and no customer can enter their account
 you set `AUTH_URL` yourself it must name the same origin or the app refuses
 rather than picking one.
 
-## Mail delivery — option A: Postmark (recommended, simple)
+## Mail delivery — which of the three
+
+`node run.mjs mail-setup` asks, writes the lines into `.env` and sends a test
+mail. Three things decide the choice, and all three are about the live app, not
+about this machine:
+
+- **Does the host let SMTP out?** Brevo and Postmark are HTTPS APIs and work on
+  every host. SMTP is a raw connection to port 587 or 465, and several hosts
+  block that on their cheaper plans — **Railway on everything below Pro**. There
+  the app starts, and no sign-in mail ever arrives (*SMTP on a host*, below).
+- **Where does the provider sit?** Every sign-in mail hands the provider a
+  customer's address and a sign-in link. Brevo is EU-hosted (Paris); Postmark is
+  US-hosted, which is a third-country transfer for an EU operator
+  ([`docs/data-protection.md`](data-protection.md)).
+- **Is there a domain to send from?** All three need a sender on the app's own
+  domain (the sender rule, below). Buy the domain first; a public mailbox
+  address (gmail, gmx, web.de …) is not a way around it — Postmark refuses one
+  at sign-up, Brevo warns against it, and receiving servers file it as spam.
+
+What the providers charge changes; look it up at the time, for the volume of
+sign-in mails the app expects, rather than assuming it costs nothing.
+
+## Mail delivery — option A: Brevo (EU-hosted, HTTPS)
+
+1. Create an account at [brevo.com](https://www.brevo.com).
+2. **Authenticate your domain** (*Senders, Domains & Dedicated IPs → Domains*:
+   the DKIM and DMARC records at your registrar), or at least validate the
+   sender address under *Senders*. An unvalidated sender is refused with HTTP 400,
+   which the test mail in `mail-setup` shows before anything is deployed.
+3. Create an **API key** (*SMTP & API → API Keys*). The API key, not an SMTP key:
+   the app talks to Brevo over HTTPS, so a host that blocks SMTP cannot stop it.
+4. Into the `.env`:
+
+```bash
+BREVO_API_KEY=xkeysib-…
+BREVO_SENDER=login@your-domain.de    # validated sender, on the app's domain
+```
+
+## Mail delivery — option B: Postmark (US-hosted, HTTPS)
 
 1. Create an account at [postmarkapp.com](https://postmarkapp.com), create a
-   **server** and copy its **server API token**.
+   **server** and copy its **server API token**. Postmark refuses a sign-up with
+   a public mailbox address — it wants an address on a domain of your own.
 2. Under *Sender Signatures* (or a whole domain) **verify your sender
    address** (set DKIM/Return-Path). This address is the "sender ID".
 3. Into the `.env`:
@@ -129,7 +168,7 @@ POSTMARK_SENDER=login@your-domain.de    # verified sender
 # POSTMARK_MESSAGE_STREAM=outbound       # default
 ```
 
-## Mail delivery — option B: SMTP (any mailbox)
+## Mail delivery — option C: SMTP (any mailbox, where the host allows it)
 
 Works with any mail server/mailbox (e.g. your own host). Into the `.env`:
 
@@ -142,7 +181,34 @@ SMTP_PASSWORD=…
 SMTP_FROM=login@your-domain.de
 ```
 
-If **neither Postmark nor SMTP** is set, email sign-in is not offered.
+If **none of the three** is set, email sign-in is not offered. When more than one
+is complete, Postmark wins, then Brevo, then SMTP — `mail-setup` comments the
+others out, so that only happens by hand.
+
+### SMTP on a host
+
+🚨 **The test mail from your own machine proves the credentials, never the
+host.** A home connection lets port 587 out; a host may not. Measured
+2026-09-16 on Railway Hobby: the test mail from `mail-setup` arrived, the
+deployed app timed out on every sign-in, and the browser said *"this page
+couldn't load"*.
+
+So the app asks from where the mail actually leaves:
+
+- **At boot** in STAGING and PROD it opens one connection to `SMTP_HOST` and,
+  if nothing answers, logs `[mail] SMTP <host>:<port> is not reachable from this
+  server …` — a warning, never an abort. `node run.mjs errors --url …` finds that
+  line and names the way out.
+- **`node run.mjs health --url https://…`** carries a `mail` probe that asks the
+  app the same question again (the answer is reused for five minutes) and
+  reports a blocked port as a HIGH finding naming the server.
+- **A sign-in that times out** says the same sentence rather than a bare
+  `Connection timeout`, and gives up after ten seconds rather than nodemailer's
+  default of two minutes.
+
+A connection that opens is not a mail that arrives — authentication, TLS and
+the provider's own rules come after it. What the probe rules out is the one
+failure no credential check can see.
 
 ## What the mails look like — and the sender rule that keeps them credible
 
@@ -180,8 +246,9 @@ The one deliberate exception is the credential-change notice (below): same
 look, **no link, ever** — not even the Impressum.
 
 **The sender address MUST live on the app's own domain** — `login@your-domain.de`
-for an app on `your-domain.de`, verified at the provider (DKIM/SPF; at
-Postmark: a sender signature or the whole domain). A sign-in mail whose links
+for an app on `your-domain.de`, verified at the provider (DKIM/SPF; at Brevo:
+an authenticated domain or a validated sender; at Postmark: a sender signature
+or the whole domain). A sign-in mail whose links
 point at your domain but whose From is somebody else's is the exact shape of a
 phishing mail: recipients report it, filters score it, and enough reports put
 the app's domain on Google's Safe Browsing list — a red **"Dangerous site"**
@@ -191,7 +258,7 @@ link a "Dangerous site"*.
 
 **Since this failure is invisible until it is expensive, the rule is enforced,
 not just stated.** In STAGING and PROD the app refuses to start when the
-resolved From (`POSTMARK_SENDER` / `SMTP_FROM` / `EMAIL_FROM`) is not on
+resolved From (`BREVO_SENDER` / `POSTMARK_SENDER` / `SMTP_FROM` / `EMAIL_FROM`) is not on
 `APP_URL`'s domain — or when a transport is configured with no sender at all,
 which would quietly send as `login@localhost` (`lib/env-guard.ts`;
 `node run.mjs doctor --deploy` shows the verdict before you deploy, and
@@ -201,6 +268,15 @@ directions, so `login@mail.your-domain.de` for an app on `your-domain.de` is
 fine, and so is `login@your-domain.de` for an app on `app.your-domain.de`.
 Behind a local `APP_URL` (localhost, an IP) there is no public domain to
 compare against, and the check skips itself.
+
+**Which is why the app needs a domain of its own before the first STAGING
+deploy, not before the launch.** A host's own address (`…up.railway.app`) is a
+full public hostname, so the rule judges it — and nobody can send mail as it.
+Without a domain the only sender left is a public mailbox address plus the
+override below, which the mail services refuse or warn against and which is the
+phishing shape this rule exists for. STAGING goes on a subdomain of the real
+domain (`test.your-domain.de`), and the sender matches without any exception
+([`docs/environments.md`](environments.md)).
 
 Sending from a foreign domain CAN be a deliberate, informed decision — a mail
 service on its own domain, properly verified there. The override is:

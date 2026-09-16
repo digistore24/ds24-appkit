@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA
 // SPDX-License-Identifier: MIT
 
-// What `node run.mjs health` MAKES of six answers — pure.
+// What `node run.mjs health` MAKES of seven answers — pure.
 //
 // Separate from check.mjs for the reason every rules file in this project is
 // separate from its shell: a rule that lives inside the script that prints it
@@ -48,10 +48,10 @@ export const VERDICT_TEXTS = Object.freeze({
 });
 
 /**
- * The reason the other five probes give when nothing answered at all.
+ * The reason the other six probes give when nothing answered at all.
  *
- * 🚨 One string, shared, because it is one FACT. Five probes each writing their
- * own sentence about the same silence is five alarms about one thing, which is
+ * 🚨 One string, shared, because it is one FACT. Six probes each writing their
+ * own sentence about the same silence is six alarms about one thing, which is
  * the failure this split exists to prevent: `liveness` reports the finding,
  * everything else reports that it was not asked and why.
  */
@@ -171,7 +171,7 @@ export function jobLadderFindings(jobFindings, url) {
  *
  * One ❌ HIGH per distinct CAUSE, which is what `parseErrors()` already hands
  * over: it dedupes by message, location and frame and counts the repeats. The
- * cap exists so one bad deploy cannot bury the other five probes under two
+ * cap exists so one bad deploy cannot bury the other six probes under two
  * hundred blocks; what is left over is counted in a line rather than dropped.
  *
  * @param {Array<{ message: string, location: string|null, frame: string|null, count: number }>} found

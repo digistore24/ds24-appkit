@@ -22,7 +22,7 @@
 // ── It does not throw when it cannot send ─────────────────────────────────
 // Five reasons for silence, and none of them is an error: an app with no mail
 // configured is the normal state in DEV, and a job that failed because the
-// operator has not set up Postmark would be a red line in `cron_runs` about
+// operator has not set up a mail transport would be a red line in `cron_runs` about
 // nothing.
 //
 // ── What DOES throw — three things, and each is a `NotifyError` ───────────
@@ -53,8 +53,7 @@
 // extension.
 
 import {
-  isPostmarkConfigured,
-  isSmtpConfigured,
+  isEmailLoginEnabled,
   sendOperatorMail,
   type OperatorMail,
 } from "@/lib/email";
@@ -156,7 +155,7 @@ export async function notifyOperators(
   // started (`lib/env-guard.ts`). Answering quietly here is what keeps a
   // developer's tree from failing a job it was never going to be able to run —
   // and it changes nothing about that start condition in either direction.
-  if (!isPostmarkConfigured() && !isSmtpConfigured()) return silent("noTransport");
+  if (!isEmailLoginEnabled()) return silent("noTransport");
 
   // ── 4. Somebody to write to ─────────────────────────────────────────────
   const recipients = await operatorRecipients();
@@ -210,8 +209,8 @@ export async function notifyOperators(
       await sendOperatorMail(recipient.email, mail);
       sent += 1;
     } catch (error) {
-      // 🚨 The provider's own text stops here. `sendViaPostmark` puts Postmark's
-      // response body — which NAMES the recipient — into its message, and
+      // 🚨 The provider's own text stops here. `lib/mail-send.mjs` puts Postmark's
+      // and Brevo's response body — which NAMES the recipient — into its message, and
       // `lib/cron/run.ts` writes `error.message` straight into
       // `cron_runs.lastDetail`, a column that promises to hold nothing personal
       // (`docs/data-protection.md` §11, cron rule 2). So the original goes to

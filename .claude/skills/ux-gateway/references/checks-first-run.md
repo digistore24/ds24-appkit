@@ -8,9 +8,10 @@ second list is short and it is the one worth acting on.
 
 The walk:
 
-1. Land on `/` as a stranger, and hold it to five questions: **what is this,
-   who is it for, what does it cost, why should I believe you, what do I
-   click?** All five answered within one scroll — and two more looks: is there
+1. Land on `/` as a stranger, and hold it to five questions: **what is this
+   and what do I get, by the names the app uses; who is it for; what does it
+   cost; why should I believe you; what do I click?** All five answered
+   within one scroll — and two more looks: is there
    anything to *see* (a screenshot, a cover, a product image — three icon
    cards are not a visual), and does the primary button reach a real
    Digistore24 checkout rather than `/login` or a dead anchor?

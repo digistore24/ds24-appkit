@@ -94,7 +94,7 @@
     "errorTitle": "Sign-in failed",
     "errorBody": "The sign-in link has expired or was already used. Request a new one below.",
     "missingTitle": "No sign-in method configured",
-    "missingBody": "Set up email delivery (Postmark or SMTP) — Google is optional. See <code>docs/auth-setup.md</code> and <code>.env.example</code>.",
+    "missingBody": "Set up email delivery (Brevo, Postmark or SMTP) — Google is optional. See <code>docs/auth-setup.md</code> and <code>.env.example</code>.",
     "backHome": "Back to home page",
     "passwordLabel": "Password",
     "passwordFailedTitle": "Sign-in failed",

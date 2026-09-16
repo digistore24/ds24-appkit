@@ -17,7 +17,7 @@
 //   1. APP_ENV resolves to "development" (STAGING and PROD are ruled out)
 //   2. NODE_ENV is not "production"  — gone under `next build`/`next start`
 //   3. APP_URL points at localhost   — a real deployment is never open
-//   4. NO mail transport is configured — as soon as Postmark or SMTP is set
+//   4. NO mail transport is configured — as soon as Brevo, Postmark or SMTP is set
 //      up, the bypass disappears automatically
 //
 // In STAGING/PROD mail sending is mandatory; without it the app does not even

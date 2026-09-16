@@ -9,7 +9,7 @@ or when you are doing it by hand.
 
 ## What this app needs from a host
 
-Four things, and they are what rules most hosts in or out:
+Five things, and they are what rules most hosts in or out:
 
 1. **Node ≥ 20 and a process that keeps running.** The app schedules its own
    jobs while it is up (`docs/cron.md`) and holds a database pool. A platform
@@ -17,10 +17,17 @@ Four things, and they are what rules most hosts in or out:
    free tiers below.
 2. **A Postgres it can reach**, with a connection string. Managed is the point
    here: nobody building their first SaaS should also be running a database.
-3. **A public https domain.** Not a nicety — Digistore24 refuses to store any
-   other kind of URL, so without one there is no IPN and no purchase reaches the
-   app.
-4. **Somewhere to put secrets** that is not the repository.
+3. **A domain of its own, with https — already for the first test go-live.**
+   Not a nicety, for two reasons. Digistore24 refuses to store any other kind of
+   URL, so without one there is no IPN and no purchase reaches the app. And the
+   sign-in mails need a sender on the app's own domain (`docs/auth-setup.md` →
+   the sender rule): nobody can send as `…up.railway.app`, and no mail service
+   takes a public mailbox address as a sender. Without a domain there is no
+   sign-in in STAGING either.
+4. **A way for the sign-in mail to leave the server.** An HTTPS mail API works
+   on every host; SMTP works only where the host lets it out, and several do
+   not on their cheaper plans (the host table below).
+5. **Somewhere to put secrets** that is not the repository.
 
 Two things it does **not** need, and it is worth knowing before somebody sets
 out to build them: **no Docker** (the hosts below build it themselves) and **no
@@ -46,9 +53,13 @@ it.)
 
 ## The four hosts
 
-All four deploy from a GitHub repository, all four give you a managed Postgres,
-all four give you an https subdomain to start with. They differ in what the
-agent can do for the user and in what breaks quietly.
+All four deploy from a GitHub repository and all four give you a managed
+Postgres. All four also hand out an https address of their own
+(`…up.railway.app`, `…onrender.com`, `…fly.dev`, `…ondigitalocean.app`) — good
+for seeing that the deploy answers, and not an address the app can live on: the
+sign-in mails need a sender on the app's own domain, so `APP_URL` is a domain
+of the user's from the first STAGING deploy on. They differ in what the agent can
+do for the user and in what breaks quietly.
 
 | | **Railway** | **Render** | **Fly.io** | **DigitalOcean** |
 |---|---|---|---|---|
@@ -56,7 +67,8 @@ agent can do for the user and in what breaks quietly.
 | Agent can drive it end-to-end | mostly | partly | **yes** | mostly |
 | Migration before the new version starts | pre-deploy command | pre-deploy command *(paid plans)* | `release_command` | `PRE_DEPLOY` job |
 | Where the money goes | app + usage-billed database | app + database, both per plan | app is cheap, **the database is not** | app + database, both per plan |
-| The trap | usage billing has no ceiling | **the free tiers** (below) | check the database price first | pick the region twice |
+| Outbound SMTP | **blocked below Pro** — take an HTTPS mail API | look it up before choosing SMTP | look it up before choosing SMTP | look it up before choosing SMTP |
+| The trap | usage billing has no ceiling, and no SMTP on the cheaper plans | **the free tiers** (below) | check the database price first | pick the region twice |
 
 ### What it costs — look it up, never quote it from memory
 
@@ -70,6 +82,16 @@ estimate for what this app actually needs — **one small always-on instance plu
 one small Postgres**. Both parts, not just the app; the database is regularly the
 larger half, and on one of the four it is several times the app.
 
+**And two more lines belong in the same sentence, because neither is optional:**
+
+- **The domain.** A yearly cost, the one no plan of any host removes, and the
+  one that gets forgotten because it is small — until the first STAGING deploy
+  refuses to start over a sender it cannot have. Look up what the user's
+  registrar charges for the name they want.
+- **The mail service** — Brevo or Postmark (`docs/auth-setup.md`). Look up the
+  plan that covers the app's sign-in volume; do not promise that it costs
+  nothing.
+
 Two things about the shape of it are stable enough to say without looking:
 
 - **The four are not in the same price bracket.** Three land close together;
@@ -79,8 +101,16 @@ Two things about the shape of it are stable enough to say without looking:
 - **Nothing here is free**, and the free tiers that exist are not a saving (next
   section).
 
+**The order that works: domain → mail service → host → deploy.** The domain
+first, because the sender has to live on it; the mail service second, because
+the host decides whether SMTP is even possible; the host third. The order that
+does not work is the tempting one — host, deploy, then mail, then a domain
+"later" — because it discovers the domain question with three accounts already
+created and the app on a server, refusing to start.
+
 **Which one?** If the user has no opinion: **Railway** — shortest path, and no
-surprise on the database. **Fly.io** if the agent should do everything and the
+surprise on the database. Railway blocks outbound SMTP on everything below its
+Pro plan, so the mail goes through Brevo or Postmark there. **Fly.io** if the agent should do everything and the
 user nothing, once the database price has been named and accepted; a sensible
 middle is the app on Fly.io with the database elsewhere (see its section).
 Render is the one to be careful with, DigitalOcean the one to pick if the user
@@ -129,8 +159,8 @@ caller is* below):
 | `TRUSTED_CLIENT_IP_HEADER` | the header your host sets and a client cannot forge — `fly-client-ip`, `do-connecting-ip`, `true-client-ip`. Set this where it exists and nothing else is needed |
 | `TRUSTED_PROXY_HOPS` | the fallback when there is no such header: how many entries at the RIGHT end of `x-forwarded-for` your infrastructure added. Default `1` |
 
-| **mail — one of the two** | `POSTMARK_SERVER_TOKEN` + `POSTMARK_SENDER`, **or** `SMTP_HOST` + `SMTP_USER` + `SMTP_PASSWORD` (+ `SMTP_FROM`) |
-| `EMAIL_FROM` | the sender address (fallback when no `SMTP_FROM`/`POSTMARK_SENDER`) — **must live on the app's own domain** (boot-enforced; `docs/auth-setup.md` → the sender rule; deliberate exception: `EMAIL_FROM_FOREIGN_DOMAIN`) |
+| **mail — one of the three** | `BREVO_API_KEY` + `BREVO_SENDER`, **or** `POSTMARK_SERVER_TOKEN` + `POSTMARK_SENDER`, **or** `SMTP_HOST` + `SMTP_USER` + `SMTP_PASSWORD` (+ `SMTP_FROM`) — SMTP only where the host lets it out |
+| `EMAIL_FROM` | the sender address (fallback when no `BREVO_SENDER`/`POSTMARK_SENDER`/`SMTP_FROM`) — **must live on the app's own domain** (boot-enforced; `docs/auth-setup.md` → the sender rule; deliberate exception: `EMAIL_FROM_FOREIGN_DOMAIN`) |
 | `MEDIA_DRIVER` | `s3` — see below. Anything else and the app refuses to start |
 | `MEDIA_S3_ENDPOINT` | your bucket provider's endpoint |
 | `MEDIA_S3_BUCKET` | the bucket's name |
@@ -144,6 +174,19 @@ caller is* below):
 > `✗ Startup aborted`. Set it up *before* the first deploy —
 > `node run.mjs mail-setup` walks through it locally, `docs/auth-setup.md` has
 > the detail.
+>
+> **And SMTP is the wrong choice on a host that blocks it.** Railway does on
+> every plan below Pro. There the app does NOT abort — it starts, logs
+> `[mail] SMTP … is not reachable from this server` once, and every sign-in
+> after that fails with `Connection timeout`. `mail-setup`'s test mail cannot
+> see this, because it leaves from your own machine;
+> `node run.mjs health --url` can, because it asks the server. Take Brevo or
+> Postmark there — both are HTTPS APIs, which no host blocks that way.
+>
+> **Where the mail provider sits is a data protection question too.** Brevo is
+> EU-hosted (Paris). Postmark is US-hosted, which makes every sign-in mail a
+> third-country transfer for an EU operator (`docs/data-protection.md`,
+> `docs/compliance.md`).
 
 > **Files go in a bucket, and this is the mistake that costs the first
 > redeploy.** In DEV uploads land on your own disk and everything works. On a
@@ -303,7 +346,8 @@ whole story — what travels with a deploy and what never does — is
 
 **What the user books:** a Railway account (GitHub sign-in), then the **Hobby**
 plan — Railway has no free tier that runs anything permanently. Postgres is a
-service inside the same project, billed by usage.
+service inside the same project, billed by usage. Before that: the domain, and a
+mail service with an HTTPS API (Brevo or Postmark), because Hobby blocks SMTP.
 
 **How the agent gets in:**
 
@@ -342,12 +386,17 @@ RAILWAY_TOKEN=…  railway status
    Deploy*). This is the migration hook; without it you are migrating by hand
    after every schema change, and one day you will forget.
 5. `railway up`, or push to the connected branch.
-6. Domain: *Settings → Networking* gives you a `…up.railway.app` to start with;
-   a custom domain is a CNAME. Put whichever one is final into `APP_URL`.
+6. Domain: *Settings → Networking* shows the `…up.railway.app` address, which
+   is enough to see that the deploy answers. The app's own domain is a CNAME
+   there — `test.your-domain.de` for STAGING, the domain itself for PROD — and
+   that is what goes into `APP_URL`.
 
-**Two Railway-specific things.** Usage billing has **no ceiling by default** —
-set a spend limit in the dashboard on day one. And its Postgres plans are small
-on connections; if the app logs `too many clients`, set `DB_POOL_MAX=5`.
+**Three Railway-specific things.** Usage billing has **no ceiling by default** —
+set a spend limit in the dashboard on day one. Its Postgres plans are small on
+connections; if the app logs `too many clients`, set `DB_POOL_MAX=5`. And
+**outbound SMTP is disabled on Free, Trial and Hobby** — Railway's own
+documentation says to use a transactional mail service with an HTTPS API there,
+which here means Brevo or Postmark (`node run.mjs mail-setup`, options 1 and 2).
 
 ## Render
 
@@ -372,8 +421,8 @@ so plan for guiding rather than doing.
    types only — one more reason Free is not a saving here. On a plan without it,
    run the migration in the shell after each deploy that carries a schema change,
    and know that this is the manual step you will eventually skip.
-5. Domain: `…onrender.com`, or a custom one under *Settings → Custom Domain*.
-   Into `APP_URL`.
+5. Domain: `…onrender.com` answers straight away; the app's own domain goes on
+   under *Settings → Custom Domain*, and that one goes into `APP_URL`.
 
 ## Fly.io
 
@@ -440,7 +489,7 @@ dashboard) and it travels as `FLY_API_TOKEN`.
 3. Secrets — one command, and they are encrypted at rest:
    ```
    fly secrets set AUTH_SECRET=… APP_ENV=production APP_URL=https://… \
-     POSTMARK_SERVER_TOKEN=… POSTMARK_SENDER=… EMAIL_FROM=… \
+     BREVO_API_KEY=… BREVO_SENDER=… EMAIL_FROM=… \
      DIGISTORE_API_KEY=… DIGISTORE_IPN_PASSPHRASE=… DIGISTORE_IPN_DOMAIN_ID=…
    ```
 4. **The migration hook** — into `fly.toml`, and this is the piece `fly launch`
@@ -452,8 +501,9 @@ dashboard) and it travels as `FLY_API_TOKEN`.
    It runs in a one-off machine before the new version takes traffic. A failing
    migration cancels the release instead of publishing a broken app.
 5. `fly deploy`. Then `fly logs`, and `fly status` for what is running.
-6. Domain: `…fly.dev` to start with; `fly certs add your-domain.com` for your
-   own, after pointing the DNS at it.
+6. Domain: `…fly.dev` answers straight away; `fly certs add your-domain.com`
+   puts the app's own on, after pointing the DNS at it, and that one goes into
+   `APP_URL`.
 
 **Check the generated Dockerfile once.** `fly launch` writes it from what it
 finds, and it prunes devDependencies for the runtime image — which is fine here
@@ -661,17 +711,21 @@ node run.mjs smoke --url https://YOUR-DOMAIN
 ```
 
 `health` is the one command to run first, and the one to run again a week later.
-It asks six things and gives you **one verdict**: is the app answering
+It asks seven things and gives you **one verdict**: is the app answering
 (`/api/healthz`), does its database answer (`/api/readyz`), is anything
 scheduled failing or stalled, what are its pages hiding behind a 200, does the
-media store answer, and when did the last payment notification arrive. Each
+media store answer, when did the last payment notification arrive, and can the
+sign-in mail leave the server. That last one is the question no test from your
+own machine answers: for SMTP the app opens a connection to its mail server
+itself — at boot and again when the answer is older than five minutes — and a
+host that blocks the port shows up as a HIGH finding naming the server. Each
 answers `✓`, a finding, or `⏭ NOT ASKED` **with a reason** — a probe that could
 not look never counts as a pass. Three exit codes: **0** nothing found, **1**
 something at HIGH or CRITICAL is open, **2** there was no address to ask, which
 is *"I could not look"* and never *"it passed"*. `--json` gives an agent the
 same facts, and every run leaves `.dev/health-check.json` behind. It needs the
-two secrets below (`CRON_SECRET`, `DIAGNOSTICS_SECRET`) for four of its six
-probes — without them those four say so by name instead of passing quietly.
+two secrets below (`CRON_SECRET`, `DIAGNOSTICS_SECRET`) for five of its seven
+probes — without them those five say so by name instead of passing quietly.
 
 The two public URLs it asks are still yours to point an **uptime checker** at,
 and that is what they are for — they need no credential:
@@ -764,9 +818,10 @@ log still has the full text for whoever has shell access there, which is the
 right way round. `DIAGNOSTICS_CAPTURE=off` removes the collector entirely.
 
 **The same secret opens one more read, and only reads.**
-`GET /api/diagnostics/health` answers the two questions nothing outside the app
-can: does the media store answer, and when did the last payment notification
-arrive. It is what `node run.mjs health` asks for its `media` and `ipn` probes,
+`GET /api/diagnostics/health` answers the three questions nothing outside the
+app can: does the media store answer, when did the last payment notification
+arrive, and can the sign-in mail leave. It is what `node run.mjs health` asks
+for its `media`, `ipn` and `mail` probes,
 it is behind the same guard and the same bodiless 404, and it holds and stores
 nothing. 🚨 This credential never gains a surface that WRITES — anything that
 changes a row is `/api/setup`, with its own database-backed key, its two-act

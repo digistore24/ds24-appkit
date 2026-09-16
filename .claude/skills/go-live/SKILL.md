@@ -18,31 +18,37 @@ really sell once it is up.
 
 ## 1. Pre-flight (before the deploy)
 
-Eight checks, each a **stop condition**, and you run them yourself. Four the host
+Nine checks, each a **stop condition**, and you run them yourself. Four the host
 enforces anyway at boot, where the same fault reads as a broken deploy. What each
 costs when skipped, and the one no boot guard can catch:
 [`references/preflight.md`](references/preflight.md).
 
 1. **Green locally** — `node run.mjs test` and `node run.mjs build`, no errors.
-2. **Mail delivery exists** — otherwise `node run.mjs mail-setup`. Mandatory in
-   STAGING/PROD, where the app aborts at startup without it. **The single most common
-   reason a first deploy fails.**
-3. **The sender address is on the app's own domain** and verified at the provider
+2. **The app has a domain of its own** — bought before the first deploy, a test
+   one included, and STAGING goes on a subdomain of it (`test.<domain>`). Not for the
+   address: for the sign-in mails' sender, which no host address and no public mailbox
+   can be. **Never plan a test go-live "without buying a domain".**
+3. **Mail delivery exists, over a path the host allows** — otherwise
+   `node run.mjs mail-setup`. Brevo or Postmark work on every host; SMTP only where the
+   host lets it out, and Railway does not below Pro. Mandatory in STAGING/PROD, where
+   the app aborts at startup without it. **The single most common reason a first
+   deploy fails.**
+4. **The sender address is on the app's own domain** and verified at the provider
    (DKIM/SPF), and `NEXT_PUBLIC_APP_NAME` is set **at the host**.
    `node run.mjs doctor --deploy` gives the verdict from this machine.
-4. **The app's own address is set at the host** — `APP_URL=https://YOUR-DOMAIN`,
+5. **The app's own address is set at the host** — `APP_URL=https://YOUR-DOMAIN`,
    no trailing slash, and no `AUTH_URL`/`NEXTAUTH_URL` beside it. STAGING/PROD abort
    at startup without it, because everything the app MAILS OUT takes its origin from
    it — the sign-in link above all (`setup-hosting` step 7).
-5. **Somewhere for files to live — *if the app takes files*.** `config/media.json` →
+6. **Somewhere for files to live — *if the app takes files*.** `config/media.json` →
    `enabled` first; if yes, `node run.mjs media-check`. Booking the bucket was
    `setup-hosting` step 6b; this is the check that it happened.
-6. **The home page sells the product, not the template** — a still-placeholder
+7. **The home page sells the product, not the template** — a still-placeholder
    `app/page.tsx` is the skill **`salespage`**.
-7. **The icons are the app's** — the three under `public/icons/` against
+8. **The icons are the app's** — the three under `public/icons/` against
    `app/icon.png`; they land on a customer's home screen and stay. The skill is
    **`design`**.
-8. **Migrations and the law** — `drizzle/` up to date (`node run.mjs db-generate`),
+9. **Migrations and the law** — `drizzle/` up to date (`node run.mjs db-generate`),
    and `node run.mjs legal-check` green **before** the deploy: a placeholder Impressum
    on a live domain is both a legal problem and the first thing a visitor reads. What
    fixes it is **`compliance-check`**.
@@ -140,7 +146,9 @@ filling — is [`references/smoke-live.md`](references/smoke-live.md).
 - **Every page answers, signed in** — `node run.mjs smoke --url https://…` after
   `node run.mjs smoke-account --apply` gave it a way in. No 5xx, and "N protected
   page(s) NOT checked" is not a pass.
-- **The sign-in mail itself is right**, not only the page it leads to: the product's
+- **The sign-in mail leaves the server, and is right** — `node run.mjs health --url
+  https://…` with no finding on its `mail` line first, then the mail itself, not only
+  the page it leads to: the product's
   name, a **button whose link is on the live domain** — not `localhost`, not the
   host's internal name; that is `APP_URL` at the host, and the boot guard can only
   prove it is *a* URL, never that it is *yours* — footer links on the live domain,

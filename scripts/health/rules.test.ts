@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA
 // SPDX-License-Identifier: MIT
 
-// What the verdict MAKES of six answers — and the three ways it could lie.
+// What the verdict MAKES of seven answers — and the three ways it could lie.
 //
 // Pure: no network, no filesystem, no `process.env`, no deployed app. Every
 // probe here is a stub returning the answer a real one would, so the assertions
@@ -44,10 +44,10 @@ const probe = (id: string, run: (ctx: Record<string, unknown>) => unknown) => ({
   run,
 });
 
-describe("the six probes declare themselves on the shipped shape", () => {
-  it("is six, in the order the reader reads them, with liveness first", () => {
+describe("the seven probes declare themselves on the shipped shape", () => {
+  it("is seven, in the order the reader reads them, with liveness first", () => {
     // 🚨 The order is load-bearing at exactly one point: liveness runs first and
-    // every probe after it reads its outcome. A seventh probe is one entry here.
+    // every probe after it reads its outcome. `mail` was the seventh, one entry.
     expect(PROBES.map((p) => p.id)).toEqual([
       "liveness",
       "readiness",
@@ -55,6 +55,7 @@ describe("the six probes declare themselves on the shipped shape", () => {
       "errors",
       "media",
       "ipn",
+      "mail",
     ]);
   });
 
@@ -70,7 +71,7 @@ describe("the six probes declare themselves on the shipped shape", () => {
   });
 });
 
-describe("AC3 — an unreachable app is one finding and five skips", () => {
+describe("AC3 — an unreachable app is one finding and six skips", () => {
   const down = () =>
     ranFound(
       [
@@ -86,7 +87,7 @@ describe("AC3 — an unreachable app is one finding and five skips", () => {
       "GET /api/healthz — nothing answered",
     );
 
-  /** The six, with liveness's answer decided by the test and the rest real-shaped. */
+  /** The seven, with liveness's answer decided by the test and the rest real-shaped. */
   const ladder = (livenessAnswer: () => unknown, asked: string[]) =>
     PROBES.map((p) =>
       p.id === "liveness"
@@ -100,13 +101,13 @@ describe("AC3 — an unreachable app is one finding and five skips", () => {
           }),
     );
 
-  it("🚨 the needle: nothing answers → one CRITICAL, five skips, and no further requests", async () => {
+  it("🚨 the needle: nothing answers → one CRITICAL, six skips, and no further requests", async () => {
     const asked: string[] = [];
     const outcomes = await runProbes(ladder(down, asked), CONTEXT);
     const summary = aggregate(outcomes);
 
     expect(summary.counts.critical).toBe(1);
-    expect(summary.notAsked).toBe(5);
+    expect(summary.notAsked).toBe(6);
     expect(summary.complete).toBe(false);
     // "the five are not attempted, timed out five times over, and reported as
     // five separate network errors" — this is the assertion behind that clause.
@@ -117,7 +118,7 @@ describe("AC3 — an unreachable app is one finding and five skips", () => {
     }
   });
 
-  it("🚨 …and the other way: with the app answering, NONE of the five is a skip", async () => {
+  it("🚨 …and the other way: with the app answering, NONE of the six is a skip", async () => {
     // Without this half, the test above passes against a command that skips
     // everything always — which is green for the same reason a broken command is.
     const asked: string[] = [];
@@ -126,10 +127,10 @@ describe("AC3 — an unreachable app is one finding and five skips", () => {
 
     expect(summary.notAsked).toBe(0);
     expect(summary.complete).toBe(true);
-    expect(asked.length).toBe(5);
+    expect(asked.length).toBe(6);
   });
 
-  it("a readiness finding does NOT stop the other four", async () => {
+  it("a readiness finding does NOT stop the other five", async () => {
     // The app is serving; what it can still answer is worth having.
     const asked: string[] = [];
     const ladder2 = PROBES.map((p) => {
@@ -158,7 +159,7 @@ describe("AC3 — an unreachable app is one finding and five skips", () => {
     });
 
     const outcomes = await runProbes(ladder2, CONTEXT);
-    expect(asked).toEqual(["jobs", "errors", "media", "ipn"]);
+    expect(asked).toEqual(["jobs", "errors", "media", "ipn", "mail"]);
     expect(aggregate(outcomes).counts.critical).toBe(1);
   });
 });

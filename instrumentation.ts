@@ -99,6 +99,26 @@ export async function register() {
   // own variable and the documented way to tell the two apart.
   if (process.env.NEXT_PHASE === "phase-production-build") return;
 
+  // Can the mail actually LEAVE this server? Only asked for SMTP, only in
+  // STAGING/PROD, and only ever warned about. Several hosts block outbound
+  // SMTP on their cheaper plans (Railway below Pro); an app set up that way
+  // starts, passes every check above and times out on every sign-in, while the
+  // test mail `mail-setup` sent from a laptop arrived. The failure line is in
+  // the shape `node run.mjs errors --url` finds, and it names the way out.
+  //
+  // Warn, never abort: a mail server with a slow minute must not take the app
+  // down. Not awaited: boot does not wait three seconds for a diagnostic. The
+  // answer is kept on `globalThis` (the route handler is another module
+  // instance — lib/diagnostics/capture.ts), where `node run.mjs health --url`
+  // reads it back.
+  if (environment !== "development") {
+    const { mailTransport } = await import("@/lib/email-from.mjs");
+    if (mailTransport(process.env) === "smtp") {
+      const { bootSmtpProbe } = await import("@/lib/diagnostics/smtp-probe.mjs");
+      void bootSmtpProbe(process.env);
+    }
+  }
+
   const { schedulerEnabled } = await import("@/lib/cron/config");
   if (!schedulerEnabled()) {
     console.log("• Scheduler: off (config/cron.json) — /api/cron still works");

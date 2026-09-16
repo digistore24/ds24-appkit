@@ -29,7 +29,8 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { approvalReport, describeApproval } from "../ds24/_approval.mjs";
 import { blockers, inspect } from "./doctor.mjs";
-import { afterCompactText, customerLanguage } from "./after-compact-rules.mjs";
+import { afterCompactText } from "./after-compact-rules.mjs";
+import { LANGUAGES, knownLanguage } from "./hooks/language-guard.mjs";
 import { describeUnwritten, readNotes, unwrittenItems } from "./app-notes.mjs";
 import { JOB_IDS } from "../../lib/cron/ids.mjs";
 import { canOpenBrowser } from "../lib/proc.mjs";
@@ -66,11 +67,11 @@ import {
 // A boolean flag, so `process.argv.includes()` rather than `flagsFrom()` — that
 // helper answers "what value follows --flag", which is a different question
 // (CLAUDE.md → Rules; scripts/lib/args.mjs says why it is strict about it).
-// The customer's language, if this app has written it down (docs/app.md →
-// Language). Null on a fresh app; then the rule stands without the fact.
-const language = existsSync("docs/app.md")
-  ? customerLanguage(readFileSync("docs/app.md", "utf8"))
-  : null;
+// The customer's language: the one the language guard remembered from their
+// prompts (.dev/customer-language), else docs/app.md → Language. Null on a
+// fresh app before anybody typed; then the rule stands without the fact.
+const languageCode = knownLanguage(process.cwd());
+const language = languageCode ? LANGUAGES[languageCode].name : null;
 
 if (process.argv.includes("--after-compact")) {
   // The lines live in after-compact-rules.mjs, each pinned to the file its
@@ -466,7 +467,7 @@ console.log(`[Project state: .env=${hasEnv}, product-brief=${hasBrief}, own page
 // wrote three English progress lines to a German customer; a line that names
 // the language in every greeting is the cheapest thing that stands in the way.
 if (language) {
-  console.log(`[Customer language: ${language} — every line they read is in it (docs/app.md → Language)]`);
+  console.log(`[Customer language: ${language} — every line they read is in it]`);
 }
 if (approvalLine) console.log(approvalLine);
 // Every time, unlike its two neighbours below — the reasoning is beside the

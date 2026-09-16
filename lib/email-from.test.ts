@@ -6,10 +6,55 @@ import {
   appHost,
   emailDomain,
   isUnjudgeableHost,
+  mailTransport,
   resolvedFrom,
   sameSite,
   senderDomainProblem,
+  splitAddress,
 } from "./email-from.mjs";
+
+describe("mailTransport", () => {
+  const postmark = { POSTMARK_SERVER_TOKEN: "t", POSTMARK_SENDER: "a@x.de" };
+  const brevo = { BREVO_API_KEY: "k", BREVO_SENDER: "b@x.de" };
+  const smtp = { SMTP_HOST: "smtp.x.de", SMTP_USER: "u", SMTP_PASSWORD: "p" };
+
+  it("names each transport when its set is complete", () => {
+    expect(mailTransport(postmark)).toBe("postmark");
+    expect(mailTransport(brevo)).toBe("brevo");
+    expect(mailTransport(smtp)).toBe("smtp");
+    expect(mailTransport({})).toBe("none");
+  });
+
+  it("does not count half a setup as a transport", () => {
+    expect(mailTransport({ POSTMARK_SERVER_TOKEN: "t" })).toBe("none");
+    expect(mailTransport({ BREVO_API_KEY: "k" })).toBe("none");
+    expect(mailTransport({ BREVO_SENDER: "b@x.de" })).toBe("none");
+    expect(mailTransport({ SMTP_HOST: "smtp.x.de", SMTP_USER: "u" })).toBe("none");
+  });
+
+  it("keeps the order deliver() always had: Postmark, Brevo, SMTP", () => {
+    expect(mailTransport({ ...smtp, ...brevo, ...postmark })).toBe("postmark");
+    expect(mailTransport({ ...smtp, ...brevo })).toBe("brevo");
+  });
+});
+
+describe("splitAddress", () => {
+  it("leaves a bare address without a name", () => {
+    expect(splitAddress("login@fangfertig.de")).toEqual({ email: "login@fangfertig.de", name: null });
+  });
+
+  it("splits the display-name form, quoted or not", () => {
+    expect(splitAddress("Fangfertig <login@fangfertig.de>")).toEqual({
+      email: "login@fangfertig.de",
+      name: "Fangfertig",
+    });
+    expect(splitAddress('"Fang, fertig" <login@fangfertig.de>')).toEqual({
+      email: "login@fangfertig.de",
+      name: "Fang, fertig",
+    });
+    expect(splitAddress("<login@fangfertig.de>")).toEqual({ email: "login@fangfertig.de", name: null });
+  });
+});
 
 describe("emailDomain", () => {
   it("extracts and normalizes the domain", () => {
@@ -81,6 +126,14 @@ describe("resolvedFrom", () => {
     ).toBe("a@x.de");
     expect(resolvedFrom({ SMTP_FROM: "b@y.de", EMAIL_FROM: "c@z.de" })).toBe("b@y.de");
     expect(resolvedFrom({ EMAIL_FROM: "c@z.de" })).toBe("c@z.de");
+  });
+
+  it("takes BREVO_SENDER when Brevo is the transport — and ignores SMTP_FROM then", () => {
+    expect(
+      resolvedFrom({ BREVO_API_KEY: "k", BREVO_SENDER: "d@x.de", SMTP_FROM: "b@y.de", EMAIL_FROM: "c@z.de" }),
+    ).toBe("d@x.de");
+    // Half a Brevo setup is no transport, so its sender is not the sender.
+    expect(resolvedFrom({ BREVO_SENDER: "d@x.de", EMAIL_FROM: "c@z.de" })).toBe("c@z.de");
   });
 
   it("returns null instead of the localhost fallback", () => {

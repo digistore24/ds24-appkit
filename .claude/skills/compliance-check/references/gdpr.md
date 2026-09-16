@@ -25,6 +25,11 @@ this app actually does, and the misses are not obvious:
 - **The AI company is the operator's choice**, not a fixed name (§5, §8).
   `node run.mjs ai-check` says which one. Naming the wrong one is worse than
   naming none.
+- **So is the mail provider** (§5): Brevo (EU-hosted), Postmark (US-hosted, a
+  third-country transfer) or an SMTP host. Every sign-in mail hands it a
+  customer's address and a sign-in link. Read which transport is configured at
+  the host; a policy naming Postmark over a Brevo app, or leaving out the
+  transfer, is wrong.
 - **Nothing about the person is sent to the assistant** — no name, address,
   balance or purchase (§8). Worth saying, because customers ask. ⚠️ **Only
   where there is no companion.** With one switched on that sentence is false,
@@ -91,7 +96,7 @@ not as a bug.
 | `verarbeitungsverzeichnis.md` | record of processing (Art. 30) | `docs/data-protection.md` + `config/ai-models.json` + the mail and host setup |
 | `tom.md` | technical and organisational measures (Art. 32) | the real ones: scrypt hashes, SHA-512 IPN signature, `lib/rate-limit.ts`, `requireOwner()`, `readOnly`/scopes as the API-key boundary, no IP storage |
 | `loeschkonzept.md` | deletion concept | the windows in `lib/cron/jobs.ts`; the proof is `node run.mjs cron --list` |
-| `avv-register.md` | processor agreements (Art. 28) | recipients from `docs/data-protection.md` §5, with the AI company actually in use |
+| `avv-register.md` | processor agreements (Art. 28) | recipients from `docs/data-protection.md` §5, with the AI company and the mail provider actually in use — and, for a US one, its third-country basis |
 | `ki-register.md` | AI systems, role, risk class, Art. 50 measures | check 4 — **one row per surface**: the assistant and any companion are two systems, possibly on two companies |
 | `ki-kompetenz.md` | AI literacy measures (Art. 4) | ask the user what they did |
 | `datenpanne.md` | breach procedure (Art. 33/34) | write it now, not during one |

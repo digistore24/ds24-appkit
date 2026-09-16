@@ -190,6 +190,159 @@ should not have to scroll back up to say yes.
 
 ---
 
+## Names and voice — settled before the first sentence
+
+Two things decide whether a page *sells* or *reports*, and neither is in the
+section inventory, because both cut across every section. Both were measured
+missing, twice, in September 2026: on one page the assistant was named Lia in
+`config/ai-chat.json` and "der Insel-Assistent" everywhere on `/`, the search
+the app ships was never mentioned, and after eight revision rounds the
+operator replaced the whole text with one from another tool. The next day a
+second app's "Werkstatt-Helfer" was "der KI-Helfer" on its page. Neither page
+told a buyer what they *get*; both told them what the product is *about*.
+
+### Names, not paraphrases
+
+The app's features have names — the ones the app itself shows: the navigation
+labels (`nav.*` in `messages/<code>.json`), module and page titles, the
+assistant's `name` in `config/ai-chat.json`, the courses' titles. **The page
+calls every feature by its name** and never describes the activity where the
+name belongs: not "Fragen" for the assistant, not "Planen lassen" for the
+planner, not "Lesen" for the guide. A buyer meets these names in the app on
+day one; a page that used other words has sold something else.
+
+So the first thing written is not a headline but the **feature list**: one row
+per feature — the name as the app shows it, what it holds (read out of the
+app: the categories, the course blocks, the tools), and the scope in numbers
+where the app's config or registry holds one (lessons, places, questions per
+plan, what a top-up costs). The list is shown to the operator and confirmed;
+from then on it is the page's vocabulary, every row appears on the page at
+least once, and section 4 is that list written out. The test at the end:
+**a stranger can say what they get, by name** — not only what it is about.
+
+**A name is not an explanation.** The names are the app's, and a stranger has
+never seen the app. So **every term that is not common knowledge is either
+explained where it first appears or left off the page**: "Finn, der KI-Coach,
+liest deine Übung" — never "Finn liest deine Übung" as the first mention; "die
+Einstufung" only with what it does ("ein kurzer Test, der dir sagt, wo du
+anfängst"); an internal label ("Montage-Übung", "Plan-Check") with its one-line
+meaning, or not at all. The test is the stranger's: every word on the page
+they could not look up in a dictionary is explained on the page. Measured
+2026-09-16: a page opened with "Finn schaut sie sich an" and never said who
+Finn was; the version it replaced at least had "der Assistent Finn".
+
+**And a name belongs to the feature that carries it in the app — only that
+one.** Each row of the feature list cites where the app shows the name (a menu
+label, a card title, a config field). A feature with no name on its own page
+has none on the salespage either, until the operator gives it one — in the app
+first. What the operator says in the chat does not replace the reading:
+measured the same day, the operator confirmed "Finn antwortet drauf", and the
+page carried the assistant's name onto two companions whose cards say "ein
+Coach" and "Plan-Check".
+
+### The voice — the operator's, written down
+
+The page speaks in the operator's voice, not in yours. Yours, measured, is a
+report: statements about a problem, prices as evidence, subordinate clauses
+and dashes, a headline built on an antithesis. Marketing copy does four things
+differently, and all four are checkable sentence by sentence:
+
+- **Verbs the reader does.** "Entdecke", "erlebe", "frag", "stell zusammen" —
+  not "Am Ende des Tages weißt du, wo du hättest angeln sollen." A statement
+  about the reader's problem is a diagnosis; an imperative is an invitation.
+- **The pain is a picture, not a proof.** "Der Platz am Ufer, von dem dir
+  jemand beim Einpacken erzählt" makes the reader *feel* the problem; "Ein
+  Guide kostet 120 € am Tag, die Angelkarte 40 €" *proves* it. No number in
+  the problem section — the numbers go where they sell: the feature list and
+  the offer block.
+- **Short main clauses.** One thought per sentence; a dash is a sign the
+  sentence wants to be two.
+- **No construction the operator excluded.** An antithesis ("Weißt du vorher,
+  was die Alten wissen, wird dein Tag ein anderer") is a writer's device; once
+  the operator has said "no antitheses", it is out of every section, not out
+  of the one they pointed at.
+
+None of that says *which* voice this operator has — du or Sie, playful or
+plain, long or short — and no file in the project does either. So before the
+first draft, **one question**: a text they wrote themselves (a mail, a post,
+their old site) or a page they want to sound like. From the answer you write
+the **style sheet**, `docs/marketing/voice.md`: five to eight lines — address,
+sentence length, what the page does instead of proving, words the operator
+uses, words and constructions that are out — and show it before the copy. It
+is the file every later writer reads (`go-to-market` writes the mails and
+posts in the same voice) and the file every revision is checked against.
+
+### The Lektorat — a second reader, before the operator
+
+The writer cannot read their own draft as a stranger: measured 2026-09-16, a
+writer read a page three times against the feature list and the style sheet
+and handed over "Finn schaut sie sich an" without ever saying who Finn was.
+So the draft gets a **second reader in a fresh context** — a subagent where
+the program has one, otherwise the writer after closing the draft and reading
+it back from disk — who reads it against a fixed list and returns
+**freigegeben** or **zurück** with one row per finding. The list, the classes
+(what sends a draft back, what is only a note), the verdict format and the
+three-round limit are in the skill's
+[`references/lektorat.md`](../.claude/skills/salespage/references/lektorat.md).
+The draft itself is a file, `docs/marketing/salespage-<lang>.md`, so that the
+reader reads what the page will say and not what the writer remembers saying.
+
+What the list measures, and where it comes from:
+
+- **Verständlich** — the four dimensions of the Hamburger
+  Verständlichkeitskonzept (Langer, Schulz von Thun, Tausch, 1970s; the
+  German-language standard since the 1980s): Einfachheit, Gliederung/Ordnung,
+  Kürze/Prägnanz, anregende Zusätze. Plus NN/g's web reading: users read at
+  most a quarter of the words, so the page must be concise, scannable and
+  free of hype — headings and bold words carry the meaning on their own.
+- **Anschaulich** — *Made to Stick* (Heath): concrete over abstract, credible
+  through what is checkable, a feeling and a scene rather than a claim. The
+  specificity rule of conversion copy: "4 hours to 15 minutes" beats "save
+  time".
+- **Problem, dann Lösung** — the oldest rule of the trade (Problem → Agitate →
+  Solve; StoryBrand's customer-as-hero): the problem in the customer's words,
+  in one place, before the product; then the product by name and what it does
+  about it; then what happens after the click.
+- **Der Fremde** — StoryBrand's grunt test (what do you offer, how does it
+  make my life better, how do I buy) widened to the five questions above.
+- **Namen, Stimme, Headline** — this file's own rules, and the Copyhackers
+  headline scale (unique, desirable, specific, succinct, memorable), of which
+  one half is a test any reader can run: could a competitor use it?
+- **Ehrlich und erlaubt** — § 5, § 6 and `legal-check`, read once more by
+  somebody who did not write the sentence.
+
+A verdict is not a rewrite and not a taste note: every row carries a
+criterion number, the writer writes the fix. Sources: Wikipedia, *Hamburger
+Verständlichkeitskonzept*; NN/g, *Concise, Scannable, and Objective* and *How
+Users Read on the Web*; Heath & Heath, *Made to Stick*; Miller, *Building a
+StoryBrand*; Copyhackers, *The Great Copy Debate: Clear vs. Clever*.
+
+### When the text comes back
+
+A page comes back three or eight times, and the rounds are where the measured
+page was lost: the headline was rewritten eight times, twice back to a version
+already discarded; the problem paragraph was never touched; an instruction
+("einfache Sätze, keine Antithesen") was broken two minutes later. Each round
+answered the *sentence* the operator pointed at. Each looked like progress.
+
+The rule: **feedback names a principle, and a principle is applied to every
+section.** So a revision round has a fixed shape —
+
+1. Say the principle behind the remark in one line, and write it into
+   `voice.md` (a construction that is out goes onto the exclusion list there).
+2. Re-read every section against it — not the one the remark was about — and
+   change what breaks it.
+3. Hand back a table, not a page: section by section, changed or unchanged,
+   and *why* the unchanged ones stand. A round in which only the headline
+   moves is the failure mode; the table makes it visible.
+4. Keep the discarded variants in the same note, with the reason. A headline
+   the operator turned down is never proposed again.
+
+And when the operator writes a line themselves, it goes in as written — the
+measured page's final headline was the operator's own.
+
+---
+
 ## Where every fact comes from
 
 The page is written **from the project, not from imagination** — every claim
@@ -227,7 +380,7 @@ The finished page is checked the way `ux-gateway` checks it — as somebody who
 has never heard of the product, five questions, answered above the fold or
 within one scroll:
 
-1. **What is this?**
+1. **What is this — and what do I get, by the names the app uses?**
 2. **Who is it for?**
 3. **What does it cost?** (or: is the price one click away, honestly labelled)
 4. **Why should I believe you?** (proof, or an honest founder story)

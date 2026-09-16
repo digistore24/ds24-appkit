@@ -7,7 +7,7 @@
 //   node run.mjs health --url https://app.example.com
 //   node run.mjs health --url https://app.example.com --json
 //
-// SIX probes on the shipped ladder (`scripts/security/rules.mjs`), each
+// SEVEN probes on the shipped ladder (`scripts/security/rules.mjs`), each
 // answering its own question, each reporting `clean` / `found` / `skipped` —
 // the same contract Story 30.1 built for the security rungs, imported and never
 // re-typed. There is no second severity vocabulary and no second renderer.
@@ -18,26 +18,27 @@
 //   errors      what is a 200 hiding                   /api/diagnostics/errors
 //   media       does the store this app writes to answer  /api/diagnostics/health
 //   ipn         when did the last payment notification arrive  (same request)
+//   mail        can the sign-in mail leave the SERVER          (same request)
 //
 // ── Why the verdict is composed HERE and not in the app ────────────────────
 //
-// One app-side endpoint answering all six would be one HTTP call with one
-// failure mode: when it 404s, SIX answers are missing and the reader sees one
+// One app-side endpoint answering all seven would be one HTTP call with one
+// failure mode: when it 404s, SEVEN answers are missing and the reader sees one
 // sentence. Worse, it would run inside the process whose health is the question
 // — so "the app is up" would be reported by the thing that has to be up for the
-// report to exist. Six probes produce six lines, and `aggregate()` counts what
+// report to exist. Seven probes produce seven lines, and `aggregate()` counts what
 // nobody asked.
 //
-// The two facts that genuinely cannot be reached from outside — does the media
-// store answer, when did the last IPN arrive — are the ONLY things the app is
-// asked about itself (`GET /api/diagnostics/health`, `lib/ops/health.ts`).
+// The three facts that genuinely cannot be reached from outside — does the
+// media store answer, when did the last IPN arrive, can the mail leave — are the
+// ONLY things the app is asked about itself (`GET /api/diagnostics/health`, `lib/ops/health.ts`).
 //
 // ── 🚨 An unreachable app is an ANSWER, not a skip ─────────────────────────
 //
-// If nothing replies, `liveness` reports one CRITICAL finding and the other five
-// report `skipped` with that as their reason — and are **not attempted**. Five
-// timeouts and five different network sentences about one fact is not more
-// information; it is the same information five times, taking fifty seconds.
+// If nothing replies, `liveness` reports one CRITICAL finding and the other six
+// report `skipped` with that as their reason — and are **not attempted**. Six
+// timeouts and six different network sentences about one fact is not more
+// information; it is the same information six times, taking a minute.
 //
 // ── ⚠️ Not a gate, and it must not become one ──────────────────────────────
 //
@@ -65,20 +66,21 @@ import { errors } from "./probes/errors.mjs";
 import { ipn } from "./probes/ipn.mjs";
 import { jobs } from "./probes/jobs.mjs";
 import { liveness } from "./probes/liveness.mjs";
+import { mail } from "./probes/mail.mjs";
 import { media } from "./probes/media.mjs";
 import { readiness } from "./probes/readiness.mjs";
 
 const PROJECT_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 /**
- * The six, in the order they run.
+ * The seven, in the order they run.
  *
  * ⚠️ Unlike the security ladder, this order IS load-bearing at exactly one
  * point: `liveness` runs first and every probe after it reads its outcome. That
- * is the whole of the coupling — a seventh probe is one import and one entry
- * here, and nothing else in this file changes.
+ * is the whole of the coupling — `mail` was the seventh, and it was one import
+ * and one entry here, and nothing else in this file changed.
  */
-export const PROBES = [liveness, readiness, jobs, errors, media, ipn];
+export const PROBES = [liveness, readiness, jobs, errors, media, ipn, mail];
 
 /** This app's own version, for the record. Never a reason to fail anything. */
 function templateVersion() {
@@ -129,7 +131,7 @@ export function resolveHealthTarget(env = {}, argv = []) {
  * for our purposes, not looked.
  *
  * 🚨 `liveness`'s outcome is handed to every probe after it. That is how the
- * other five know to report `skipped` rather than each discovering the same
+ * other six know to report `skipped` rather than each discovering the same
  * silence for itself, one ten-second timeout at a time.
  */
 export async function runProbes(probes, context) {

@@ -4,7 +4,7 @@
 // Full Auth.js setup (Node runtime) — with the database adapter.
 // Builds on the slim auth.config.ts and adds the Drizzle adapter (users,
 // OAuth accounts, email verification tokens) plus the email magic-link
-// provider (Postmark/SMTP), which may only run in the Node runtime.
+// provider (Brevo/Postmark/SMTP), which may only run in the Node runtime.
 import NextAuth from "next-auth";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import authConfig from "@/auth.config";

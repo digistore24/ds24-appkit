@@ -1,9 +1,9 @@
 // Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA
 // SPDX-License-Identifier: MIT
 
-// How the six probes talk to a deployed app — not a probe itself.
+// How the seven probes talk to a deployed app — not a probe itself.
 //
-// `_` because the registry in `../check.mjs` imports the six files beside this
+// `_` because the registry in `../check.mjs` imports the seven files beside this
 // one by name and this is the only other thing in the folder; the same signal
 // `scripts/ds24/_approval.mjs` carries.
 //

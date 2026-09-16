@@ -10,7 +10,7 @@ programming experience.
 Auth.js v5 (email token, Google optional) · Tailwind v4 + shadcn/ui.
 
 Wired up and ready to use:
-- 🔐 **Sign-in** (email token/magic link via Postmark or SMTP; Google optional)
+- 🔐 **Sign-in** (email token/magic link via Brevo, Postmark or SMTP; Google optional)
   — plus an **optional password** each customer may set on themselves, and
   locally you get straight in **without a mail account** (development login)
 - 👥 **User management** with three roles (admin / moderator / user) — admins
@@ -151,7 +151,8 @@ before anything is booked — but it helps to know the list in advance:
 |---|---|---|
 | **a Digistore24 vendor account** | as soon as the app should sell — step 2.2 | a fee per sale (the current rate is on their site); nothing up front |
 | **a host** (Railway, Render, Fly.io or DigitalOcean) plus its database | at go-live — step 3.1 | a monthly price; the skill looks it up and says it |
-| **mail delivery** (Postmark or SMTP) and a **domain** | at go-live | the providers' prices; the skill names them at that step |
+| **a domain** of your own | before the first deploy, even a test one — the sign-in mails need a sender on it | a yearly price at a registrar; small, and the one no plan of any host removes |
+| **mail delivery** (Brevo, Postmark or SMTP) | before the first deploy, chosen after the host — some hosts block SMTP | the provider's price for your volume; the skill looks it up |
 | **an AI company's key** (OpenAI, Anthropic, Gemini, Mistral or OpenRouter) | only if your app uses AI — step 2.3h | per use; `node run.mjs ai-check` shows what one call costs |
 
 Your AI program's own usage is the other cost, and it depends on your plan
@@ -203,7 +204,7 @@ Docker, or without it — see above), apply migrations, bring the app up
 (→ http://localhost:3000).
 
 `AUTH_SECRET` is generated for you on the first start. One thing is left for
-later: mail delivery for sign-in (Postmark **or** SMTP) — `node run.mjs
+later: mail delivery for sign-in (Brevo, Postmark **or** SMTP) — `node run.mjs
 mail-setup` asks you for the details and writes them into `.env` itself, so
 nothing has to be edited by hand (details in
 [`docs/auth-setup.md`](docs/auth-setup.md)).
@@ -222,7 +223,7 @@ ones, `node run.mjs help --all` every one of them):
 | `node run.mjs smoke` | call every page once — finds "Internal Server Error" |
 | `node run.mjs db-migrate` | apply pending database migrations |
 | `node run.mjs db-reset` | wipe the local database, migrate anew, load the seed |
-| `node run.mjs mail-setup` | set up mail delivery (Postmark or SMTP) + test mail |
+| `node run.mjs mail-setup` | set up mail delivery (Brevo, Postmark or SMTP) + test mail |
 | `node run.mjs ds24-connect` | fetch the Digistore24 API key (browser) and store it in `.env` |
 | `node run.mjs logs` | follow the log of the running app |
 | `node run.mjs doctor` | check that everything needed is installed |

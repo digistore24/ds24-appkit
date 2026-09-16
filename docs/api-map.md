@@ -4,7 +4,7 @@
      scripts/api-map.test.ts compares this file with what the generator
      produces, and a hand edit is undone by the next run. -->
 
-_50 files, 224 exported functions, 46 tables. Regenerate
+_50 files, 227 exported functions, 46 tables. Regenerate
 with `node run.mjs api-map` after adding an export or a table; the suite says so
 when it is behind._
 
@@ -291,6 +291,7 @@ tests — `docs/ux.md` owns each, this is where they are needed:
 ## lib/email.ts
 
 - `isPostmarkConfigured(): boolean` — The detection lives in lib/env-guard.ts (pure env checks, without the nodemailer dependency) — here we only apply it to process.env, so t…
+- `isBrevoConfigured(): boolean`
 - `isSmtpConfigured(): boolean`
 - `isEmailLoginEnabled(): boolean`
 - `emailFrom(): string` — Sender address (From), depending on the configured transport.
@@ -329,7 +330,9 @@ tests — `docs/ux.md` owns each, this is where they are needed:
 
 ## lib/env-guard.ts
 
+- `configuredMailTransport(env: MailEnv): MailTransport`
 - `hasPostmarkConfig(env: MailEnv): boolean`
+- `hasBrevoConfig(env: MailEnv): boolean`
 - `hasSmtpConfig(env: MailEnv): boolean`
 - `hasEmailConfig(env: MailEnv): boolean` — true if at least one transport is fully configured.
 - `appEnv(value?: string): AppEnv` — Normalizes APP_ENV.

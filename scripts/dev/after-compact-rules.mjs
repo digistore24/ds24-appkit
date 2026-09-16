@@ -108,7 +108,7 @@ export function afterCompactText({ language = null } = {}) {
     "[After compaction — these rules still apply]",
     ...AFTER_COMPACT_RULES.map((rule, i) =>
       i === 0 && language
-        ? `- ${rule.line} Here that language is ${language} (docs/app.md → Language).`
+        ? `- ${rule.line} Here that language is ${language}.`
         : `- ${rule.line}`,
     ),
   ].join("\n");

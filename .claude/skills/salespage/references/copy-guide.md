@@ -20,6 +20,76 @@ sounds like a person said it.
 Test: could a competitor put the same headline over their product? Then it is
 a category, not a promise — sharpen until it could only be this one.
 
+## Sell, don't report — the four moves, sentence by sentence
+
+The rules are `docs/salespage.md` → *The voice*. What they look like applied:
+
+| Reports — a statement about the reader | Sells — something the reader does |
+|---|---|
+| "Am Ende des Tages weißt du, wo du hättest angeln sollen." | "Wirf da aus, wo die Fische wirklich stehen." |
+| "Die meisten Anfänger geben nach dem dritten leeren Tag auf." | "Fang am dritten Tag, nicht im dritten Jahr." |
+
+| Proves the pain | Shows the pain |
+|---|---|
+| "Ein Guide kostet 120 € am Tag, die Angelkarte 40 € — und der beste Foren-Tipp ist von 2011." | "Der Platz am Ufer, von dem dir jemand beim Einpacken erzählt. Der Köder, den du zu Hause gelassen hast." |
+
+| Nested | Two sentences |
+|---|---|
+| "Wer vorher weiß, was die Alten am Wasser wissen — welcher Köder im Mai, welche Stelle bei Ostwind —, dessen Tag wird ein anderer." | "Welcher Köder im Mai. Welche Stelle bei Ostwind. Du weißt es vorher." |
+
+Test per sentence: does it start with something the reader *does*, or with
+something that is *the case*? A page may carry statements — but not in the
+hero, not in the problem section, and never as the headline.
+
+## Names, not paraphrases — the feature list, then the page
+
+The feature list comes first (`docs/salespage.md` → *Names, not
+paraphrases*), written from `nav.*`, `config/ai-chat.json` and the app:
+
+| Name — as the app shows it | What it holds | Scope |
+|---|---|---|
+| **Der Kurs** | 5 Blöcke: Gerät, Köder, Gewässer, Technik, der erste Trip | 12 Lektionen |
+| **Gewässer-Suche** | Seen und Flüsse nach Fischart, Saison und Erlaubnis | 140 Gewässer |
+| **Finn**, der KI-Coach | antwortet aus dem Kurs, nie aus dem Netz | 100 Fragen im Monat |
+
+Then the page uses these words, and no others, for them:
+
+| Paraphrased — what a measured page did | Named — what the page says |
+|---|---|
+| Überschrift „Drei Wege hinein" — „Lernen · Suchen · Fragen" | „Was willst du heute?" — **Der Kurs · Die Gewässer-Suche · Frag Finn** |
+| „Der Coach antwortet aus genau diesem Wissen, nie aus dem Netz" | „**Frag Finn, deinen KI-Coach.** Welcher Köder bei Ostwind? Frag einfach — 100 Fragen im Monat." |
+| „Orte und Anbieter" | „Seen, Flüsse, Angelläden und Guides" |
+| *(the search is not mentioned at all)* | „**Gewässer-Suche**: 140 Gewässer nach Fischart, Saison und Erlaubnis" |
+| „Finn liest deine Übung." *(first mention — who is Finn?)* | „**Finn, dein KI-Coach**, liest deine Übung." |
+| „Die Einstufung sagt dir, wo du anfängst." | „Ein kurzer Test, die **Einstufung**, sagt dir, wo du anfängst." |
+| „Finn prüft deinen Plan." *(the app's card says „Plan-Check", no name)* | „Der **Plan-Check** sieht deinen Plan durch, bevor du losfährst." |
+
+Test: read only the bold words on the page — can the visitor list what they
+get? Every row of the feature list appears on the page by name at least once,
+and every count is the app's own.
+
+## A revision round, worked
+
+Operator: „Zu viele Zahlen, das liest sich wie ein Kostenvoranschlag."
+
+Wrong answer: a new problem paragraph with fewer numbers. Right answer —
+principle, whole page, table:
+
+> **Principle:** the problem is shown, not proved — no number before the offer
+> block. Written into `docs/marketing/voice.md`.
+>
+> | Section | Changed | Why / why not |
+> |---|---|---|
+> | Hero | subline: „40 € Angelkarte" out, „der Platz, von dem dir jemand beim Einpacken erzählt" in | carried a price |
+> | Problem | rewritten: three pictures, no number | the section the remark was about |
+> | Benefits | unchanged | already outcomes, no numbers |
+> | What's inside | unchanged — „12 Lektionen", „140 Gewässer" stay | these numbers sell; the principle is "no number in the pain", not "no numbers" |
+> | Offer block | unchanged | the price belongs here |
+> | FAQ | answer 5 shortened: „meist unter 50 €" out | a cost inside a reassurance |
+>
+> Discarded so far: „Vom Ufer aus gesehen" (round 1, too vague), „Fang mehr,
+> such weniger" (round 2 — you said: too loud). Neither comes back.
+
 ## Feature → benefit — the translation table
 
 The move: feature → what the customer can *do* afterwards → why that matters.

@@ -33,6 +33,8 @@ vi.mock("./_transport.mjs", async (importOriginal) => {
 import { UNREACHABLE_REASON } from "../rules.mjs";
 import { liveness } from "./liveness.mjs";
 import { jobs } from "./jobs.mjs";
+import { mail } from "./mail.mjs";
+import { OPS_HEALTH_PATH } from "./_transport.mjs";
 
 const URL_ = "https://app.example.com";
 
@@ -152,5 +154,88 @@ describe("jobs — the silence nobody would otherwise notice", () => {
         "a skip with no reason tells the reader nothing",
       ).toBeTruthy();
     }
+  });
+});
+
+describe("mail — the question a test mail from a laptop cannot answer", () => {
+  // The shared health request is handed over the way `readOpsHealth()` caches
+  // it for one run: on `ctx.shared`. The credential is a real `--env prod` one,
+  // so the probe's own credential branch runs.
+  const CTX = { url: URL_, env: { DIAGNOSTICS_SECRET_PROD: "s" }, askedEnv: "prod", liveness: { state: "clean" } };
+  const withBody = (mailState: unknown) => ({
+    ...CTX,
+    shared: new Map([
+      [
+        OPS_HEALTH_PATH,
+        {
+          ok: true,
+          body: { media: { state: "ok" }, ipn: { state: "ok" }, ...(mailState === undefined ? {} : { mail: mailState }) },
+        },
+      ],
+    ]),
+  });
+  const smtp = { host: "smtp.strato.de", port: 587, ms: 3001, probedAt: "2026-09-16T10:00:00.000Z", source: "boot" };
+  /** Only a probe that RAN carries evidence; narrowed rather than cast. */
+  const evidenceOf = (result: object) => ("evidence" in result ? String(result.evidence) : "");
+
+  it("does not ask when the app is already known to be down", async () => {
+    const result = await mail.run({ ...CTX, liveness: { state: "found" } });
+    expect(result.state).toBe("skipped");
+    expect("reason" in result && result.reason).toBe(UNREACHABLE_REASON);
+  });
+
+  it("says it could not look without the secret", async () => {
+    const result = await mail.run({ ...CTX, env: {} });
+    expect(result.state).toBe("skipped");
+    expect("reason" in result && result.reason).toMatch(/DIAGNOSTICS_SECRET_PROD/);
+  });
+
+  it("skips, with a way forward, when the app's answer has no mail state yet", async () => {
+    const result = await mail.run(withBody(undefined));
+    expect(result.state).toBe("skipped");
+    expect("reason" in result && result.reason).toMatch(/redeploy/);
+    // No version floor in the sentence — nothing in the template names one.
+    expect("reason" in result && result.reason).not.toMatch(/\d+\.\d+\.\d+/);
+  });
+
+  it("🚨 reports a blocked SMTP port as HIGH, naming the server and both ways out", async () => {
+    const result = await mail.run(withBody({ state: "finding", transport: "smtp", code: "timeout", smtp }));
+    expect(result.state).toBe("found");
+    const [found] = "findings" in result ? result.findings : [];
+    expect(found.severity).toBe("high");
+    expect(found.evidence).toContain("smtp.strato.de:587");
+    expect(found.evidence).toContain("at boot");
+    expect(found.why).toMatch(/nobody can sign in/);
+    for (const part of ["mail-setup", "Brevo", "Postmark", "Railway"]) expect(found.fix).toContain(part);
+  });
+
+  it("tells a refused port apart — that is usually the port, not the host", async () => {
+    const result = await mail.run(withBody({ state: "finding", transport: "smtp", code: "refused", smtp }));
+    const [found] = "findings" in result ? result.findings : [];
+    expect(found.title).toMatch(/refuses/);
+    expect(found.fix).toMatch(/SMTP_PORT/);
+  });
+
+  it("is clean with a line saying WHAT it knows, never that mail works", async () => {
+    const https = await mail.run(withBody({ state: "ok", transport: "brevo", code: "httpsTransport", smtp: null }));
+    expect(https.state).toBe("clean");
+    expect(evidenceOf(https)).toMatch(/HTTPS via Brevo/);
+    expect(evidenceOf(https)).toMatch(/test mail/);
+
+    const reachable = await mail.run(
+      withBody({ state: "ok", transport: "smtp", code: "reachable", smtp: { ...smtp, ms: 40, source: "request" } }),
+    );
+    expect(reachable.state).toBe("clean");
+    expect(evidenceOf(reachable)).toContain("smtp.strato.de:587");
+    expect(evidenceOf(reachable)).toMatch(/not a delivery/);
+
+    const none = await mail.run(withBody({ state: "ok", transport: "none", code: "noTransport", smtp: null }));
+    expect(evidenceOf(none)).toMatch(/development sign-in/);
+  });
+
+  it("skips when the app could not check its own transport", async () => {
+    const result = await mail.run(withBody({ state: "unchecked", transport: "smtp", code: "probeFailed", smtp: null }));
+    expect(result.state).toBe("skipped");
+    expect("reason" in result && result.reason).toContain("probeFailed");
   });
 });

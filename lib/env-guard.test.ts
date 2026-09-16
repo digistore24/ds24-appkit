@@ -7,8 +7,14 @@ import {
   isLocalUrl,
   isRealEnvironment,
   checkEnvironment,
+  configuredMailTransport,
+  hasBrevoConfig,
+  hasEmailConfig,
+  hasPostmarkConfig,
+  hasSmtpConfig,
   serverEnv,
 } from "./env-guard";
+import { resolvedFrom } from "./email-from.mjs";
 
 describe("appEnv", () => {
   it("recognizes development (including empty/unknown-local)", () => {
@@ -87,6 +93,11 @@ describe("checkEnvironment", () => {
     const p = checkEnvironment({ ...complete, emailConfigured: false });
     expect(p).toHaveLength(1);
     expect(p[0]).toMatch(/email delivery/);
+    // All three ways out, by their variables — a message naming two of three
+    // sends the reader to the one their host may block.
+    for (const name of ["BREVO_API_KEY", "POSTMARK_SERVER_TOKEN", "SMTP_HOST", "mail-setup"]) {
+      expect(p[0]).toContain(name);
+    }
   });
 
   it("requires mail delivery in STAGING too", () => {
@@ -201,6 +212,36 @@ describe("the origin of outgoing links in a real environment", () => {
     });
     expect(p).toHaveLength(1);
     expect(p[0]).toMatch(/old-domain\.de/);
+  });
+});
+
+describe("mail transport detection", () => {
+  const brevo = { BREVO_API_KEY: "k", BREVO_SENDER: "login@fangfertig.de" };
+
+  it("counts a complete Brevo set as mail delivery, and as nothing else", () => {
+    expect(hasEmailConfig(brevo)).toBe(true);
+    expect(hasBrevoConfig(brevo)).toBe(true);
+    expect(hasPostmarkConfig(brevo)).toBe(false);
+    expect(hasSmtpConfig(brevo)).toBe(false);
+    expect(configuredMailTransport(brevo)).toBe("brevo");
+  });
+
+  it("does not count half a Brevo set", () => {
+    expect(hasEmailConfig({ BREVO_API_KEY: "k" })).toBe(false);
+    expect(hasEmailConfig({ BREVO_SENDER: "login@fangfertig.de" })).toBe(false);
+  });
+
+  it("feeds a Brevo-only environment through the boot guard with its own sender", () => {
+    // The two halves instrumentation.ts hands over, computed the way it does:
+    // a Brevo sender on the app's domain must start, one elsewhere must not.
+    const base = { APP_ENV: "production", AUTH_SECRET: "s", APP_URL: "https://fangfertig.de", MEDIA_DRIVER: "s3", mediaBucketConfigured: true };
+    expect(
+      checkEnvironment({ ...base, emailConfigured: hasEmailConfig(brevo), emailFrom: resolvedFrom(brevo) }),
+    ).toEqual([]);
+    const foreign = { ...brevo, BREVO_SENDER: "someone@gmail.com" };
+    const problems = checkEnvironment({ ...base, emailConfigured: hasEmailConfig(foreign), emailFrom: resolvedFrom(foreign) });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain("gmail.com");
   });
 });
 

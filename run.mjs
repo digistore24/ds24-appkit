@@ -211,7 +211,7 @@ const TASKS = {
   },
   health: {
     group: "Tests & quality",
-    help: "Is the DEPLOYED app healthy — six probes, one verdict, one exit code (--url https://…, --json)",
+    help: "Is the DEPLOYED app healthy — seven probes, one verdict, one exit code (--url https://…, --json)",
     // No `needs`: the same argument `errors` carries. It has to work precisely
     // when the app has fallen over, and it loads the .env itself
     // (scripts/health/check.mjs → import "../lib/env.mjs").
@@ -476,7 +476,7 @@ const TASKS = {
   // ── Mail delivery (sign-in) ───────────────────────────────────────────────
   "mail-setup": {
     group: "Mail delivery",
-    help: "Set up email delivery (Postmark or SMTP) + a test mail",
+    help: "Set up email delivery (Brevo, Postmark or SMTP) + a test mail",
     run: () => script("scripts/dev/mail-setup.mjs"),
   },
 

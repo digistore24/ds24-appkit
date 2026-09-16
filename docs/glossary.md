@@ -100,9 +100,13 @@ touches only your computer or the outside world, and whether it can be undone.
   The skill `setup-hosting` says the price before anything is booked.
 - **Domain** — the address people type, `yourapp.com`. Bought from a
   registrar, pointed at the host.
-- **Mail delivery (Postmark, SMTP)** — the service that sends the app's own
+- **Mail delivery (Brevo, Postmark, SMTP)** — the service that sends the app's own
   mails, sign-in links first of all. Live, the app refuses to start without
-  one.
+  one, and it needs a sender address on your own domain — which is why the
+  domain comes before the first deploy.
+- **SMTP** — the old, direct way of handing a mail to a mail server. Some hosts
+  block it on their cheaper plans; Brevo and Postmark send over the web
+  instead, which no host blocks that way.
 
 ## Money
 

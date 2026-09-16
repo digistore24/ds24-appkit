@@ -529,6 +529,11 @@ function mailSenderCheck() {
   const from = resolvedFrom({
     POSTMARK_SERVER_TOKEN: read("POSTMARK_SERVER_TOKEN"),
     POSTMARK_SENDER: read("POSTMARK_SENDER"),
+    BREVO_API_KEY: read("BREVO_API_KEY"),
+    BREVO_SENDER: read("BREVO_SENDER"),
+    SMTP_HOST: read("SMTP_HOST"),
+    SMTP_USER: read("SMTP_USER"),
+    SMTP_PASSWORD: read("SMTP_PASSWORD"),
     SMTP_FROM: read("SMTP_FROM"),
     EMAIL_FROM: read("EMAIL_FROM"),
   });

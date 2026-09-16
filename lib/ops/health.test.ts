@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA
 // SPDX-License-Identifier: MIT
 
-// The two facts, and the four ways a probe can lie about them.
+// The three facts, and the ways a probe can lie about them.
 //
 // Pure: the store and the queries arrive as `OpsProbes`, so every branch below
 // is reached by handing this file a world rather than by stubbing a module.
@@ -47,6 +47,8 @@ function healthy(overrides: Partial<OpsProbes> = {}): OpsProbes {
     sellingProducts: () => 1,
     recentOrderCount: async () => 3,
     latestIpnAt: async () => daysAgo(1),
+    mailTransport: () => "brevo",
+    smtpReachability: async () => null,
     ...overrides,
   };
 }
@@ -369,7 +371,94 @@ describe("operationalState — the IPN probe", () => {
   });
 });
 
-describe("operationalState — the two are independent", () => {
+describe("operationalState — the mail probe", () => {
+  const snapshot = (over: Record<string, unknown> = {}) => ({
+    host: "smtp.strato.de",
+    port: 587,
+    reachable: true,
+    code: null,
+    ms: 41,
+    probedAt: NOW.toISOString(),
+    source: "boot" as const,
+    ...over,
+  });
+
+  it("answers an HTTPS transport without probing anything", async () => {
+    const probe = vi.fn(async () => snapshot());
+    for (const transport of ["brevo", "postmark"] as const) {
+      const state = await operationalState(
+        { now: NOW },
+        healthy({ mailTransport: () => transport, smtpReachability: probe }),
+      );
+      expect(state.mail).toEqual({ state: "ok", transport, code: "httpsTransport", smtp: null });
+    }
+    expect(probe).not.toHaveBeenCalled();
+  });
+
+  it("says there is no transport, as a DEV app's normal state", async () => {
+    const state = await operationalState({ now: NOW }, healthy({ mailTransport: () => "none" }));
+    expect(state.mail).toEqual({ state: "ok", transport: "none", code: "noTransport", smtp: null });
+  });
+
+  it("reports a reachable SMTP server with where and when it was asked", async () => {
+    const state = await operationalState(
+      { now: NOW },
+      healthy({ mailTransport: () => "smtp", smtpReachability: async () => snapshot() }),
+    );
+    expect(state.mail).toEqual({
+      state: "ok",
+      transport: "smtp",
+      code: "reachable",
+      smtp: { host: "smtp.strato.de", port: 587, ms: 41, probedAt: NOW.toISOString(), source: "boot" },
+    });
+  });
+
+  it("🚨 reports a blocked SMTP port as a finding, with its code", async () => {
+    // The tester's Railway app: every sign-in timed out, every check was green.
+    for (const code of ["timeout", "refused", "dns", "unreachable", "badPort"] as const) {
+      const state = await operationalState(
+        { now: NOW },
+        healthy({
+          mailTransport: () => "smtp",
+          smtpReachability: async () => snapshot({ reachable: false, code, ms: 3000 }),
+        }),
+      );
+      expect(state.mail.state, code).toBe("finding");
+      expect(state.mail.code).toBe(code);
+      expect(state.mail.smtp?.host).toBe("smtp.strato.de");
+    }
+  });
+
+  it("never turns a throw or a contradiction into `ok`", async () => {
+    const thrown = await operationalState(
+      { now: NOW },
+      healthy({
+        mailTransport: () => "smtp",
+        smtpReachability: async () => {
+          throw new Error("connect ETIMEDOUT smtp.strato.de:587 for owner@example.com");
+        },
+      }),
+    );
+    expect(thrown.mail).toEqual({ state: "unchecked", transport: "smtp", code: "probeFailed", smtp: null });
+    expect(JSON.stringify(thrown)).not.toContain("owner@example.com");
+
+    // SMTP configured, yet no host to ask — nothing is known, so nothing is ok.
+    const contradiction = await operationalState(
+      { now: NOW },
+      healthy({ mailTransport: () => "smtp", smtpReachability: async () => null }),
+    );
+    expect(contradiction.mail.state).toBe("unchecked");
+  });
+
+  it("uses the real transport decision and the cached probe by default", () => {
+    // The seam is only worth something if production goes through the same
+    // two functions the boot hook uses.
+    expect(defaultProbes.mailTransport.toString()).toContain("configuredMailTransport");
+    expect(defaultProbes.smtpReachability.toString()).toContain("cachedSmtpProbe");
+  });
+});
+
+describe("operationalState — the three are independent", () => {
   it("a database that is down leaves the media answer intact, and vice versa", async () => {
     const dbDown = await operationalState(
       { now: NOW },
@@ -392,6 +481,20 @@ describe("operationalState — the two are independent", () => {
     );
     expect(storeDown.media.state).toBe("finding");
     expect(storeDown.ipn.state).toBe("ok");
+    expect(storeDown.mail.state).toBe("ok");
+
+    const mailDown = await operationalState(
+      { now: NOW },
+      healthy({
+        mailTransport: () => "smtp",
+        smtpReachability: async () => {
+          throw new Error("EHOSTUNREACH");
+        },
+      }),
+    );
+    expect(mailDown.mail.state).toBe("unchecked");
+    expect(mailDown.media.state).toBe("ok");
+    expect(mailDown.ipn.state).toBe("ok");
   });
 
   it("🚨 the needle: everything throwing produces no `ok` at all — and a healthy app does", async () => {
@@ -423,12 +526,20 @@ describe("operationalState — the two are independent", () => {
       latestIpnAt: async () => {
         throw new Error("boom");
       },
+      mailTransport: () => {
+        throw new Error("boom");
+      },
+      smtpReachability: async () => {
+        throw new Error("boom");
+      },
     });
     expect(everythingBroken.media.state).not.toBe("ok");
     expect(everythingBroken.ipn.state).not.toBe("ok");
+    expect(everythingBroken.mail.state).not.toBe("ok");
 
     const fine = await operationalState({ now: NOW }, healthy());
     expect(fine.media.state).toBe("ok");
     expect(fine.ipn.state).toBe("ok");
+    expect(fine.mail.state).toBe("ok");
   });
 });

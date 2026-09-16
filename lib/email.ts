@@ -1,25 +1,32 @@
 // Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA
 // SPDX-License-Identifier: MIT
 
-// Email delivery for the magic-link sign-in. Two transports, chosen by env:
-//   1) Postmark  — POSTMARK_SERVER_TOKEN + POSTMARK_SENDER (verified sender)
-//   2) SMTP      — SMTP_HOST/PORT/USER/PASSWORD (+ optional SMTP_SECURE, SMTP_FROM)
+// Email delivery for the magic-link sign-in. Three transports, chosen by env:
+//   1) Brevo     — BREVO_API_KEY + BREVO_SENDER (HTTPS, EU-hosted)
+//   2) Postmark  — POSTMARK_SERVER_TOKEN + POSTMARK_SENDER (HTTPS, US-hosted)
+//   3) SMTP      — SMTP_HOST/PORT/USER/PASSWORD (+ optional SMTP_SECURE, SMTP_FROM)
+// The numbering is the recommendation, not the precedence: when more than one
+// is complete, Postmark wins, then Brevo, then SMTP (`mailTransport()` in
+// lib/email-from.mjs, which is the one place that decides).
 //
-// If neither is configured, the email sign-in is disabled (the sign-in page
-// then does not show it). nodemailer is loaded at runtime only (the SMTP path)
-// — never import it in auth.config.ts (that config is shared with proxy.ts and
-// has to stay free of Node-only dependencies).
+// If none is configured, the email sign-in is disabled (the sign-in page then
+// does not show it). The sending itself is `lib/mail-send.mjs`, which loads
+// nodemailer at runtime only (the SMTP path) — never import either in
+// auth.config.ts (that config is shared with proxy.ts and has to stay free of
+// Node-only dependencies).
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { guardSignInLink } from "@/lib/auth/link-context";
 
 import type { Provider } from "next-auth/providers";
 import {
+  hasBrevoConfig,
   hasPostmarkConfig,
   hasSmtpConfig,
   hasEmailConfig,
 } from "@/lib/env-guard";
 import { resolvedFrom } from "@/lib/email-from.mjs";
+import { sendMail } from "@/lib/mail-send.mjs";
 import { availableLegalPages, legalDocument } from "@/lib/legal/pages";
 import { parse as parseLegalMarkdown } from "@/lib/legal/markdown";
 import { DEFAULT_LOCALE, isLocale, type Locale } from "@/i18n/config";
@@ -49,6 +56,10 @@ function appName(): string {
 // is exactly one source of truth.
 export function isPostmarkConfigured(): boolean {
   return hasPostmarkConfig(process.env);
+}
+
+export function isBrevoConfigured(): boolean {
+  return hasBrevoConfig(process.env);
 }
 
 export function isSmtpConfigured(): boolean {
@@ -430,51 +441,12 @@ export interface Mail {
   html: string;
 }
 
-async function sendViaPostmark(mail: Mail): Promise<void> {
-  const res = await fetch("https://api.postmarkapp.com/email", {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      "X-Postmark-Server-Token": process.env.POSTMARK_SERVER_TOKEN as string,
-    },
-    body: JSON.stringify({
-      From: emailFrom(),
-      To: mail.to,
-      Subject: mail.subject,
-      HtmlBody: mail.html,
-      TextBody: mail.text,
-      MessageStream: process.env.POSTMARK_MESSAGE_STREAM || "outbound",
-    }),
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!res.ok) {
-    throw new Error(`Postmark delivery failed (HTTP ${res.status}): ${await res.text()}`);
-  }
-}
-
-async function sendViaSmtp(mail: Mail): Promise<void> {
-  const nodemailer = await import("nodemailer");
-  const transport = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: process.env.SMTP_SECURE === "true", // true = 465, otherwise STARTTLS
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD },
-  });
-  await transport.sendMail({
-    to: mail.to,
-    from: emailFrom(),
-    subject: mail.subject,
-    text: mail.text,
-    html: mail.html,
-  });
-}
-
-/** Hands one finished message to whichever transport is configured. */
+/**
+ * Hands one finished message to whichever transport is configured — the same
+ * path the wizard's test mail takes (`lib/mail-send.mjs`).
+ */
 async function deliver(mail: Mail): Promise<void> {
-  if (isPostmarkConfigured()) return sendViaPostmark(mail);
-  if (isSmtpConfigured()) return sendViaSmtp(mail);
-  throw new Error("No email transport configured (Postmark or SMTP).");
+  await sendMail(process.env, { from: emailFrom(), ...mail });
 }
 
 /** The sign-in mail's layout, assembled from finished texts. */

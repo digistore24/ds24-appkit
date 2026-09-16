@@ -106,6 +106,7 @@ const jobRow = (over: Record<string, unknown> = {}) => ({
 const healthyOps = (over: Record<string, unknown> = {}) => ({
   checkedAt: NOW.toISOString(),
   media: { state: "ok", driver: "s3", code: "answered", ms: 4 },
+  mail: { state: "ok", transport: "brevo", code: "httpsTransport", smtp: null },
   ipn: {
     state: "ok",
     code: "recent",

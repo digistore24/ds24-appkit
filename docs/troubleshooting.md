@@ -416,7 +416,7 @@ without it the first person to learn of the interstitial is a customer.
 The symptom: in STAGING or PROD the app refuses to start, and the message
 names the sender address, the app's domain and this rule. That is the guard
 for the section above doing its job (`lib/env-guard.ts`): the From of the
-sign-in mails (`POSTMARK_SENDER` / `SMTP_FROM` / `EMAIL_FROM`) lives on a
+sign-in mails (`BREVO_SENDER` / `POSTMARK_SENDER` / `SMTP_FROM` / `EMAIL_FROM`) lives on a
 different domain than `APP_URL`, or a mail transport is configured with no
 sender at all — which would send as `login@localhost`.
 
@@ -429,6 +429,41 @@ If the foreign sender is a deliberate, informed decision, set
 [`docs/auth-setup.md`](auth-setup.md) → *the sender rule*.
 `node run.mjs doctor --deploy` gives the same verdict on your own machine,
 before a deploy ever runs into it.
+
+**If there is no domain of the app's own yet, this is the moment it is
+missing** — typically a STAGING deploy on the host's own address
+(`…up.railway.app`). Nobody can send as that address, and a public mailbox
+address plus the override is the phishing shape this rule exists for. Buy the
+domain, put STAGING on a subdomain of it (`test.your-domain.de`), and the rule
+matches without any exception ([`docs/environments.md`](environments.md)).
+
+## Sign-in mails never arrive on the live app — `Connection timeout`
+
+The symptom: the app is deployed and starts. On the sign-in page the button
+turns, then the browser says *"this page couldn't load"*, or the page says a
+mail is on its way and none arrives. The log says
+
+```
+[auth][error] EmailSignInError: Connection timeout
+```
+
+and, where the app could name the cause, `SMTP <host>:<port> is not reachable
+from this server — the host probably blocks outbound SMTP …` — at boot as
+`[mail] SMTP <host>:<port> is not reachable …`.
+
+The cause is almost never the credentials: **the host does not let outbound
+SMTP out.** Railway blocks it on Free, Trial and Hobby; other hosts do the same
+on some plans. `node run.mjs mail-setup`'s test mail arrived because it left
+from your own machine, whose network allows port 587 — it proved the password,
+not the path.
+
+`node run.mjs health --url https://…` asks the server itself: its `mail` line is
+a HIGH finding naming the server when the port is blocked. The fix is a mail
+service with an HTTPS API, which a host does not block that way:
+`node run.mjs mail-setup` → **Brevo** or **Postmark**, the new variables into
+the host's secrets, the `SMTP_*` ones removed, redeploy. The sender stays on
+the app's own domain either way ([`docs/auth-setup.md`](auth-setup.md) →
+*SMTP on a host*).
 
 ## The sign-in link points at `localhost` — a deployed app nobody can enter
 
@@ -599,6 +634,31 @@ sentence it costs somebody on a large plan is *"run through"*, recorded once as
 the `Pace:` line of `docs/plan.md`. A build that ran forty minutes in one turn
 was the shape that produced this section, reported by a customer whose own
 plan had room for it and who asked what happens to the ones whose does not.
+
+## The language guard — German in, German out
+
+The symptom, from a session's side: after a tool call a line appears in the
+context — *"Customer language: German. Your next line to the customer is German,
+or it is not written."* — and at the end of a turn a closing message in English
+is refused with *"Write that message again, completely, in German"*. That is
+`scripts/dev/hooks/language-guard.mjs`, three Claude Code hooks shipped in
+`.claude/settings.json` (`UserPromptSubmit`, `PostToolUse`, `Stop`).
+
+**What it does:** it recognises the language the customer writes in from their
+own messages, remembers it in `.dev/customer-language` (falling back to
+`docs/app.md` → Language), and names it at the moment a progress line is about
+to be written. A short "ok" or a pasted English error message does not switch a
+German customer to English. English customers get nothing from it.
+
+**Why it exists.** Three build turns on the same German prompt, measured
+2026-09-15: 0, 3 and 24 of the progress lines between tool calls were English,
+with the rule in `CLAUDE.md` the whole time — a progress line is written right
+after an English tool result, and the rule was 150 requests back. No hook sees
+a line before it is shown, so a single English line can still slip through;
+the closing message cannot.
+
+**If it guessed wrong:** write one clear sentence in your language, or delete
+`.dev/customer-language`. Codex, OpenCode and Antigravity run no hooks.
 
 ## The read guard said no — read a range
 

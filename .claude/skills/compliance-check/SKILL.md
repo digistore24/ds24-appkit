@@ -115,6 +115,7 @@ Read from disk first, and say what you found rather than asking about it:
 | Is there a support **assistant**? | `config/ai-chat.json` (`enabled`) — she answers from `content/knowledge/` and is sent nothing about the person |
 | Is there a **companion** — anything that reads, judges or advises on what a customer produced? | `config/ai-companion.json` (`enabled`) **and** the entries in `modules/companion/companions.ts`. `node run.mjs legal-check` reports the switch; each entry's `load()` is the list of customer data that call sends, and it is what §8a and the policy paragraph are drafted from |
 | Which AI company receives data? | `node run.mjs ai-check` |
+| Which mail provider receives every customer's address? | the mail variables at the host — `BREVO_*` (Brevo, EU-hosted), `POSTMARK_*` (Postmark, US-hosted: a third-country transfer) or `SMTP_HOST` (wherever that server sits) |
 | Is there tracking? | grep `app/`, `components/` for analytics — the template ships none |
 | Is there **ingested third-party material**? | `content/knowledge-sources/` — a rights question the Licence Gate at intake already governs (verbatim storage only for own or licensed content; third-party sources are distilled, source cited): [`docs/knowledge.md`](../../../docs/knowledge.md) |
 | What personal data is held? | `docs/data-protection.md` |

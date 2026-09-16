@@ -1,20 +1,24 @@
 // Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA
 // SPDX-License-Identifier: MIT
 
-// The two facts about this app that nothing outside it can answer.
+// The three facts about this app that nothing outside it can answer.
 //
 //   * **does the media store answer** — the bucket this app's customers'
 //     pictures, recordings and downloads live in
 //   * **when did the last IPN arrive** — the payment notification that turns a
 //     purchase into access
+//   * **can the sign-in mail leave** — which transport is configured, and for
+//     SMTP whether this server can open a connection to it at all
 //
 // Everything else an operator wants to know about a deployed app is already
 // answerable from outside: `/api/healthz` says it is up, `/api/readyz` says the
 // database answers, `/api/cron?list` says what the scheduler did, and
-// `/api/diagnostics/errors` says what a 200 is hiding. These two are not, and
-// the reason is the same for both: the credentials are the HOST's. An operator's
-// laptop has neither the production bucket keys nor a production connection
-// string, and `docs/DEPLOY.md` is written so it never needs them.
+// `/api/diagnostics/errors` says what a 200 is hiding. These three are not, and
+// the reason is the same for all of them: the answer lives on the HOST. An
+// operator's laptop has neither the production bucket keys nor a production
+// connection string — and for the mail, the laptop's network is exactly the
+// wrong one to ask: several hosts block outbound SMTP that every home
+// connection lets through (tester feedback 2026-09-16, Railway below Pro).
 //
 // ── It returns FACTS. It says nothing ──────────────────────────────────────
 //
@@ -53,7 +57,8 @@ import { db } from "@/db";
 import { ipnEvents, orders } from "@/db/schema";
 import { desc, gte } from "drizzle-orm";
 
-import { appEnv } from "@/lib/env-guard";
+import { appEnv, configuredMailTransport, type MailTransport } from "@/lib/env-guard";
+import { cachedSmtpProbe } from "@/lib/diagnostics/smtp-probe.mjs";
 import { allProducts, productIdsOf, type SyncEnv } from "@/lib/digistore/products";
 import { IPN_LOG_RETENTION_DAYS } from "@/lib/digistore/ipn-log";
 import { isMediaEnabled } from "@/lib/media/config";
@@ -120,6 +125,61 @@ export type IpnCode =
   | "emptyLog"
   | "dbUnreachable";
 
+/**
+ * Why the mail component answered what it did — closed.
+ *
+ *   httpsTransport    Brevo or Postmark: an HTTPS API, which a host does not
+ *                     block the way it blocks SMTP. Whether the key is right is
+ *                     the wizard's test mail's question, not this one
+ *   noTransport       nothing is configured — a DEV app on the development
+ *                     sign-in; STAGING/PROD refuse to start like this
+ *   reachable         SMTP, and this server opened a TCP connection to it.
+ *                     A connection, never a delivery
+ *   timeout           SMTP, and nothing answered — the blocked-port shape
+ *   refused           SMTP, and the server said no — usually a wrong port
+ *   dns               SMTP, and the host name does not resolve
+ *   unreachable       SMTP, and the network had no route
+ *   badPort           `SMTP_PORT` is not a port at all
+ *   probeFailed       the probe itself threw, so nothing is known
+ */
+export type MailCode =
+  | "httpsTransport"
+  | "noTransport"
+  | "reachable"
+  | "timeout"
+  | "refused"
+  | "dns"
+  | "unreachable"
+  | "badPort"
+  | "probeFailed";
+
+/** The SMTP probe's answer as it travels — facts, no error text. */
+export interface SmtpProbeFacts {
+  host: string;
+  port: number;
+  ms: number;
+  probedAt: string;
+  source: "boot" | "request";
+}
+
+export interface MailState {
+  state: OpsComponentState;
+  transport: MailTransport;
+  code: MailCode;
+  /**
+   * Only for SMTP, null otherwise. The host name travels behind
+   * `DIAGNOSTICS_SECRET` because the finding has to say WHICH server is out of
+   * reach; it is a name the operator typed, never a credential.
+   */
+  smtp: SmtpProbeFacts | null;
+}
+
+/** What `cachedSmtpProbe()` hands back (lib/diagnostics/smtp-probe.mjs). */
+export interface SmtpSnapshot extends SmtpProbeFacts {
+  reachable: boolean;
+  code: "timeout" | "refused" | "dns" | "unreachable" | "badPort" | null;
+}
+
 export interface MediaState {
   state: OpsComponentState;
   driver: MediaDriver | "unknown";
@@ -147,6 +207,7 @@ export interface OperationalState {
   checkedAt: string;
   media: MediaState;
   ipn: IpnState;
+  mail: MailState;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -226,9 +287,16 @@ export interface OpsProbes {
   sellingProducts: () => number;
   recentOrderCount: (since: Date) => Promise<number>;
   latestIpnAt: () => Promise<Date | null>;
+  /** Which transport the sign-in mail leaves through. */
+  mailTransport: () => MailTransport;
+  /** The SMTP reachability answer, cached — null when SMTP is not configured. */
+  smtpReachability: () => Promise<SmtpSnapshot | null>;
 }
 
 export const defaultProbes: OpsProbes = {
+  mailTransport: () => configuredMailTransport(process.env),
+  smtpReachability: () =>
+    cachedSmtpProbe(process.env, { source: "request" }) as Promise<SmtpSnapshot | null>,
   mediaProblems: () => mediaStoreProblems(process.env),
   mediaDriver: () => driverFromEnv(process.env),
   mediaEnabled: () => isMediaEnabled(),
@@ -431,9 +499,46 @@ async function probeIpn(probes: OpsProbes, now: Date): Promise<IpnState> {
 }
 
 /**
- * The two facts, measured.
+ * Can the sign-in mail leave this server?
  *
- * Each probe is in its own `try` and neither can throw out of here: a database
+ * For Brevo and Postmark the answer is the transport itself: an HTTPS call goes
+ * where every other request of this app goes. For SMTP it is the cached probe —
+ * reused for five minutes, so whoever holds the secret cannot turn this
+ * endpoint into a connection pump against the operator's mail server.
+ */
+async function probeMail(probes: OpsProbes): Promise<MailState> {
+  let transport: MailTransport = "none";
+  try {
+    transport = probes.mailTransport();
+    if (transport === "none") return { state: "ok", transport, code: "noTransport", smtp: null };
+    if (transport !== "smtp") return { state: "ok", transport, code: "httpsTransport", smtp: null };
+
+    const snapshot = await probes.smtpReachability();
+    if (!snapshot) {
+      // SMTP is the transport, yet the probe found no host to ask. Not "ok":
+      // that combination is a contradiction, and a contradiction is unchecked.
+      return { state: "unchecked", transport, code: "probeFailed", smtp: null };
+    }
+    const smtp: SmtpProbeFacts = {
+      host: snapshot.host,
+      port: snapshot.port,
+      ms: snapshot.ms,
+      probedAt: snapshot.probedAt,
+      source: snapshot.source,
+    };
+    if (snapshot.reachable) return { state: "ok", transport, code: "reachable", smtp };
+    return { state: "finding", transport, code: snapshot.code ?? "unreachable", smtp };
+  } catch (error) {
+    // 🚨 Never `ok` from here — same rule as the two probes above.
+    console.error("[ops] the mail transport could not be probed:", error);
+    return { state: "unchecked", transport, code: "probeFailed", smtp: null };
+  }
+}
+
+/**
+ * The three facts, measured.
+ *
+ * Each probe is in its own `try` and none can throw out of here: a database
  * that is down must not take the media answer with it, and vice versa. The
  * caller gets a 200 with one component `unchecked`, which is a far more useful
  * answer than a 500.
@@ -446,6 +551,10 @@ export async function operationalState(
   { now }: { now: Date },
   probes: OpsProbes = defaultProbes,
 ): Promise<OperationalState> {
-  const [media, ipn] = await Promise.all([probeMedia(probes), probeIpn(probes, now)]);
-  return { checkedAt: now.toISOString(), media, ipn };
+  const [media, ipn, mail] = await Promise.all([
+    probeMedia(probes),
+    probeIpn(probes, now),
+    probeMail(probes),
+  ]);
+  return { checkedAt: now.toISOString(), media, ipn, mail };
 }

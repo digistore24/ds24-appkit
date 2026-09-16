@@ -10,7 +10,7 @@
 // the fixture below is the actual output of a Next 16 dev server that rendered
 // `format.dateTime()` on a string — the bug this command was written for.
 import { describe, expect, it } from "vitest";
-import { parseErrors } from "./parse.mjs";
+import { parseErrors, renderFindings } from "./parse.mjs";
 
 /**
  * A real log excerpt. Note the shapes that a naive parser gets wrong:
@@ -251,5 +251,53 @@ Error: FORMATTING_ERROR: Invalid time value
       "MISSING_MESSAGE: Could not resolve `admin.title`",
       "FORMATTING_ERROR: Invalid time value",
     ]);
+  });
+
+  // Tester feedback 2026-09-16: an app on a host that blocks outbound SMTP
+  // logged this on every sign-in, and `errors --url` gave no direction. The
+  // lines are Auth.js's own logger output, colour codes included — it colours
+  // its prefix whether or not anything is a terminal.
+  describe("a sign-in mail that could not leave", () => {
+    const R = "\x1b[31m";
+    const Z = "\x1b[0m";
+    const log = [
+      `${R}[auth][error]${Z} EmailSignInError: Connection timeout`,
+      "Read more at https://errors.authjs.dev#emailsigninerror",
+      `${R}[auth][cause]${Z}: Error: Connection timeout`,
+      "    at SMTPConnection._formatError (node_modules/nodemailer/lib/smtp-connection/index.js:809:19)",
+      `${R}[auth][details]${Z}: {`,
+      '  "provider": "nodemailer"',
+      "}",
+    ].join("\n");
+
+    it("is found, through the colour codes and the stacked prefixes", () => {
+      const found = parseErrors(log);
+      expect(found.map((finding) => finding.message)).toEqual([
+        "[auth][error] EmailSignInError: Connection timeout",
+        "[auth][cause]: Error: Connection timeout",
+      ]);
+    });
+
+    it("points at the host's SMTP block, not at the database", () => {
+      const body = renderFindings(parseErrors(log)).body.join("\n");
+      expect(body).toMatch(/block outbound SMTP/);
+      expect(body).toMatch(/Brevo or\s+Postmark/);
+      expect(body).not.toMatch(/the database\?/);
+    });
+
+    it("still gives a refused database the database hint", () => {
+      const body = renderFindings(
+        parseErrors("Error: connect ECONNREFUSED 127.0.0.1:5432\n    at x (lib/db.ts:1:1)\n"),
+      ).body.join("\n");
+      expect(body).toMatch(/the database\?/);
+    });
+
+    it("stays quiet about Auth.js's warnings and the probe's success line", () => {
+      const quiet = [
+        `\x1b[33m[auth][warn][debug-enabled]${Z} Read more: https://warnings.authjs.dev`,
+        "• Mail: SMTP smtp-relay.brevo.com:587 reachable (41 ms)",
+      ].join("\n");
+      expect(parseErrors(quiet)).toEqual([]);
+    });
   });
 });

@@ -94,7 +94,7 @@
     "errorTitle": "Anmeldung fehlgeschlagen",
     "errorBody": "Der Anmelde-Link ist abgelaufen oder wurde schon benutzt. Fordere unten einen neuen an.",
     "missingTitle": "Kein Login-Verfahren konfiguriert",
-    "missingBody": "Hinterlege einen E-Mail-Versand (Postmark oder SMTP) — optional Google. Siehe <code>docs/auth-setup.md</code> und <code>.env.example</code>.",
+    "missingBody": "Hinterlege einen E-Mail-Versand (Brevo, Postmark oder SMTP) — optional Google. Siehe <code>docs/auth-setup.md</code> und <code>.env.example</code>.",
     "backHome": "Zurück zur Startseite",
     "passwordLabel": "Kennwort",
     "passwordFailedTitle": "Anmeldung fehlgeschlagen",

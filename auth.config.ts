@@ -8,8 +8,8 @@
 // HAS to be edge-safe — it stays that way anyway: it sits in front of every
 // matched request, and a database or mail dependency has no business there.
 // Only such providers live here. The email magic-link provider
-// (Postmark/SMTP) is added in auth.ts (Node runtime) — see lib/email.ts.
-//   - email token sign-in (default) → Postmark OR SMTP (setup: docs/auth-setup.md)
+// (Brevo/Postmark/SMTP) is added in auth.ts (Node runtime) — see lib/email.ts.
+//   - email token sign-in (default) → Brevo, Postmark OR SMTP (setup: docs/auth-setup.md)
 //   - Google OAuth (optional)       → GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
 import type { NextAuthConfig } from "next-auth";
 import Google from "next-auth/providers/google";

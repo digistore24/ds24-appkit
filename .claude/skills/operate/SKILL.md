@@ -246,14 +246,15 @@ not configured exits 2 with the key it wants (`SETUP_KEY`, `SETUP_KEY_PROD`) —
 ## 6 · `reach` — what a stranger gets
 
 ```bash
-node run.mjs health --url https://your-app    # six probes, one verdict
+node run.mjs health --url https://your-app    # seven probes, one verdict
 node run.mjs smoke  --url https://your-app    # every page, called once
 ```
 
 `health --url` is the one that asks together: is it answering at all
 (`/api/healthz`), does its database answer (`/api/readyz`), is anything scheduled
 failing or stalled, what are its pages hiding behind a 200, does the media store
-answer, and when did the last payment notification arrive.
+answer, when did the last payment notification arrive, and can the sign-in mail
+leave the server.
 
 **`/api/healthz` and `/api/readyz` are what an uptime checker is pointed at** —
 that is the skill `setup-monitoring`, and it is something OUTSIDE the app, since
@@ -265,8 +266,8 @@ them by hand; `health --url` is what asks them from here.
 sign-in once with `node run.mjs smoke-account --apply` and run it again.
 `health`'s exit **2** means *there was no address to ask*: it prints
 `✗ Could not look — …` and never a `✓`. An unreachable app is an **answer** —
-one CRITICAL from `liveness` and the other five reporting `⏭ NOT ASKED` with
-that as their reason, which is one fact reported once rather than five timeouts.
+one CRITICAL from `liveness` and the other six reporting `⏭ NOT ASKED` with
+that as their reason, which is one fact reported once rather than six timeouts.
 And *"there is nothing to check"* is a `✓` **with its evidence line**, never a
 bare tick: an app that has sold nothing has no payment notification to miss.
 

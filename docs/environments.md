@@ -14,16 +14,27 @@ set — that is fine as long as they test (test purchases against the dev set,
 `node run.mjs smoke`/`errors`, and go-live's live checks). A staging set earns
 its place when real people test on a public domain before the launch.
 
+**Every environment that is not DEV needs the app's own domain — STAGING
+included.** Not for the address: for the sign-in mails' sender, which has to
+live on the app's domain or STAGING refuses to start
+([`docs/auth-setup.md`](auth-setup.md) → the sender rule). A host's own address
+(`…up.railway.app`) is a public hostname the rule judges, and nobody can send
+mail as it; a public mailbox address as the sender is refused by the mail
+services and filed as spam. So STAGING runs on a subdomain of the real domain —
+`test.your-domain.de` — and the domain is bought before the first STAGING
+deploy, not before the launch. It is the one cost of a test go-live that no
+plan of any host removes.
+
 | What | DEV (local) | STAGING (optional) | PROD |
 |-----|-------------|--------------------|------|
-| `APP_URL` | `http://localhost:3000` | staging domain | live domain |
+| `APP_URL` | `http://localhost:3000` | a subdomain of your own domain (`https://test.your-domain.de`) | your own domain |
 | `DATABASE_URL` | local Postgres (Docker) | staging DB | prod DB |
 | Products (`productIds.<env>`) | own set, names carry ` [DEV]` | own set, ` [STAGING]` | own set, clean names |
 | Thank-you/IPN target | Cloudflare Quick Tunnel / redirect → localhost | `APP_URL_STAGING` | `APP_URL_PROD` (or `APP_URL` on the host) |
 | IPN connection | own (`DIGISTORE_IPN_DOMAIN_ID`, scoped to the dev ids) | own | own |
 | Payments | **DS24 test purchases** | test purchases | real purchases |
 | Marketplace approval | not needed | not needed | **the** approval (prod set only) |
-| Mail delivery | optional | **mandatory** | **mandatory** |
+| Mail delivery | optional | **mandatory**, sender on your domain | **mandatory**, sender on your domain |
 | Sign-in without a mail account | **yes** (development sign-in) | no | no |
 
 All sets live in one vendor account, told apart by the internal name

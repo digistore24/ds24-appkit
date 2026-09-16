@@ -94,7 +94,7 @@
     "errorTitle": "Échec de la connexion",
     "errorBody": "Le lien de connexion a expiré ou a déjà été utilisé. Demandes-en un nouveau ci-dessous.",
     "missingTitle": "Aucune méthode de connexion configurée",
-    "missingBody": "Configure un envoi d'e-mails (Postmark ou SMTP) — Google est facultatif. Voir <code>docs/auth-setup.md</code> et <code>.env.example</code>.",
+    "missingBody": "Configure un envoi d'e-mails (Brevo, Postmark ou SMTP) — Google est facultatif. Voir <code>docs/auth-setup.md</code> et <code>.env.example</code>.",
     "backHome": "Retour à la page d'accueil",
     "passwordLabel": "Mot de passe",
     "passwordFailedTitle": "Échec de la connexion",

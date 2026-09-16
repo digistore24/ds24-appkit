@@ -31,8 +31,11 @@ its `keyword_absence` type is the inverse). Read the field's own wording instead
 copying a value: the wrong way round is a check that is green exactly while the app
 is down. Per provider: `setup-monitoring` → `references/providers.md`.
 
-`node run.mjs health --url https://YOUR-DOMAIN` asks these two plus the database, the
-jobs, the media store and the last payment notification, and gives one verdict.
+`node run.mjs health --url https://YOUR-DOMAIN` asks these two plus the scheduled jobs,
+what the pages hide behind a 200, the media store, the last payment notification and
+whether the sign-in mail can leave the server — seven probes, one verdict. 🚨 **Read its `mail` line before you open the
+sign-in mail below**: on a host that blocks SMTP it is the only line that is not
+green, and the sign-in test would otherwise just wait for a mail that never comes.
 
 ## Give smoke a way in — once
 

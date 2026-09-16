@@ -57,8 +57,12 @@ Produce concrete content and put it under `docs/marketing/`:
   Write spoken text the user can record word for word; keep it concrete and in
   the language of the target audience.
 
-Adapt the tone to the target audience. Do not invent false claims/
-testimonials — mark placeholders (e.g. "[insert real customer quote]").
+Adapt the tone to the target audience — and if `docs/marketing/voice.md`
+exists (the `salespage` skill writes it from a text the operator gave), THAT is
+the tone: every mail and post follows it, so the page and the mails sound like
+one person. If it does not exist yet, write it first, the same five to eight
+lines, from a text of theirs. Do not invent false claims/testimonials — mark
+placeholders (e.g. "[insert real customer quote]").
 
 **One thing to do once, when this phase is finished:** if `app/page.tsx` still
 carries a weaker page than this document — the template's placeholder, or a

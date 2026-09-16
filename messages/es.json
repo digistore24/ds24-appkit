@@ -94,7 +94,7 @@
     "errorTitle": "Error al iniciar sesión",
     "errorBody": "El enlace de acceso ha caducado o ya se ha utilizado. Solicita uno nuevo abajo.",
     "missingTitle": "Ningún método de inicio de sesión configurado",
-    "missingBody": "Configura un envío de correo (Postmark o SMTP) — Google es opcional. Consulta <code>docs/auth-setup.md</code> y <code>.env.example</code>.",
+    "missingBody": "Configura un envío de correo (Brevo, Postmark o SMTP) — Google es opcional. Consulta <code>docs/auth-setup.md</code> y <code>.env.example</code>.",
     "backHome": "Volver a la página de inicio",
     "passwordLabel": "Contraseña",
     "passwordFailedTitle": "Error al iniciar sesión",

@@ -1,19 +1,25 @@
 // Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA
 // SPDX-License-Identifier: MIT
 
-// The two facts about a DEPLOYED app that nothing outside it can answer.
+// The three facts about a DEPLOYED app that nothing outside it can answer.
 //
 //   GET /api/diagnostics/health
 //
 // `Authorization: Bearer <DIAGNOSTICS_SECRET>`. Read it with
 // `node run.mjs health --url https://your-app`, which asks this endpoint once
-// and turns its two answers into two of its six probes.
+// and turns its three answers into three of its seven probes.
 //
 // Everything else that command asks is public or already has an endpoint:
 // `/api/healthz`, `/api/readyz`, `/api/cron?list`, `/api/diagnostics/errors`.
-// These two are here because the credentials are the HOST's — an operator's
+// These three are here because the answer lives on the HOST — an operator's
 // laptop has neither the production bucket keys nor a production connection
-// string, and `docs/DEPLOY.md` is written so it never needs them.
+// string, and for the mail its network is the wrong one to ask: a host that
+// blocks outbound SMTP lets a home connection through (lib/ops/health.ts).
+//
+// The mail answer carries `SMTP_HOST` and its port. That is argued, not
+// slipped in: the finding has to say WHICH server is out of reach, the value is
+// a name the operator typed and never a credential, and it travels behind the
+// same secret as everything else here.
 //
 // ── It guards itself, and off is indistinguishable from never built ────────
 // `proxy.ts` matches `/dashboard` only, so everything under `app/api/` is public

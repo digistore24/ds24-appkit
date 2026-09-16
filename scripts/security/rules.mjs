@@ -443,7 +443,7 @@ export function failsVerdict(counts) {
  * What the shipped ladder calls its steps, and where its judgement half lives.
  *
  * Both are defaults rather than constants because a SECOND ladder exists since
- * 0.24.0 — `node run.mjs health` runs six probes on this same interface and
+ * 0.24.0 — `node run.mjs health` runs seven probes on this same interface and
  * would otherwise close with *"the judgement half is the skill:
  * security-gateway"*, which is the wrong skill for "your app is down".
  *

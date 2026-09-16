@@ -80,6 +80,16 @@ export const COMPACT_GREETER = `${GREETER} --after-compact`;
  */
 export const READ_GUARD = "node scripts/dev/hooks/read-guard.mjs";
 
+/**
+ * The language guard — Claude Code only, for the same reason as the read guard.
+ * Three events, one script: the customer's prompt (recognise and remember the
+ * language), every tool result (say it right where a progress line is about to
+ * be written), and the end of the turn (refuse, once, a closing message in
+ * another language). The rule is CLAUDE.md → Rules; the measurement — 0, 3 and
+ * 24 English progress lines in three German build turns — is in the header.
+ */
+export const LANGUAGE_GUARD = "node scripts/dev/hooks/language-guard.mjs";
+
 const claudeSettings = `{
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "hooks": {
@@ -114,6 +124,36 @@ const claudeSettings = `{
           {
             "type": "command",
             "command": ${JSON.stringify(READ_GUARD)}
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ${JSON.stringify(`${LANGUAGE_GUARD} --prompt`)}
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ${JSON.stringify(`${LANGUAGE_GUARD} --post`)}
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ${JSON.stringify(`${LANGUAGE_GUARD} --stop`)}
           }
         ]
       }

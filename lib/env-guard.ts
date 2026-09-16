@@ -20,7 +20,7 @@
 
 export type AppEnv = "development" | "staging" | "production";
 
-import { senderDomainProblem } from "./email-from.mjs";
+import { mailTransport, senderDomainProblem } from "./email-from.mjs";
 import { authUrlProblem } from "./auth/auth-url.mjs";
 
 // --- Detecting the mail transport ----------------------------------------
@@ -32,6 +32,8 @@ import { authUrlProblem } from "./auth/auth-url.mjs";
 export interface MailEnv {
   POSTMARK_SERVER_TOKEN?: string;
   POSTMARK_SENDER?: string;
+  BREVO_API_KEY?: string;
+  BREVO_SENDER?: string;
   SMTP_HOST?: string;
   SMTP_USER?: string;
   SMTP_PASSWORD?: string;
@@ -39,17 +41,32 @@ export interface MailEnv {
   [key: string]: string | undefined;
 }
 
+/**
+ * The configured transport, or "none". The decision itself lives in
+ * `lib/email-from.mjs` (zero imports, shared with the scripts); the names
+ * below are the TS-facing view of it, so there is one rule and not four.
+ */
+export type MailTransport = "postmark" | "brevo" | "smtp" | "none";
+
+export function configuredMailTransport(env: MailEnv): MailTransport {
+  return mailTransport(env);
+}
+
 export function hasPostmarkConfig(env: MailEnv): boolean {
-  return Boolean(env.POSTMARK_SERVER_TOKEN && env.POSTMARK_SENDER);
+  return mailTransport(env) === "postmark";
+}
+
+export function hasBrevoConfig(env: MailEnv): boolean {
+  return mailTransport(env) === "brevo";
 }
 
 export function hasSmtpConfig(env: MailEnv): boolean {
-  return Boolean(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASSWORD);
+  return mailTransport(env) === "smtp";
 }
 
 /** true if at least one transport is fully configured. */
 export function hasEmailConfig(env: MailEnv): boolean {
-  return hasPostmarkConfig(env) || hasSmtpConfig(env);
+  return mailTransport(env) !== "none";
 }
 
 export interface EnvCheckInput {
@@ -203,8 +220,10 @@ export function checkEnvironment(env: EnvCheckInput): string[] {
       `APP_ENV=${environment}: No email delivery is configured. ` +
         "In STAGING and PROD it is mandatory — without it nobody could sign " +
         "in, and the development login is deliberately unavailable there. " +
-        "Set up Postmark (POSTMARK_SERVER_TOKEN + POSTMARK_SENDER) " +
-        "or SMTP (SMTP_HOST + SMTP_USER + SMTP_PASSWORD).",
+        "Set up Brevo (BREVO_API_KEY + BREVO_SENDER), " +
+        "Postmark (POSTMARK_SERVER_TOKEN + POSTMARK_SENDER) " +
+        "or SMTP (SMTP_HOST + SMTP_USER + SMTP_PASSWORD) — " +
+        "`node run.mjs mail-setup` walks through it.",
     );
   }
 
@@ -349,8 +368,8 @@ function senderProblem(environment: AppEnv, env: EnvCheckInput): string | null {
     return (
       `APP_ENV=${environment}: A mail transport is configured, but no sender ` +
       'address is set — mails would go out as "login@localhost", which ' +
-      "receiving servers treat as spam at best. Set SMTP_FROM (SMTP) or " +
-      "POSTMARK_SENDER (Postmark), or EMAIL_FROM as the fallback, to an " +
+      "receiving servers treat as spam at best. Set BREVO_SENDER (Brevo), " +
+      "POSTMARK_SENDER (Postmark) or SMTP_FROM (SMTP), or EMAIL_FROM as the fallback, to an " +
       "address on the app's own domain. `node run.mjs mail-setup` does it " +
       "interactively."
     );

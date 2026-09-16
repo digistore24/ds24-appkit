@@ -158,7 +158,7 @@ line flags, raw SQL, dates — are **[`docs/conventions.md`](docs/conventions.md
 - **No secrets in the code.** Read from `process.env` and add new variables to `.env.example`; the operator's Digistore24 credentials are read via `lib/digistore/settings.ts` — never from the database.
 - **No mock/demo fallback** on Digistore API errors — throw errors.
 - **Database changes only via migration.** `db/schema.ts` → `node run.mjs db-generate` → `node run.mjs db-migrate`; the file in `drizzle/` is checked in and never edited again after it has been applied. `db:push` only against an empty local DB, never against staging or production — [`docs/database.md`](docs/database.md).
-- **Environments are binding: DEV / STAGING / PROD** (`APP_ENV`). In STAGING and PROD mail delivery is a start condition, `APP_URL` is another — 🚨 **every link the app MAILS OUT takes its origin from it, never from the request** — and the sign-in mails' sender must live on the app's own domain. The development sign-in (`lib/auth/dev-login.ts`) holds in DEV only, under the four conditions [`docs/environments.md`](docs/environments.md) names: 🚨 **never soften that gate, it is an auth bypass.**
+- **Environments are binding: DEV / STAGING / PROD** (`APP_ENV`). In STAGING and PROD mail delivery is a start condition, `APP_URL` is another — 🚨 **every link the app MAILS OUT takes its origin from it, never from the request** — and the sign-in mails' sender must live on the app's own domain — so even a test go-live needs a domain of its own, bought before the first deploy. The development sign-in (`lib/auth/dev-login.ts`) holds in DEV only, under the four conditions [`docs/environments.md`](docs/environments.md) names: 🚨 **never soften that gate, it is an auth bypass.**
 - **Use the design system — never rebuild anything yourself.** No raw `<button>`, `<input>`, `<select>` or `<table>`, no hand-picked colour classes; what is missing gets fetched with `npx shadcn@latest add <component>`. See **UI**.
 - **All visible text goes through i18n.** Every sentence lives in every `messages/<code>.json` — the languages are `LOCALES` in `i18n/config.ts`, never a pair written out by hand. See **Languages**.
 - **Messages always as a `Callout`** with one of its four intents, never with hand-picked colour classes. What must stay on screen is a `Callout`, what may drift past is a toast — three mechanisms, never a fourth. See **UI**.
@@ -267,8 +267,8 @@ is for, and it exits non-zero so it can gate a "done". 🚨 **`smoke` skips dyna
 own eyes.
 
 The deployed app answers both over `DIAGNOSTICS_SECRET`, and `node run.mjs health --url
-https://…` asks them plus the database, the jobs, the media store and the last payment
-notification. The verdicts in full, what a 200 hides, and why a component is checked
+https://…` asks them plus the database, the jobs, the media store, the last payment
+notification and whether the sign-in mail can leave the server. The verdicts in full, what a 200 hides, and why a component is checked
 this way rather than in a unit test: **[`docs/smoke.md`](docs/smoke.md)**. Errors that
 are not what they look like: **[`docs/troubleshooting.md`](docs/troubleshooting.md)**.
 
@@ -591,6 +591,16 @@ reference is **[`docs/salespage.md`](docs/salespage.md)**.
 
 - **The offer block is not the `/plans` table.** `/plans` is the catalog; the
   salespage features ONE product and links to `/plans` for the comparison.
+- **Names and voice come before the first sentence.** Every feature by the
+  name the app shows (`nav.*`, the assistant's `name` in `config/ai-chat.json`)
+  — explained at its first mention or left out, a stranger has never seen the
+  app, and a name never moves to another feature —
+  the operator's voice written down in `docs/marketing/voice.md`, and a
+  revision answers with a PRINCIPLE applied to every section — never a new
+  sentence for the one they pointed at. Measured 2026-09-14: eight rounds, the
+  headline turned eight times, the problem paragraph never. **And no draft
+  reaches the operator without the Lektorat** — a second reader in a fresh
+  context, `freigegeben` or `zurück` against a fixed list.
 - **Nothing invented** — no made-up testimonials, member numbers, results or
   guarantees (UWG; `compliance-check` takes it seriously). 🚨 **And never promise
   how LONG a members' area lasts** — "für immer", "lebenslang", "lifetime",

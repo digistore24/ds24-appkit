@@ -140,6 +140,8 @@ beforeEach(() => {
   delete process.env.SMTP_HOST;
   delete process.env.SMTP_USER;
   delete process.env.SMTP_PASSWORD;
+  delete process.env.BREVO_API_KEY;
+  delete process.env.BREVO_SENDER;
 
   vi.stubGlobal(
     "fetch",
@@ -182,6 +184,8 @@ afterEach(() => {
   delete process.env.SMTP_HOST;
   delete process.env.SMTP_USER;
   delete process.env.SMTP_PASSWORD;
+  delete process.env.BREVO_API_KEY;
+  delete process.env.BREVO_SENDER;
 });
 
 /** Did any statement at all leave the process? */
@@ -340,6 +344,47 @@ describe("a delivery that fails", () => {
     expect(message).not.toContain("owner1");
 
     delete process.env.EMAIL_FROM;
+  });
+
+  it("🚨 reports numbers over Brevo too — a third provider, the same leak", async () => {
+    // Brevo's refusal body names the recipient the way Postmark's does, and it
+    // reaches the same `catch`. Postmark is removed so the Brevo leg is the one
+    // that runs — `mailTransport()` would pick Postmark first otherwise.
+    delete process.env.POSTMARK_SERVER_TOKEN;
+    delete process.env.POSTMARK_SENDER;
+    process.env.BREVO_API_KEY = "xkeysib-test";
+    process.env.BREVO_SENDER = "post@app.example";
+
+    const brevoPosted: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: { body: string }) => {
+        const body = JSON.parse(init.body) as { to: { email: string }[] };
+        brevoPosted.push(`${url} ${body.to[0].email}`);
+        return {
+          ok: false,
+          status: 400,
+          text: async () => `{"code":"invalid_parameter","message":"email ${body.to[0].email} is blocklisted"}`,
+        };
+      }),
+    );
+
+    probe().owners = [owner(1), owner(2)];
+    const { notifyOperators, NotifyError } = await channel();
+    const thrown = await notifyOperators(DIGEST).then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+    // The Brevo leg really ran.
+    expect(brevoPosted).toEqual([
+      "https://api.brevo.com/v3/smtp/email owner1@example.com",
+      "https://api.brevo.com/v3/smtp/email owner2@example.com",
+    ]);
+    expect(thrown).toBeInstanceOf(NotifyError);
+    const message = (thrown as Error).message;
+    expect(message).toContain("0 of 2");
+    expect(message, "an address reached a message bound for cron_runs").not.toContain("@");
   });
 
   it("one unreachable address does not silence the others", async () => {

@@ -30,10 +30,12 @@ command that gets pasted into the wrong window.
 **Only three things need a human**, and all three because a browser asks a
 person to agree to something:
 
-1. **Creating the account** at the host (and entering a payment method).
+1. **Creating the accounts** — at the registrar for the domain, at the mail
+   service and at the host (and entering a payment method).
 2. **The login in the browser** — `railway login`, `flyctl auth login`. You run
    the command, the browser opens, they confirm.
-3. **The DNS record** for a custom domain, at whoever sells them their domain.
+3. **The DNS records** for their domain, at whoever sells it to them — the
+   CNAME for the host, and the mail service's DKIM/SPF records.
 
 Everything else — CLI install, project creation, database, environment
 variables, migration hook, deploy, verification — is yours. If you catch yourself
@@ -50,7 +52,8 @@ node run.mjs build         # the production build, without errors
 ```
 
 A build that fails locally fails at the host too, only slower and with a worse
-log. And check the mail transport (below) **now**, not after the first deploy.
+log. And settle the domain and the mail service (steps 2 and 3) **now**, not
+after the first deploy.
 
 ## 2. Look the price up, then say it out loud
 
@@ -58,15 +61,32 @@ log. And check the mail transport (below) **now**, not after the first deploy.
 number somebody budgeted on is worse when it is stale than when it is missing.
 So look them up, at the moment you need them.
 
-Before the user books anything, fetch the current pricing page of the hosts in
-play and give **one rough monthly figure** for what this app actually needs:
-**one small always-on instance plus one small Postgres.** Both halves — the
-database is regularly the larger one, and on Fly.io it is several times the app.
-One sentence is enough:
+Before the user books anything, fetch the current pricing pages and give the
+**whole** picture, because a test go-live costs the same four things a launch
+does:
+
+1. **one small always-on instance plus one small Postgres** at the host — both
+   halves; the database is regularly the larger one, and on Fly.io it is
+   several times the app;
+2. **the domain** — a yearly price at a registrar. Small, and the one line no
+   plan of any host removes, which is exactly why it drops out of a plan and
+   then blocks the deploy halfway (step 3);
+3. **the mail service** (Brevo or Postmark) for the app's sign-in volume;
+4. **object storage**, if the app takes files (step 6b) — priced by what is
+   stored and sent out.
+
+Two or three sentences are enough:
 
 > "Running this will cost you roughly X a month at <host> — about this much for
-> the app and this much for the database. There is no free option I would put a
-> real product on; I can explain why if you want."
+> the app and this much for the database — plus about Y a year for the domain
+> and Z for the mail service. That holds for the test run too: there is no free
+> option I would put even a test on, and without a domain the sign-in cannot
+> work at all. I can explain why if you want."
+
+🚨 **Never tell the user a test go-live is free** — not the host, not the mail
+service, not the storage, and not "we can skip the domain for the test". Every
+one of those sentences has been said, and the last one cost a tester three
+accounts and a day.
 
 Two things you may say without looking, because they are about shape and not
 about numbers:
@@ -84,9 +104,27 @@ arrive as a surprise on a credit card statement. It is their money and their
 decision, so if they want the free tier after hearing the risk, do it and say
 once what to watch for.
 
-## 3. Pick a host — one question, not four
+## 3. Pick a host — after the domain and with the mail in mind
 
-Ask **one** question, with a recommendation in it:
+**Two things come before the host, in this order.** The order that feels
+natural — host, deploy, then mail, then a domain "later" — asks the domain
+question with three accounts created and the app refusing to start.
+
+1. **The domain.** Does the user own one for this app? If not, it is bought now
+   — not for the app's address, for the sign-in mails' **sender**: STAGING and
+   PROD refuse to start unless the From lives on the app's domain
+   ([`docs/auth-setup.md`](../../../docs/auth-setup.md) → the sender rule).
+   Nobody can send as the host's own `…up.railway.app`, and a public mailbox
+   address as the sender is refused by Postmark at sign-up, warned against by
+   Brevo, and filed as spam. STAGING then runs on `test.<their-domain>`.
+2. **The mail service, chosen by what the host allows.** Railway blocks outbound
+   SMTP on everything below Pro — there it is **Brevo** (EU-hosted) or
+   **Postmark** (US-hosted, a third-country transfer), never SMTP. On the other
+   hosts, look up whether the plan lets SMTP out before choosing it. Without an
+   opinion from the user, take Brevo: it works on every host and keeps the
+   customers' addresses in the EU.
+
+Then ask **one** question, with a recommendation in it:
 
 > "Do you already have an account at one of these — Railway, Render, Fly.io,
 > DigitalOcean? If not, I would take **Railway**: it is the shortest path from
@@ -94,7 +132,7 @@ Ask **one** question, with a recommendation in it:
 
 | If they say | Take | Because |
 |---|---|---|
-| nothing / no idea | **Railway** | fewest steps, database included, and the cheap database of the four |
+| nothing / no idea | **Railway** | fewest steps, database included, and the cheap database of the four — mail through Brevo or Postmark, since its cheaper plans block SMTP |
 | "you do all of it" | **Fly.io** | every step is a command; the least clicking — but price its database first and say the number, and offer the app-on-Fly-database-elsewhere variant |
 | "I already have DigitalOcean" | **DigitalOcean** | an account they already pay for beats a new one |
 | "I already have Render" | **Render** | fine — warn about Free, both the service and the database |
@@ -166,10 +204,17 @@ one. Ask for it, use it for the deploy, and keep the three rules above.
 login does not exist outside DEV, so without mail nobody could ever sign in —
 including the operator.
 
-So before the deploy: `node run.mjs mail-setup` (Postmark or SMTP,
-`docs/auth-setup.md` for the detail), and the resulting values go to the host
-with everything else. If the user has no sender domain yet, that is a thing to
-solve now, not after the app is online and refusing to boot.
+So before the deploy: `node run.mjs mail-setup` (Brevo, Postmark or SMTP —
+the service step 3 settled; `docs/auth-setup.md` for the detail), and the
+resulting values go to the host with everything else. If the user has no domain
+of their own yet, step 3 was skipped: go back — there is no honest sender
+without one.
+
+🚨 **`mail-setup`'s test mail proves the credentials from THIS machine, never the
+host's network.** A home connection lets port 587 out where a host may not;
+measured 2026-09-16, a test mail arrived while the deployed app on Railway timed
+out on every sign-in. For SMTP, `node run.mjs health --url` after the deploy
+(step 9) is the check that counts — its `mail` line asks the server.
 
 **The startup refusal covers the sender's domain too**: the From must be an
 address on the app's own domain (the one going into `APP_URL`), or
@@ -287,8 +332,10 @@ checking them as five separate questions:
    command / `release_command` / `PRE_DEPLOY` job, running `npm run db:migrate`.
    Not "I will run it by hand after each deploy": that is the step that gets
    skipped, and it is skipped on the deploy that needed it.
-5. **`APP_URL` is the address the app is actually reachable at**, https, no
-   trailing slash — and STAGING/PROD **do not start without it**
+5. **`APP_URL` is the address the app is actually reachable at** — the user's
+   own domain, or `test.<their-domain>` for STAGING, put on at the host as a
+   CNAME; never the host's own `…up.railway.app`, whose name no sender can
+   match. https, no trailing slash — and STAGING/PROD **do not start without it**
    (`lib/env-guard.ts`). 🚨 It is not cosmetic: everything the app MAILS OUT
    takes its origin from it, the sign-in link above all (`AUTH_URL` is derived
    from it at startup, `lib/auth/auth-url.mjs`). `AUTH_TRUST_HOST=true` says
@@ -311,8 +358,9 @@ Create it yourself, against the production `DATABASE_URL`:
 node run.mjs user-create --email <the user's address> --role owner --apply
 ```
 
-Then have them sign in once — through the real mail, which also proves the mail
-transport works.
+Then have them sign in once — through the real mail. If no mail arrives, run
+step 9's `node run.mjs health --url` and read its `mail` line before looking
+anywhere else: on a host that blocks SMTP the sign-in simply waits.
 
 ## 9. Prove it
 
@@ -323,10 +371,15 @@ https://YOUR-DOMAIN/api/readyz      → {"status":"ready"}   (this one asks the
                                       {"status":"not-ready"} when it cannot)
 DATABASE_URL="postgres://…" node run.mjs smoke-account --apply    # once
 node run.mjs smoke --url https://YOUR-DOMAIN
+node run.mjs health --url https://YOUR-DOMAIN                    # read the `mail` line
 ```
 
-🚨 **These two are also what an uptime checker gets pointed at later, and the
-obvious way to configure one is wrong.** Bind such a check to the **status code**,
+**Read `health`'s `mail` line even when everything else is green.** It is the
+one probe that asks whether the sign-in mail can leave the server; a HIGH there
+means nobody will be able to sign in, while every page still answers 200.
+
+🚨 **`/api/healthz` and `/api/readyz` are also what an uptime checker gets pointed
+at later, and the obvious way to configure one is wrong.** Bind such a check to the **status code**,
 and where a body match is offered as well, match `"status":"ready"` **with its
 quotes and its colon** — never the bare word `ready`, which is a substring of
 `not-ready` and therefore matches the failure body too, for ever and in silence.
@@ -376,7 +429,11 @@ Say that in one sentence and start it.
 3. **Install commands come from `doctor --deploy --json`**, never from memory.
 4. **A hosting token never touches the repo, `.env`, or the chat.**
 5. **The migration belongs in the deploy**, not in your good intentions.
-6. **Verify before you report.** healthz, readyz, smoke, and a look at the log.
+6. **Verify before you report.** healthz, readyz, smoke, `health --url` with its
+   `mail` line, and a look at the log.
    "It deployed" is not the same sentence as "it works".
 7. **Secrets go to the host, and stay there.** They are not in the commit that
    sets everything else up.
+8. **The domain comes before the host, the mail service before the deploy.** A
+   test go-live without a domain has no sender, and a mail service chosen before
+   the host may be the one the host blocks.

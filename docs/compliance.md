@@ -151,9 +151,11 @@ Two more that are about people rather than paper:
   people** are constantly occupied with automated processing — or, regardless of
   headcount, if a DSFA is required or you process data commercially for transfer.
 - **Third-country transfers** (Art. 44 ff.) arise the moment a processor sits
-  outside the EEA. For this template that is routinely the AI company and often
-  the host. Standard contractual clauses, or the EU-US Data Privacy Framework
-  where the company is certified.
+  outside the EEA. For this template that is routinely the AI company, often
+  the host, and the mail provider when it is Postmark (US) — every sign-in mail
+  hands it a customer's address and a sign-in link. Brevo (Paris) is the mail
+  transport with no third-country transfer. Standard contractual clauses, or the
+  EU-US Data Privacy Framework where the company is certified.
 
 ---
 

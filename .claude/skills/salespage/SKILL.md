@@ -1,6 +1,6 @@
 ---
 name: salespage
-description: Builds the app's own salespage — replaces the placeholder home page with one that actually sells THIS product — headline, a real visual, honest proof, ONE offer block with a working checkout, an FAQ. Use this when the user says "build my salespage", "my homepage is weak", "the start page still shows the template", "the landing page looks empty", "make the home page sell", or when build-app, `setup-digistore` or `go-to-market` hands over. "Visitors do not buy" has two answers — no traffic is `go-to-market`, a page that does not convert the traffic it gets is this skill.
+description: Builds the app's own salespage — replaces the placeholder home page with one that actually sells THIS product — headline, a real visual, honest proof, ONE offer block with a working checkout, an FAQ. Use this when the user says "build my salespage", "my homepage is weak", "the start page still shows the template", "the landing page looks empty", "make the home page sell", "the text reads like a report", "it does not sound like me", or when build-app, `setup-digistore` or `go-to-market` hands over. "Visitors do not buy" has two answers — no traffic is `go-to-market`, a page that does not convert the traffic it gets is this skill.
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -28,7 +28,11 @@ The decision is the user's, never yours (`docs/guidance.md` → *How a skill wor
   `home.features.*` keys are gone from the page — that is the marker, whatever
   the page renders them as) → somebody already built one. This run is
   an improvement pass: do step 5's stranger test first, report what fails, and
-  propose only the sections that would fix it.
+  propose only the sections that would fix it. If the complaint is the TEXT —
+  it reports, it does not sound like the operator, a buyer cannot tell what
+  they get — step 1b comes first (feature list, style sheet), the Lektorat
+  (step 3c) reads the page AS IT IS for the first measurement, and every
+  round follows step 3b.
 - **An experiment / test app** → skip the whole skill, same boundary as
   everywhere else.
 
@@ -48,6 +52,9 @@ Almost everything this page needs is on disk. Read, in this order:
 | `config/digistore-products.json` | products, prices, the `highlight` entry |
 | `docs/design.md` (if it exists) | tokens, type, composition the page must follow |
 | `docs/marketing/` (if `go-to-market` ran) | finished copy — transplant it, do not rewrite it |
+| `docs/marketing/voice.md` (if it exists) | the operator's voice — every sentence follows it |
+| `config/ai-chat.json` → `name` | the assistant's NAME — the page says "Frag Lia", never "der Assistent" |
+| `nav.*` in `messages/<code>.json`, module and page titles | the names the app gives its features — the page's vocabulary |
 | the app's own pages / course content | section 4's concrete contents |
 
 Then **inventory the imagery the app already owns**: `public/`, the app icon,
@@ -56,8 +63,34 @@ routinely keep every picture behind the paywall while `/` shows three icons —
 what exists decides whether the hero needs anything generated at all.
 
 Ask the user only what no file answers — typically: is there any real proof
-yet (customers, numbers, a story), and is there a house guarantee beyond the
-statutory withdrawal right. Two questions, one sentence each.
+yet (customers, numbers, a story), is there a house guarantee beyond the
+statutory withdrawal right, and — unless `voice.md` exists — a text they wrote
+themselves or a page they want to sound like. Three questions, one sentence
+each.
+
+## Step 1b — The feature list and the style sheet, before any sentence
+
+Two things no file holds ready, and the page fails without both — measured
+twice in September 2026, `docs/salespage.md` → *Names and voice*:
+
+- **The feature list.** One row per feature: the name **as the app shows it**
+  and WHERE (`nav.*`, a card title, the assistant's `name` — the row cites the
+  place), what it holds, read out of the app, and the scope in numbers where
+  config or registry has one. A feature with no name on its own page gets
+  none here, and a name never moves to another feature — not even when the
+  operator says so in the chat. Show it and have it confirmed. From then on
+  the page calls every feature by that name — "Frag Lia", "Wochenplaner",
+  never "Fragen" and "Planen lassen" — and every row appears on the page at
+  least once.
+- **Unknown words are explained or left out.** A stranger has never seen the
+  app: the first mention of a name carries its role ("Finn, dein KI-Coach"),
+  an internal label carries its one-line meaning or stays off the page.
+- **The style sheet.** From the operator's sample, write
+  `docs/marketing/voice.md`: five to eight lines — address, sentence length,
+  what the page does instead of proving, words they use, words and
+  constructions that are out. Show it before the first sentence of copy.
+
+Both worked in [`references/copy-guide.md`](references/copy-guide.md).
 
 ## Step 2 — Propose the sections, then WAIT
 
@@ -107,11 +140,59 @@ on exactly this page:
   and headline examples are in
   [`references/copy-guide.md`](references/copy-guide.md).
 
+And the four that `docs/salespage.md` → *The voice* names because a measured
+page broke all of them: verbs the reader does; the pain shown, not proved — no
+number before the offer block; short main clauses; nothing `voice.md`
+excludes. The draft is a file, not a message: `docs/marketing/salespage-<lang>.md`
+in the operator's language, the feature list at its head, then the sections in
+page order. Read it once against the feature list (every name present, every
+count the app's own), once against `voice.md` (every sentence), and once as a
+stranger (every term not common knowledge explained at its first mention, or
+removed) — then hand it to the Lektorat.
+
+## Step 3c — The Lektorat, before the operator reads a word
+
+A second reader in a fresh context — a subagent where you have one, otherwise
+you, after closing the draft and reading it back from disk — reads the deck
+against [`references/lektorat.md`](references/lektorat.md): understandable
+(short sentences, unknown terms explained or gone), concrete (a scene, not a
+proof; numbers the app's own), problem named then solution named, the
+stranger's five, names, voice, headline, honesty. It writes its verdict into
+the deck under `## Lektorat`: **freigegeben** or **zurück**, one row per
+finding — place, criterion number, finding, one possible fix. You fix every
+*zurück* row and it reads again; three rounds at most, then the open rows go
+to the operator as they stand. Measured 2026-09-16: without this reader a
+page reached the operator that opened with "Finn schaut sie sich an" and never
+said who Finn was — the writer had read it three times and not seen it.
+
 Show the user the headline and the offer-block wording before building — those
-two carry the sale, and they are cheaper to change as text than as a page.
+two carry the sale, and they are cheaper to change as text than as a page —
+together with the Lektorat's verdict and its open Hinweise, in one line each.
+
+## Step 3b — When the text comes back
+
+Feedback names a **principle**, and a principle is applied to **every
+section** — never a new sentence for the one they pointed at. The measured
+page turned its headline eight times in 44 minutes, twice back to a discarded
+version, never touched its problem paragraph, and broke "keine Antithesen"
+two minutes after hearing it. Each round:
+
+1. The principle in one line, written into `voice.md` (an excluded
+   construction goes onto its exclusion list).
+2. Every section re-read against it; what breaks it changes.
+3. The Lektorat reads the revised deck again (step 3c) — the operator's
+   remark changed one principle, the reader checks that the page still holds
+   all the others.
+4. The hand-back is a table — section, changed or unchanged, why — not a page,
+   with the Lektorat's verdict under it.
+5. Discarded variants stay listed with their reason and never come back; a
+   line the operator wrote goes in as written.
 
 ## Step 4 — Build it
 
+The page is built from the **freigegebene** deck — every `home.*` string in
+every `messages/<code>.json` is a line of it, the other languages translated
+from it and read once more (`references/lektorat.md` → *The other languages*).
 Replace `app/page.tsx`'s content section by section — the worked TSX recipes,
 kit-only and token-only, are in
 [`references/sections.md`](references/sections.md). The rules that hold
@@ -140,9 +221,9 @@ node run.mjs errors
 ```
 
 Then look at `/` yourself — both themes, once at ~380 px — and run the
-stranger test from `docs/salespage.md`: *what is this, who is it for, what
-does it cost, why believe you, what do I click* — five answers within one
-scroll. Click the buy button once: in DEV it carries the test-payment
+stranger test from `docs/salespage.md`: *what is this and what do I get, by
+the names the app uses; who is it for; what does it cost; why believe you;
+what do I click* — five answers within one scroll. Click the buy button once: in DEV it carries the test-payment
 parameter by itself, and a button that does not reach a Digistore24 checkout
 form is a finding, not a detail. If a browser tool is available use it;
 otherwise ask the user to open the page and say what they see
@@ -160,8 +241,9 @@ were gated on the membership — the customer caught it, the page had not.
 
 ## Step 6 — Write it down, hand over
 
-One entry in `docs/app.md`: the sections built, where the copy came from, and
-what was decided against (no proof section yet, no FAQ — with the reason).
+One entry in `docs/app.md`: the sections built, where the copy came from,
+that the voice is in `docs/marketing/voice.md` and the approved deck with its
+Lektorat in `docs/marketing/salespage-<lang>.md`, and what was decided against (no proof section yet, no FAQ — with the reason).
 Then name the next step: **`ux-gateway`** (check `first-run`) audits the page
 as a stranger next; **`go-to-market`** comes after go-live for the traffic
 that lands on it.

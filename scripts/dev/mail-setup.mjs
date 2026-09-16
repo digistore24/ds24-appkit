@@ -8,10 +8,19 @@
 // sends a test mail on request. Afterwards the development sign-in disappears
 // automatically and the magic-link sign-in is active.
 //
-// Two ways — exactly ONE of them gets configured:
-//   Postmark  service with a free allowance; needs a server token
-//             and a verified sender address (sender signature).
-//   SMTP      any mail server/mailbox (your own provider's too).
+// Three ways — exactly ONE of them gets configured:
+//   Brevo     a service with an HTTPS API, EU-hosted (Paris); needs an API key
+//             and a sender validated there.
+//   Postmark  a service with an HTTPS API, US-hosted; needs a server token and
+//             a verified sender signature.
+//   SMTP      any mail server/mailbox — but only where the HOST lets outbound
+//             SMTP out, which several do not on their cheaper plans.
+//
+// ⚠️ The test mail goes out from THIS machine. It proves the credentials; it
+// cannot prove the host lets the connection out. For SMTP that gap is real
+// (tester feedback 2026-09-16: the test mail arrived, the deployed app timed
+// out on every sign-in), so the SMTP branch says so before it ends and names
+// the command that asks the server itself.
 //
 // Usage:  node scripts/dev/mail-setup.mjs   (or: node run.mjs mail-setup)
 import { createInterface } from "node:readline/promises";
@@ -22,6 +31,7 @@ import {
   resolvedFrom,
   senderDomainProblem,
 } from "../../lib/email-from.mjs";
+import { sendMail } from "../../lib/mail-send.mjs";
 import { commentEnvValue, setEnvValue } from "../lib/env-write.mjs";
 import "../lib/env.mjs";
 
@@ -107,49 +117,35 @@ function writeEnv(values) {
   for (const [key, value] of Object.entries(values)) setEnvValue(ENV_FILE, key, value);
 }
 
-/** Comments out lines so that two transports are never set at the same time. */
+/**
+ * Comments out lines so that two transports are never set at the same time —
+ * and forgets them in this process too. `.env` was loaded at start, so a
+ * Postmark token commented out in the FILE would otherwise still be in
+ * `process.env`, and the test mail below would go out through Postmark while
+ * the user had just chosen Brevo: the one transport that decides first.
+ */
 function disable(keys) {
-  for (const key of keys) commentEnvValue(ENV_FILE, key);
+  for (const key of keys) {
+    commentEnvValue(ENV_FILE, key);
+    delete process.env[key];
+  }
 }
 
 // Sends a test mail with the values just entered (the caller puts them into
-// process.env via Object.assign beforehand).
+// process.env via Object.assign beforehand) — through the same send path the
+// app uses (lib/mail-send.mjs), so the test takes the road the real mail takes.
 async function sendTestMail(to) {
-  const isPostmark = Boolean(process.env.POSTMARK_SERVER_TOKEN && process.env.POSTMARK_SENDER);
-  // One From resolution for the whole template — lib/email.ts uses the same.
-  const from = resolvedFrom(process.env);
-  const subject = "Test mail from your app";
-  const text = "If you are reading this, mail delivery works.\nThe magic-link sign-in is ready to use now.";
-
-  if (isPostmark) {
-    const res = await fetch("https://api.postmarkapp.com/email", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        "X-Postmark-Server-Token": process.env.POSTMARK_SERVER_TOKEN,
-      },
-      body: JSON.stringify({
-        From: from,
-        To: to,
-        Subject: subject,
-        TextBody: text,
-        MessageStream: process.env.POSTMARK_MESSAGE_STREAM || "outbound",
-      }),
-    });
-    if (!res.ok) throw new Error(`Postmark ${res.status}: ${await res.text()}`);
-    return;
-  }
-
-  const nodemailer = (await import("nodemailer")).default;
-  const transport = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: String(process.env.SMTP_SECURE) === "true",
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD },
+  await sendMail(process.env, {
+    from: resolvedFrom(process.env) ?? "",
+    to,
+    subject: "Test mail from your app",
+    text: "If you are reading this, mail delivery works.\nThe magic-link sign-in is ready to use now.",
   });
-  await transport.sendMail({ from, to, subject, text });
 }
+
+const POSTMARK_KEYS = ["POSTMARK_SERVER_TOKEN", "POSTMARK_SENDER"];
+const BREVO_KEYS = ["BREVO_API_KEY", "BREVO_SENDER"];
+const SMTP_KEYS = ["SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"];
 
 // ---------------------------------------------------------------------------
 
@@ -159,13 +155,19 @@ console.log("The sign-in link (magic link) is sent by email. For that the app");
 console.log("needs a mail account. As long as none is set up, there is the");
 console.log("development sign-in locally — but not in staging and production:");
 console.log("there, mail delivery is mandatory.\n");
-console.log("  1) Postmark  — a service, free allowance, very reliable");
-console.log("  2) SMTP      — your own mail server or your provider's mailbox\n");
+console.log("  1) Brevo     — a service with an HTTPS API, EU-hosted (Paris); works on every host");
+console.log("  2) Postmark  — a service with an HTTPS API, US-hosted; works on every host");
+console.log("  3) SMTP      — your own mail server or your provider's mailbox; only where");
+console.log("                 your host lets outbound SMTP out (Railway does not below Pro)\n");
+console.log("The sender has to be an address on the app's own domain. A public mailbox address");
+console.log("(gmail, gmx, web.de …) is refused by the services and lands in spam where it is not.\n");
 
-const choice = await ask("How would you like to send? (1/2)", "1");
+const choice = (await ask("How would you like to send? (1/2/3)", "1")).toLowerCase();
 
 let values;
-if (choice === "2" || choice.toLowerCase().startsWith("s")) {
+let transport;
+if (choice === "3" || choice.startsWith("s")) {
+  transport = "smtp";
   console.log("\nSMTP credentials (you get them from your mail provider):");
   const host = await askRequired("  Server (SMTP_HOST), e.g. smtp.strato.de", process.env.SMTP_HOST || "");
   const port = await ask("  Port (587 = STARTTLS, 465 = SSL)", process.env.SMTP_PORT || "587");
@@ -181,8 +183,9 @@ if (choice === "2" || choice.toLowerCase().startsWith("s")) {
     SMTP_FROM: from,
     EMAIL_FROM: from,
   };
-  disable(["POSTMARK_SERVER_TOKEN", "POSTMARK_SENDER"]);
-} else {
+  disable([...POSTMARK_KEYS, ...BREVO_KEYS]);
+} else if (choice === "2" || choice.startsWith("p")) {
+  transport = "postmark";
   console.log("\nPostmark credentials (Server → API Tokens):");
   console.log("The sender address has to be verified there as a sender signature.");
   const token = await askRequired("  Server token", process.env.POSTMARK_SERVER_TOKEN || "");
@@ -194,7 +197,19 @@ if (choice === "2" || choice.toLowerCase().startsWith("s")) {
     POSTMARK_MESSAGE_STREAM: stream,
     EMAIL_FROM: sender,
   };
-  disable(["SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"]);
+  disable([...BREVO_KEYS, ...SMTP_KEYS]);
+} else {
+  transport = "brevo";
+  console.log("\nBrevo credentials (your profile → SMTP & API → API Keys — the API key, not an SMTP key):");
+  console.log("The sender address has to be a validated sender there, or on a domain you authenticated.");
+  const key = await askRequired("  API key", process.env.BREVO_API_KEY || "");
+  const sender = await askSender("  Sender address", process.env.BREVO_SENDER || "");
+  values = {
+    BREVO_API_KEY: key,
+    BREVO_SENDER: sender,
+    EMAIL_FROM: sender,
+  };
+  disable([...POSTMARK_KEYS, ...SMTP_KEYS]);
 }
 
 writeEnv(values);
@@ -208,10 +223,33 @@ if (to) {
     console.log(`✓ Test mail sent to ${to}. Have a look in your inbox (spam too).`);
   } catch (e) {
     console.error(`\n✗ Delivery failed: ${e.message}`);
-    console.error("  Check the credentials and run `node run.mjs mail-setup` again.");
+    if (e.cause) {
+      // The connection itself failed (lib/mail-send.mjs wraps only that case),
+      // so the credentials were never even tried — "check the credentials"
+      // would send somebody to the one thing that is not the problem.
+      console.error("  Nothing answered, so the username and password were never tried.");
+      console.error("  On your own machine that is a wrong server name or port, or a network");
+      console.error("  that blocks SMTP. On a host it is usually the host itself.");
+    } else {
+      console.error("  Check the credentials and run `node run.mjs mail-setup` again.");
+    }
     rl.close();
     process.exit(1);
   }
+}
+
+if (transport === "smtp") {
+  // The gap this wizard cannot close from here, said before anybody deploys.
+  console.log(
+    to
+      ? "\n⚠ That was the path from THIS machine. Whether your host lets outbound SMTP"
+      : "\n⚠ A test mail from here would only prove the path from THIS machine. Whether your host lets outbound SMTP",
+  );
+  console.log("  out is not proven by it — several block ports 587 and 465 (Railway does below");
+  console.log("  its Pro plan), and there the app starts and no sign-in mail ever arrives.");
+  console.log("  After the deploy, ask the server itself:");
+  console.log("      node run.mjs health --url https://your-app");
+  console.log("  If its mail line says the server is unreachable, run mail-setup again and pick 1 or 2.");
 }
 
 console.log("\nNext step: node run.mjs restart");
