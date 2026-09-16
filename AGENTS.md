@@ -594,7 +594,8 @@ reference is **[`docs/salespage.md`](docs/salespage.md)**.
 - **Names and voice come before the first sentence.** Every feature by the
   name the app shows (`nav.*`, the assistant's `name` in `config/ai-chat.json`)
   — explained at its first mention or left out, a stranger has never seen the
-  app, and a name never moves to another feature —
+  app, and a name never moves to another feature; one section lists EVERY
+  feature plainly, name and one line, whatever the complaint was —
   the operator's voice written down in `docs/marketing/voice.md`, and a
   revision answers with a PRINCIPLE applied to every section — never a new
   sentence for the one they pointed at. Measured 2026-09-14: eight rounds, the

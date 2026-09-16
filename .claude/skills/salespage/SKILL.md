@@ -27,12 +27,18 @@ The decision is the user's, never yours (`docs/guidance.md` → *How a skill wor
 - **`app/page.tsx` is no longer the shipped placeholder** (the three
   `home.features.*` keys are gone from the page — that is the marker, whatever
   the page renders them as) → somebody already built one. This run is
-  an improvement pass: do step 5's stranger test first, report what fails, and
-  propose only the sections that would fix it. If the complaint is the TEXT —
-  it reports, it does not sound like the operator, a buyer cannot tell what
-  they get — step 1b comes first (feature list, style sheet), the Lektorat
-  (step 3c) reads the page AS IT IS for the first measurement, and every
-  round follows step 3b.
+  an improvement pass, and it runs the same path as a first build, only
+  shorter: **step 1b first, whatever the complaint** — "it does not sell" as
+  much as "it reads like a report" — then the Lektorat (step 3c) reads the
+  page AS IT IS against that list, then step 5's stranger test. Propose what
+  fixes the findings; a page on which a feature-list row is missing gets
+  section 4 in the proposal, marked ✅, every time. Every copy change, even a
+  subline, goes through the deck (step 3) and the Lektorat (3c) before it is
+  built; every later round follows step 3b. Measured 2026-09-16: on "sie
+  verkauft nicht" a session skipped all three, moved the price and the
+  audience up, and left eleven features unnamed until the operator wrote
+  *"simpel die Funktionen — die hast du nur umschrieben und nicht einmal alle
+  aufgeführt"*.
 - **An experiment / test app** → skip the whole skill, same boundary as
   everywhere else.
 
@@ -76,12 +82,16 @@ twice in September 2026, `docs/salespage.md` → *Names and voice*:
 - **The feature list.** One row per feature: the name **as the app shows it**
   and WHERE (`nav.*`, a card title, the assistant's `name` — the row cites the
   place), what it holds, read out of the app, and the scope in numbers where
-  config or registry has one. A feature with no name on its own page gets
+  config or registry has one. Read the APP, not the page you replace: every
+  buyer-visible `nav.*` entry, every module in `config/modules.json` and its
+  pages, every companion card, every activity, what a lesson page carries
+  (worksheet, task), the community's rooms — a row left out says why. A feature with no name on its own page gets
   none here, and a name never moves to another feature — not even when the
   operator says so in the chat. Show it and have it confirmed. From then on
   the page calls every feature by that name — "Frag Lia", "Wochenplaner",
-  never "Fragen" and "Planen lassen" — and every row appears on the page at
-  least once.
+  never "Fragen" and "Planen lassen" — every row appears on the page at
+  least once, and **section 4 lists them all, plainly**: name, one line,
+  scope (`docs/salespage.md` § 4).
 - **Unknown words are explained or left out.** A stranger has never seen the
   app: the first mention of a name carries its role ("Finn, dein KI-Coach"),
   an internal label carries its one-line meaning or stays off the page.
@@ -89,6 +99,8 @@ twice in September 2026, `docs/salespage.md` → *Names and voice*:
   `docs/marketing/voice.md`: five to eight lines — address, sentence length,
   what the page does instead of proving, words they use, words and
   constructions that are out. Show it before the first sentence of copy.
+  The sample was given for its voice: putting its sentences on the page is
+  a question to the operator, not a default.
 
 Both worked in [`references/copy-guide.md`](references/copy-guide.md).
 
@@ -105,7 +117,8 @@ Your home page still sells the template. For <product> I would build:
   1  Hero — "<outcome headline draft>", with <the cover image you already have>  ✅
   2  Problem → promise — from the brief's pain points                            ✅
   3  Benefits — 3 outcomes (not the checkout bullets)                            ✅
-  4  What's inside — your 5 course blocks, with their cover images               ✅
+  4  What you get — all <n> features by name, one line each (the list above)  ✅
+     plus your 5 course blocks, with their cover images
   5  Social proof — you have no reviews yet: founder story, or leave it out
   6  Offer block — <highlight product> at <price>, withdrawal right named,
      buy button on the real checkout                                             ✅
@@ -123,6 +136,9 @@ Three answers, all valid: **numbers** → exactly those; **"you choose"** → th
 unrecorded no is one somebody proposes again next session.
 
 **Do not negotiate a `0`**, and do not reopen the menu after an answer.
+Rows 1, 4 and 6 are the page's spine (`docs/salespage.md` → *The section
+inventory*): when the numbers leave out 4, say in one sentence that a page
+without the list of what the buyer gets has sold an idea, and ask once.
 
 ## Step 3 — Write the copy
 

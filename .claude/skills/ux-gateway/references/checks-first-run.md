@@ -42,7 +42,7 @@ event, and whether this app wants a survey or a nudge around them — is the
 skill **`user-onboarding`**; report the finding here and hand over there when
 the user wants it built.
 
-**Two more named findings, both on `/`:**
+**Three more named findings, all on `/`:**
 
 - **The home page is still the shipped placeholder — or a re-texted one.** The
   tell is structural, not verbal: the three-card grid with the template's
@@ -56,3 +56,7 @@ the user wants it built.
   reused as the offer, six checkmark bullets from the product registry and no
   argument around them. ⚠️ MEDIUM; the offer-block-versus-catalog reasoning is
   `docs/salespage.md` § 6, and the fix is `salespage` too.
+- **The page does not list what the buyer gets.** Open the app's menu and its
+  modules, then the page: a feature the app has (the community, a game, the
+  worksheets) that the page never names, or benefit cards standing in for a
+  list. ⚠️ MEDIUM; `docs/salespage.md` § 4, the fix is `salespage`.

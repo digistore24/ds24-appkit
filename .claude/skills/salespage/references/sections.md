@@ -119,12 +119,38 @@ If icons are wanted, pick one **per benefit** so it means what it sits next to
 — never keep the shipped key/cart/sparkles trio beside new copy. Course covers
 or screenshots per card beat icons where they exist.
 
-## 4 · What's inside (`id="inside"`)
+## 4 · What you get (`id="inside"`)
 
-Numbered cards from the app's real structure; lesson/block cover images via
-`<Figure>` where the app has them. Same `Card` grid as section 3 — with a
-number or cover instead of an icon, and one line of deliverable per block
-("Block 3 — your first rig, with the checklist as PDF").
+The feature list, one entry per row — **every row**, as many as the app has.
+A plain list scans faster than eleven cards; name first, bold, then one line:
+
+```tsx
+import { Check } from "lucide-react";
+
+const features = ["course", "placement", "game", "assistant", "community"] as const; // one per feature-list row
+
+<section id="inside" className="mx-auto mt-24 max-w-3xl scroll-mt-24">
+  <h2 className="text-center text-2xl font-semibold sm:text-3xl">
+    {t("features.title")}
+  </h2>
+  <ul className="mt-10 grid gap-x-8 gap-y-4 sm:grid-cols-2">
+    {features.map((key) => (
+      <li key={key} className="flex gap-3">
+        <Check aria-hidden className="text-primary mt-1 size-4 shrink-0" />
+        <p>
+          <span className="font-semibold">{t(`features.${key}.name`)}</span>
+          {": "}
+          <span className="text-muted-foreground">{t(`features.${key}.line`)}</span>
+        </p>
+      </li>
+    ))}
+  </ul>
+</section>
+```
+
+The course's blocks may follow in the same section as numbered cards with
+their cover images via `<Figure>` — they show what is inside ONE row, and never
+stand in for the list.
 
 ## 5 · Social proof — only what is real
 

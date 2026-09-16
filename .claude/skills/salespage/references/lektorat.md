@@ -23,8 +23,10 @@ file is the procedure and the list.
    file. For the honesty checks it also opens `config/digistore-products.json`
    and the gates the offer's button grants (`SKILL.md` step 5 names them).
    **No feature list, no reading**: when the Lektorat measures an existing
-   page (step 0) and no list exists, it writes one first — from `nav.*`, the
-   card titles and `config/ai-chat.json`, each row with WHERE the name stands
+   page (step 0) and no list exists, it writes one first — out of the app, from
+   the sources `SKILL.md` step 1b names (`nav.*`, `config/modules.json`,
+   companion cards, activities, lesson pages, `config/ai-chat.json`), never
+   from the page it measures, each row with WHERE the name stands
    — because 5.1 and 5.2 are comparisons, and a comparison without its other
    half passes everything. Measured 2026-09-16: a Lektorat without a list
    caught "Finn" unexplained five times and missed that Finn is the chat
@@ -87,7 +89,8 @@ finding stands.
 |---|---|---|---|
 | 5.1 | **Every feature by the name the app shows** | Compare against the feature list: a paraphrase ("Fragen", "Planen lassen") where a name exists | **Z** |
 | 5.2 | **A name belongs to one feature** | For every name on the page, open the place the list's "where" column names: does THAT feature carry the name there? The assistant's name on a companion whose card says "ein Coach", a module label on another module | **Z** |
-| 5.3 | **Every row appears** | A feature list row the page never mentions | H |
+| 5.3 | **Every row appears** | A feature list row the page never mentions — the community, the game, the worksheets | **Z** |
+| 5.4 | **The list is on the page, plainly** | One section (`docs/salespage.md` § 4) where a scanner reads every feature: its name, one line, the scope. Benefits that describe features without naming them, or two features merged into one line, do not count | **Z** |
 
 ### 6 · Stimme (`docs/marketing/voice.md`)
 

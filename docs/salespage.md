@@ -26,8 +26,9 @@ overrides `CLAUDE.md` § **UI** (kit only, tokens only, both modes) or
 ## The section inventory
 
 A salespage is built from a small set of sections in a deliberate order —
-attention → interest → trust → decision. Every row is optional except the first
-and the sixth: a page with no hero has no first impression, and a page with no
+attention → interest → trust → decision. Every row is optional except the
+first, the fourth and the sixth: a page with no hero has no first impression, a
+page that does not list what the buyer gets has sold an idea, and a page with no
 offer sells nothing. The skill puts this list to the user as a menu; nobody
 gets all eight by default.
 
@@ -36,7 +37,7 @@ gets all eight by default.
 | 1 | **Hero** | One outcome-headline for the named audience, a subline, the primary call to action — and a real visual |
 | 2 | **Problem → promise** | Name the pain in the customer's words, then the change this product makes |
 | 3 | **Benefits** | 3–5 outcomes, written fresh — never the registry's feature bullets |
-| 4 | **What's inside** | The curriculum, the tool, the deliverables — read out of the app itself |
+| 4 | **What you get** | Every feature by the name the app shows, one line each — the feature list written out, none left out |
 | 5 | **Social proof** | Real quotes, numbers, or a founder story — never invented |
 | 6 | **Offer block** | ONE purchase decision: value stack, price, guarantee, buy button |
 | 7 | **FAQ** | The objections, answered before they are raised |
@@ -83,7 +84,11 @@ the pain in its subline.
 
 ### 3 · Benefits — outcomes, not features
 
-Three to five, each one sentence of outcome plus at most one of how. Written
+Three to five, each one sentence of outcome plus at most one of how, and each
+hung on a feature by its name ("Finn, dein KI-Coach, beantwortet …"). Benefits
+**do not replace section 4**: an outcome is why somebody wants the feature, the
+list is what they buy, and a page that has only the first has described a
+feeling. Written
 **fresh, for this page** — the `features[]` strings in
 `config/digistore-products.json` are checkout bullets ("12 Lektionen",
 "Arbeitsblätter als PDF") and read like a packing list when promoted to
@@ -95,13 +100,31 @@ key/shopping-cart/sparkles trio describes sign-in, billing and readiness — re-
 texting the cards while keeping those icons puts a shopping cart next to "your
 personal coach". Choose per benefit, or drop the icons for numbers or images.
 
-### 4 · What's inside
+### 4 · What you get — every feature, by name
 
-Concrete contents build more trust than adjectives: the five course blocks,
-the three tools, the deliverables per module. **Read it out of the app** —
-the course structure, `docs/app.md`, the actual pages — so the page can never
-promise a module the app does not have. Cards or a numbered list; lesson cover
-images if they exist make this the cheapest visual section on the page.
+The section a buyer scans to answer *what do I get for the money*. It is the
+feature list (*Names and voice* below) written out: **one line per row, every
+row** — the name in bold as the app shows it, what the reader does with it in
+one short sentence, and the scope in numbers where the app has one:
+
+> **Köder-Duell**: acht Situationen am Wasser, du wählst den Köder.
+> **Finn, dein KI-Assistent**: beantwortet deine Fragen aus dem Kurs.
+> **Community**: drei Räume, in denen du mit anderen Käufern sprichst.
+
+Plain, not clever: a name and a sentence, no paraphrase in place of the name,
+no two features merged into one line so the list looks shorter, none dropped
+because it seemed minor. The course's blocks or the tool's categories may
+follow as their own part, with cover images if they exist — they are *inside*
+one feature, not a substitute for the list. **Read it out of the app** — so the
+page can never promise a module the app does not have, and never forgets one
+it has.
+
+Measured 2026-09-16: asked to make a page "sell", a session moved the price up
+and put the audience into the subline — and left eleven features described as
+three benefits, the community, the game and the course review not mentioned at
+all. The operator's words: *"Ich hätte mir zumindest gewünscht, dass er das,
+was die App kann, auf den Punkt bringt und aufführt. Also simpel die
+Funktionen."* The list came one round later, after the complaint.
 
 ### 5 · Social proof — the section with a hard rule
 
@@ -211,13 +234,24 @@ name belongs: not "Fragen" for the assistant, not "Planen lassen" for the
 planner, not "Lesen" for the guide. A buyer meets these names in the app on
 day one; a page that used other words has sold something else.
 
-So the first thing written is not a headline but the **feature list**: one row
+So the first thing written is not a headline but the **feature list** — on
+every run, whatever the complaint was: "it does not sell" is answered from the
+list as much as "it reads like a report". One row
 per feature — the name as the app shows it, what it holds (read out of the
 app: the categories, the course blocks, the tools), and the scope in numbers
 where the app's config or registry holds one (lessons, places, questions per
 plan, what a top-up costs). The list is shown to the operator and confirmed;
 from then on it is the page's vocabulary, every row appears on the page at
-least once, and section 4 is that list written out. The test at the end:
+least once, and section 4 is that list written out.
+
+**Where the rows come from** — the app, not the page being replaced (a page
+that forgot a feature passes its gap on): every buyer-visible entry of `nav.*`,
+every module in `config/modules.json` and the pages it gives a buyer, every
+companion's card title, every learning activity's title, what a lesson page
+carries (a worksheet, a task to hand in), the community's rooms, the
+assistant's `name`. A row is left out only with its reason (owner-only, not
+in the plan on the button). Measured the same day: a list taken from `nav.*`
+and the old page had eleven rows and still missed the five worksheets. The test at the end:
 **a stranger can say what they get, by name** — not only what it is about.
 
 **A name is not an explanation.** The names are the app's, and a stranger has
@@ -380,7 +414,8 @@ The finished page is checked the way `ux-gateway` checks it — as somebody who
 has never heard of the product, five questions, answered above the fold or
 within one scroll:
 
-1. **What is this — and what do I get, by the names the app uses?**
+1. **What is this — and what do I get, by the names the app uses?** Every
+   feature-list row, in one place (§ 4) — not the three the writer liked best.
 2. **Who is it for?**
 3. **What does it cost?** (or: is the price one click away, honestly labelled)
 4. **Why should I believe you?** (proof, or an honest founder story)

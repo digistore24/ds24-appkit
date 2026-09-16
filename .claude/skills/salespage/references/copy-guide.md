@@ -68,6 +68,15 @@ Test: read only the bold words on the page — can the visitor list what they
 get? Every row of the feature list appears on the page by name at least once,
 and every count is the app's own.
 
+And one place says them all, plainly — section 4, *What you get*. Not three
+benefit cards that stand for eleven features:
+
+| Described — what a measured page did | Listed — section 4 |
+|---|---|
+| „Ein Coach, der antwortet" · „Lernen in deinem Tempo" · „Einmalzahlung, kein Abo" *(three cards; the community, the game and the course review nowhere)* | **Einstufung**: ein kurzer Test sagt dir, wo du einsteigst. · **Selbst-Check**: 17 Fragen, je Block eine Runde. · **Köder-Duell**: acht Situationen, du wählst den Köder. · **Arbeitsblätter**: fünf PDFs zum Mitnehmen ans Wasser. · **Finn, dein KI-Assistent**: beantwortet deine Fragen aus dem Kurs. · **Community**: drei Räume mit anderen Käufern. · … one line per row, every row |
+
+The benefits stay — they say why. The list says what.
+
 ## A revision round, worked
 
 Operator: „Zu viele Zahlen, das liest sich wie ein Kostenvoranschlag."
