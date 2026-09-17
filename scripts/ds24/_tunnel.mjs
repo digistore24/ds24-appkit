@@ -286,7 +286,7 @@ export async function openTunnel({ port = appPort(), log = () => {}, gateScript 
   }
 
   // ── 2. cloudflared, onto the gate — never onto the app ────────────────────
-  log(`>> Cloudflare Quick Tunnel to http://127.0.0.1:${gatePort}`);
+  log(`>> Public address onto the IPN gate (127.0.0.1:${gatePort}) — Cloudflare Quick Tunnel, no account`);
   let child;
   try {
     child = spawnDetached("cloudflared", ["tunnel", "--url", `http://127.0.0.1:${gatePort}`], fd);

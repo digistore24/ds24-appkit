@@ -83,12 +83,15 @@ touches only your computer or the outside world, and whether it can be undone.
 - **localhost / local** — only on your computer. `http://localhost:3000` is
   your app, reachable from your machine and from nowhere else. Nobody can
   buy anything there; purchases are test purchases.
-- **Tunnel** — a temporary public address that leads to ONE door of the app
-  on your computer, the one Digistore24 delivers purchase notifications to.
-  **While it runs, anyone with that address reaches that door and nothing
-  else** — not the sign-in page, not the dashboard, nothing else on your
-  machine. `node run.mjs stop` closes it; `node run.mjs status` shows whether
-  one is open.
+- **Tunnel (Cloudflare Quick Tunnel)** — a temporary public address that leads
+  to ONE door of the app on your computer, the one Digistore24 delivers
+  purchase notifications to. **While it runs, anyone with that address reaches
+  that door and nothing else** — not the sign-in page, not the dashboard,
+  nothing else on your machine. Of Cloudflare — a large internet company —
+  this app uses nothing but that free address: no account, no bill. Only the
+  purchase notification travels through it; your pages and your sign-in stay
+  on your computer. `node run.mjs stop` closes it; `node run.mjs status`
+  shows whether one is open.
 - **DEV · STAGING · PROD** — the three environments. DEV is your computer.
   PROD is the live app your customers pay for. STAGING is an optional live
   copy for trying things out with test purchases. Products and the database
