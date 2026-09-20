@@ -29,9 +29,10 @@
 // FOLDER in the vendor backend, and that is what keeps this app's products
 // findable next to everything else the account sells. ⚠️ This used to read "the
 // DS24 API has no tag field, so the group is what…". There is a tag field now
-// (`data[tag]`, `_own.mjs`), and this app writes one — but a tag is a filter
-// somebody has to type and a folder is a place they can open, so the group is
-// not made redundant by it. The reason was wrong; the decision was not. Its id is persisted in the registry (`productGroupId`) like the
+// (`data[tag]`, `_own.mjs`), and this app writes one PER ENVIRONMENT
+// (`ds24-appkit` live, `ds24-appkit-test` on staging, `ds24-appkit-dev`
+// locally) — but a tag is a filter somebody has to type and a folder is a place
+// they can open, so the group is not made redundant by it. The reason was wrong; the decision was not. Its id is persisted in the registry (`productGroupId`) like the
 // product ids, and every create/update sends it — so a group deleted at DS24
 // is recreated and re-collects the products on the next sync by itself.
 //
@@ -81,6 +82,7 @@ import {
   noteWith,
   tagOf,
   tagWith,
+  productTagFor,
   canClassify,
   orphanProducts,
 } from "./_own.mjs";
@@ -123,6 +125,12 @@ console.log(
       ? " — the LIVE product set (ids → productIds.prod)"
       : ` — product names carry the [${env.toUpperCase()}] suffix (ids → productIds.${env})`),
 );
+
+// The coarse backoffice tag of THIS environment (`_own.mjs`). Resolved once,
+// here, before the first API call: `productTagFor` throws on an environment it
+// does not know, and a run that has already created products is the wrong
+// place to find that out.
+const productTag = productTagFor(env);
 
 // The thank-you page. Digistore24 stores public https URLs only, so a local app
 // travels as a redirect address (scripts/ds24/_public-url.mjs) — without it the
@@ -180,10 +188,12 @@ function productData(key, def, language, existing = null) {
     stampFor({ syncId, env }),
   );
   if (note !== null) data["data[note]"] = note;
-  // The coarse marker, appended to whatever tags the product already has —
-  // `tagWith` answers null when ours is in there already, and never drops one
-  // the vendor put there (`_own.mjs`), so the field is simply not sent then.
-  const tag = tagWith(existing ? tagOf(existing) : null);
+  // The coarse marker of THIS environment, appended to whatever tags the
+  // product already has — `tagWith` answers null when ours is in there already,
+  // and never drops one the vendor put there (`_own.mjs`), so the field is
+  // simply not sent then. A product that was synced under another environment
+  // keeps that tag too: removing one is not this sync's business.
+  const tag = tagWith(existing ? tagOf(existing) : null, productTag);
   if (tag !== null) data["data[tag]"] = tag;
   if (appUrl) data["data[thankyou_url]"] = appUrl;
   // The app's own product group — sent on create AND update, so a product

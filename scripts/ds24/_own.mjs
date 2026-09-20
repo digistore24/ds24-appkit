@@ -58,10 +58,18 @@
 /**
  * THE SECOND MARKER: a coarse one, in `data[tag]`.
  *
- * Where the note stamp says "THIS app, in THIS environment", the tag says only
- * "made by an app built on this template". That is deliberately less, and it is
- * useful for something else: the vendor can filter their backoffice by it, and
+ * Where the note stamp says "THIS app, in THIS environment", the tag says
+ * "made by an app built on this template — in THIS environment". That is
+ * deliberately less than the stamp (it names no app) and it is useful for
+ * something else: the vendor can filter their backoffice by it, and
  * Digistore24 can see which products came out of the appkit at all.
+ *
+ * ── One tag per environment ────────────────────────────────────────────────
+ * The filter is only worth typing if it can separate the live products from
+ * the ones a sync made while somebody was testing. So there is one tag per
+ * environment (`PRODUCT_TAGS`), and `productTagFor(env)` is the only place a
+ * run picks its own — never a default, because a default is what writes the
+ * LIVE tag onto a dev product the day somebody forgets to pass the argument.
  *
  * 🚨 **It is NOT an ownership proof and `--prune` must never read it.** Two
  * apps built from this template carry the same tag; acting on it would let one
@@ -109,8 +117,53 @@
  * tags and this app goes unmarked. That is the right way round: the tag is
  * explicitly NOT an ownership proof (see above), so losing ours costs nothing
  * and losing theirs costs them.
+ *
+ * `PRODUCT_TAG` is the LIVE set's tag and the stem the other two are built from.
  */
 export const PRODUCT_TAG = "ds24-appkit";
+
+/**
+ * The tag per sync environment (`_env.mjs` → SYNC_ENVS).
+ *
+ * Staging's tag says `-test`, not `-staging`: the word is read in a vendor's
+ * backoffice filter, where "test" is what the products ARE, and the
+ * environment's own name already travels in full inside the note stamp and the
+ * internal name. Prod keeps the bare stem — it is the set that was there
+ * first, and the one a vendor filters for most.
+ *
+ * 🚨 **Nothing here is ever REMOVED from a product.** A product synced under
+ * one environment and later under another keeps both tags, because `tagWith`
+ * only ever appends (see below) and the rule "what we did not write, we keep"
+ * is not worth a second, cleverer rule for the tags we did write — the tag is
+ * not an ownership proof, so a stale one costs a filter hit, and a removal
+ * pass that gets the ownership question wrong costs the vendor a tag.
+ */
+export const PRODUCT_TAGS = {
+  dev: `${PRODUCT_TAG}-dev`,
+  staging: `${PRODUCT_TAG}-test`,
+  prod: PRODUCT_TAG,
+};
+
+/**
+ * The tag THIS run writes, for a sync environment.
+ *
+ * 🚨 **Throws on an unknown environment**, and the caller resolves it ONCE
+ * before the first API call. `resolveSyncEnv` has already refused anything
+ * outside the three by then, so reaching this is a programming error — and the
+ * two quiet alternatives are both worse: falling back to the prod tag labels a
+ * dev product as live in the vendor's filter, and answering `null` leaves a
+ * whole product set unmarked without anybody noticing. Loud, and before
+ * anything has been created.
+ */
+export function productTagFor(env) {
+  const tag = PRODUCT_TAGS[String(env)];
+  if (!tag) {
+    throw new Error(
+      `No product tag for environment "${env}" — known: ${Object.keys(PRODUCT_TAGS).join(", ")}.`,
+    );
+  }
+  return tag;
+}
 
 /**
  * The value to WRITE into `data[tag]`, or `null` when the tag is already there
@@ -133,7 +186,17 @@ export const PRODUCT_TAG_MAX = 127;
  */
 const TAG_STRIPPED = /[<>&#";'\\\t\r\n]/g;
 
-export function tagWith(existingTag, tag = PRODUCT_TAG, maxLength = PRODUCT_TAG_MAX) {
+export function tagWith(existingTag, tag, maxLength = PRODUCT_TAG_MAX) {
+  // 🚨 `tag` has NO default, and this is the guard that keeps it that way. A
+  // default would be the prod tag, and a call site that forgot to pass the
+  // environment's tag would then quietly mark dev products as live — invisible
+  // in every test that passes its own value in. A missing argument is a bug
+  // here, not a shape to tiptoe around like `existingTag` below.
+  if (typeof tag !== "string" || tag.trim() === "") {
+    throw new TypeError(
+      "tagWith() needs the tag of THIS environment — see productTagFor(env).",
+    );
+  }
   // ⚠️ Both the spec and a live `listProducts` say `string` (2026-09-10), so the
   // array branch below is belt-and-braces rather than the guess it started as.
   // It stays because it costs nothing and because which way the doubt falls is
@@ -151,6 +214,8 @@ export function tagWith(existingTag, tag = PRODUCT_TAG, maxLength = PRODUCT_TAG_
     return null;
   }
   parts = parts.map((t) => t.trim()).filter(Boolean);
+  // Exact, so `ds24-appkit` and `ds24-appkit-dev` are two different tags: a
+  // product that moved environments gets the new one ADDED and keeps the old.
   if (parts.some((t) => t.toLowerCase() === tag.toLowerCase())) return null;
 
   const value = [...parts, tag].join(",");

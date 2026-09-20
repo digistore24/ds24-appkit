@@ -20,9 +20,12 @@ import {
   NOTE_MAX,
   tagWith,
   tagOf,
+  productTagFor,
   PRODUCT_TAG_MAX,
   PRODUCT_TAG,
+  PRODUCT_TAGS,
 } from "./_own.mjs";
+import { SYNC_ENVS } from "./_env.mjs";
 
 const APP = "a1b2c3d4e5f6";
 const stamp = (over: Record<string, string> = {}) =>
@@ -201,26 +204,80 @@ describe("orphanProducts — what --prune is allowed to see", () => {
   });
 });
 
+describe("the tag per environment", () => {
+  it("gives each environment its own value, and prod keeps the bare stem", () => {
+    expect(productTagFor("prod")).toBe(PRODUCT_TAG);
+    expect(productTagFor("staging")).toBe("ds24-appkit-test");
+    expect(productTagFor("dev")).toBe("ds24-appkit-dev");
+  });
+
+  it("covers every environment a sync run can target, and no two share a tag", () => {
+    // SYNC_ENVS is the list `resolveSyncEnv` accepts; a new environment there
+    // with no tag here would reach `productTagFor` and throw mid-release.
+    expect(Object.keys(PRODUCT_TAGS).sort()).toEqual([...SYNC_ENVS].sort());
+    const values = Object.values(PRODUCT_TAGS);
+    expect(new Set(values).size).toBe(values.length);
+  });
+
+  it("🚨 THROWS on an environment it does not know — never the live tag", () => {
+    // The two quiet answers are both worse than a crash before the first API
+    // call: the prod tag would label a test product as live in the vendor's
+    // filter, and `null` would leave a whole set unmarked unnoticed.
+    expect(() => productTagFor("produktion")).toThrow(/produktion/);
+    expect(() => productTagFor(undefined)).toThrow();
+    expect(() => productTagFor("")).toThrow();
+  });
+
+  it("every tag fits the field on its own", () => {
+    for (const tag of Object.values(PRODUCT_TAGS)) {
+      expect(tagWith(null, tag)).toBe(tag);
+    }
+  });
+});
+
 describe("the tag — the coarse marker", () => {
+  const TAG = PRODUCT_TAGS.dev;
+
   it("adds ours to an empty field", () => {
-    expect(tagWith(null)).toBe(PRODUCT_TAG);
-    expect(tagWith("")).toBe(PRODUCT_TAG);
-    expect(tagWith("   ")).toBe(PRODUCT_TAG);
+    expect(tagWith(null, TAG)).toBe(TAG);
+    expect(tagWith("", TAG)).toBe(TAG);
+    expect(tagWith("   ", TAG)).toBe(TAG);
   });
 
   it("🚨 APPENDS, and never drops a tag the vendor put there", () => {
     // The field is a comma-separated list written whole, so writing just ours
     // would delete theirs — the same failure as the note field, one door up.
-    expect(tagWith("sommer,bestseller")).toBe(`sommer,bestseller,${PRODUCT_TAG}`);
+    expect(tagWith("sommer,bestseller", TAG)).toBe(`sommer,bestseller,${TAG}`);
   });
 
   it("answers null when ours is already there — nothing to write", () => {
-    expect(tagWith(PRODUCT_TAG)).toBeNull();
-    expect(tagWith(`sommer,${PRODUCT_TAG},bestseller`)).toBeNull();
+    expect(tagWith(TAG, TAG)).toBeNull();
+    expect(tagWith(`sommer,${TAG},bestseller`, TAG)).toBeNull();
+  });
+
+  it("🚨 keeps another environment's tag and ADDS its own beside it", () => {
+    // A product first synced against prod and later against dev carries both.
+    // That is the decision: nothing here removes a tag, not even one we wrote,
+    // because the tag proves no ownership and a wrong removal costs the vendor.
+    expect(tagWith(PRODUCT_TAG, PRODUCT_TAGS.dev)).toBe(
+      `${PRODUCT_TAG},${PRODUCT_TAGS.dev}`,
+    );
+    // And the comparison is exact: `ds24-appkit` is not `ds24-appkit-dev`.
+    expect(tagWith(PRODUCT_TAGS.dev, PRODUCT_TAG)).toBe(
+      `${PRODUCT_TAGS.dev},${PRODUCT_TAG}`,
+    );
+  });
+
+  it("🚨 refuses a call that did not say WHICH environment", () => {
+    // No default, deliberately: a default would be the live tag, and a call
+    // site that forgot the argument would mark dev products as live — a defect
+    // every test passing its own value in would never see.
+    expect(() => tagWith(null)).toThrow(/productTagFor/);
+    expect(() => tagWith(null, "")).toThrow();
   });
 
   it("recognises it through the spacing and casing a human leaves", () => {
-    expect(tagWith(` sommer , ${PRODUCT_TAG.toUpperCase()} `)).toBeNull();
+    expect(tagWith(` sommer , ${TAG.toUpperCase()} `, TAG)).toBeNull();
   });
 
   it("reads the field off a product, or answers null", () => {
@@ -231,16 +288,16 @@ describe("the tag — the coarse marker", () => {
   it("understands a list that arrives as an ARRAY", () => {
     // The field is not live yet, so its shape on the way back is a guess. An
     // array is the likely other one.
-    expect(tagWith(["sommer", "bestseller"])).toBe(`sommer,bestseller,${PRODUCT_TAG}`);
-    expect(tagWith([PRODUCT_TAG])).toBeNull();
+    expect(tagWith(["sommer", "bestseller"], TAG)).toBe(`sommer,bestseller,${TAG}`);
+    expect(tagWith([TAG], TAG)).toBeNull();
   });
 
   it("🚨 leaves a shape it does not understand ALONE", () => {
     // The costly guess would be "not a string means nothing is there" — that
     // writes our tag over whatever the vendor had. Unknown shape, hands off.
-    expect(tagWith({ some: "object" })).toBeNull();
-    expect(tagWith([1, 2])).toBeNull();
-    expect(tagWith(42)).toBeNull();
+    expect(tagWith({ some: "object" }, TAG)).toBeNull();
+    expect(tagWith([1, 2], TAG)).toBeNull();
+    expect(tagWith(42, TAG)).toBeNull();
   });
 
   it("🚨 refuses to exceed the documented 127 characters", () => {
@@ -250,10 +307,10 @@ describe("the tag — the coarse marker", () => {
     // into a false one, and a truncation cuts tags this app never wrote. So the
     // answer is `null`: their tags stay whole and ours is simply absent. The
     // tag is not an ownership proof, so that costs nothing.
-    const room = PRODUCT_TAG_MAX - PRODUCT_TAG.length - 1; // -1 for the comma
+    const room = PRODUCT_TAG_MAX - TAG.length - 1; // -1 for the comma
     const fits = "x".repeat(room);
-    expect(tagWith(fits)).toBe(`${fits},${PRODUCT_TAG}`);
-    expect(tagWith(`${fits}x`)).toBeNull();
+    expect(tagWith(fits, TAG)).toBe(`${fits},${TAG}`);
+    expect(tagWith(`${fits}x`, TAG)).toBeNull();
   });
 
   it("counts the SANITIZED length, the way Digistore24 does", () => {
@@ -261,14 +318,14 @@ describe("the tag — the coarse marker", () => {
     // characters are gone before the count. A value that is too long only
     // because of characters the API removes must still go through, or this
     // refuses for a reason the API does not have.
-    const room = PRODUCT_TAG_MAX - PRODUCT_TAG.length - 1;
+    const room = PRODUCT_TAG_MAX - TAG.length - 1;
     const withStripped = "x".repeat(room) + '<<<>>>&&&###';
     expect(withStripped.length).toBeGreaterThan(room);
-    expect(tagWith(withStripped)).toBe(`${withStripped},${PRODUCT_TAG}`);
+    expect(tagWith(withStripped, TAG)).toBe(`${withStripped},${TAG}`);
   });
 
   it("and an empty product still gets the tag, unless the tag itself is too long", () => {
-    expect(tagWith(null)).toBe(PRODUCT_TAG);
+    expect(tagWith(null, TAG)).toBe(TAG);
     expect(tagWith(null, "y".repeat(PRODUCT_TAG_MAX))).toBe("y".repeat(PRODUCT_TAG_MAX));
     expect(tagWith(null, "y".repeat(PRODUCT_TAG_MAX + 1))).toBeNull();
   });

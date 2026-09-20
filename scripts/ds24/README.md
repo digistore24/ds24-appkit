@@ -79,12 +79,21 @@ apart:
 | | field | says | read by |
 |---|---|---|---|
 | **the stamp** | `data[note]` | `ds24-appkit:1:<syncId>:<env>` — THIS app, THIS environment | `--prune`, and nothing else |
-| **the tag** | `data[tag]` | `ds24-appkit` — made by an app built on this template | nobody here; the vendor's backoffice filter |
+| **the tag** | `data[tag]` | `ds24-appkit` (prod) · `ds24-appkit-test` (staging) · `ds24-appkit-dev` (dev) — made by an app built on this template, in THIS environment | nobody here; the vendor's backoffice filter |
 
 🚨 **Only the stamp decides ownership.** Two apps built from this template
 carry the same tag, so a prune that read it could let one delete the other's
 products. That is why the stamp carries the `syncId` — a random value written
 once into `config/digistore-products.json` and never regenerated.
+
+**One tag per environment** (`_own.mjs` → `PRODUCT_TAGS`), so the backoffice
+filter can separate the live products from the ones a sync made while somebody
+was testing; staging's says `-test` because that is what those products ARE to
+whoever reads the filter. The run picks its own with `productTagFor(env)`, once,
+before the first API call — there is no default, because a default is the LIVE
+tag on a dev product the day somebody forgets the argument. A product synced
+under one environment and later under another **keeps both tags**: nothing here
+removes one, not even one this app wrote.
 
 Two properties both markers share, and both were measured rather than
 documented:
@@ -98,9 +107,9 @@ documented:
 - **Neither field is ever taken from the vendor.** A note holding something we
   did not write is left alone (the product then stays unstamped, which is the
   safe direction), and `data[tag]` is a comma-separated LIST written whole — so
-  the sync reads the existing tags, appends ours if it is missing, and writes
-  them all back. Writing just `ds24-appkit` would delete every tag the vendor
-  had put there.
+  the sync reads the existing tags, appends this environment's if it is missing,
+  and writes them all back. Writing just `ds24-appkit-dev` would delete every
+  tag the vendor had put there.
 
 ⚠️ **And `data` is validated against a strict ALLOWLIST**, which is worth
 knowing before you add a field to `productData()`: a key Digistore24 does not
