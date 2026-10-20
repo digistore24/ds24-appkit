@@ -4,7 +4,7 @@
      scripts/api-map.test.ts compares this file with what the generator
      produces, and a hand edit is undone by the next run. -->
 
-_50 files, 227 exported functions, 46 tables. Regenerate
+_51 files, 228 exported functions, 46 tables. Regenerate
 with `node run.mjs api-map` after adding an export or a table; the suite says so
 when it is behind._
 
@@ -345,6 +345,10 @@ tests — `docs/ux.md` owns each, this is where they are needed:
 ## lib/impersonation/session.ts
 
 - `applyImpersonationUpdate(token: JWT, payload: unknown): Promise<JWT | null>` — Handle an update trigger on the `jwt` callback.
+
+## lib/legal/markers.mjs
+
+- `readMarkers(raw)` — A legal file's text without its markers, and what the markers said.
 
 ## lib/media/config.ts
 

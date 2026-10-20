@@ -16,5 +16,9 @@ lu dans le code plutôt que de mémoire. Le skill **compliance-check** rédige l
 politique à partir de cet inventaire et ne te demande que ce qui ne figure pas
 sur le disque.
 
+Ce que la skill écrit est un **projet à soumettre à un conseil juridique** ;
+il est signalé comme tel sur la page jusqu'à ce que tu retires la mention
+après la relecture — ce n'est pas un conseil juridique.
+
 **node run.mjs legal-check** t'indique à tout moment quelles pages légales portent
 encore ce texte.

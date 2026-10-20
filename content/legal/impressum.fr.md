@@ -13,5 +13,9 @@ les informations qu'exige ta forme juridique et écrit ce fichier
 (**content/legal/impressum.fr.md**) ainsi que ses équivalents dans les autres
 langues de l'application.
 
+Ce que la skill écrit est un **projet à soumettre à un conseil juridique** ;
+il est signalé comme tel sur la page jusqu'à ce que tu retires la mention
+après la relecture — ce n'est pas un conseil juridique.
+
 **node run.mjs legal-check** t'indique à tout moment quelles pages légales portent
 encore ce texte.

@@ -15,5 +15,9 @@ was read out of the code rather than remembered. The skill
 **compliance-check** drafts the policy from it and only asks you what is not
 on disk.
 
+What the skill writes is a **draft for legal review** and is labelled as such
+on the page until you remove the label after the review — it is not legal
+advice.
+
 **node run.mjs legal-check** tells you at any time which legal pages still carry
 this placeholder.

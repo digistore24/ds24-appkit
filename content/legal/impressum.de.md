@@ -13,5 +13,9 @@ ab, die für deine Rechtsform nötig sind, und schreibt diese Datei
 (**content/legal/impressum.de.md**) und ihre Gegenstücke in den übrigen
 Sprachen der App.
 
+Was der Skill schreibt, ist ein **Entwurf zur Vorlage bei einer Rechtsberatung**
+und steht so gekennzeichnet auf der Seite, bis du die Kennzeichnung nach der
+Prüfung entfernst — eine Rechtsberatung ist es nicht.
+
 **node run.mjs legal-check** sagt dir jederzeit, welche Rechtsseiten noch auf
 diesem Text stehen.

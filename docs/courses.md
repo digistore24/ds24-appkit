@@ -445,7 +445,7 @@ once, no subscription.** Two reasons, and the second is the sharper one:
    immer* — while allowing access to be **limited to at most two years**. Their
    reason is the one that costs money: an offer that is gone after 24 months can
    oblige the vendor to refund the full price. ⚠️ These criteria bind whoever
-   sells through the reseller **Digistore24 GmbH**; check your own contract
+   sells through the reseller **Digistore24**; check your own contract
    before treating the two years as universal.
 
 The same rule, on the page that has to keep it: [`docs/salespage.md`](salespage.md)

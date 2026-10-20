@@ -1177,6 +1177,11 @@ function placeholderFiles(trace, facts) {
     .map(({ path, text }) => ({
       path,
       marked: (trace.markers ?? []).some((marker) => text.includes(marker)),
+      // The second marker a legal file can carry (`lib/legal/markers.mjs`): the
+      // text `compliance-check` wrote, not yet read by a lawyer. It does not
+      // change the STATE — the skill has done its work, and the review is nobody's
+      // here to measure — but the evidence says so, or "done" reads as finished.
+      draft: text.includes("ds24-appkit:draft"),
     }));
 }
 
@@ -1575,9 +1580,11 @@ function evidenceOf(row, facts, state) {
       const folder = `${paths[0].split("/").slice(0, -1).join("/")}/`;
       if (present.length === 0) return one ? `no ${paths[0]} yet` : `nothing written yet in ${folder}`;
       if (state === "done") {
+        const drafts = present.filter((file) => file.draft).length;
+        const review = drafts > 0 ? `, ${drafts} still a draft for legal review` : "";
         return one
-          ? `${paths[0]} is your own now`
-          : `${folder} ${present.length} written, none still the template`;
+          ? `${paths[0]} is your own now${review}`
+          : `${folder} ${present.length} written, none still the template${review}`;
       }
       const marked = present.filter((file) => file.marked).map((file) => file.path.split("/").pop());
       return one

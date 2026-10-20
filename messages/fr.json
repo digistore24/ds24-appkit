@@ -136,7 +136,7 @@
     "onboardingTokensBody": "Avec des jetons, tu paies ce que tu utilises vraiment.",
     "onboardingTokensCta": "Acheter du crédit",
     "onboardingTokensDone": "{balance} jetons sur ton compte.",
-    "purchaseReseller": "Le prélèvement est effectué par Digistore24 GmbH — c'est sous ce nom que le paiement apparaît sur ton relevé bancaire."
+    "purchaseReseller": "Le prélèvement est effectué par Digistore24 — c'est sous ce nom que le paiement apparaît sur ton relevé bancaire."
   },
   "onboarding": {
     "title": "Tes premiers pas",
@@ -546,7 +546,7 @@
     "signInBody": "Connecte-toi avec l'adresse e-mail avec laquelle tu as payé — ton achat sera alors automatiquement rattaché à ton compte.",
     "signInCta": "Se connecter maintenant",
     "dashboardCta": "Vers l'application",
-    "reseller": "Le prélèvement est effectué par Digistore24 GmbH — c'est aussi sous ce nom que le paiement apparaît sur ton relevé bancaire."
+    "reseller": "Le prélèvement est effectué par Digistore24 — c'est aussi sous ce nom que le paiement apparaît sur ton relevé bancaire."
   },
   "ds24Connected": {
     "title": "Accès accordé",
@@ -814,6 +814,8 @@
     "navLabel": "Informations légales",
     "placeholderTitle": "Cette page n'est pas encore remplie",
     "placeholderBody": "Le texte ci-dessous est l'espace réservé livré par défaut, pas une déclaration valable. Lance le skill compliance-check pour le remplacer.",
+    "draftTitle": "Projet à soumettre à un conseil juridique",
+    "draftBody": "Ce texte a été rédigé par un logiciel à partir de l'aperçu des données de cette application et n'a pas encore été vérifié par un avocat. Il ne constitue pas un conseil juridique.",
     "otherLanguage": "Cette page n'existe pas encore dans ta langue et s'affiche dans la version disponible.",
     "impressum": {
       "title": "Mentions légales"

@@ -127,7 +127,7 @@ export default async function OptinPage({
         </Card>
 
         {/* 🚨 Who took the money — outside the conditional, on purpose.
-            Digistore24 GmbH is the RESELLER: it is their name on the buyer's
+            Digistore24 is the RESELLER: it is their name on the buyer's
             bank statement, not the vendor's. A buyer who does not recognise a
             line on their statement does not write a support mail, they call
             their bank — and a chargeback costs the vendor the sale, the fee

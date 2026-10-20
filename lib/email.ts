@@ -367,6 +367,10 @@ export function imprintLines(markdown: string): string[] {
 async function imprintFor(locale: string): Promise<string[]> {
   const doc = await legalDocument("impressum", locale as Locale);
   if (!doc || doc.placeholder) return [];
+  // A DRAFT Impressum is mailed: its name and address are the operator's real
+  // details, and the "Entwurf zur Vorlage bei einer Rechtsberatung" paragraph
+  // it opens with is already out of `doc.text` (`readMarkers()` in
+  // `lib/legal/markers.mjs`), so no footer opens with that sentence.
   return imprintLines(doc.text);
 }
 

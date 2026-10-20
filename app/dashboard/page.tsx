@@ -224,7 +224,7 @@ export default async function DashboardPage({
       {/* 🚨 Who took the money — and a Callout rather than a second toast,
           because this is the one thing on the screen that must not drift past
           (CLAUDE.md → UI: what must stay is a Callout, what may drift is a
-          toast). Digistore24 GmbH is the RESELLER: theirs is the name on the
+          toast). Digistore24 is the RESELLER: theirs is the name on the
           buyer's bank statement, and a line nobody recognises becomes a call to
           their bank rather than a mail to the vendor.
 

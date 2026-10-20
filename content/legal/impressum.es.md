@@ -13,5 +13,9 @@ datos que exige tu forma jurídica y escribe este archivo
 (**content/legal/impressum.es.md**) y sus equivalentes en los demás idiomas de la
 aplicación.
 
+Lo que escribe el skill es un **borrador para revisión jurídica** y aparece
+marcado así en la página hasta que retires la marca tras la revisión — no es
+asesoramiento jurídico.
+
 **node run.mjs legal-check** te dice en cualquier momento qué páginas legales
 siguen mostrando este texto.

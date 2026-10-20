@@ -12,5 +12,9 @@ details your legal form requires and writes this file
 (**content/legal/impressum.en.md**) and its counterparts in the app's other
 languages.
 
+What the skill writes is a **draft for legal review** and is labelled as such
+on the page until you remove the label after the review — it is not legal
+advice.
+
 **node run.mjs legal-check** tells you at any time which legal pages still carry
 this placeholder.

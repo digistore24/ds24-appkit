@@ -1,6 +1,6 @@
 ---
 name: compliance-check
-description: The EU compliance check for this app — works out which rules actually reach it (GDPR, TDDDG §25, EU AI Act, DDG §5, consumer law, plus BFSG/DSA where they bite), then fixes, writes the legal pages and reports. Use it before go-live, when somebody asks "do I need a cookie banner?", "does the AI Act apply to me?", "what do I have to put in my privacy policy?", "can my customers delete their account?", "am I allowed to sell this yet?", mentions an Impressum, a warning letter (Abmahnung) or a data protection authority, or after adding anything that processes personal data. NOT legal advice — it prepares, a lawyer decides.
+description: The EU compliance check for this app — works out which rules actually reach it (GDPR, TDDDG §25, EU AI Act, DDG §5, consumer law, plus BFSG/DSA where they bite), then fixes, writes the legal pages as drafts for legal review and reports. Use it before go-live, when somebody asks "do I need a cookie banner?", "does the AI Act apply to me?", "what do I have to put in my privacy policy?", "can my customers delete their account?", "am I allowed to sell this yet?", mentions an Impressum, a warning letter (Abmahnung) or a data protection authority, or after adding anything that processes personal data. NOT legal advice — it prepares, a lawyer decides.
 ---
 <!-- Copyright (c) 2026 Digistore24 Inc, St. Petersburg, USA — SPDX-License-Identifier: MIT -->
 
@@ -201,6 +201,33 @@ export default function Page() {
 Remove the `<!-- ds24-appkit:placeholder -->` marker from a file when you fill
 it in — that marker is what `legal-check` and the warning box on the page read.
 
+🚨 **Every text you write here is a DRAFT FOR LEGAL REVIEW, and it says so
+itself — in the file, on the page, and in `legal-check`.** Whoever publishes
+this template gives no legal advice, may not and does not want to, and a
+drafted privacy policy that reads like a finished one claims exactly that. So
+every legal text this skill writes — Impressum, privacy policy, AGB, Widerruf,
+in every language — opens with these two lines, before the first heading:
+
+```markdown
+<!-- ds24-appkit:draft -->
+**Entwurf zur Vorlage bei einer Rechtsberatung** — am <date> mit Software aus dem Datenbestand dieser App entworfen, noch nicht rechtlich geprüft. Keine Rechtsberatung.
+```
+
+The bold line in the page's own language (English: *Draft for legal review —
+drafted on <date> by software from this app's data inventory, not yet reviewed
+by a lawyer. Not legal advice.*; Spanish and French accordingly). The marker is
+what the app reads: `components/legal-page.tsx` keeps a warning box
+"Entwurf zur Vorlage bei einer Rechtsberatung" above the text in the reader's
+language, and `node run.mjs legal-check` reports the page as a draft on every
+run (`lib/legal/markers.mjs`). The bold line itself is for whoever opens the
+FILE — it is taken out together with the marker before the page and the mail
+footer render the text, so the page shows the box once and no customer mail
+opens its Impressum with it. **Only the operator removes the two lines, after
+a lawyer has read the text — never this skill, never because a run came back
+clean.** Say so in the hand-back, in the words of the person who does not read
+code: *the texts are drafts for your lawyer; the page says so until you take the
+label off.*
+
 ### The Impressum — § 5 DDG
 
 What to ask the user for, the repealed-TMG trap, and why a half-filled
@@ -286,6 +313,10 @@ from that section.
 
 `node run.mjs legal-check` lists which of the seven are missing.
 
+Each of the seven opens with the same line the legal pages carry — **Entwurf zur
+Vorlage bei einer Rechtsberatung**, with the date — and so does the report. They
+are prepared for a review, not the review.
+
 ## 8 · `map` — what else could reach you
 
 Five minutes, no building. Answer each with *reaches you / does not reach you
@@ -316,12 +347,18 @@ shape*. Two sections are this skill's own, and they bracket the rest:
 - **`## Scope` comes first**, before the findings: the seven answers, dated.
   Everything else in the report depends on them, which is why they are above and
   not in an appendix.
+- **The report opens, under its header, with the same line the pages carry** —
+  *Entwurf zur Vorlage bei einer Rechtsberatung*, with the date — and so does
+  every file of the evidence pack, each in the operator's language (the one the
+  conversation is in). Nothing `legal-check` reads enforces this; the rule is
+  here because a run that writes only the report never reads the `pages` check.
 - **`## Still needs a human` comes last** — the honest list, drawn from the STOP
   section below. It is not `## Open`: `## Open` is work somebody here could do and
   has not, this is work nobody here may do at all.
 
 `## Fixed in this run` is called **`## What was built`** here, because that is what
-a fix looks like in this domain: files created, pages filled, purposes declared.
+a fix looks like in this domain: files created, pages filled, purposes declared —
+and every page filled is listed as *draft for legal review*, never as done.
 
 ⚠️ **This skill has never named a `compliance-accepted.md` register**, unlike the
 three gateways — an accepted risk here has only ever been a row in the report
@@ -356,8 +393,10 @@ Prepare these, do not decide them:
 - **Any app not established in Germany**, for the national statutes.
 
 And say this once, plainly, at the end of every run: **nothing here is legal
-advice.** What it produces is material for a review, and the review is worth
-buying — it is cheaper than the letter that comes otherwise.
+advice.** What it produces is material for a review — every text it wrote is
+labelled *Entwurf zur Vorlage bei einer Rechtsberatung* and stays labelled until
+the operator takes the label off after that review — and the review is worth
+buying: it is cheaper than the letter that comes otherwise.
 
 ## Next step
 

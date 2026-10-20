@@ -136,7 +136,7 @@
     "onboardingTokensBody": "Mit Tokens bezahlst du, was du wirklich nutzt.",
     "onboardingTokensCta": "Guthaben kaufen",
     "onboardingTokensDone": "{balance} Tokens auf deinem Konto.",
-    "purchaseReseller": "Die Abbuchung erfolgt über die Digistore24 GmbH — unter diesem Namen erscheint die Zahlung auf deinem Kontoauszug."
+    "purchaseReseller": "Die Abbuchung erfolgt über Digistore24 — unter diesem Namen erscheint die Zahlung auf deinem Kontoauszug."
   },
   "onboarding": {
     "title": "Deine ersten Schritte",
@@ -546,7 +546,7 @@
     "signInBody": "Melde dich mit der E-Mail-Adresse an, mit der du bezahlt hast — dein Kauf wird deinem Konto dann automatisch zugeordnet.",
     "signInCta": "Jetzt anmelden",
     "dashboardCta": "Zur App",
-    "reseller": "Die Abbuchung erfolgt über die Digistore24 GmbH — unter diesem Namen erscheint die Zahlung auch auf deinem Kontoauszug."
+    "reseller": "Die Abbuchung erfolgt über Digistore24 — unter diesem Namen erscheint die Zahlung auch auf deinem Kontoauszug."
   },
   "ds24Connected": {
     "title": "Freigabe erteilt",
@@ -814,6 +814,8 @@
     "navLabel": "Rechtliches",
     "placeholderTitle": "Diese Seite ist noch nicht ausgefüllt",
     "placeholderBody": "Der Text unten ist der ausgelieferte Platzhalter, keine gültige Erklärung. Starte den Skill compliance-check, um ihn zu ersetzen.",
+    "draftTitle": "Entwurf zur Vorlage bei einer Rechtsberatung",
+    "draftBody": "Dieser Text wurde mit Software anhand der Datenübersicht dieser App entworfen und ist noch nicht anwaltlich geprüft. Er ist keine Rechtsberatung.",
     "otherLanguage": "Diese Seite liegt noch nicht in deiner Sprache vor und wird in der verfügbaren Fassung angezeigt.",
     "impressum": {
       "title": "Impressum"

@@ -15,5 +15,9 @@ und wurde aus dem Code gelesen, nicht aus der Erinnerung. Der Skill
 **compliance-check** schreibt die Erklärung daraus und fragt dich nur, was
 nicht auf der Platte steht.
 
+Was der Skill schreibt, ist ein **Entwurf zur Vorlage bei einer Rechtsberatung**
+und steht so gekennzeichnet auf der Seite, bis du die Kennzeichnung nach der
+Prüfung entfernst — eine Rechtsberatung ist es nicht.
+
 **node run.mjs legal-check** sagt dir jederzeit, welche Rechtsseiten noch auf
 diesem Text stehen.

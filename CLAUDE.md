@@ -723,7 +723,7 @@ was written from, and `compliance-check` drafts yours from this one.
 ## Which EU rules reach this app
 
 **[`docs/compliance.md`](docs/compliance.md) is the map**, and the skill that
-walks it is `compliance-check`. Three rules before you touch any of it:
+walks it is `compliance-check`. Four rules before you touch any of it:
 
 - **The AI disclosure is law, not copy** (Art. 50(1) EU AI Act). It is a rule
   about a LIST of surfaces, and the list has two halves: `DISCLOSURE_SURFACES` in
@@ -738,6 +738,11 @@ walks it is `compliance-check`. Three rules before you touch any of it:
 - **Deleting an account does not delete everything, and the dialog says so.**
   Orders stay, with the member link `null`; a running subscription **warns and
   does not block**.
+- 🚨 **Every legal text written here is a draft for legal review, and the page
+  says so.** `<!-- ds24-appkit:draft -->` on its first line keeps the box
+  "Entwurf zur Vorlage bei einer Rechtsberatung" up and `legal-check` reporting
+  until the OPERATOR removes it after a lawyer has read the text — never you.
+  Nobody here gives legal advice.
 
 ## STOP criteria
 

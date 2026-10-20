@@ -176,7 +176,7 @@ describe("this template's own text keeps the rule", () => {
 
 describe("who charged — the notice on both surfaces", () => {
   it("recognises the name and nothing else", () => {
-    expect(namesReseller("Die Abbuchung erfolgt über die Digistore24 GmbH.")).toBe(true);
+    expect(namesReseller("Die Abbuchung erfolgt über Digistore24.")).toBe(true);
     expect(namesReseller("Billed by digistore24")).toBe(true);
     expect(namesReseller("Your payment has been processed.")).toBe(false);
     expect(namesReseller(null)).toBe(false);

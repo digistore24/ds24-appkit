@@ -15,5 +15,9 @@ La base ya existe: **docs/data-protection.md** es el inventario, y se leyó del
 código en lugar de recordarse. El skill **compliance-check** redacta la
 política a partir de él y solo te pregunta lo que no está en el disco.
 
+Lo que escribe el skill es un **borrador para revisión jurídica** y aparece
+marcado así en la página hasta que retires la marca tras la revisión — no es
+asesoramiento jurídico.
+
 **node run.mjs legal-check** te dice en cualquier momento qué páginas legales
 siguen mostrando este texto.

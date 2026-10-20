@@ -82,6 +82,18 @@ export async function LegalPage({ slug }: { slug: LegalSlug }) {
             </Callout>
           )}
 
+          {/* The draft compliance-check wrote, not yet reviewed by a lawyer.
+              Also a warning Callout, also impossible to miss: whoever publishes
+              this template gives no legal advice, and a drafted privacy policy
+              that reads like a finished one would claim exactly that. The box
+              goes when the operator removes the marker after the review
+              (`lib/legal/markers.mjs`). */}
+          {document.draft && (
+            <Callout variant="warning" title={t("draftTitle")}>
+              {t("draftBody")}
+            </Callout>
+          )}
+
           {/* Only worth saying when it differs from what the reader chose —
               otherwise it is a line explaining that German is in German. */}
           {document.locale !== locale && (

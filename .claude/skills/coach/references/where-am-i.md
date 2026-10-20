@@ -80,7 +80,11 @@ becomes something people skip.
   prove nothing — they ship — and so does the presence of `content/legal/*.md`;
   what is unwritten is the text, marked `<!-- ds24-appkit:placeholder -->` in
   those files. The journey reads that same marker, and `app/agb` / `app/widerruf`
-  depend on the seller role → **`compliance-check`**.
+  depend on the seller role → **`compliance-check`**. ⚠️ Written is not
+  reviewed: a text the skill wrote carries `<!-- ds24-appkit:draft -->` and the
+  page says "Entwurf zur Vorlage bei einer Rechtsberatung" until the operator
+  removes it after a lawyer has read it. The journey counts those as written and
+  says how many are still drafts; the next step there is a lawyer, not a skill.
 
 ## A date measured against another date
 

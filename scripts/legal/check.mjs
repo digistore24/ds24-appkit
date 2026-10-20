@@ -40,12 +40,13 @@ import {
   durationClaims,
   namesReseller,
 } from "../../lib/legal/digistore-claims.mjs";
+// The two markers a legal file can carry — the shipped placeholder and the
+// draft `compliance-check` wrote. One copy, shared with `lib/legal/pages.ts`,
+// so the page and this report cannot disagree about what a file is.
+import { PLACEHOLDER_MARKER, DRAFT_MARKER } from "../../lib/legal/markers.mjs";
 import { blankComments } from "../lib/source-text.mjs";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
-
-/** The marker a shipped placeholder carries — mirrors lib/legal/pages.ts. */
-const PLACEHOLDER_MARKER = "<!-- ds24-appkit:placeholder -->";
 
 /** Mirrors LEGAL_SLUGS in lib/legal/pages.ts. */
 const LEGAL_SLUGS = ["impressum", "datenschutz", "agb", "widerruf"];
@@ -138,9 +139,25 @@ for (const slug of LEGAL_SLUGS) {
 
   written.push(slug);
 
-  const placeholders = files.filter((f) =>
-    readFileSync(f.path, "utf8").includes(PLACEHOLDER_MARKER),
-  );
+  const texts = files.map((f) => ({ ...f, text: readFileSync(f.path, "utf8") }));
+  const placeholders = texts.filter((f) => f.text.includes(PLACEHOLDER_MARKER));
+  const drafts = texts.filter((f) => f.text.includes(DRAFT_MARKER));
+
+  // A draft is a WARNING and never a failure, deliberately. The thing that
+  // ends it — a lawyer having read the text — leaves no trace this command can
+  // measure, and a gate that cannot be passed honestly gets passed dishonestly:
+  // the operator deletes the marker to turn the light green, and the page then
+  // claims a review that never happened. So it is said, every run, in words,
+  // and `go-live` asks about it; the decision stays with the operator.
+  if (drafts.length > 0) {
+    warn(
+      `/${slug} is a draft for legal review (${drafts.map((f) => f.locale).join(", ")})`,
+      `The text was drafted by software from this app's data inventory, and the ` +
+        `page says so in a warning box: "Entwurf zur Vorlage bei einer ` +
+        `Rechtsberatung". Nothing here is legal advice. Have a lawyer review ` +
+        `it, then remove the line ${DRAFT_MARKER} from the file.`,
+    );
+  }
 
   if (placeholders.length === files.length) {
     fail(
@@ -155,7 +172,7 @@ for (const slug of LEGAL_SLUGS) {
         `The page falls back to the language that exists, so nobody sees a ` +
         `broken page — they see a finished policy in the wrong language.`,
     );
-  } else {
+  } else if (drafts.length === 0) {
     ok(`/${slug} (${files.map((f) => f.locale).join(", ")})`);
   }
 }
@@ -433,7 +450,7 @@ for (const surface of RESELLER_SURFACES) {
     fail(
       `${surface.label}: ${surface.rendersIn} no longer renders ${surface.mount}`,
       `The sentence is in the message files and nobody shows it. Digistore24 ` +
-        `GmbH is the name on the buyer's bank statement, not yours: a line ` +
+        `is the name on the buyer's bank statement, not yours: a line ` +
         `nobody recognises becomes a call to their bank rather than a mail to ` +
         `you, and a chargeback costs the sale, the fee and a mark on your account.`,
     );

@@ -136,7 +136,7 @@
     "onboardingTokensBody": "With tokens you pay for what you actually use.",
     "onboardingTokensCta": "Buy credit",
     "onboardingTokensDone": "{balance} tokens on your account.",
-    "purchaseReseller": "Your payment is processed by Digistore24 GmbH — that is the name that appears on your statement."
+    "purchaseReseller": "Your payment is processed by Digistore24 — that is the name that appears on your statement."
   },
   "onboarding": {
     "title": "Your first steps",
@@ -546,7 +546,7 @@
     "signInBody": "Sign in with the email address you paid with — your purchase is then attached to your account automatically.",
     "signInCta": "Sign in now",
     "dashboardCta": "Go to the app",
-    "reseller": "Your payment is processed by Digistore24 GmbH — that is the name you will see on your statement."
+    "reseller": "Your payment is processed by Digistore24 — that is the name you will see on your statement."
   },
   "ds24Connected": {
     "title": "Access approved",
@@ -814,6 +814,8 @@
     "navLabel": "Legal",
     "placeholderTitle": "This page has not been filled in yet",
     "placeholderBody": "The text below is the shipped placeholder, not a valid notice. Run the compliance-check skill to replace it.",
+    "draftTitle": "Draft for legal review",
+    "draftBody": "This text was drafted by software from this app's data overview and has not been reviewed by a lawyer yet. It is not legal advice.",
     "otherLanguage": "This page is not available in your language yet and is shown in the version that exists.",
     "impressum": {
       "title": "Legal notice"

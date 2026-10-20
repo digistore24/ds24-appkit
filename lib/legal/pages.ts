@@ -33,6 +33,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { LOCALES, DEFAULT_LOCALE, type Locale } from "@/i18n/config";
+import { PLACEHOLDER_MARKER, DRAFT_MARKER, readMarkers } from "@/lib/legal/markers.mjs";
 
 /** Every page this app is willing to serve under a legal slug. */
 export const LEGAL_SLUGS = ["impressum", "datenschutz", "agb", "widerruf"] as const;
@@ -66,10 +67,18 @@ export interface LegalDocument {
    * "not filled in yet" is a § 5 DDG problem and a first impression.
    */
   placeholder: boolean;
+  /**
+   * True while the text is the draft `compliance-check` wrote and no lawyer has
+   * reviewed it — marked with `DRAFT_MARKER`. The page says so in a box above
+   * the text ("Entwurf zur Vorlage bei einer Rechtsberatung"), because the
+   * people who publish this template neither give legal advice nor may, and
+   * `legal-check` reports it. The operator removes the marker after the review.
+   */
+  draft: boolean;
 }
 
-/** The marker a shipped placeholder carries. Removing it is part of filling it in. */
-export const PLACEHOLDER_MARKER = "<!-- ds24-appkit:placeholder -->";
+// The markers live in `markers.mjs`, shared with `scripts/legal/check.mjs`.
+export { PLACEHOLDER_MARKER, DRAFT_MARKER };
 
 /**
  * One legal document, or `null` when the app does not have that page.
@@ -87,13 +96,9 @@ export async function legalDocument(
 
   for (const candidate of [...new Set(tried)]) {
     try {
-      const text = await readFile(fileFor(slug, candidate), "utf8");
-      return {
-        slug,
-        text: text.replace(PLACEHOLDER_MARKER, "").trimStart(),
-        locale: candidate,
-        placeholder: text.includes(PLACEHOLDER_MARKER),
-      };
+      const raw = await readFile(fileFor(slug, candidate), "utf8");
+      const { text, placeholder, draft } = readMarkers(raw);
+      return { slug, text, locale: candidate, placeholder, draft };
     } catch {
       // Not there in this language. Try the next.
     }

@@ -32,7 +32,7 @@ Member out of `tracking[custom]` and recorded; refunds, chargebacks and missed
 subscription payments update that record.
 
 🚨 **Not a payment provider, and the difference reaches the customer.** A PSP
-processes a payment for the seller; Digistore24 GmbH SELLS — where it resells it
+processes a payment for the seller; Digistore24 SELLS — where it resells it
 is the buyer's contractual partner and carries the invoice, the VAT and the right
 of withdrawal. **The money is collected by Digistore24 either way**, and their
 name is what turns up on the buyer's bank statement. So customer-facing text says

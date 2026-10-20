@@ -495,7 +495,7 @@ be read as "the words do not occur".
 **The buyer is told who charged them** — §0 above, and it does not depend on who
 the contracting party is.
 
-⚠️ Both bind whoever sells through **Digistore24 GmbH**. Check your own contract
+⚠️ Both bind whoever sells through **Digistore24**. Check your own contract
 before treating the two years as universal. What to write instead is
 [`docs/courses.md`](courses.md) → *Shape 1* and
 [`docs/salespage.md`](salespage.md) → *The offer block*: what is TRUE, which is
@@ -693,3 +693,20 @@ into `docs/compliance/` and leaves a dated report in `docs/reports/`.
 **None of it is legal advice, and none of it makes a lawyer unnecessary** for
 the AGB, the right of withdrawal, tax questions, special categories of data, or
 any app that has left this map at § 3.5.
+
+**And every legal text the skill writes says so itself.** A file under
+`content/legal/` can carry two markers on its first line
+(`lib/legal/markers.mjs`): `<!-- ds24-appkit:placeholder -->` is the shipped
+text nobody has replaced, and `<!-- ds24-appkit:draft -->` is the text
+`compliance-check` drafted. While the second is there, the page shows a warning
+box above the text in the reader's language — **"Entwurf zur Vorlage bei einer
+Rechtsberatung"**, drafted by software, not reviewed, not legal advice — and
+`legal-check` reports the page as a draft on every run; the file itself opens
+with the same sentence in its own language, so a copy handed to a lawyer carries
+it too. **Only the operator removes the marker, after a lawyer has read the
+text.** It is a warning and not a failure, deliberately: the review leaves no
+trace a command could measure, and a gate that cannot be passed honestly gets
+passed by deleting the marker — which would make the page claim a review that
+never happened. The publisher of this template, Digistore24 Inc., St.
+Petersburg, USA, gives no legal advice; the label is how the texts say so for
+it.

@@ -133,4 +133,9 @@ a customer — an Impressum still carrying the shipped placeholder (§ 5 DDG), a
 policy that has not been written (Art. 13 GDPR), an assistant switched on without the
 AI notice (Art. 50 EU AI Act). It also says whether the retention jobs have actually
 run: *"last run: never"* means the retention period in the privacy policy is not
-describing this app.
+describing this app. ⚠️ **A legal page reported as a draft for legal review is a
+warning, not a failure, and it does not go away by itself**: the page shows
+"Entwurf zur Vorlage bei einer Rechtsberatung" to every visitor until the operator
+removes the `<!-- ds24-appkit:draft -->` line after a lawyer has read the text.
+Ask whether that review has happened; never remove the marker yourself, and never
+call the page finished while it is there.

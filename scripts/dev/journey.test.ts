@@ -803,6 +803,20 @@ describe("the legal pages", () => {
     expect(stateOf({ text: written }, "compliance-check")).toBe("done");
   });
 
+  it("is done with a text the skill DRAFTED, and the evidence says it is still a draft", () => {
+    // The second marker (`lib/legal/markers.mjs`): written by `compliance-check`,
+    // not yet read by a lawyer. The skill has done its work, so the row is done —
+    // but "done" without the word would read as finished, and the review is the
+    // one step nobody here can measure.
+    const draft = "<!-- ds24-appkit:draft -->\n**Entwurf zur Vorlage bei einer Rechtsberatung** — Probe.\n\n# Datenschutz";
+    const text = { ...written, "content/legal/datenschutz.de.md": draft };
+    expect(stateOf({ text }, "compliance-check")).toBe("done");
+    const row = journeyState(facts({ text })).rows.find((r) => r.skill === "compliance-check")!;
+    expect(row.evidence).toContain("1 still a draft for legal review");
+    const clean = journeyState(facts({ text: written })).rows.find((r) => r.skill === "compliance-check")!;
+    expect(clean.evidence).not.toContain("draft");
+  });
+
   it("counts only the files that are there, so a dropped locale cannot block it", () => {
     // An app that carries two locales and not four is still an app with written
     // legal pages. A missing file is neither a written one nor a placeholder.

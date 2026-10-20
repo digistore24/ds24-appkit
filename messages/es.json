@@ -136,7 +136,7 @@
     "onboardingTokensBody": "Con tokens pagas solo lo que realmente usas.",
     "onboardingTokensCta": "Comprar saldo",
     "onboardingTokensDone": "{balance} tokens en tu cuenta.",
-    "purchaseReseller": "El cargo se realiza a través de Digistore24 GmbH — con ese nombre aparece el pago en tu extracto bancario."
+    "purchaseReseller": "El cargo se realiza a través de Digistore24 — con ese nombre aparece el pago en tu extracto bancario."
   },
   "onboarding": {
     "title": "Tus primeros pasos",
@@ -546,7 +546,7 @@
     "signInBody": "Inicia sesión con la dirección de correo electrónico con la que has pagado — tu compra se asignará entonces automáticamente a tu cuenta.",
     "signInCta": "Iniciar sesión ahora",
     "dashboardCta": "Ir a la app",
-    "reseller": "El cargo se realiza a través de Digistore24 GmbH — con ese nombre aparece también el pago en tu extracto bancario."
+    "reseller": "El cargo se realiza a través de Digistore24 — con ese nombre aparece también el pago en tu extracto bancario."
   },
   "ds24Connected": {
     "title": "Acceso concedido",
@@ -814,6 +814,8 @@
     "navLabel": "Información legal",
     "placeholderTitle": "Esta página todavía no está rellenada",
     "placeholderBody": "El texto de abajo es el marcador de posición incluido, no una declaración válida. Inicia el skill compliance-check para sustituirlo.",
+    "draftTitle": "Borrador para revisión jurídica",
+    "draftBody": "Este texto fue redactado por software a partir del resumen de datos de esta aplicación y todavía no ha sido revisado por un abogado. No es asesoramiento jurídico.",
     "otherLanguage": "Esta página todavía no existe en tu idioma y se muestra en la versión disponible.",
     "impressum": {
       "title": "Aviso legal"
