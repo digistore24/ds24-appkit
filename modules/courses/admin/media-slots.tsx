@@ -33,7 +33,7 @@
 // step would then throw away, because a presigned PUT cannot enforce a size.
 // The server asks the same question again on both routes, because a check in a
 // browser is not a check.
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Image as ImageIcon, Paperclip, Trash2 } from "lucide-react";
 
@@ -61,6 +61,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MediaUpload } from "@/components/ui/media-upload";
 import { useActionToast, type ActionState } from "@/hooks/use-action-toast";
+import { afterOk } from "@/hooks/after-ok";
 import { formatBytes } from "@/lib/media/rules";
 
 import { COURSE_SLOTS, COURSE_SLOT_IDS, mayOperatorWrite, type CourseSlotId } from "../rules";
@@ -198,7 +199,6 @@ function Slot({
   const locale = useLocale();
   const formAction = ACTIONS[slot];
   const [state, action, pending] = useActionState(formAction ?? NO_FORM_ACTION, EMPTY_ACTION_STATE);
-  const [detachState, detachAction] = useActionState(detachSlotAction, EMPTY_ACTION_STATE);
   // ⚠️ The confirm button calls the action OUTSIDE a form, so it has to open its
   // own transition — `useActionState`'s dispatch called bare logs "An async
   // function with useActionState was called outside of a transition" and leaves
@@ -207,6 +207,11 @@ function Slot({
   // because it never reaches the server log.
   const [detachPending, startDetach] = useTransition();
   const [removing, setRemoving] = useState(false);
+  // The confirmation closes once the server has detached — a refusal leaves it.
+  const [detachState, detachAction] = useActionState(
+    afterOk(detachSlotAction, () => setRemoving(false)),
+    EMPTY_ACTION_STATE,
+  );
   // Set by `<MediaUpload>` while submitting would be pointless: the file is
   // over the ceiling, or the direct upload is still running.
   const [blocked, setBlocked] = useState(false);
@@ -217,10 +222,6 @@ function Slot({
   useActionToast(state);
   useActionToast(detachState);
   useActionToast(directState);
-
-  useEffect(() => {
-    if (detachState.ok) setRemoving(false);
-  }, [detachState.ok]);
 
   const rules = COURSE_SLOTS[slot];
   // Whichever of the two routes this slot takes, this is the state that says

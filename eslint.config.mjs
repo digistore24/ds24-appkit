@@ -28,20 +28,25 @@ const eslintConfig = [
       // A warning, not an error — deliberately.
       //
       // Next 16 brought this rule along as an error. It is a good rule: an
-      // effect that sets state immediately causes a second render pass. But it
-      // also hits two patterns this app uses on purpose and for which React
-      // offers no better answer:
+      // effect that sets state immediately causes a second render pass. This
+      // tree is clean under it since 2026-10-22 — it used to hit two patterns
+      // of this app's own, and both have a better answer now:
       //
       //   1. the hydration guard (`useEffect(() => setMounted(true), [])`) in
-      //      components/theme-toggle.tsx — the server does not know the theme,
-      //      it lives in localStorage;
-      //   2. "close the dialog only once the server action succeeded"
-      //      (`useActionState` → `if (state.ok) setOpen(false)`) in the admin
-      //      pages.
+      //      components/theme-toggle.tsx is `useSyncExternalStore` with a
+      //      server snapshot — React's own form of "differs between server and
+      //      client";
+      //   2. "close the dialog only once the server action succeeded" is
+      //      `afterOk(action, then)` (hooks/after-ok.ts) — the close runs
+      //      INSIDE the action, in the same transition as the result, instead
+      //      of one render later. A prop change that resets state is decided
+      //      during the render that sees it, as React's "adjust state when a
+      //      prop changes" describes.
       //
-      // As an error the rule would make `node run.mjs lint` red out of the box on a
-      // freshly deployed app. As a warning it stays visible — whoever writes a
-      // NEW effect that sets state should take it seriously.
+      // It stays a warning all the same: an app's agent writes new effects, and
+      // a red lint over a performance heuristic is a brake, and a brake is what
+      // somebody eventually removes. A warning is read; the sentence above says
+      // what to write instead.
       "react-hooks/set-state-in-effect": "warn",
 
       // 🚨 A leading underscore means "deliberately unused", and this tree has

@@ -22,6 +22,7 @@ import { Send, Shield, ShieldOff } from "lucide-react";
 
 import { MAX_MESSAGE_LENGTH, contentState, displayNameFor } from "@/modules/community/lib/rules";
 import { useActionToast } from "@/hooks/use-action-toast";
+import { afterOk } from "@/hooks/after-ok";
 import { PostBody } from "@/modules/community/components/post-body";
 import { ReportButton } from "@/modules/community/components/report-button";
 import { Button } from "@/components/ui/button";
@@ -123,7 +124,11 @@ export function MessageComposer({
 }) {
   const t = useTranslations("community");
   const [content, setContent] = useState("");
-  const [state, action] = useActionState(sendMessageAction, EMPTY);
+  // Cleared only when the message actually landed — a refusal leaves it.
+  const [state, action] = useActionState(
+    afterOk(sendMessageAction, () => setContent("")),
+    EMPTY,
+  );
   const { onSubmit: dispatch, pending } = useFormSubmit(action);
 
   // Whether the state below belongs to a submit of ours. `useActionState`
@@ -138,11 +143,6 @@ export function MessageComposer({
   };
 
   useActionToast(state);
-
-  // Cleared only when the message actually landed — a refusal leaves it.
-  useEffect(() => {
-    if (state.ok) setContent("");
-  }, [state]);
 
   useEffect(() => {
     if (!awaiting.current) return;

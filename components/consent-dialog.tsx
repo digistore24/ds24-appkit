@@ -36,7 +36,7 @@
 // And note the shipped answer to "do I need one of those?": no. This app sets
 // three cookies, all strictly necessary or set by the user's own click. A
 // banner where nothing is tracked is a defect, not caution.
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
@@ -49,6 +49,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useActionToast } from "@/hooks/use-action-toast";
+import { afterOk } from "@/hooks/after-ok";
 import { answerConsentAction } from "@/app/consent-actions";
 
 const EMPTY = { error: null, ok: null };
@@ -73,15 +74,16 @@ export function ConsentDialog({ pending }: { pending: PendingConsent[] }) {
   const t = useTranslations("consent");
 
   const [answered, setAnswered] = useState<string[]>([]);
-  const [state, action, busy] = useActionState(answerConsentAction, EMPTY);
-  useActionToast(state);
-
   // Take the answered one off the queue so the next question appears. The
   // server revalidates too, but the dialog is open in front of the page and
   // would otherwise re-ask the same thing until the route refreshes.
-  useEffect(() => {
-    if (state.ok) setAnswered((current) => [...current, current.length.toString()]);
-  }, [state.ok]);
+  const [state, action, busy] = useActionState(
+    afterOk(answerConsentAction, () =>
+      setAnswered((current) => [...current, current.length.toString()]),
+    ),
+    EMPTY,
+  );
+  useActionToast(state);
 
   const queue = pending.slice(answered.length);
   const current = queue[0];

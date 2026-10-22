@@ -46,6 +46,7 @@ import {
 } from "@/modules/community/lib/rules";
 import { cn } from "@/lib/utils";
 import { useActionToast } from "@/hooks/use-action-toast";
+import { afterOk } from "@/hooks/after-ok";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -306,15 +307,15 @@ export function CreateGroupDialog({ plans }: { plans: PlanOption[] }) {
   const t = useTranslations("communityAdmin");
   const tCommon = useTranslations("common");
   const [open, setOpen] = useState(false);
-  const [state, action] = useActionState(createGroupAction, EMPTY_ACTION_STATE);
+  // Close after creating; leave open on error — and, thanks to
+  // `useDialogSubmit`, with everything the operator typed still on screen.
+  const [state, action] = useActionState(
+    afterOk(createGroupAction, () => setOpen(false)),
+    EMPTY_ACTION_STATE,
+  );
   const { onSubmit, pending } = useDialogSubmit(action);
 
   useActionToast(state);
-  // Close after creating; leave open on error — and, thanks to
-  // `useDialogSubmit`, with everything the operator typed still on screen.
-  useEffect(() => {
-    if (state.ok) setOpen(false);
-  }, [state]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -584,8 +585,10 @@ export function GroupTable({
   const toModerate = byId(moderateId);
   const toArchive = byId(archiveId);
 
+  // The archive confirmation closes once the server has done it — a refusal
+  // leaves it up with the sentence saying why.
   const [archiveState, archiveAction] = useActionState(
-    setGroupArchivedAction,
+    afterOk(setGroupArchivedAction, () => setArchiveId(null)),
     EMPTY_ACTION_STATE,
   );
   const [reorderState, reorderAction] = useActionState(
@@ -596,10 +599,6 @@ export function GroupTable({
 
   useActionToast(archiveState);
   useActionToast(reorderState);
-
-  useEffect(() => {
-    if (archiveState.ok) setArchiveId(null);
-  }, [archiveState]);
 
   const placeholderLabel = tCommunity("memberPlaceholder");
 

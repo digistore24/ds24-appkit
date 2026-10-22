@@ -36,6 +36,7 @@ import {
 import { formatBytes } from "@/lib/media/rules";
 import { cn } from "@/lib/utils";
 import { useActionToast } from "@/hooks/use-action-toast";
+import { afterOk } from "@/hooks/after-ok";
 import { Figure } from "@/components/ui/figure";
 import { MediaUpload } from "@/components/ui/media-upload";
 import { PostBody } from "@/modules/community/components/post-body";
@@ -158,18 +159,28 @@ function PostImageFields({
   const blocked = React.useRef<boolean[]>([]);
 
   // A successful post empties the fields — and takes the extra slots away with
-  // them, so the next reply starts as small as the first one did.
-  useEffect(() => {
-    if (!resetKey) return;
-    setSlots(1);
-    blocked.current = [];
-  }, [resetKey]);
+  // them, so the next reply starts as small as the first one did. Decided in
+  // the render that sees the new key (React's "adjust state when a prop
+  // changes"), not in an effect one commit later: the single slot and the
+  // emptied fields then appear in the same frame.
+  const [seenReset, setSeenReset] = useState(resetKey);
+  if (resetKey !== seenReset) {
+    setSeenReset(resetKey);
+    if (resetKey) setSlots(1);
+  }
 
   if (policy.max <= 0) return null;
 
+  const live = Math.min(slots, policy.max);
   const report = (index: number, value: boolean) => {
-    blocked.current[index] = value;
-    onBlocked(blocked.current.some(Boolean));
+    // Only the slots on screen count. A slot a reset took away may have left a
+    // `true` behind, and `<MediaUpload>` reports only for fields that exist —
+    // so the flags are cut to those here, in a handler, where a ref may be
+    // written (the render above may not).
+    const flags = blocked.current.slice(0, live);
+    flags[index] = value;
+    blocked.current = flags;
+    onBlocked(flags.some(Boolean));
   };
 
   return (
@@ -384,7 +395,14 @@ export function PostComposer({
   // True while a picked picture is over the ceiling: submitting would spend a
   // posting allowance on a refusal.
   const [blocked, setBlocked] = useState(false);
-  const [state, action] = useActionState(addPostAction, EMPTY);
+  // Cleared only when the post actually landed. A refusal leaves it — the
+  // whole reason this form is not `<form action={…}>`, and the half of NFR-37
+  // that matters most: a thousand-word post refused for being a thousand and
+  // one must not vanish.
+  const [state, action] = useActionState(
+    afterOk(addPostAction, () => setContent("")),
+    EMPTY,
+  );
   const { onSubmit: dispatch, pending } = useFormSubmit(action);
 
   // Whether the state below belongs to a submit of ours. `useActionState`
@@ -399,14 +417,6 @@ export function PostComposer({
   };
 
   useActionToast(state);
-  // Cleared only when the post actually landed. A refusal leaves it — the
-  // whole reason this form is not `<form action={…}>`, and the half of NFR-37
-  // that matters most: a thousand-word post refused for being a thousand and
-  // one must not vanish.
-  useEffect(() => {
-    if (state.ok) setContent("");
-  }, [state]);
-
   useEffect(() => {
     if (!awaiting.current) return;
     if (!state.ok && !state.error) return;
@@ -625,25 +635,28 @@ export function PostList({
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const [editState, editAction] = useActionState(editPostAction, EMPTY);
-  const [deleteState, deleteAction] = useActionState(deletePostAction, EMPTY);
+  // The dialog closes once the server has written, and the list is told to ask
+  // for the change at once — on a refusal neither happens.
+  const [editState, editAction] = useActionState(
+    afterOk(editPostAction, () => {
+      setEditId(null);
+      onChanged?.();
+    }),
+    EMPTY,
+  );
+  const [deleteState, deleteAction] = useActionState(
+    afterOk(deletePostAction, () => {
+      setDeleteId(null);
+      onChanged?.();
+    }),
+    EMPTY,
+  );
   const { onSubmit: onEditSubmit, pending: editing } =
     useFormSubmit(editAction);
   const [, startAction] = useTransition();
 
   useActionToast(editState);
   useActionToast(deleteState);
-
-  useEffect(() => {
-    if (!editState.ok) return;
-    setEditId(null);
-    onChanged?.();
-  }, [editState, onChanged]);
-  useEffect(() => {
-    if (!deleteState.ok) return;
-    setDeleteId(null);
-    onChanged?.();
-  }, [deleteState, onChanged]);
 
   const placeholderLabel = t("memberPlaceholder");
   const toEdit = posts.find((post) => post.id === editId) ?? null;

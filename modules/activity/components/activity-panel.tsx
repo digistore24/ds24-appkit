@@ -124,10 +124,15 @@ export function ActivityPanel({ activityId, subject, children }: ActivityPanelPr
   const [notRecorded, setNotRecorded] = useState(false);
   const [liveMessage, setLiveMessage] = useState("");
 
-  useEffect(() => {
-    let cancelled = false;
-    // A new element starts clean — without this, the previous element's
-    // attempts, "Passed!" and error survive a prop change.
+  // A new element starts clean — without this, the previous element's
+  // attempts, "Passed!" and error survive a prop change. Decided in the render
+  // that sees the new props (React's "adjust state when a prop changes"), so
+  // the clean panel and its "loading" are one render, not a flash of the old
+  // element followed by a second pass.
+  const element = `${activityId}:${subject}`;
+  const [shown, setShown] = useState(element);
+  if (shown !== element) {
+    setShown(element);
     setLoaded(null);
     setAttempts(0);
     setScore(null);
@@ -136,6 +141,10 @@ export function ActivityPanel({ activityId, subject, children }: ActivityPanelPr
     setErrorCode(null);
     setNotRecorded(false);
     setLiveMessage("");
+  }
+
+  useEffect(() => {
+    let cancelled = false;
     loadActivityAction({ activityId, subject })
       .then((state) => {
         if (cancelled) return;

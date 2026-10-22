@@ -19,12 +19,12 @@
 // `standingProblem()` on the server, not prevented by disabling a button here.
 // A hidden control is not a permission.
 
-import * as React from "react";
 import { useActionState, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { EyeOff, PenOff, ShieldCheck } from "lucide-react";
 
 import { useActionToast } from "@/hooks/use-action-toast";
+import { afterOk } from "@/hooks/after-ok";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -75,22 +75,21 @@ function ListButton({
   Icon: (typeof FIELDS)[number]["icon"];
 }) {
   const t = useTranslations("community");
-  const [state, action] = useActionState(setStandingAction, EMPTY_ACTION_STATE);
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
-
-  useActionToast(state);
-
   // A refusal keeps the dialog open with what was typed still in it — the
   // reason is prose somebody wrote, and losing it to a validation error is the
   // one thing that makes an operator stop writing reasons.
-  React.useEffect(() => {
-    if (state.ok) {
+  const [state, action] = useActionState(
+    afterOk(setStandingAction, () => {
       setOpen(false);
       setReason("");
-    }
-  }, [state.ok]);
+    }),
+    EMPTY_ACTION_STATE,
+  );
+
+  useActionToast(state);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

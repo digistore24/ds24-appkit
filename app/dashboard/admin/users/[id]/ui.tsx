@@ -16,6 +16,7 @@ import { Ban, CircleCheck, CirclePause, CircleSlash, Clock, Coins, KeyRound, Pen
 import type { GrantState } from "@/lib/entitlements/rules";
 import { cn } from "@/lib/utils";
 import { useActionToast } from "@/hooks/use-action-toast";
+import { afterOk } from "@/hooks/after-ok";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -144,28 +145,24 @@ function AdjustBalance({
 }) {
   const t = useTranslations("memberBilling");
   const tCommon = useTranslations("common");
-  const [state, formAction, isPending] = useActionState(
-    adjustTokensAction,
-    EMPTY_ACTION_STATE,
-  );
   const [confirming, setConfirming] = useState(false);
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
   const confirmed = useRef(false);
-
-  useActionToast(state);
-
   // The confirmation closes only once the server has confirmed. On a refusal it
   // stays up with the input intact — the toast says why, and the Operator can
   // correct the amount instead of typing everything again.
-  useEffect(() => {
-    if (state.ok) {
+  const [state, formAction, isPending] = useActionState(
+    afterOk(adjustTokensAction, () => {
       setConfirming(false);
       setAmount("");
       setReason("");
-    }
-  }, [state]);
+    }),
+    EMPTY_ACTION_STATE,
+  );
+
+  useActionToast(state);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     if (confirmed.current) {
@@ -299,22 +296,21 @@ function GrantPlan({
 }) {
   const t = useTranslations("memberBilling");
   const tCommon = useTranslations("common");
-  const [state, formAction, isPending] = useActionState(grantPlanAction, EMPTY_ACTION_STATE);
   const [productKey, setProductKey] = useState(products[0]?.key ?? "");
   const [reason, setReason] = useState("");
   const [day, setDay] = useState("");
-
-  useActionToast(state);
-
   // Cleared only once the server has confirmed. On a refusal the input stays —
   // the toast says why, and the Operator corrects one field instead of all of
   // them.
-  useEffect(() => {
-    if (state.ok) {
+  const [state, formAction, isPending] = useActionState(
+    afterOk(grantPlanAction, () => {
       setReason("");
       setDay("");
-    }
-  }, [state]);
+    }),
+    EMPTY_ACTION_STATE,
+  );
+
+  useActionToast(state);
 
   // Nothing to grant: a registry that declares only token packages. Saying so
   // beats a picker with no options and a form that refuses every submission.

@@ -3,7 +3,7 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
 import { useTranslations } from "next-intl";
 import { Monitor, Sun, Moon } from "lucide-react";
@@ -33,14 +33,24 @@ const THEME_OPTIONS = [
   { value: "dark", labelKey: "dark", Icon: Moon },
 ] as const;
 
+/** Nothing to subscribe to: the only "change" is the client taking over. */
+const subscribeToNothing = () => () => {};
+
 export function ThemeToggle({ className }: { className?: string }) {
   const t = useTranslations("theme");
   const { theme, setTheme } = useTheme();
   // On the server the user's choice is unknown (it lives in localStorage).
   // Render only after mounting, otherwise React reports a hydration mismatch
-  // as soon as someone is not on "system".
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  // as soon as someone is not on "system". `useSyncExternalStore` with a server
+  // snapshot of `false` is React's own way to say "this value differs between
+  // server and client": the hydration pass renders the server's answer and the
+  // client's follows — without the effect-driven second render pass that
+  // `useEffect(() => setMounted(true), [])` used to be.
+  const mounted = useSyncExternalStore(
+    subscribeToNothing,
+    () => true,
+    () => false,
+  );
 
   const buttons = useRef<Array<HTMLButtonElement | null>>([]);
 

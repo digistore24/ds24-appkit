@@ -25,7 +25,7 @@
 // No counts, anywhere (FR-222). No "3 new posts" badge — that is an aggregate
 // over the follow graph wearing a friendly hat.
 import * as React from "react";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
@@ -71,11 +71,18 @@ export function FeedList({
   const [pending, startLoading] = useTransition();
 
   // A page render replaces the list — otherwise a router refresh would leave
-  // the stale rows sitting under the fresh ones.
-  useEffect(() => {
+  // the stale rows sitting under the fresh ones. Decided in the render that
+  // receives the new props (React's "adjust state when a prop changes"), so
+  // the fresh rows are what THIS render shows rather than the one after it.
+  const [received, setReceived] = useState({ initialItems, initialNextCursor });
+  if (
+    received.initialItems !== initialItems ||
+    received.initialNextCursor !== initialNextCursor
+  ) {
+    setReceived({ initialItems, initialNextCursor });
     setItems(initialItems);
     setNextCursor(initialNextCursor);
-  }, [initialItems, initialNextCursor]);
+  }
 
   // The polling loop is `useLiveScope` — shared with both discussion surfaces.
   // This file used to carry its own copy, which is how it kept two defects a

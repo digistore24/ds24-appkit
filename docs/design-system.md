@@ -445,7 +445,10 @@ that way, and never by a component of your own beside it.
 has to appear*: `<Callout>` (`components/ui/callout.tsx`) for what has to stay on
 screen, `useActionToast(state)` (`hooks/use-action-toast.ts`) for a server action on
 the same page, and `<FlashToast>` (`components/flash-toast.tsx`) for something that
-ended in a `redirect()`. Server Actions return `{ error, ok }`; `<FlashToast>` fires
+ended in a `redirect()`. What happens on SUCCESS only — the dialog closes, the field
+empties — is `afterOk(action, then)` (`hooks/after-ok.ts`) around the action, never
+an effect watching `state.ok`: the close runs inside the action's own transition,
+so result and closed dialog are one render, and a refusal runs nothing. Server Actions return `{ error, ok }`; `<FlashToast>` fires
 once and then strips its query parameter, so a reload does not repeat the message —
 and **the message never travels in the URL**: the parameter carries a *reference*
 (an id) the receiving page looks up, because a URL carrying the sentence itself lets

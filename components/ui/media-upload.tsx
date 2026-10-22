@@ -227,12 +227,23 @@ export function MediaUpload({
   // callout flashed for a frame. The handle has its own end: `onChange` clears
   // it the moment another file is picked, which is the only moment at which it
   // stops describing what the form carries.
+  //
+  // What is STATE is decided in the render that sees the new key (React's
+  // "adjust state when a prop changes"); what is not — the uncontrolled input's
+  // value, the caller's flag — follows in the effect, because a render may
+  // touch neither the DOM nor another component.
+  const [seenReset, setSeenReset] = React.useState(resetKey);
+  if (resetKey !== seenReset) {
+    setSeenReset(resetKey);
+    if (resetKey) {
+      setRefused(null);
+      setFailed(null);
+      setPercent(null);
+    }
+  }
   React.useEffect(() => {
     if (!resetKey) return;
     if (fileRef.current) fileRef.current.value = "";
-    setRefused(null);
-    setFailed(null);
-    setPercent(null);
     onBlocked?.(false);
     // `onBlocked` is deliberately not a dependency: callers pass an inline
     // closure, and depending on it would empty the field on every render.

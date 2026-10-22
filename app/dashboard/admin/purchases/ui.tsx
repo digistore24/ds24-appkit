@@ -13,7 +13,7 @@
 // re-renders the server component after an attach, and a filter held in
 // component state would survive that render while the rows beneath it were
 // refetched unfiltered — a table that no longer matches the form above it.
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useState, useTransition } from "react";
 import { useTranslations, useFormatter } from "next-intl";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -50,6 +50,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useActionToast } from "@/hooks/use-action-toast";
+import { afterOk } from "@/hooks/after-ok";
 import type { OrderStatus } from "@/lib/digistore/claimable";
 import {
   ANY_PRODUCT,
@@ -271,21 +272,20 @@ export function PurchasesTable({
   const tCommon = useTranslations("common");
   const format = useFormatter();
 
-  const [state, action] = useActionState(attachOrderAction, EMPTY_ACTION_STATE);
   const [isPending, startAction] = useTransition();
   const [toAttach, setToAttach] = useState<Row | null>(null);
   const [memberId, setMemberId] = useState("");
-
-  useActionToast(state);
-
   // Close only on success — a refused attach leaves the dialog open with the
   // toast explaining why.
-  useEffect(() => {
-    if (state.ok) {
+  const [state, action] = useActionState(
+    afterOk(attachOrderAction, () => {
       setToAttach(null);
       setMemberId("");
-    }
-  }, [state.ok]);
+    }),
+    EMPTY_ACTION_STATE,
+  );
+
+  useActionToast(state);
 
   const filtered = isFiltered(filter);
 

@@ -30,6 +30,7 @@ import { useTranslations } from "next-intl";
 import { ListTree, MoveVertical, Pencil, Plus, Trash2 } from "lucide-react";
 
 import { useActionToast } from "@/hooks/use-action-toast";
+import { afterOk } from "@/hooks/after-ok";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -163,14 +164,14 @@ export function CreateBlockDialog({
   const t = useTranslations("coursesAdmin");
   const tCommon = useTranslations("common");
   const [open, setOpen] = useState(false);
-  const [state, action, pending] = useActionState(createBlockAction, EMPTY);
-
-  useActionToast(state);
   // Close on success only — a rejected slug stays in the field rather than
   // having to be typed again.
-  useEffect(() => {
-    if (state.ok) setOpen(false);
-  }, [state]);
+  const [state, action, pending] = useActionState(
+    afterOk(createBlockAction, () => setOpen(false)),
+    EMPTY,
+  );
+
+  useActionToast(state);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -251,12 +252,13 @@ export function CreateUnitDialog({
   const t = useTranslations("coursesAdmin");
   const tCommon = useTranslations("common");
   const [open, setOpen] = useState(false);
-  const [state, action, pending] = useActionState(createUnitAction, EMPTY);
+  // Close on success only — see `CreateBlockDialog`.
+  const [state, action, pending] = useActionState(
+    afterOk(createUnitAction, () => setOpen(false)),
+    EMPTY,
+  );
 
   useActionToast(state);
-  useEffect(() => {
-    if (state.ok) setOpen(false);
-  }, [state]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -338,8 +340,16 @@ export function BlockMenu({ block, shape }: { block: BlockRef; shape: string }) 
   const [moving, setMoving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const [editState, editAction, editPending] = useActionState(updateBlockAction, EMPTY);
-  const [deleteState, deleteAction] = useActionState(deleteBlockAction, EMPTY);
+  const [editState, editAction, editPending] = useActionState(
+    afterOk(updateBlockAction, () => setEditing(false)),
+    EMPTY,
+  );
+  // Stays open on a refusal — that is where the sentence naming the lesson
+  // count is worth reading.
+  const [deleteState, deleteAction] = useActionState(
+    afterOk(deleteBlockAction, () => setDeleting(false)),
+    EMPTY,
+  );
   // ⚠️ The confirm button calls the action OUTSIDE a form, so it has to open
   // its own transition — `useActionState`'s dispatch called bare logs
   // "An async function with useActionState was called outside of a transition"
@@ -349,14 +359,6 @@ export function BlockMenu({ block, shape }: { block: BlockRef; shape: string }) 
 
   useActionToast(editState);
   useActionToast(deleteState);
-  useEffect(() => {
-    if (editState.ok) setEditing(false);
-  }, [editState]);
-  // Stays open on a refusal — that is where the sentence naming the lesson
-  // count is worth reading.
-  useEffect(() => {
-    if (deleteState.ok) setDeleting(false);
-  }, [deleteState]);
 
   if (!mayOperatorWrite(block.origin)) {
     return <span className="text-muted-foreground text-xs">{t("lockedHint")}</span>;
@@ -486,19 +488,19 @@ export function UnitMenu({ unit }: { unit: UnitRef }) {
   const [moving, setMoving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const [editState, editAction, editPending] = useActionState(updateUnitAction, EMPTY);
-  const [deleteState, deleteAction] = useActionState(deleteUnitAction, EMPTY);
+  const [editState, editAction, editPending] = useActionState(
+    afterOk(updateUnitAction, () => setEditing(false)),
+    EMPTY,
+  );
+  const [deleteState, deleteAction] = useActionState(
+    afterOk(deleteUnitAction, () => setDeleting(false)),
+    EMPTY,
+  );
   // Same reason as in `BlockMenu` — see the comment there.
   const [deletePending, startDelete] = useTransition();
 
   useActionToast(editState);
   useActionToast(deleteState);
-  useEffect(() => {
-    if (editState.ok) setEditing(false);
-  }, [editState]);
-  useEffect(() => {
-    if (deleteState.ok) setDeleting(false);
-  }, [deleteState]);
 
   if (!mayOperatorWrite(unit.origin)) return null;
 

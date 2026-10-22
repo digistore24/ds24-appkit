@@ -80,17 +80,24 @@ export function CompanionPanel({ companionId, subject, maxInputChars }: Companio
    */
   const showing = useRef(`${companionId}:${subject}`);
 
-  useEffect(() => {
-    let alive = true;
-    const key = `${companionId}:${subject}`;
-    showing.current = key;
-    // Everything that belongs to the previous subject goes with it. A draft
-    // typed for day 3 must not be sent against day 7 with one click, and a
-    // stale error must not sit above a conversation it was never about.
+  // Everything that belongs to the previous subject goes with it. A draft
+  // typed for day 3 must not be sent against day 7 with one click, and a
+  // stale error must not sit above a conversation it was never about. Decided
+  // in the render that sees the new subject (React's "adjust state when a prop
+  // changes"), so the emptied panel and the new subject are one render.
+  const subjectKey = `${companionId}:${subject}`;
+  const [shown, setShown] = useState(subjectKey);
+  if (shown !== subjectKey) {
+    setShown(subjectKey);
     setLoaded(null);
     setTurns([]);
     setMessage("");
     setError(null);
+  }
+
+  useEffect(() => {
+    let alive = true;
+    showing.current = `${companionId}:${subject}`;
 
     void loadCompanionAction({ companionId, subject })
       .then((result) => {

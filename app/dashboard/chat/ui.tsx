@@ -39,6 +39,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useActionToast } from "@/hooks/use-action-toast";
+import { afterOk } from "@/hooks/after-ok";
 import { MAX_MESSAGE_CHARS } from "@/lib/ai/rules";
 import { clearChatAction } from "./actions";
 import { AiDisclosure } from "@/components/ai-disclosure";
@@ -116,17 +117,13 @@ export function ChatWindow({
   const [busy, setBusy] = useState(false);
   const [errorCode, setErrorCode] = useState<string | null>(null);
 
+  // The server re-renders the page after the history is deleted; mirror that
+  // into local state, or the transcript stays on screen until a reload.
   const [clearState, clearAction, clearing] = useActionState(
-    clearChatAction,
+    afterOk(clearChatAction, () => setMessages([])),
     EMPTY,
   );
   useActionToast(clearState);
-
-  // The server re-renders the page after the history is deleted; mirror that
-  // into local state, or the transcript stays on screen until a reload.
-  useEffect(() => {
-    if (clearState.ok) setMessages([]);
-  }, [clearState.ok]);
 
   const bottom = useRef<HTMLDivElement>(null);
   useEffect(() => {

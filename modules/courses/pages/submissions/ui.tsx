@@ -25,10 +25,11 @@
 // Feedback is `useActionState` + `useActionToast(state)`, the mechanism
 // `app/dashboard/admin/users/ui.tsx` established. Nothing here ends silently.
 
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 
 import { useActionToast } from "@/hooks/use-action-toast";
+import { afterOk } from "@/hooks/after-ok";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -65,22 +66,21 @@ export function ReplyForm({
 }) {
   const t = useTranslations("coursesAdmin");
   const tCommon = useTranslations("common");
-  const [state, send] = useActionState(replyToSubmissionAction, EMPTY);
   const [asking, setAsking] = useState(false);
   const [text, setText] = useState(defaultValue);
+  // Close the dialog once the write has SUCCEEDED, never on the click. A
+  // refusal is the thing worth reading, and a dialog that vanished with it
+  // would leave the toast explaining a screen that had already changed.
+  const [state, send] = useActionState(
+    afterOk(replyToSubmissionAction, () => setAsking(false)),
+    EMPTY,
+  );
   // Its own transition: `useActionState`'s dispatch called bare logs "An async
   // function with useActionState was called outside of a transition" and the
   // pending flag never moves — the same reason `../../admin/ui.tsx` has one.
   const [pending, startSending] = useTransition();
 
   useActionToast(state);
-
-  // Close the dialog once the write has SUCCEEDED, never on the click. A
-  // refusal is the thing worth reading, and a dialog that vanished with it
-  // would leave the toast explaining a screen that had already changed.
-  useEffect(() => {
-    if (state.ok) setAsking(false);
-  }, [state]);
 
   return (
     <div className="flex flex-col gap-3">

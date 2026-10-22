@@ -50,6 +50,7 @@ import {
 } from "@/lib/users/list-filter";
 import { cn } from "@/lib/utils";
 import { useActionToast } from "@/hooks/use-action-toast";
+import { afterOk } from "@/hooks/after-ok";
 import { RoleBadge } from "@/components/role-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
@@ -117,13 +118,13 @@ export function CreateUserDialog() {
   const tRoles = useTranslations("roles");
   const tCommon = useTranslations("common");
   const [open, setOpen] = useState(false);
-  const [state, action, pending] = useActionState(createUserAction, EMPTY_ACTION_STATE);
+  // Close after creating; leave open on error so the input is not lost.
+  const [state, action, pending] = useActionState(
+    afterOk(createUserAction, () => setOpen(false)),
+    EMPTY_ACTION_STATE,
+  );
 
   useActionToast(state);
-  // Close after creating; leave open on error so the input is not lost.
-  useEffect(() => {
-    if (state.ok) setOpen(false);
-  }, [state]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -370,9 +371,7 @@ export function UserTable({
   const format = useFormatter();
 
   const [roleState, roleAction] = useActionState(setRoleAction, EMPTY_ACTION_STATE);
-  const [blockState, blockAction] = useActionState(setBlockedAction, EMPTY_ACTION_STATE);
   const [linkState, linkAction] = useActionState(sendLoginLinkAction, EMPTY_ACTION_STATE);
-  const [deleteState, deleteAction] = useActionState(deleteUserAction, EMPTY_ACTION_STATE);
   const [impersonateState, impersonateAction] = useActionState(
     startImpersonationAction,
     EMPTY_ACTION_STATE,
@@ -386,22 +385,23 @@ export function UserTable({
   // …and for "sign in as this user", which is consequential enough to confirm:
   // the mis-click it prevents is picking the wrong row on a long list.
   const [toImpersonate, setToImpersonate] = useState<Row | null>(null);
+  // The confirmation only closes once the delete succeeded. If it fails (e.g.
+  // last admin) it stays up — the message explains why. The block confirmation
+  // closes the same way.
+  const [deleteState, deleteAction] = useActionState(
+    afterOk(deleteUserAction, () => setToDelete(null)),
+    EMPTY_ACTION_STATE,
+  );
+  const [blockState, blockAction] = useActionState(
+    afterOk(setBlockedAction, () => setToBlock(null)),
+    EMPTY_ACTION_STATE,
+  );
 
   useActionToast(roleState);
   useActionToast(blockState);
   useActionToast(linkState);
   useActionToast(deleteState);
   useActionToast(impersonateState);
-
-  // The confirmation only closes once the delete succeeded. If it fails (e.g.
-  // last admin) it stays up — the message explains why.
-  useEffect(() => {
-    if (deleteState.ok) setToDelete(null);
-  }, [deleteState]);
-
-  useEffect(() => {
-    if (blockState.ok) setToBlock(null);
-  }, [blockState]);
 
   /** Call a server action outside a form (menu entry / button). */
   function run(
