@@ -18,8 +18,9 @@
 // **that**, plus what was measured, rather than an invented rationale.
 //
 // Five overrides are pinned here, one measurement, one refusal, one
-// non-decision — and one field that is not an override at all (`allowScripts`,
-// section 6).
+// non-decision — one field that is not an override at all (`allowScripts`,
+// section 6), and one deprecation accepted by name with its expiry measured
+// (`eslint`, section 7).
 //
 // ── 6. `allowScripts` — the install scripts, decided rather than defaulted ──
 // npm 11.19 BLOCKS a dependency's `install`/`postinstall` by default and ends
@@ -485,6 +486,57 @@ describe("the deprecation warnings a first install prints", () => {
           `or say here why it stays.`,
       ).toEqual([]);
     }
+  });
+});
+
+// ── 7. `eslint@9` is deprecated, and stays until its plugins let it go ──────
+// Every 9.x prints `npm warn deprecated eslint@9.x: This version is no longer
+// supported` on a first install (measured on a fresh `npm ci`, 2026-10-22). The
+// obvious fix, `eslint@10`, is the one docs/troubleshooting.md already refuses:
+// `eslint-config-next` brings three plugins — react, jsx-a11y, import — whose
+// peer ranges stop at `^9`, so 10 trades one deprecation line for three
+// `ERESOLVE` blocks on the same install. Dev-only, never shipped. The factory's
+// deploy-local check accepts the line by name; THIS block is what ends the
+// acceptance: the day all three plugins admit ESLint 10, the assertion below
+// goes red and the entry — here, there, and the row in troubleshooting.md — goes.
+
+/** The plugins eslint-config-next pins that hold ESLint at 9. */
+const ESLINT_10_BLOCKERS = ["eslint-plugin-react", "eslint-plugin-jsx-a11y", "eslint-plugin-import"];
+
+/** Does one npm range (`^3 || ^4 || >=9`) admit ESLint major 10? */
+function admitsEslint10(range: string): boolean {
+  return range.split("||").some((part) => {
+    const m = /^\s*(\^|>=|~)?\s*(\d+)/.exec(part);
+    if (!m) return false;
+    const major = Number(m[2]);
+    if (m[1] === ">=") return major <= 10;
+    return major === 10;
+  });
+}
+
+describe("the eslint@9 deprecation a first install prints", () => {
+  it("is still held in place by eslint-config-next's plugins — otherwise drop it", () => {
+    const stillBlocking = ESLINT_10_BLOCKERS.filter((name) => {
+      const copies = Object.entries(lock.packages as Record<string, { peerDependencies?: Record<string, string> }>)
+        .filter(([where]) => packageNameAt(where) === name);
+      expect(copies.length, `${name} is not in the lockfile — did eslint-config-next drop it?`).toBeGreaterThan(0);
+      return copies.some(([, entry]) => !admitsEslint10(entry.peerDependencies?.eslint ?? ""));
+    });
+    expect(
+      stillBlocking,
+      "Every plugin that held ESLint at 9 now admits 10. Move eslint to ^10, " +
+        "then remove: this block, \"eslint\" from ACCEPTED_DEPRECATIONS in the " +
+        "factory's scripts/deploy-local.test.mjs, and the eslint@9 row in " +
+        "docs/troubleshooting.md → What the first install prints.",
+    ).not.toEqual([]);
+  });
+
+  it("reads the ranges it judges by — the helper tells 9 from 10", () => {
+    expect(admitsEslint10("^3 || ^4 || ^5 || ^6 || ^7 || ^8 || ^9.7")).toBe(false);
+    expect(admitsEslint10("^9 || ^10")).toBe(true);
+    expect(admitsEslint10(">=9.0.0")).toBe(true);
+    expect(admitsEslint10(">=11")).toBe(false);
+    expect(admitsEslint10("")).toBe(false);
   });
 });
 

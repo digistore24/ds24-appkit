@@ -247,10 +247,13 @@ already has a shadow — a `<Card>`, a variant that ships one — it wins by its
 `cn()` (`lib/utils.ts`) resolves the conflict and drops the base step, exactly
 as it does for `shadow-lg`.
 
-⚠️ That holds because `cn()` is an `extendTailwindMerge` here. Stock
-tailwind-merge 2.6.1 does not know this shorthand — it kept both classes and the
-base shadow won, so the line changed nothing at all while compiling, answering
-200 and going red nowhere. 🚨 Do not add a trailing `!` to
+⚠️ That holds because `cn()` is an `extendTailwindMerge` here, not stock.
+Stock tailwind-merge 2.6.1 did not know this shorthand — it kept both classes
+and the base shadow won, so the line changed nothing at all while compiling,
+answering 200 and going red nowhere; stock tailwind-merge 3 knows it, and still
+keeps the arbitrary form carrying a `var()` beside the shorthand `shadow-(--b)`
+(measured 2026-10-22), which is why the clauses in `lib/utils.ts` stay. 🚨 Do
+not add a trailing `!` to
 it: `!important` beats every later override too, and the marker takes the class
 out of the merge — a marked class and a plain one deliberately never conflict,
 in either spelling — so it leaves the dead base class in the DOM.

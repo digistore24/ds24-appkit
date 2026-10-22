@@ -30,6 +30,18 @@
 // including its sweep — 131 of 216 prefixes stop behaving like the plain form.
 // None is covered by the others, which is why all three sets are here.
 //
+// ⚠️ tailwind-merge 3 (2026-10-22) knows the shorthand and the trailing marker
+// natively, and this file was run against its STOCK `twMerge` before deciding
+// anything: 5 of 15 fail, both sweeps among them — eight prefixes (`flex`,
+// `font-stretch`, `font-features`, `decoration`, `shadow`, `inset-shadow`,
+// `text-shadow`, `drop-shadow`) where v3 reads the shorthand unlike the
+// arbitrary form. The elevation dial is one of them, so the clauses stay.
+// Three assertions below changed with v3 and say so where they stand: a
+// parenthesis WITHOUT a custom property inside is an arbitrary variable to v3
+// and merges, and a class carrying BOTH markers is unknown to v3 and is kept.
+// Both are the library's own readings, and `__testing` is what shows the
+// clauses had no hand in either.
+//
 // ⚠️ This file writes NO bracketed arbitrary value literally — every one is
 // assembled at run time out of escapes, on the rule in
 // `scripts/tailwind-raw-text.test.ts`: Tailwind reads this file as raw text and
@@ -37,7 +49,7 @@
 import { describe, expect, it } from "vitest";
 import { getDefaultConfig } from "tailwind-merge";
 
-import { cn } from "./utils";
+import { cn, __testing } from "./utils";
 
 /** The two brackets, assembled — see the header. */
 const OPEN = "[";
@@ -115,9 +127,15 @@ describe("cn — Tailwind v4's custom-property shorthand", () => {
   });
 
   it("leaves a class alone when the parenthesis is not a custom property", () => {
-    // Not this shorthand — Tailwind emits no rule for it either, so the merger
-    // must not start inventing a conflict.
-    expect(cn("w-10", "w-(foo)")).toBe("w-10 w-(foo)");
+    // Not this shorthand — Tailwind emits no rule for it, so clause 1 must not
+    // rewrite it. That is what the clause promises, and what is measured here.
+    expect(__testing.desugarVarShorthand("w-(foo)")).toBe("w-(foo)");
+    expect(__testing.desugarVarShorthand("gap-(4)")).toBe("gap-(4)");
+    // What the MERGE then says is tailwind-merge's own reading, recorded rather
+    // than corrected: v3 files any parenthesised value under the width group's
+    // arbitrary-variable validator, so the pair conflicts and the last one
+    // stays (2.6.1 kept both). `gap-(4)` meets no such validator and is kept.
+    expect(cn("w-10", "w-(foo)")).toBe("w-(foo)");
     expect(cn("grid-cols-2 gap-(4)")).toBe("grid-cols-2 gap-(4)");
   });
 
@@ -227,7 +245,11 @@ describe("cn — Tailwind v4's trailing important marker", () => {
     expect(cn("size-12 rounded-full p-0", "shadow-(--elevation-overlay)!")).toBe(
       "size-12 rounded-full p-0 shadow-(--elevation-overlay)!",
     );
-    expect(cn("w-10!", "w-(foo)!")).toBe("w-10! w-(foo)!");
+    // Same reading as without the marker (see the shorthand block above): v3
+    // takes `(foo)` for an arbitrary variable, so the pair merges. Clause 3
+    // only moved the marker, which the plain pair shows it did consistently.
+    expect(cn("w-10!", "w-(foo)!")).toBe("w-(foo)!");
+    expect(cn("w-10", "w-(foo)")).toBe("w-(foo)");
   });
 
   // ── Marked and unmarked deliberately do NOT conflict ─────────────────────
@@ -252,11 +274,16 @@ describe("cn — Tailwind v4's trailing important marker", () => {
   it("does not invent a reading for a class carrying both markers", () => {
     // Valid in neither Tailwind version, so clause 3 declines it: the leading
     // marker was already consumed, and what is left is a base class ending in a
-    // character no class group knows. 2.6.1 files that under box-shadow COLOUR
-    // and merges the pair — its answer, not ours, and it must stay its answer.
-    // This assertion is here to go red if the clause ever grows greedy enough
-    // to start interpreting a class Tailwind emits no rule for.
-    expect(cn("!shadow-sm!", "!shadow-lg!")).toBe("!shadow-lg!");
+    // character no class group knows. The clause's refusal is measured
+    // directly — a parsed class that already carries the marker comes back
+    // untouched — and the merge below is the library's own answer: v3 knows no
+    // group for it and keeps both (2.6.1 filed it under box-shadow COLOUR and
+    // merged the pair). Either way it must stay the library's answer; this is
+    // here to go red if the clause ever grows greedy enough to start
+    // interpreting a class Tailwind emits no rule for.
+    const both = { modifiers: [], hasImportantModifier: true, baseClassName: "shadow-sm!", maybePostfixModifierPosition: undefined };
+    expect(__testing.withTrailingImportant(both)).toBe(both);
+    expect(cn("!shadow-sm!", "!shadow-lg!")).toBe("!shadow-sm! !shadow-lg!");
     // The same class with only ONE marker is the one that is real, either way.
     expect(cn("!shadow-sm", "!shadow-lg")).toBe("!shadow-lg");
     expect(cn("shadow-sm!", "shadow-lg!")).toBe("shadow-lg!");

@@ -276,6 +276,7 @@ KIND of line and what to do with it, and that is what follows.
 | What npm prints | What it is, and what to do |
 |---|---|
 | `npm WARN deprecated @esbuild-kit/esm-loader` (and `core-utils`) | transitive dependencies of `drizzle-kit`, which is on its latest stable release. **Nothing to do.** Not ours, no newer stable to move to. The pair is named in `scripts/deps.test.ts`; a *third* deprecated package fails that test rather than quietly joining the wallpaper |
+| `npm WARN deprecated eslint@9…: This version is no longer supported` | **Nothing to do, and do not move to `eslint@10`** — the three plugins `eslint-config-next` brings (`react`, `jsx-a11y`, `import`) admit ESLint 9 at most, so 10 prints three `ERESOLVE` blocks on this very install (see below). Dev-only, never shipped. `scripts/deps.test.ts` section 7 goes red the day those plugins admit 10, which is the day this line goes |
 | a security advisory summary — `… vulnerabilities`, at any severity | **judge it against what ships.** `npm audit --omit=dev --audit-level=high` — what the skill `security-gateway` §5 runs — is the question that decides whether anything reaches a customer. A dev-only finding is real but does not ship. A finding you accept is accepted **by its GHSA id with a reason written next to it**, never as a number. See below |
 | an `ERESOLVE` block | **a regression.** Report it, do not silence it. See below for what catches it and what does not |
 

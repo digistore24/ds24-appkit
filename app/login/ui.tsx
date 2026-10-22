@@ -96,8 +96,8 @@ export function SignInForm({
     // the only construction a near-black page can actually show.
     //
     // 🚨 And it needs NO `!` — which is worth a paragraph, because it used to.
-    // <Card> carries `shadow-sm` in its own class list, and tailwind-merge
-    // 2.6.1 does not know Tailwind v4's `(--var)` shorthand: it kept both
+    // <Card> carries `shadow-sm` in its own class list, and the tailwind-merge
+    // of the time (2.6.1) did not know Tailwind v4's `(--var)` shorthand: it kept both
     // classes instead of resolving them, and `.shadow-sm` is emitted last, so
     // this line rendered `raised` and looked applied. That was a silent no-op —
     // it compiled, it type-checked, the page answered 200 — and it is fixed at
@@ -105,8 +105,8 @@ export function SignInForm({
     // that teaches the merger the shorthand. `lib/utils.test.ts` is the needle;
     // do not put the `!` back to "make sure". An `!important` here would beat
     // every later override too — a variant, a `shadow-none` from a caller — and
-    // the trailing `!` is itself a form tailwind-merge 2.6.1 cannot parse, so
-    // it would keep a dead `shadow-sm` in the DOM beside this one.
+    // a marked class and a plain one never conflict in tailwind-merge, by its
+    // design, so it would keep a dead `shadow-sm` in the DOM beside this one.
     //
     // The bracketed arbitrary form would resolve through tailwind-merge as
     // well, and is still the wrong answer: `node run.mjs ux-check` rejects it,

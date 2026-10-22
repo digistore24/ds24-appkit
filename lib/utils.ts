@@ -34,6 +34,19 @@ import {
 //
 // The three clauses below fix that at the cause. None changes what any class
 // MEANS; all three only teach the merger to see a conflict that is really there.
+//
+// ⚠️ tailwind-merge 3 (here since 2026-10-22) knows Tailwind v4 natively — the
+// shorthand, the trailing marker, a `var()` under the shadow group — and the
+// obvious move is to delete all of this. Measured first, with the STOCK v3
+// `twMerge` against `lib/utils.test.ts`: 5 of its 15 assertions fail, both
+// sweeps among them. For eight prefixes v3 reads the shorthand UNLIKE the
+// arbitrary form it is defined to be sugar for — `flex`, `font-stretch`,
+// `font-features`, `decoration`, `shadow`, `inset-shadow`, `text-shadow`,
+// `drop-shadow`: the arbitrary form carrying `var(--a)` beside the shorthand
+// `shadow-(--b)` keeps BOTH, while two arbitrary spellings merge. The elevation
+// dial is one of the eight. So the
+// clauses stay, for the identity Tailwind itself applies; what v3 does on its
+// own is recorded in the test file, not corrected here.
 
 /**
  * The two square brackets, each on its own line and never beside each other.

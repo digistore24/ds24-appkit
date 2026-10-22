@@ -93,7 +93,7 @@ And the same file once you have chosen a company:
 | `provider` | One of the five, or `"auto"`. |
 | `model` | The provider's own model id, exactly as they spell it. |
 | `maxTokens` | Cap on the answer. It is a cost lever, which is why it lives here rather than in the feature. |
-| `providerOptions` | Passed to that provider **verbatim**. The layer never reads it — except for `cacheTtl`, which is its own word (below). `{"thinking": …}` for Anthropic, `{"reasoning_effort": …}` for OpenAI, `{"generationConfig": …}` for Gemini. Not portable between providers — but neither is the model name. |
+| `providerOptions` | Passed to that provider **verbatim**. The layer never reads it — except for `cacheTtl`, which is its own word (below). `{"thinking": …}` for Anthropic, `{"reasoning_effort": …}` for OpenAI, `{"generationConfig": …}` for Gemini. Not portable between providers — but neither is the model name. ⚠️ Verbatim means the provider judges it: Anthropic's API version `2026-10-21` (SDK 1.x, shipped here) no longer takes `temperature`, `top_p` or `top_k` — measured 2026-10-22, a binding carrying one answers `400 temperature: Extra inputs are not permitted` on every call of that task. |
 
 ### `"auto"` — the shipped default
 

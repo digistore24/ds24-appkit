@@ -295,17 +295,21 @@ carries a shadow it beats the base step by itself, because `cn()`
 returns `shadow-(--elevation-overlay)` alone, exactly as
 `cn("shadow-sm", "shadow-lg")` returns `shadow-lg`.
 
-⚠️ **That is newer than it looks, and an app whose `lib/utils.ts` is three
-lines long does not have it.** Stock tailwind-merge 2.6.1 predates Tailwind v4
-and does not know the `(--var)` shorthand at all: it kept BOTH classes, and
-`.shadow-sm` — emitted last — won. The line was a silent no-op; it compiled, it
-type-checked, the page answered 200, and the shadow was simply the one that was
-already there. `cn()` is now an `extendTailwindMerge` with three clauses: it
-rewrites the shorthand into the arbitrary form it is defined to mean, files an
-un-hinted `var()` under box-shadow rather than box-shadow colour, and reads
-Tailwind v4's TRAILING important marker (`shadow-lg!`) as the same thing as the
-v3 leading one (`!shadow-lg`), which is the only spelling 2.6.1 knows.
-`lib/utils.test.ts` is the needle that keeps all three.
+⚠️ **That is newer than it looks, and it is `cn()`'s doing, not the library's
+alone.** Stock tailwind-merge 2.6.1 predated Tailwind v4 and did not know the
+`(--var)` shorthand at all: it kept BOTH classes, and `.shadow-sm` — emitted
+last — won. The line was a silent no-op; it compiled, it type-checked, the page
+answered 200, and the shadow was simply the one that was already there. `cn()`
+is an `extendTailwindMerge` with three clauses: it rewrites the shorthand into
+the arbitrary form it is defined to mean, files an un-hinted `var()` under
+box-shadow rather than box-shadow colour, and reads Tailwind v4's TRAILING
+important marker (`shadow-lg!`) as the same thing as the leading one
+(`!shadow-lg`). tailwind-merge 3 knows all three shapes natively — and still
+reads the shorthand unlike the arbitrary form for eight prefixes, `shadow`
+among them (measured 2026-10-22, stock v3: the arbitrary form carrying a
+`var()` beside the shorthand `shadow-(--b)` keeps both). So the clauses stay,
+and `lib/utils.test.ts` is
+the needle that keeps all three.
 
 🚨 **Do not add the `!` "to be safe" once `cn()` is fixed, and the third clause
 is not a licence to.** It makes a trailing `!` MERGEABLE against another
